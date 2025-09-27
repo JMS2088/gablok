@@ -32,28 +32,29 @@
 	<h3>Object Measurements</h3>
 	<div class="measurement-item">
 		<span class="measurement-label">Width (X):</span>
-		<span class="measurement-value" id="measure-width">--</span>
+		<input class="measurement-input" id="input-width" type="number" step="0.1" min="1" max="20" />
 	</div>
 	<div class="measurement-item">
 		<span class="measurement-label">Depth (Z):</span>
-		<span class="measurement-value" id="measure-depth">--</span>
+		<input class="measurement-input" id="input-depth" type="number" step="0.1" min="1" max="20" />
 	</div>
 	<div class="measurement-item">
 		<span class="measurement-label">Height (Y):</span>
-		<span class="measurement-value" id="measure-height">--</span>
+		<input class="measurement-input" id="input-height" type="number" step="0.1" min="0.5" max="10" />
 	</div>
 	<div class="measurement-item">
 		<span class="measurement-label">Position X:</span>
-		<span class="measurement-value" id="measure-pos-x">--</span>
+		<input class="measurement-input" id="input-pos-x" type="number" step="0.1" min="-100" max="100" />
 	</div>
 	<div class="measurement-item">
 		<span class="measurement-label">Position Z:</span>
-		<span class="measurement-value" id="measure-pos-z">--</span>
+		<input class="measurement-input" id="input-pos-z" type="number" step="0.1" min="-100" max="100" />
 	</div>
 	<div class="measurement-item">
 		<span class="measurement-label">Floor:</span>
 		<span class="measurement-value" id="measure-floor">--</span>
 	</div>
+	<button id="save-measurements" style="margin-top:10px;padding:6px 16px;">Save</button>
 </div>
 
 <div id="info-modal">

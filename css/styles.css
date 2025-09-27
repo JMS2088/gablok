@@ -18,9 +18,19 @@
   button.secondary:hover { background: #e0e0e0; }
   
   select {
-    padding: 10px; border: 1px solid #ccc; border-radius: 6px; background: white;
-    font-size: 14px;
-  }
+      padding: 10px 30px 10px 10px; /* extra right padding for arrow */
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      background: white;
+      font-size: 14px;
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    background-size: 12px 8px;
+    }
   
   #measurements {
     position: fixed; top: 20px; right: 20px; z-index: 100;
@@ -44,6 +54,18 @@
   
   #measurements .measurement-label { color: #666; font-weight: 500; }
   #measurements .measurement-value { color: #333; font-weight: 600; }
+  #measurements .measurement-input {
+    width: 60px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #333;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-left: 8px;
+    text-align: right;
+  }
   
   #status {
     position: fixed; bottom: 20px; right: 20px; z-index: 100;

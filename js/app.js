@@ -18,7 +18,7 @@ var roofComponents = [];
 var currentSnapGuides = [];
 
 var HANDLE_RADIUS = 12;
-var GRID_SPACING = 2;
+var GRID_SPACING = 0.5;
 var SNAP_GRID_TOLERANCE = 1.0;
 var SNAP_CENTER_TOLERANCE = 0.6;
 var HANDLE_SNAP_TOLERANCE = 0.25;
@@ -50,7 +50,7 @@ var PRICING = {
   stairs: 1200,
   pergola: 500,
   garage: 500,
-  roof: 120
+  roof: 170 // increased by $50 per sqm
 };
 
 function startApp() {
@@ -123,7 +123,10 @@ function createRoom(x, z, level) {
 }
 
 function createInitialRoom() {
-  var room = createRoom(0, 0, 0);
+  // Place first room exactly on grid lines (multiples of 1m)
+  var gridX = 0;
+  var gridZ = 0;
+  var room = createRoom(gridX, gridZ, 0);
   allRooms.push(room);
   selectedRoomId = room.id;
 }
@@ -132,8 +135,8 @@ function addNewRoom() {
   try {
     var room = createRoom(0, 0, currentFloor);
     var spot = findFreeSpot(room);
-    room.x = spot.x;
-    room.z = spot.z;
+  room.x = Math.round(spot.x / GRID_SPACING) * GRID_SPACING;
+  room.z = Math.round(spot.z / GRID_SPACING) * GRID_SPACING;
     allRooms.push(room);
     selectedRoomId = room.id;
     updateStatus('Room added');
@@ -481,7 +484,15 @@ function drawGrid() {
   minZ = Math.floor(minZ / GRID_SPACING) * GRID_SPACING;
   maxZ = Math.ceil(maxZ / GRID_SPACING) * GRID_SPACING;
   
+  // Always include 0.0 in grid lines
+  var zLines = [];
   for (var z = minZ; z <= maxZ; z += GRID_SPACING) {
+    zLines.push(z);
+  }
+  if (!zLines.includes(0)) zLines.push(0);
+  zLines.sort(function(a, b) { return a - b; });
+  for (var zi = 0; zi < zLines.length; zi++) {
+    var z = zLines[zi];
     var h1 = project3D(minX, 0, z);
     var h2 = project3D(maxX, 0, z);
     if (h1 && h2) {
@@ -491,8 +502,15 @@ function drawGrid() {
       ctx.stroke();
     }
   }
-  
+
+  var xLines = [];
   for (var x = minX; x <= maxX; x += GRID_SPACING) {
+    xLines.push(x);
+  }
+  if (!xLines.includes(0)) xLines.push(0);
+  xLines.sort(function(a, b) { return a - b; });
+  for (var xi = 0; xi < xLines.length; xi++) {
+    var x = xLines[xi];
     var v1 = project3D(x, 0, minZ);
     var v2 = project3D(x, 0, maxZ);
     if (v1 && v2) {
@@ -1149,14 +1167,49 @@ function updateMeasurements() {
   
   measurementsPanel.className = 'visible';
   
-  document.getElementById('measure-width').textContent = selectedObject.width.toFixed(1) + 'm';
-  document.getElementById('measure-depth').textContent = selectedObject.depth.toFixed(1) + 'm';
-  document.getElementById('measure-height').textContent = selectedObject.height.toFixed(1) + 'm';
-  document.getElementById('measure-pos-x').textContent = selectedObject.x.toFixed(1) + 'm';
-  document.getElementById('measure-pos-z').textContent = selectedObject.z.toFixed(1) + 'm';
-  
+  // Populate input fields with current values
+  var widthInput = document.getElementById('input-width');
+  var depthInput = document.getElementById('input-depth');
+  var heightInput = document.getElementById('input-height');
+  var posXInput = document.getElementById('input-pos-x');
+  var posZInput = document.getElementById('input-pos-z');
+  widthInput.value = selectedObject.width.toFixed(1);
+  depthInput.value = selectedObject.depth.toFixed(1);
+  heightInput.value = selectedObject.height.toFixed(1);
+  posXInput.value = selectedObject.x.toFixed(1);
+  posZInput.value = selectedObject.z.toFixed(1);
+  widthInput.disabled = false;
+  depthInput.disabled = false;
+  heightInput.disabled = false;
+  posXInput.disabled = false;
+  posZInput.disabled = false;
+
+  // Update object immediately on input change or arrow key
+  widthInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.width = Math.max(1, Math.min(20, parseFloat(this.value))); } };
+  depthInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.depth = Math.max(1, Math.min(20, parseFloat(this.value))); } };
+  heightInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.height = Math.max(0.5, Math.min(10, parseFloat(this.value))); } };
+  posXInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.x = Math.max(-100, Math.min(100, parseFloat(this.value))); } };
+  posZInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.z = Math.max(-100, Math.min(100, parseFloat(this.value))); } };
+
   var floorText = selectedObject.level === 0 ? 'Ground' : 'Floor ' + (selectedObject.level + 1);
   document.getElementById('measure-floor').textContent = floorText;
+// Save measurements from input fields to selected object
+function saveMeasurements() {
+  if (!selectedRoomId) return;
+  var selectedObject = findObjectById(selectedRoomId);
+  if (!selectedObject) return;
+  var width = parseFloat(document.getElementById('input-width').value);
+  var depth = parseFloat(document.getElementById('input-depth').value);
+  var height = parseFloat(document.getElementById('input-height').value);
+  var posX = parseFloat(document.getElementById('input-pos-x').value);
+  var posZ = parseFloat(document.getElementById('input-pos-z').value);
+  if (!isNaN(width) && width >= 1 && width <= 20) selectedObject.width = width;
+  if (!isNaN(depth) && depth >= 1 && depth <= 20) selectedObject.depth = depth;
+  if (!isNaN(height) && height >= 0.5 && height <= 10) selectedObject.height = height;
+  if (!isNaN(posX) && posX >= -100 && posX <= 100) selectedObject.x = posX;
+  if (!isNaN(posZ) && posZ >= -100 && posZ <= 100) selectedObject.z = posZ;
+  updateStatus('Measurements saved');
+}
 }
 
 function calculatePricing() {
@@ -1216,7 +1269,11 @@ function calculatePricing() {
   for (var i = 0; i < roofComponents.length; i++) {
     var roof = roofComponents[i];
     var roofArea = roof.width * roof.depth;
-    var roofCost = roofArea * PRICING.roof;
+    var roofRate = PRICING.roof;
+    if (roof.roofType === 'curved') {
+      roofRate += 100;
+    }
+    var roofCost = roofArea * roofRate;
     breakdown.components.push({
       name: roof.name,
       area: roofArea,
@@ -2641,3 +2698,10 @@ function startRender() {
 }
 
 document.addEventListener('DOMContentLoaded', startApp);
+// Add event listener for Save button in measurements panel
+document.addEventListener('DOMContentLoaded', function() {
+  var saveBtn = document.getElementById('save-measurements');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', saveMeasurements);
+  }
+});
