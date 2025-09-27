@@ -282,10 +282,35 @@ function createRoof(x, z) {
 }
 
 function addRoof() {
-  var newRoof = createRoof();
-  var spot = findFreeSpot(newRoof);
-  newRoof.x = spot.x;
-  newRoof.z = spot.z;
+  // Find bounding box of all rooms on the roof's level
+  var hasFirstFloor = allRooms.some(function(room) { return room.level === 1; });
+  var roofLevel = hasFirstFloor ? 1 : 0;
+  var minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (var i = 0; i < allRooms.length; i++) {
+    var room = allRooms[i];
+    if (room.level === roofLevel) {
+      var hw = room.width / 2;
+      var hd = room.depth / 2;
+      minX = Math.min(minX, room.x - hw);
+      maxX = Math.max(maxX, room.x + hw);
+      minZ = Math.min(minZ, room.z - hd);
+      maxZ = Math.max(maxZ, room.z + hd);
+    }
+  }
+  // If no rooms, use default
+  var roofWidth = 6;
+  var roofDepth = 8;
+  var roofCenterX = 0;
+  var roofCenterZ = 0;
+  if (minX !== Infinity) {
+    roofWidth = Math.max(6, maxX - minX);
+    roofDepth = Math.max(8, maxZ - minZ);
+    roofCenterX = (minX + maxX) / 2;
+    roofCenterZ = (minZ + maxZ) / 2;
+  }
+  var newRoof = createRoof(roofCenterX, roofCenterZ);
+  newRoof.width = roofWidth;
+  newRoof.depth = roofDepth;
   roofComponents.push(newRoof);
   currentFloor = 0;
   selectedRoomId = newRoof.id;
@@ -1257,11 +1282,16 @@ function showPricing() {
     }
   }
   
+  var totalRoomArea = breakdown.rooms.reduce(function(sum, room) { return sum + room.area; }, 0);
   var totalPricingDiv = document.getElementById('total-pricing');
   if (totalPricingDiv) {
     totalPricingDiv.innerHTML = 
       '<div class="pricing-item">' +
-        '<span class="pricing-item-name">Total Project Cost</span>' +
+        '<span class="pricing-item-name">Total Room Area</span>' +
+        '<span class="pricing-item-cost">' + totalRoomArea.toFixed(1) + ' m²</span>' +
+      '</div>' +
+      '<div class="pricing-item">' +
+        '<span class="pricing-item-name">Total Project Cost </span>' +
         '<span class="pricing-item-cost">' + formatCurrency(breakdown.totalCost) + '</span>' +
       '</div>';
   }

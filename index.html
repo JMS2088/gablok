@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>3D Home Configurator with Pricing</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="controls">
+	<button onclick="addNewRoom()">+ Add Room</button>
+	<select id="levelSelect" onchange="switchLevel()">
+		<option value="0">Ground Floor</option>
+		<option value="1">First Floor</option>
+		<option value="stairs">Add Stairs</option>
+		<option value="pergola">Add Pergola</option>
+		<option value="garage">Add Garage</option>
+		<option value="roof">Add Roof</option>
+	</select>
+	<button class="secondary" onclick="fitView()">Fit View</button>
+	<button class="secondary" onclick="resetAll()">Reset</button>
+	<button class="secondary" onclick="showPricing()" title="Show pricing">💰 Price</button>
+	<button class="secondary" onclick="showInfo()" title="Show information">ℹ</button>
+</div>
+
+<canvas id="canvas"></canvas>
+<div id="labels"></div>
+<div id="status">Ready</div>
+
+<div id="measurements">
+	<h3>Object Measurements</h3>
+	<div class="measurement-item">
+		<span class="measurement-label">Width (X):</span>
+		<span class="measurement-value" id="measure-width">--</span>
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label">Depth (Z):</span>
+		<span class="measurement-value" id="measure-depth">--</span>
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label">Height (Y):</span>
+		<span class="measurement-value" id="measure-height">--</span>
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label">Position X:</span>
+		<span class="measurement-value" id="measure-pos-x">--</span>
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label">Position Z:</span>
+		<span class="measurement-value" id="measure-pos-z">--</span>
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label">Floor:</span>
+		<span class="measurement-value" id="measure-floor">--</span>
+	</div>
+</div>
+
+<div id="info-modal">
+	<div id="info-content">
+		<button class="close-button" onclick="hideInfo()">&times;</button>
+		<h2>3D Home Configurator</h2>
+		<p><strong>Camera Controls:</strong></p>
+		<ul>
+			<li>Drag to rotate view</li>
+			<li>Shift + Drag to pan</li>
+			<li>Mouse wheel to zoom in/out</li>
+		</ul>
+		<p><strong>Building:</strong></p>
+		<ul>
+			<li>Click "+ Add Room" to create new rooms</li>
+			<li>Use dropdown to add stairs, pergolas, garages, or roofs</li>
+			<li>Click room labels to select and drag objects</li>
+			<li>Drag colored handles to resize selected objects</li>
+		</ul>
+		<p><strong>Keyboard:</strong></p>
+		<ul>
+			<li>Escape - Clear selection</li>
+			<li>Delete - Remove selected object</li>
+		</ul>
+	</div>
+</div>
+
+<div id="pricing-modal">
+	<div id="pricing-content">
+		<button class="close-button" onclick="hidePricing()">&times;</button>
+		<h2>Project Pricing</h2>
+		<div id="pricing-breakdown">
+			<div class="pricing-section">
+				<h3>Rooms</h3>
+				<div id="room-pricing"></div>
+			</div>
+			<div class="pricing-section">
+				<h3>Additional Components</h3>
+				<div id="component-pricing"></div>
+			</div>
+			<div class="pricing-section total-section">
+				<h3>Total Estimate</h3>
+				<div id="total-pricing"></div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div id="pricing-modal">
+	<div id="pricing-content">
+		<button class="close-button" onclick="hidePricing()">&times;</button>
+		<h2>Project Pricing</h2>
+		<div id="pricing-breakdown">
+			<div class="pricing-section">
+				<h3>Rooms</h3>
+				<div id="room-pricing"></div>
+			</div>
+			<div class="pricing-section">
+				<h3>Additional Components</h3>
+				<div id="component-pricing"></div>
+			</div>
+			<div class="pricing-section total-section">
+				<h3>Total Estimate</h3>
+				<div id="total-pricing"></div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<script src="js/app.js"></script>
+
+</body>
+</html>
