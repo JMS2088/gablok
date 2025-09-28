@@ -1,40 +1,13 @@
-// Removed photorealistic render code
-// ...existing code...
+var GRID_SPACING = 2;
 
-function createPergola(x, z) {
-  var count = pergolaComponents.length;
-  return {
-    id: 'pergola_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-    x: x || 8,
-    z: z || 8,
-    width: 4,
-    depth: 3,
-    height: 2.7,
-    roofThickness: 0.3,
-    totalHeight: 3,
-    legWidth: 0.3,
-        if (stairsComponent && stairsComponent.width && stairsComponent.depth) {
-          var stairsArea = stairsComponent.width * stairsComponent.depth;
-          var stairsCost = stairsArea * PRICING.stairs;
-          breakdown.components.push({
-            name: stairsComponent.name,
-            area: stairsArea,
-            cost: stairsCost
-          });
-          breakdown.totalCost += stairsCost;
-        }
-  var spot = findFreeSpot(newPergola);
-  newPergola.x = spot.x;
-  newPergola.z = spot.z;
-  
-  pergolaComponents.push(newPergola);
-  currentFloor = 0;
-  selectedRoomId = newPergola.id;
-  
-  var selector = document.getElementById('levelSelect');
-  if (selector) selector.value = '0';
-  
-  updateStatus('Pergola added (' + pergolaComponents.length + ' total)');
+function startApp() {
+  canvas = document.getElementById('canvas');
+  ctx = canvas.getContext('2d');
+  screenW = canvas.width = window.innerWidth;
+  screenH = canvas.height = window.innerHeight;
+  centerX = screenW / 2;
+  centerY = screenH / 2;
+  renderLoop();
 }
 
 function createGarage(x, z) {
@@ -1656,18 +1629,36 @@ function setupEvents() {
       }
       
       if (roofIndex > -1) {
-  } else if (value === 'roof') {
-    addRoof();
-    selector.value = '0';
-  } else {
-    var newFloor = parseInt(value) || 0;
-    if (newFloor !== currentFloor) {
-      currentFloor = newFloor;
-      selectedRoomId = null;
-      updateStatus('Floor ' + (newFloor + 1));
+        var roof = roofComponents[roofIndex];
+        roofComponents.splice(roofIndex, 1);
+        selectedRoomId = null;
+        updateStatus(roof.name + ' deleted');
+        return;
+      }
     }
+  });
+  
+  var levelSelect = document.getElementById('levelSelect');
+  if (levelSelect) {
+    levelSelect.addEventListener('change', function() {
+      var value = this.value;
+      if (value === '') {
+        currentFloor = 0;
+        selectedRoomId = null;
+        updateStatus('Ground floor');
+      } else if (value === 'roof') {
+        addRoof();
+        selector.value = '0';
+      } else {
+        var newFloor = parseInt(value) || 0;
+        if (newFloor !== currentFloor) {
+          currentFloor = newFloor;
+          selectedRoomId = null;
+          updateStatus('Floor ' + (newFloor + 1));
+        }
+      }
+    });
   }
-}
 
 function fitView() {
   var rooms = allRooms.filter(function(r) { return r.level === currentFloor; });
@@ -1763,6 +1754,7 @@ document.addEventListener('click', function(e) {
   if (pricingModal && e.target === pricingModal) {
     hidePricing();
   }
+});
 
 function drawStairs(stairs) {
   if (!stairs) return;
