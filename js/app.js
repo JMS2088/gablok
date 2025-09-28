@@ -1,63 +1,206 @@
-// Minimal stub for project3D to allow rendering
-function project3D(x, y, z) {
-  // Simple orthographic projection for demo purposes
-  return { x: centerX + x * 20, y: centerY - y * 20 };
-}
-function createRoom(x, z) {
-  var count = allRooms.length;
-  return {
-    id: 'room_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-    x: x || 0, z: z || 0, width: 4, depth: 4, height: 3, wallThickness: 0.2,
-    name: count === 0 ? 'Room' : 'Room ' + (count + 1),
-    type: 'room', level: currentFloor || 0
-  };
-}
+'use strict';
 
-function addNewRoom() {
-  var newRoom = createRoom();
-  var spot = findFreeSpot(newRoom);
-  newRoom.x = spot.x;
-  newRoom.z = spot.z;
-  allRooms.push(newRoom);
-  currentFloor = newRoom.level;
-  selectedRoomId = newRoom.id;
-  var selector = document.getElementById('levelSelect');
-  if (selector) selector.value = String(newRoom.level);
-  updateStatus('Room added (' + allRooms.length + ' total)');
-}
-var GRID_SPACING = 2;
+var canvas = null;
+var ctx = null;
+var screenW = 0;
+var screenH = 0;
+var centerX = 0;
+var centerY = 0;
 var allRooms = [];
-var camera = { targetX: 0, targetZ: 0, distance: 20, yaw: 0 };
+var selectedRoomId = null;
+var currentFloor = 0;
+var resizeHandles = [];
+var animationId = null;
+var stairsComponent = null;
+var pergolaComponents = [];
 var garageComponents = [];
 var roofComponents = [];
-var currentFloor = 0;
-var selectedRoomId = null;
-var ctx, canvas, screenW, screenH, centerX, centerY;
-var resizeHandles = [];
-var PRICING = { stairs: 100, pergola: 80, garage: 120, roof: 150 };
-var stairsComponent = null;
+var currentSnapGuides = [];
+
+var HANDLE_RADIUS = 12;
+var GRID_SPACING = 2;
+var SNAP_GRID_TOLERANCE = 1.0;
+var SNAP_CENTER_TOLERANCE = 0.6;
+var HANDLE_SNAP_TOLERANCE = 0.25;
+
+var camera = {
+  yaw: 0.5,
+  pitch: -0.5,
+  distance: 12,
+  targetX: 0,
+  targetZ: 0,
+  minPitch: -Math.PI * 0.4,
+  maxPitch: 0.1,
+  minDistance: 3,
+  maxDistance: 80
+};
+
+var mouse = {
+  down: false,
+  lastX: 0,
+  lastY: 0,
+  dragType: null,
+  dragInfo: null
+};
+
+var pan = { x: 0, y: 0 };
+
+var PRICING = {
+  room: 600,
+  stairs: 1200,
+  pergola: 500,
+  garage: 500,
+  roof: 120
+};
 
 function startApp() {
   canvas = document.getElementById('canvas');
-  if (!canvas) {
-    console.error('Canvas element not found!');
-    return;
-  }
   ctx = canvas.getContext('2d');
-  if (!ctx) {
-    console.error('Canvas context not available!');
+  setupCanvas();
+  createInitialRoom();
+  setupEvents();
+  startRender();
+  updateStatus('Ready');
+}
+
+function updateStatus(message) {
+  var status = document.getElementById('status');
+  if (status) status.textContent = message;
+}
+
+function setupCanvas() {
+  var ratio = Math.min(2, window.devicePixelRatio || 1);
+  screenW = window.innerWidth;
+  screenH = window.innerHeight;
+  
+  canvas.width = screenW * ratio;
+  canvas.height = screenH * ratio;
+  canvas.style.width = screenW + 'px';
+  canvas.style.height = screenH + 'px';
+  
+  centerX = screenW / 2;
+  centerY = screenH / 2 + 200;
+  
+  ctx.scale(ratio, ratio);
+  ctx.imageSmoothingEnabled = true;
+}
+
+function project3D(worldX, worldY, worldZ) {
+  try {
+    var dx = worldX - camera.targetX;
+    var dy = worldY;
+    var dz = worldZ - camera.targetZ;
+    
+    var cosYaw = Math.cos(camera.yaw);
+    var sinYaw = Math.sin(camera.yaw);
+    var rotX = cosYaw * dx + sinYaw * dz;
+    var rotZ = -sinYaw * dx + cosYaw * dz;
+    
+    var cosPitch = Math.cos(camera.pitch);
+    var sinPitch = Math.sin(camera.pitch);
+    var finalY = cosPitch * dy - sinPitch * rotZ;
+    var finalZ = sinPitch * dy + cosPitch * rotZ + camera.distance;
+    
+    if (finalZ <= 0.1) return null;
+    
+    var fov = 800;
+    var screenX = centerX + (rotX * fov) / finalZ + pan.x;
+    var screenY = centerY - (finalY * fov) / finalZ + pan.y;
+    
+    return { x: screenX, y: screenY, depth: finalZ };
+  } catch (e) {
+    return null;
+  }
+}
+
+function createRoom(x, z, level) {
+  var count = allRooms.filter(function(r) { return r.level === level; }).length;
+  return {
+    id: 'room_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    x: x, z: z, width: 4, depth: 3, height: 3, level: level,
+    name: 'Room ' + (count + 1) + (level > 0 ? ' (Floor ' + (level + 1) + ')' : '')
+  };
+}
+
+function createInitialRoom() {
+  var room = createRoom(0, 0, 0);
+  allRooms.push(room);
+  selectedRoomId = room.id;
+}
+
+function addNewRoom() {
+  try {
+    var room = createRoom(0, 0, currentFloor);
+    var spot = findFreeSpot(room);
+    room.x = spot.x;
+    room.z = spot.z;
+    allRooms.push(room);
+    selectedRoomId = room.id;
+    updateStatus('Room added');
+  } catch (error) {
+    console.error('Add room error:', error);
+    updateStatus('Error adding room');
+  }
+}
+
+function createStairs() {
+  return {
+    id: 'stairs_' + Date.now(),
+    x: -6, z: -6, width: 3, depth: 8, height: 3.5, steps: 14,
+    name: 'Stairs', type: 'stairs', level: 0
+  };
+}
+
+function addStairs() {
+  if (stairsComponent) {
+    updateStatus('Stairs already exist');
     return;
   }
-  screenW = canvas.width;
-  screenH = canvas.height;
-  centerX = screenW / 2;
-  centerY = screenH / 2;
-  allRooms = [];
-  addNewRoom();
-  clearCanvas();
-  drawGrid();
-  drawRoom(allRooms[0]);
-  renderLoop();
+  stairsComponent = createStairs();
+  var spot = findFreeSpot(stairsComponent);
+  stairsComponent.x = spot.x;
+  stairsComponent.z = spot.z;
+  currentFloor = 0;
+  selectedRoomId = stairsComponent.id;
+  var selector = document.getElementById('levelSelect');
+  if (selector) selector.value = '0';
+  updateStatus('Stairs added');
+}
+
+function createPergola(x, z) {
+  var count = pergolaComponents.length;
+  return {
+    id: 'pergola_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    x: x || 8,
+    z: z || 8,
+    width: 4,
+    depth: 3,
+    height: 2.7,
+    roofThickness: 0.3,
+    totalHeight: 3,
+    legWidth: 0.3,
+    slatCount: 8,
+    slatWidth: 0.15,
+    name: count === 0 ? 'Pergola' : 'Pergola ' + (count + 1),
+    type: 'pergola',
+    level: 0
+  };
+}
+
+function addPergola() {
+  var newPergola = createPergola();
+  var spot = findFreeSpot(newPergola);
+  newPergola.x = spot.x;
+  newPergola.z = spot.z;
+  
+  pergolaComponents.push(newPergola);
+  currentFloor = 0;
+  selectedRoomId = newPergola.id;
+  
+  var selector = document.getElementById('levelSelect');
+  if (selector) selector.value = '0';
+  
+  updateStatus('Pergola added (' + pergolaComponents.length + ' total)');
 }
 
 function createGarage(x, z) {
@@ -116,20 +259,33 @@ function createRoof(x, z) {
   var roofCenterX = 0;
   var roofCenterZ = 0;
   
-      // Removed photorealistic render code
-      if (stairsComponent) {
-        var stairsArea = stairsComponent.width * stairsComponent.depth;
-        var stairsCost = stairsArea * PRICING.stairs;
-        breakdown.components.push({
-          name: stairsComponent.name,
-          area: stairsArea,
-          cost: stairsCost
-        });
-        breakdown.totalCost += stairsCost;
-      }
-  var newRoof = createRoof(roofCenterX, roofCenterZ);
-  newRoof.width = roofWidth;
-  newRoof.depth = roofDepth;
+  if (minX !== Infinity) {
+    roofWidth = Math.max(6, maxX - minX + 2);
+    roofDepth = Math.max(8, maxZ - minZ + 2);
+    roofCenterX = (minX + maxX) / 2;
+    roofCenterZ = (minZ + maxZ) / 2;
+  }
+  
+  return {
+    id: 'roof_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    x: x || roofCenterX,
+    z: z || roofCenterZ,
+    width: roofWidth,
+    depth: roofDepth,
+    height: 1.5,
+    baseHeight: baseHeight,
+    roofType: 'gable',
+    name: count === 0 ? 'Roof' : 'Roof ' + (count + 1),
+    type: 'roof',
+    level: roofLevel
+  };
+}
+
+function addRoof() {
+  var newRoof = createRoof();
+  var spot = findFreeSpot(newRoof);
+  newRoof.x = spot.x;
+  newRoof.z = spot.z;
   roofComponents.push(newRoof);
   currentFloor = 0;
   selectedRoomId = newRoof.id;
@@ -300,15 +456,7 @@ function drawGrid() {
   minZ = Math.floor(minZ / GRID_SPACING) * GRID_SPACING;
   maxZ = Math.ceil(maxZ / GRID_SPACING) * GRID_SPACING;
   
-  // Always include 0.0 in grid lines
-  var zLines = [];
   for (var z = minZ; z <= maxZ; z += GRID_SPACING) {
-    zLines.push(z);
-  }
-  if (!zLines.includes(0)) zLines.push(0);
-  zLines.sort(function(a, b) { return a - b; });
-  for (var zi = 0; zi < zLines.length; zi++) {
-    var z = zLines[zi];
     var h1 = project3D(minX, 0, z);
     var h2 = project3D(maxX, 0, z);
     if (h1 && h2) {
@@ -318,15 +466,8 @@ function drawGrid() {
       ctx.stroke();
     }
   }
-
-  var xLines = [];
+  
   for (var x = minX; x <= maxX; x += GRID_SPACING) {
-    xLines.push(x);
-  }
-  if (!xLines.includes(0)) xLines.push(0);
-  xLines.sort(function(a, b) { return a - b; });
-  for (var xi = 0; xi < xLines.length; xi++) {
-    var x = xLines[xi];
     var v1 = project3D(x, 0, minZ);
     var v2 = project3D(x, 0, maxZ);
     if (v1 && v2) {
@@ -983,58 +1124,87 @@ function updateMeasurements() {
   
   measurementsPanel.className = 'visible';
   
-  // Populate input fields with current values
-  var widthInput = document.getElementById('input-width');
-  var depthInput = document.getElementById('input-depth');
-  var heightInput = document.getElementById('input-height');
-  var posXInput = document.getElementById('input-pos-x');
-  var posZInput = document.getElementById('input-pos-z');
-  widthInput.value = selectedObject.width.toFixed(1);
-  depthInput.value = selectedObject.depth.toFixed(1);
-  heightInput.value = selectedObject.height.toFixed(1);
-  posXInput.value = selectedObject.x.toFixed(1);
-  posZInput.value = selectedObject.z.toFixed(1);
-  widthInput.disabled = false;
-  depthInput.disabled = false;
-  heightInput.disabled = false;
-  posXInput.disabled = false;
-  posZInput.disabled = false;
-
-  // Update object immediately on input change or arrow key
-  widthInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.width = Math.max(1, Math.min(20, parseFloat(this.value))); } };
-  depthInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.depth = Math.max(1, Math.min(20, parseFloat(this.value))); } };
-  heightInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.height = Math.max(0.5, Math.min(10, parseFloat(this.value))); } };
-  posXInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.x = Math.max(-100, Math.min(100, parseFloat(this.value))); } };
-  posZInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.z = Math.max(-100, Math.min(100, parseFloat(this.value))); } };
-
+  document.getElementById('measure-width').textContent = selectedObject.width.toFixed(1) + 'm';
+  document.getElementById('measure-depth').textContent = selectedObject.depth.toFixed(1) + 'm';
+  document.getElementById('measure-height').textContent = selectedObject.height.toFixed(1) + 'm';
+  document.getElementById('measure-pos-x').textContent = selectedObject.x.toFixed(1) + 'm';
+  document.getElementById('measure-pos-z').textContent = selectedObject.z.toFixed(1) + 'm';
+  
   var floorText = selectedObject.level === 0 ? 'Ground' : 'Floor ' + (selectedObject.level + 1);
   document.getElementById('measure-floor').textContent = floorText;
 }
 
-// Save measurements from input fields to selected object
-function renderLoop() {
-  try {
-    if (!ctx) {
-      console.error('Canvas context not available in renderLoop!');
-      return;
-    }
-    clearCanvas();
-    drawGrid();
-    for (var i = 0; i < allRooms.length; i++) {
-      drawRoom(allRooms[i]);
-    }
-    requestAnimationFrame(renderLoop);
-  } catch (e) {
-    console.error('renderLoop error:', e);
+function calculatePricing() {
+  var breakdown = {
+    rooms: [],
+    components: [],
+    totalCost: 0
+  };
+  
+  for (var i = 0; i < allRooms.length; i++) {
+    var room = allRooms[i];
+    var area = room.width * room.depth;
+    var cost = area * PRICING.room;
+    breakdown.rooms.push({
+      name: room.name,
+      area: area,
+      cost: cost
+    });
+    breakdown.totalCost += cost;
   }
+  
+  if (stairsComponent) {
+    var stairsArea = stairsComponent.width * stairsComponent.depth;
+    var stairsCost = stairsArea * PRICING.stairs;
+    breakdown.components.push({
+      name: stairsComponent.name,
+      area: stairsArea,
+      cost: stairsCost
+    });
+    breakdown.totalCost += stairsCost;
+  }
+  
+  for (var i = 0; i < pergolaComponents.length; i++) {
+    var pergola = pergolaComponents[i];
+    var pergolaArea = pergola.width * pergola.depth;
+    var pergolaCost = pergolaArea * PRICING.pergola;
+    breakdown.components.push({
+      name: pergola.name,
+      area: pergolaArea,
+      cost: pergolaCost
+    });
+    breakdown.totalCost += pergolaCost;
+  }
+  
+  for (var i = 0; i < garageComponents.length; i++) {
+    var garage = garageComponents[i];
+    var garageArea = garage.width * garage.depth;
+    var garageCost = garageArea * PRICING.garage;
+    breakdown.components.push({
+      name: garage.name,
+      area: garageArea,
+      cost: garageCost
+    });
+    breakdown.totalCost += garageCost;
+  }
+  
+  for (var i = 0; i < roofComponents.length; i++) {
+    var roof = roofComponents[i];
+    var roofArea = roof.width * roof.depth;
+    var roofCost = roofArea * PRICING.roof;
+    breakdown.components.push({
+      name: roof.name,
+      area: roofArea,
+      cost: roofCost
+    });
+    breakdown.totalCost += roofCost;
+  }
+  
+  return breakdown;
+}
 
 function formatCurrency(amount) {
-  try {
-    return '$' + Math.round(amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  } catch (e) {
-    console.error('formatCurrency error:', e);
-    return '$0';
-  }
+  return '$' + Math.round(amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 function showPricing() {
@@ -1087,16 +1257,11 @@ function showPricing() {
     }
   }
   
-  var totalRoomArea = breakdown.rooms.reduce(function(sum, room) { return sum + room.area; }, 0);
   var totalPricingDiv = document.getElementById('total-pricing');
   if (totalPricingDiv) {
     totalPricingDiv.innerHTML = 
       '<div class="pricing-item">' +
-        '<span class="pricing-item-name">Total Room Area</span>' +
-        '<span class="pricing-item-cost">' + totalRoomArea.toFixed(1) + ' m²</span>' +
-      '</div>' +
-      '<div class="pricing-item">' +
-        '<span class="pricing-item-name">Total Project Cost </span>' +
+        '<span class="pricing-item-name">Total Project Cost</span>' +
         '<span class="pricing-item-cost">' + formatCurrency(breakdown.totalCost) + '</span>' +
       '</div>';
   }
@@ -1648,40 +1813,796 @@ function setupEvents() {
         updateStatus(roof.name + ' deleted');
         return;
       }
+      
+      updateStatus('Cannot delete - select an object first');
     }
   });
+}
+
+function switchLevel() {
+  var selector = document.getElementById('levelSelect');
+  if (!selector) return;
   
-  var levelSelect = document.getElementById('levelSelect');
-  if (levelSelect) {
-    levelSelect.addEventListener('change', function() {
-      var value = this.value;
-      if (value === '') {
-        currentFloor = 0;
-        selectedRoomId = null;
-        updateStatus('Ground floor');
-      } else if (value === 'roof') {
-        addRoof();
-        selector.value = '0';
-      } else {
-        var newFloor = parseInt(value) || 0;
-        if (newFloor !== currentFloor) {
-          currentFloor = newFloor;
-          selectedRoomId = null;
-          updateStatus('Floor ' + (newFloor + 1));
-        }
-      }
-    });
+  var value = selector.value;
+  
+  if (value === 'stairs') {
+    addStairs();
+    selector.value = '0';
+  } else if (value === 'pergola') {
+    addPergola();
+    selector.value = '0';
+  } else if (value === 'garage') {
+    addGarage();
+    selector.value = '0';
+  } else if (value === 'roof') {
+    addRoof();
+    selector.value = '0';
+  } else {
+    var newFloor = parseInt(value) || 0;
+    if (newFloor !== currentFloor) {
+      currentFloor = newFloor;
+      selectedRoomId = null;
+      updateStatus('Floor ' + (newFloor + 1));
+    }
   }
 }
 
 function fitView() {
-  // Placeholder: implement view fitting logic
-  updateStatus('Fit View clicked');
+  var rooms = allRooms.filter(function(r) { return r.level === currentFloor; });
+  var objects = rooms.slice();
+  
+  if (stairsComponent && currentFloor === 0) {
+    objects.push(stairsComponent);
+  }
+  if (currentFloor === 0) {
+    objects = objects.concat(pergolaComponents);
+    objects = objects.concat(garageComponents);
+    objects = objects.concat(roofComponents);
+  }
+  
+  if (objects.length === 0) return;
+  
+  var minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  
+  for (var i = 0; i < objects.length; i++) {
+    var obj = objects[i];
+    var hw = obj.width / 2;
+    var hd = obj.depth / 2;
+    minX = Math.min(minX, obj.x - hw);
+    maxX = Math.max(maxX, obj.x + hw);
+    minZ = Math.min(minZ, obj.z - hd);
+    maxZ = Math.max(maxZ, obj.z + hd);
+  }
+  
+  camera.targetX = (minX + maxX) / 2;
+  camera.targetZ = (minZ + maxZ) / 2;
+  camera.distance = Math.max(8, Math.max(maxX - minX, maxZ - minZ) * 2 + 5);
+  
+  pan.x = 0;
+  pan.y = 0;
+  
+  updateStatus('View fitted');
 }
 
 function resetAll() {
-  // Placeholder: implement reset logic
-  updateStatus('Reset All clicked');
+  if (animationId) {
+    cancelAnimationFrame(animationId);
+    animationId = null;
+  }
+  
+  allRooms = [];
+  selectedRoomId = null;
+  stairsComponent = null;
+  pergolaComponents = [];
+  garageComponents = [];
+  roofComponents = [];
+  resizeHandles = [];
+  currentSnapGuides = [];
+  
+  camera.yaw = 0.5;
+  camera.pitch = -0.5;
+  camera.distance = 12;
+  camera.targetX = 0;
+  camera.targetZ = 0;
+  pan.x = 0;
+  pan.y = 0;
+  currentFloor = 0;
+  
+  var selector = document.getElementById('levelSelect');
+  if (selector) selector.value = '0';
+  
+  var labels = document.getElementById('labels');
+  if (labels) labels.innerHTML = '';
+  
+  createInitialRoom();
+  startRender();
+  
+  updateStatus('Reset complete');
+}
+
+function showInfo() {
+  var modal = document.getElementById('info-modal');
+  if (modal) modal.style.display = 'block';
+}
+
+function hideInfo() {
+  var modal = document.getElementById('info-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+  var infoModal = document.getElementById('info-modal');
+  var pricingModal = document.getElementById('pricing-modal');
+  
+  if (infoModal && e.target === infoModal) {
+    hideInfo();
+  }
+  
+  if (pricingModal && e.target === pricingModal) {
+    hidePricing();
+  }
+});
+
+function drawStairs(stairs) {
+  if (!stairs) return;
+  
+  try {
+    var selected = selectedRoomId === stairs.id;
+    var stepHeight = stairs.height / stairs.steps;
+    var stepDepth = stairs.depth / stairs.steps;
+    
+    var opacity = currentFloor === 0 ? 1.0 : 0.6;
+    var strokeColor = selected ? '#007acc' : '#D0D0D0';
+    var strokeWidth = selected ? 2 : 1;
+    
+    ctx.globalAlpha = opacity;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth;
+    
+    for (var step = 0; step < stairs.steps; step++) {
+      var stepY = step * stepHeight;
+      var stepZ = stairs.z - stairs.depth/2 + step * stepDepth;
+      
+      var stepCorners = [
+        {x: stairs.x - stairs.width/2, y: stepY, z: stepZ},
+        {x: stairs.x + stairs.width/2, y: stepY, z: stepZ},
+        {x: stairs.x + stairs.width/2, y: stepY, z: stepZ + stepDepth},
+        {x: stairs.x - stairs.width/2, y: stepY, z: stepZ + stepDepth},
+        {x: stairs.x - stairs.width/2, y: stepY + stepHeight, z: stepZ},
+        {x: stairs.x + stairs.width/2, y: stepY + stepHeight, z: stepZ},
+        {x: stairs.x + stairs.width/2, y: stepY + stepHeight, z: stepZ + stepDepth},
+        {x: stairs.x - stairs.width/2, y: stepY + stepHeight, z: stepZ + stepDepth}
+      ];
+      
+      var projected = [];
+      var allVisible = true;
+      for (var i = 0; i < stepCorners.length; i++) {
+        var p = project3D(stepCorners[i].x, stepCorners[i].y, stepCorners[i].z);
+        if (!p) {
+          allVisible = false;
+          break;
+        }
+        projected.push(p);
+      }
+      
+      if (!allVisible) continue;
+      
+      var edges = [
+        [0,1],[1,2],[2,3],[3,0],
+        [4,5],[5,6],[6,7],[7,4],
+        [0,4],[1,5],[2,6],[3,7]
+      ];
+      
+      ctx.beginPath();
+      for (var i = 0; i < edges.length; i++) {
+        var edge = edges[i];
+        ctx.moveTo(projected[edge[0]].x, projected[edge[0]].y);
+        ctx.lineTo(projected[edge[1]].x, projected[edge[1]].y);
+      }
+      ctx.stroke();
+      
+      ctx.fillStyle = selected ? 'rgba(0,122,204,0.2)' : 'rgba(208,208,208,0.2)';
+      ctx.beginPath();
+      ctx.moveTo(projected[4].x, projected[4].y);
+      ctx.lineTo(projected[5].x, projected[5].y);
+      ctx.lineTo(projected[6].x, projected[6].y);
+      ctx.lineTo(projected[7].x, projected[7].y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    
+    ctx.globalAlpha = 1.0;
+    
+    if (selected) {
+      drawHandlesForStairs(stairs);
+    }
+    
+  } catch (error) {
+    console.error('Stairs draw error:', error);
+  }
+}
+
+function drawHandlesForStairs(stairs) {
+  try {
+    var handleY = stairs.height + 0.2;
+    
+    var stairHandles = [
+      {x: stairs.x + stairs.width/2, y: handleY, z: stairs.z, type: 'width+', label: 'X+', color: '#007acc'},
+      {x: stairs.x - stairs.width/2, y: handleY, z: stairs.z, type: 'width-', label: 'X-', color: '#007acc'},
+      {x: stairs.x, y: handleY, z: stairs.z + stairs.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
+      {x: stairs.x, y: handleY, z: stairs.z - stairs.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'}
+    ];
+    
+    for (var i = 0; i < stairHandles.length; i++) {
+      var handle = stairHandles[i];
+      var screen = project3D(handle.x, handle.y, handle.z);
+      if (!screen) continue;
+      
+      ctx.fillStyle = handle.color;
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y, HANDLE_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(handle.label, screen.x, screen.y);
+      
+      resizeHandles.push({
+        screenX: screen.x - HANDLE_RADIUS,
+        screenY: screen.y - HANDLE_RADIUS,
+        width: HANDLE_RADIUS * 2,
+        height: HANDLE_RADIUS * 2,
+        type: handle.type,
+        roomId: stairs.id
+      });
+    }
+  } catch (error) {
+    console.error('Stairs handle error:', error);
+  }
+}
+
+function drawPergola(pergola) {
+  if (!pergola) return;
+  
+  try {
+    var selected = selectedRoomId === pergola.id;
+    var strokeColor = selected ? '#007acc' : '#D0D0D0';
+    var strokeWidth = selected ? 2 : 1.5;
+    var opacity = currentFloor === 0 ? 1.0 : 0.6;
+    
+    ctx.globalAlpha = opacity;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth;
+    
+    var legSize = pergola.legWidth;
+    var legPositions = [
+      {x: pergola.x - pergola.width/2 + legSize/2, z: pergola.z - pergola.depth/2 + legSize/2},
+      {x: pergola.x + pergola.width/2 - legSize/2, z: pergola.z - pergola.depth/2 + legSize/2},
+      {x: pergola.x + pergola.width/2 - legSize/2, z: pergola.z + pergola.depth/2 - legSize/2},
+      {x: pergola.x - pergola.width/2 + legSize/2, z: pergola.z + pergola.depth/2 - legSize/2}
+    ];
+    
+    var roofHeight = 0.25;
+    var roofY = pergola.height;
+    
+    for (var legIdx = 0; legIdx < legPositions.length; legIdx++) {
+      var legPos = legPositions[legIdx];
+      var legHalf = legSize / 2;
+      
+      var legCorners = [
+        {x: legPos.x - legHalf, y: 0, z: legPos.z - legHalf},
+        {x: legPos.x + legHalf, y: 0, z: legPos.z - legHalf},
+        {x: legPos.x + legHalf, y: 0, z: legPos.z + legHalf},
+        {x: legPos.x - legHalf, y: 0, z: legPos.z + legHalf},
+        {x: legPos.x - legHalf, y: roofY + roofHeight, z: legPos.z - legHalf},
+        {x: legPos.x + legHalf, y: roofY + roofHeight, z: legPos.z - legHalf},
+        {x: legPos.x + legHalf, y: roofY + roofHeight, z: legPos.z + legHalf},
+        {x: legPos.x - legHalf, y: roofY + roofHeight, z: legPos.z + legHalf}
+      ];
+      
+      var projectedLeg = [];
+      var allVisible = true;
+      for (var i = 0; i < legCorners.length; i++) {
+        var p = project3D(legCorners[i].x, legCorners[i].y, legCorners[i].z);
+        if (!p) {
+          allVisible = false;
+          break;
+        }
+        projectedLeg.push(p);
+      }
+      
+      if (allVisible) {
+        var legEdges = [
+          [0,1],[1,2],[2,3],[3,0],
+          [4,5],[5,6],[6,7],[7,4],
+          [0,4],[1,5],[2,6],[3,7]
+        ];
+        
+        ctx.beginPath();
+        for (var i = 0; i < legEdges.length; i++) {
+          var edge = legEdges[i];
+          ctx.moveTo(projectedLeg[edge[0]].x, projectedLeg[edge[0]].y);
+          ctx.lineTo(projectedLeg[edge[1]].x, projectedLeg[edge[1]].y);
+        }
+        ctx.stroke();
+      }
+    }
+    
+    var roofCorners = [
+      {x: pergola.x - pergola.width/2, y: roofY, z: pergola.z - pergola.depth/2},
+      {x: pergola.x + pergola.width/2, y: roofY, z: pergola.z - pergola.depth/2},
+      {x: pergola.x + pergola.width/2, y: roofY, z: pergola.z + pergola.depth/2},
+      {x: pergola.x - pergola.width/2, y: roofY, z: pergola.z + pergola.depth/2},
+      {x: pergola.x - pergola.width/2, y: roofY + roofHeight, z: pergola.z - pergola.depth/2},
+      {x: pergola.x + pergola.width/2, y: roofY + roofHeight, z: pergola.z - pergola.depth/2},
+      {x: pergola.x + pergola.width/2, y: roofY + roofHeight, z: pergola.z + pergola.depth/2},
+      {x: pergola.x - pergola.width/2, y: roofY + roofHeight, z: pergola.z + pergola.depth/2}
+    ];
+    
+    var projectedRoof = [];
+    var roofVisible = true;
+    for (var i = 0; i < roofCorners.length; i++) {
+      var p = project3D(roofCorners[i].x, roofCorners[i].y, roofCorners[i].z);
+      if (!p) {
+        roofVisible = false;
+        break;
+      }
+      projectedRoof.push(p);
+    }
+    
+    if (roofVisible) {
+      var roofEdges = [
+        [0,1],[1,2],[2,3],[3,0],
+        [4,5],[5,6],[6,7],[7,4],
+        [0,4],[1,5],[2,6],[3,7]
+      ];
+      
+      ctx.fillStyle = selected ? 'rgba(0,122,204,0.2)' : 'rgba(208,208,208,0.15)';
+      
+      ctx.beginPath();
+      ctx.moveTo(projectedRoof[4].x, projectedRoof[4].y);
+      ctx.lineTo(projectedRoof[5].x, projectedRoof[5].y);
+      ctx.lineTo(projectedRoof[6].x, projectedRoof[6].y);
+      ctx.lineTo(projectedRoof[7].x, projectedRoof[7].y);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.beginPath();
+      ctx.moveTo(projectedRoof[0].x, projectedRoof[0].y);
+      ctx.lineTo(projectedRoof[1].x, projectedRoof[1].y);
+      ctx.lineTo(projectedRoof[2].x, projectedRoof[2].y);
+      ctx.lineTo(projectedRoof[3].x, projectedRoof[3].y);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.beginPath();
+      for (var i = 0; i < roofEdges.length; i++) {
+        var edge = roofEdges[i];
+        ctx.moveTo(projectedRoof[edge[0]].x, projectedRoof[edge[0]].y);
+        ctx.lineTo(projectedRoof[edge[1]].x, projectedRoof[edge[1]].y);
+      }
+      ctx.stroke();
+      
+      var slatSpacing = pergola.width / (pergola.slatCount + 1);
+      var slatThickness = 0.08;
+      
+      for (var slatIdx = 0; slatIdx < pergola.slatCount; slatIdx++) {
+        var slatX = pergola.x - pergola.width/2 + (slatIdx + 1) * slatSpacing;
+        var slatHalf = slatThickness / 2;
+        
+        var slatCorners = [
+          {x: slatX - slatHalf, y: roofY + roofHeight, z: pergola.z - pergola.depth/2},
+          {x: slatX + slatHalf, y: roofY + roofHeight, z: pergola.z - pergola.depth/2},
+          {x: slatX + slatHalf, y: roofY + roofHeight, z: pergola.z + pergola.depth/2},
+          {x: slatX - slatHalf, y: roofY + roofHeight, z: pergola.z + pergola.depth/2},
+          {x: slatX - slatHalf, y: roofY + roofHeight + slatThickness, z: pergola.z - pergola.depth/2},
+          {x: slatX + slatHalf, y: roofY + roofHeight + slatThickness, z: pergola.z - pergola.depth/2},
+          {x: slatX + slatHalf, y: roofY + roofHeight + slatThickness, z: pergola.z + pergola.depth/2},
+          {x: slatX - slatHalf, y: roofY + roofHeight + slatThickness, z: pergola.z + pergola.depth/2}
+        ];
+        
+        var projectedSlat = [];
+        var slatValid = true;
+        for (var i = 0; i < slatCorners.length; i++) {
+          var p = project3D(slatCorners[i].x, slatCorners[i].y, slatCorners[i].z);
+          if (!p) {
+            slatValid = false;
+            break;
+          }
+          projectedSlat.push(p);
+        }
+        
+        if (slatValid) {
+          var slatEdges = [
+            [0,1],[1,2],[2,3],[3,0],
+            [4,5],[5,6],[6,7],[7,4],
+            [0,4],[1,5],[2,6],[3,7]
+          ];
+          
+          ctx.strokeStyle = selected ? '#007acc' : '#909090';
+          ctx.lineWidth = 1;
+          ctx.fillStyle = selected ? 'rgba(0,85,128,0.3)' : 'rgba(192,192,192,0.5)';
+          
+          ctx.beginPath();
+          ctx.moveTo(projectedSlat[4].x, projectedSlat[4].y);
+          ctx.lineTo(projectedSlat[5].x, projectedSlat[5].y);
+          ctx.lineTo(projectedSlat[6].x, projectedSlat[6].y);
+          ctx.lineTo(projectedSlat[7].x, projectedSlat[7].y);
+          ctx.closePath();
+          ctx.fill();
+          
+          ctx.beginPath();
+          for (var i = 0; i < slatEdges.length; i++) {
+            var edge = slatEdges[i];
+            ctx.moveTo(projectedSlat[edge[0]].x, projectedSlat[edge[0]].y);
+            ctx.lineTo(projectedSlat[edge[1]].x, projectedSlat[edge[1]].y);
+          }
+          ctx.stroke();
+          
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = strokeWidth;
+        }
+      }
+    }
+    
+    ctx.globalAlpha = 1.0;
+    
+    if (selected) {
+      drawHandlesForPergola(pergola);
+    }
+    
+  } catch (error) {
+    console.error('Pergola draw error:', error);
+  }
+}
+
+function drawHandlesForPergola(pergola) {
+  try {
+    var handleY = pergola.totalHeight + 0.2;
+    
+    var pergolaHandles = [
+      {x: pergola.x + pergola.width/2, y: handleY, z: pergola.z, type: 'width+', label: 'X+', color: '#007acc'},
+      {x: pergola.x - pergola.width/2, y: handleY, z: pergola.z, type: 'width-', label: 'X-', color: '#007acc'},
+      {x: pergola.x, y: handleY, z: pergola.z + pergola.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
+      {x: pergola.x, y: handleY, z: pergola.z - pergola.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'}
+    ];
+    
+    for (var i = 0; i < pergolaHandles.length; i++) {
+      var handle = pergolaHandles[i];
+      var screen = project3D(handle.x, handle.y, handle.z);
+      if (!screen) continue;
+      
+      ctx.fillStyle = handle.color;
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y, HANDLE_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(handle.label, screen.x, screen.y);
+      
+      resizeHandles.push({
+        screenX: screen.x - HANDLE_RADIUS,
+        screenY: screen.y - HANDLE_RADIUS,
+        width: HANDLE_RADIUS * 2,
+        height: HANDLE_RADIUS * 2,
+        type: handle.type,
+        roomId: pergola.id
+      });
+    }
+  } catch (error) {
+    console.error('Pergola handle error:', error);
+  }
+}
+
+function drawGarage(garage) {
+  if (!garage) return;
+  
+  try {
+    var selected = selectedRoomId === garage.id;
+    var strokeColor = selected ? '#007acc' : '#D0D0D0';
+    var fillColor = selected ? 'rgba(0,122,204,0.3)' : 'rgba(208,208,208,0.2)';
+    var strokeWidth = selected ? 2 : 1.5;
+    var opacity = currentFloor === 0 ? 1.0 : 0.6;
+    
+    ctx.globalAlpha = opacity;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth;
+    
+    var hw = garage.width / 2;
+    var hd = garage.depth / 2;
+    
+    var corners = [
+      {x: garage.x - hw, y: 0, z: garage.z - hd},
+      {x: garage.x + hw, y: 0, z: garage.z - hd},
+      {x: garage.x + hw, y: 0, z: garage.z + hd},
+      {x: garage.x - hw, y: 0, z: garage.z + hd},
+      {x: garage.x - hw, y: garage.height, z: garage.z - hd},
+      {x: garage.x + hw, y: garage.height, z: garage.z - hd},
+      {x: garage.x + hw, y: garage.height, z: garage.z + hd},
+      {x: garage.x - hw, y: garage.height, z: garage.z + hd}
+    ];
+    
+    var projected = [];
+    for (var i = 0; i < corners.length; i++) {
+      var p = project3D(corners[i].x, corners[i].y, corners[i].z);
+      if (!p) return;
+      projected.push(p);
+    }
+    
+    var edges = [
+      [0,1],[1,2],[2,3],[3,0],
+      [4,5],[5,6],[6,7],[7,4],
+      [0,4],[1,5],[2,6],[3,7]
+    ];
+    
+    ctx.beginPath();
+    for (var i = 0; i < edges.length; i++) {
+      var edge = edges[i];
+      ctx.moveTo(projected[edge[0]].x, projected[edge[0]].y);
+      ctx.lineTo(projected[edge[1]].x, projected[edge[1]].y);
+    }
+    ctx.stroke();
+    
+    ctx.fillStyle = fillColor;
+    ctx.beginPath();
+    ctx.moveTo(projected[0].x, projected[0].y);
+    ctx.lineTo(projected[1].x, projected[1].y);
+    ctx.lineTo(projected[2].x, projected[2].y);
+    ctx.lineTo(projected[3].x, projected[3].y);
+    ctx.closePath();
+    ctx.fill();
+    
+    var doorWidth = garage.width;
+    var doorHeight = garage.height * 0.9;
+    var doorY = 0;
+    
+    var doorCorners = [
+      {x: garage.x - doorWidth/2, y: doorY, z: garage.z - garage.depth/2},
+      {x: garage.x + doorWidth/2, y: doorY, z: garage.z - garage.depth/2},
+      {x: garage.x + doorWidth/2, y: doorY + doorHeight, z: garage.z - garage.depth/2},
+      {x: garage.x - doorWidth/2, y: doorY + doorHeight, z: garage.z - garage.depth/2}
+    ];
+    
+    var projectedDoor = [];
+    var doorVisible = true;
+    for (var i = 0; i < doorCorners.length; i++) {
+      var p = project3D(doorCorners[i].x, doorCorners[i].y, doorCorners[i].z);
+      if (!p) {
+        doorVisible = false;
+        break;
+      }
+      projectedDoor.push(p);
+    }
+    
+    if (doorVisible) {
+      ctx.fillStyle = selected ? '#B8D4F0' : 'rgba(192,192,192,0.5)';
+      ctx.beginPath();
+      ctx.moveTo(projectedDoor[0].x, projectedDoor[0].y);
+      ctx.lineTo(projectedDoor[1].x, projectedDoor[1].y);
+      ctx.lineTo(projectedDoor[2].x, projectedDoor[2].y);
+      ctx.lineTo(projectedDoor[3].x, projectedDoor[3].y);
+      ctx.closePath();
+      ctx.fill();
+      
+      ctx.strokeStyle = selected ? '#007acc' : '#A0A0A0';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      
+      var slatCount = garage.doorSlatCount || 8;
+      var slatHeight = doorHeight / slatCount;
+      
+      for (var slatIdx = 1; slatIdx < slatCount; slatIdx++) {
+        var slatY = doorY + slatIdx * slatHeight;
+        var slatLeft = project3D(garage.x - doorWidth/2, slatY, garage.z - garage.depth/2);
+        var slatRight = project3D(garage.x + doorWidth/2, slatY, garage.z - garage.depth/2);
+        
+        if (slatLeft && slatRight) {
+          ctx.strokeStyle = selected ? '#007acc' : '#D0D0D0';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(slatLeft.x, slatLeft.y);
+          ctx.lineTo(slatRight.x, slatRight.y);
+          ctx.stroke();
+        }
+      }
+      
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = strokeWidth;
+    }
+    
+    ctx.globalAlpha = 1.0;
+    
+    if (selected) {
+      drawHandlesForGarage(garage);
+    }
+    
+  } catch (error) {
+    console.error('Garage draw error:', error);
+  }
+}
+
+function drawHandlesForGarage(garage) {
+  try {
+    var handleY = garage.height + 0.2;
+    
+    var garageHandles = [
+      {x: garage.x + garage.width/2, y: handleY, z: garage.z, type: 'width+', label: 'X+', color: '#007acc'},
+      {x: garage.x - garage.width/2, y: handleY, z: garage.z, type: 'width-', label: 'X-', color: '#007acc'},
+      {x: garage.x, y: handleY, z: garage.z + garage.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
+      {x: garage.x, y: handleY, z: garage.z - garage.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'}
+    ];
+    
+    for (var i = 0; i < garageHandles.length; i++) {
+      var handle = garageHandles[i];
+      var screen = project3D(handle.x, handle.y, handle.z);
+      if (!screen) continue;
+      
+      ctx.fillStyle = handle.color;
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y, HANDLE_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(handle.label, screen.x, screen.y);
+      
+      resizeHandles.push({
+        screenX: screen.x - HANDLE_RADIUS,
+        screenY: screen.y - HANDLE_RADIUS,
+        width: HANDLE_RADIUS * 2,
+        height: HANDLE_RADIUS * 2,
+        type: handle.type,
+        roomId: garage.id
+      });
+    }
+  } catch (error) {
+    console.error('Garage handle error:', error);
+  }
+}
+
+function renderLoop() {
+  try {
+    resizeHandles = [];
+    
+    clearCanvas();
+    drawGrid();
+    drawSnapGuides();
+    
+    var allObjects = [];
+    
+    for (var i = 0; i < allRooms.length; i++) {
+      var room = allRooms[i];
+      var roomCenterY = room.level * 3.5 + room.height / 2;
+      var distFromCamera = Math.sqrt(
+        (room.x - camera.targetX) * (room.x - camera.targetX) + 
+        (roomCenterY) * (roomCenterY) +
+        (room.z - camera.targetZ) * (room.z - camera.targetZ)
+      );
+      allObjects.push({
+        object: room,
+        type: 'room',
+        distance: distFromCamera,
+        maxHeight: room.level * 3.5 + room.height
+      });
+    }
+    
+    if (stairsComponent) {
+      var stairsCenterY = stairsComponent.height / 2;
+      var stairsDistance = Math.sqrt(
+        (stairsComponent.x - camera.targetX) * (stairsComponent.x - camera.targetX) + 
+        (stairsCenterY) * (stairsCenterY) +
+        (stairsComponent.z - camera.targetZ) * (stairsComponent.z - camera.targetZ)
+      );
+      allObjects.push({
+        object: stairsComponent,
+        type: 'stairs',
+        distance: stairsDistance,
+        maxHeight: stairsComponent.height
+      });
+    }
+    
+    for (var i = 0; i < pergolaComponents.length; i++) {
+      var pergola = pergolaComponents[i];
+      var pergolaCenterY = pergola.totalHeight / 2;
+      var pergolaDistance = Math.sqrt(
+        (pergola.x - camera.targetX) * (pergola.x - camera.targetX) + 
+        (pergolaCenterY) * (pergolaCenterY) +
+        (pergola.z - camera.targetZ) * (pergola.z - camera.targetZ)
+      );
+      allObjects.push({
+        object: pergola,
+        type: 'pergola',
+        distance: pergolaDistance,
+        maxHeight: pergola.totalHeight
+      });
+    }
+    
+    for (var i = 0; i < garageComponents.length; i++) {
+      var garage = garageComponents[i];
+      var garageCenterY = garage.height / 2;
+      var garageDistance = Math.sqrt(
+        (garage.x - camera.targetX) * (garage.x - camera.targetX) + 
+        (garageCenterY) * (garageCenterY) +
+        (garage.z - camera.targetZ) * (garage.z - camera.targetZ)
+      );
+      allObjects.push({
+        object: garage,
+        type: 'garage',
+        distance: garageDistance,
+        maxHeight: garage.height
+      });
+    }
+    
+    for (var i = 0; i < roofComponents.length; i++) {
+      var roof = roofComponents[i];
+      var roofCenterY = roof.baseHeight + roof.height / 2;
+      var roofDistance = Math.sqrt(
+        (roof.x - camera.targetX) * (roof.x - camera.targetX) + 
+        (roofCenterY) * (roofCenterY) +
+        (roof.z - camera.targetZ) * (roof.z - camera.targetZ)
+      );
+      allObjects.push({
+        object: roof,
+        type: 'roof',
+        distance: roofDistance,
+        maxHeight: roof.baseHeight + roof.height
+      });
+    }
+    
+    allObjects.sort(function(a, b) {
+      var distDiff = b.distance - a.distance;
+      if (Math.abs(distDiff) > 1.0) {
+        return distDiff;
+      }
+      return a.maxHeight - b.maxHeight;
+    });
+    
+    for (var i = 0; i < allObjects.length; i++) {
+      var item = allObjects[i];
+      switch (item.type) {
+        case 'room':
+          drawRoom(item.object);
+          break;
+        case 'stairs':
+          drawStairs(item.object);
+          break;
+        case 'pergola':
+          drawPergola(item.object);
+          break;
+        case 'garage':
+          drawGarage(item.object);
+          break;
+        case 'roof':
+          drawRoof(item.object);
+          break;
+      }
+    }
+    
+    updateLabels();
+    updateMeasurements();
+    
+  } catch (error) {
+    console.error('Render error:', error);
+    updateStatus('Render error');
+  }
+  
+  animationId = requestAnimationFrame(renderLoop);
 }
 
 function startRender() {
@@ -1690,11 +2611,3 @@ function startRender() {
 }
 
 document.addEventListener('DOMContentLoaded', startApp);
-// Add event listener for Save button in measurements panel
-document.addEventListener('DOMContentLoaded', function() {
-  var saveBtn = document.getElementById('save-measurements');
-  if (saveBtn) {
-    saveBtn.addEventListener('click', saveMeasurements);
-  }
-
-
