@@ -2046,7 +2046,9 @@ function drawHandlesForStairs(stairs) {
       {x: stairs.x + stairs.width/2, y: handleY, z: stairs.z, type: 'width+', label: 'X+', color: '#007acc'},
       {x: stairs.x - stairs.width/2, y: handleY, z: stairs.z, type: 'width-', label: 'X-', color: '#007acc'},
       {x: stairs.x, y: handleY, z: stairs.z + stairs.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
-      {x: stairs.x, y: handleY, z: stairs.z - stairs.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'}
+      {x: stairs.x, y: handleY, z: stairs.z - stairs.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'},
+      // New 360 handle
+      {x: stairs.x, y: handleY + 0.3, z: stairs.z, type: 'rotate', label: '360', color: '#ff9900'}
     ];
     
     for (var i = 0; i < stairHandles.length; i++) {
