@@ -18,7 +18,7 @@ var roofComponents = [];
 var currentSnapGuides = [];
 
 var HANDLE_RADIUS = 12;
-var GRID_SPACING = 2;
+var GRID_SPACING = 0.5;
 var SNAP_GRID_TOLERANCE = 1.0;
 var SNAP_CENTER_TOLERANCE = 0.6;
 var HANDLE_SNAP_TOLERANCE = 0.25;
@@ -283,9 +283,7 @@ function createRoof(x, z) {
 
 function addRoof() {
   var newRoof = createRoof();
-  var spot = findFreeSpot(newRoof);
-  newRoof.x = spot.x;
-  newRoof.z = spot.z;
+  // newRoof.x and newRoof.z are already centered in createRoof
   roofComponents.push(newRoof);
   currentFloor = 0;
   selectedRoomId = newRoof.id;
@@ -1123,13 +1121,31 @@ function updateMeasurements() {
   }
   
   measurementsPanel.className = 'visible';
-  
-  document.getElementById('measure-width').textContent = selectedObject.width.toFixed(1) + 'm';
-  document.getElementById('measure-depth').textContent = selectedObject.depth.toFixed(1) + 'm';
-  document.getElementById('measure-height').textContent = selectedObject.height.toFixed(1) + 'm';
-  document.getElementById('measure-pos-x').textContent = selectedObject.x.toFixed(1) + 'm';
-  document.getElementById('measure-pos-z').textContent = selectedObject.z.toFixed(1) + 'm';
-  
+
+  // Populate input fields with current values
+  var widthInput = document.getElementById('input-width');
+  var depthInput = document.getElementById('input-depth');
+  var heightInput = document.getElementById('input-height');
+  var posXInput = document.getElementById('input-pos-x');
+  var posZInput = document.getElementById('input-pos-z');
+  widthInput.value = selectedObject.width.toFixed(1);
+  depthInput.value = selectedObject.depth.toFixed(1);
+  heightInput.value = selectedObject.height.toFixed(1);
+  posXInput.value = selectedObject.x.toFixed(1);
+  posZInput.value = selectedObject.z.toFixed(1);
+  widthInput.disabled = false;
+  depthInput.disabled = false;
+  heightInput.disabled = false;
+  posXInput.disabled = false;
+  posZInput.disabled = false;
+
+  // Update object immediately on input change or arrow key
+  widthInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.width = Math.max(1, Math.min(20, parseFloat(this.value))); } };
+  depthInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.depth = Math.max(1, Math.min(20, parseFloat(this.value))); } };
+  heightInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.height = Math.max(0.5, Math.min(10, parseFloat(this.value))); } };
+  posXInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.x = Math.max(-100, Math.min(100, parseFloat(this.value))); } };
+  posZInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.z = Math.max(-100, Math.min(100, parseFloat(this.value))); } };
+
   var floorText = selectedObject.level === 0 ? 'Ground' : 'Floor ' + (selectedObject.level + 1);
   document.getElementById('measure-floor').textContent = floorText;
 }
