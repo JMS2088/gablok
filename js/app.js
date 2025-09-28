@@ -1549,8 +1549,14 @@ function setupEvents() {
     var handle = findHandle(mouseX, mouseY);
     if (handle) {
       var target = findObjectById(handle.roomId);
-      
       if (target) {
+        if (handle.type === 'rotate') {
+          // Rotate stairs by 22.5 degrees
+          target.rotation = ((target.rotation || 0) + 22.5) % 360;
+          renderLoop();
+          updateStatus('Stairs rotated 22.5°');
+          return;
+        }
         mouse.dragType = 'handle';
         mouse.dragInfo = {
           handle: handle,
@@ -1975,25 +1981,34 @@ function drawStairs(stairs) {
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = strokeWidth;
     
+    var rotRad = ((stairs.rotation || 0) * Math.PI) / 180;
     for (var step = 0; step < stairs.steps; step++) {
       var stepY = step * stepHeight;
       var stepZ = stairs.z - stairs.depth/2 + step * stepDepth;
-      
-      var stepCorners = [
-        {x: stairs.x - stairs.width/2, y: stepY, z: stepZ},
-        {x: stairs.x + stairs.width/2, y: stepY, z: stepZ},
-        {x: stairs.x + stairs.width/2, y: stepY, z: stepZ + stepDepth},
-        {x: stairs.x - stairs.width/2, y: stepY, z: stepZ + stepDepth},
-        {x: stairs.x - stairs.width/2, y: stepY + stepHeight, z: stepZ},
-        {x: stairs.x + stairs.width/2, y: stepY + stepHeight, z: stepZ},
-        {x: stairs.x + stairs.width/2, y: stepY + stepHeight, z: stepZ + stepDepth},
-        {x: stairs.x - stairs.width/2, y: stepY + stepHeight, z: stepZ + stepDepth}
+      // Apply rotation around stairs center
+      var corners = [
+        {x: stairs.x - stairs.width/2, z: stepZ},
+        {x: stairs.x + stairs.width/2, z: stepZ},
+        {x: stairs.x + stairs.width/2, z: stepZ + stepDepth},
+        {x: stairs.x - stairs.width/2, z: stepZ + stepDepth},
+        {x: stairs.x - stairs.width/2, z: stepZ},
+        {x: stairs.x + stairs.width/2, z: stepZ},
+        {x: stairs.x + stairs.width/2, z: stepZ + stepDepth},
+        {x: stairs.x - stairs.width/2, z: stepZ + stepDepth}
       ];
-      
+      var rotatedCorners = [];
+      for (var i = 0; i < corners.length; i++) {
+        var dx = corners[i].x - stairs.x;
+        var dz = corners[i].z - stairs.z;
+        var rx = stairs.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad);
+        var rz = stairs.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad);
+        var y = stepY + (i >= 4 ? stepHeight : 0);
+        rotatedCorners.push({x: rx, y: y, z: rz});
+      }
       var projected = [];
       var allVisible = true;
-      for (var i = 0; i < stepCorners.length; i++) {
-        var p = project3D(stepCorners[i].x, stepCorners[i].y, stepCorners[i].z);
+      for (var i = 0; i < rotatedCorners.length; i++) {
+        var p = project3D(rotatedCorners[i].x, rotatedCorners[i].y, rotatedCorners[i].z);
         if (!p) {
           allVisible = false;
           break;
