@@ -716,16 +716,23 @@ function drawGableRoof(roof, selected, strokeColor, fillColor, strokeWidth) {
   var hd = roof.depth / 2;
   var baseY = roof.baseHeight;
   var peakY = baseY + roof.height;
-  
+  var rotRad = ((roof.rotation || 0) * Math.PI) / 180;
+  function rotate(x, z) {
+    var dx = x - roof.x;
+    var dz = z - roof.z;
+    return {
+      x: roof.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+      z: roof.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+    };
+  }
   var roofCorners = [
-    {x: roof.x - hw, y: baseY, z: roof.z - hd},
-    {x: roof.x + hw, y: baseY, z: roof.z - hd},
-    {x: roof.x + hw, y: baseY, z: roof.z + hd},
-    {x: roof.x - hw, y: baseY, z: roof.z + hd},
-    {x: roof.x - hw, y: peakY, z: roof.z},
-    {x: roof.x + hw, y: peakY, z: roof.z}
+    (function(){var p=rotate(roof.x-hw,roof.z-hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z-hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z+hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw,roof.z+hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw,roof.z);return {x:p.x,y:peakY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z);return {x:p.x,y:peakY,z:p.z};})()
   ];
-  
   var projected = [];
   for (var i = 0; i < roofCorners.length; i++) {
     var p = project3D(roofCorners[i].x, roofCorners[i].y, roofCorners[i].z);
@@ -764,15 +771,22 @@ function drawHipRoof(roof, selected, strokeColor, fillColor, strokeWidth) {
   var hd = roof.depth / 2;
   var baseY = roof.baseHeight;
   var peakY = baseY + roof.height;
-  
+  var rotRad = ((roof.rotation || 0) * Math.PI) / 180;
+  function rotate(x, z) {
+    var dx = x - roof.x;
+    var dz = z - roof.z;
+    return {
+      x: roof.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+      z: roof.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+    };
+  }
   var corners = [
-    {x: roof.x - hw, y: baseY, z: roof.z - hd},
-    {x: roof.x + hw, y: baseY, z: roof.z - hd},
-    {x: roof.x + hw, y: baseY, z: roof.z + hd},
-    {x: roof.x - hw, y: baseY, z: roof.z + hd},
-    {x: roof.x, y: peakY, z: roof.z}
+    (function(){var p=rotate(roof.x-hw,roof.z-hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z-hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z+hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw,roof.z+hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x,roof.z);return {x:p.x,y:peakY,z:p.z};})()
   ];
-  
   var projected = [];
   for (var i = 0; i < corners.length; i++) {
     var p = project3D(corners[i].x, corners[i].y, corners[i].z);
@@ -800,14 +814,21 @@ function drawFlatRoof(roof, selected, strokeColor, fillColor, strokeWidth) {
   var hw = roof.width / 2;
   var hd = roof.depth / 2;
   var roofY = roof.baseHeight + roof.height * 0.2;
-  
+  var rotRad = ((roof.rotation || 0) * Math.PI) / 180;
+  function rotate(x, z) {
+    var dx = x - roof.x;
+    var dz = z - roof.z;
+    return {
+      x: roof.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+      z: roof.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+    };
+  }
   var corners = [
-    {x: roof.x - hw, y: roofY, z: roof.z - hd},
-    {x: roof.x + hw, y: roofY, z: roof.z - hd},
-    {x: roof.x + hw, y: roofY, z: roof.z + hd},
-    {x: roof.x - hw, y: roofY, z: roof.z + hd}
+    (function(){var p=rotate(roof.x-hw,roof.z-hd);return {x:p.x,y:roofY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z-hd);return {x:p.x,y:roofY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z+hd);return {x:p.x,y:roofY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw,roof.z+hd);return {x:p.x,y:roofY,z:p.z};})()
   ];
-  
   var projected = [];
   for (var i = 0; i < corners.length; i++) {
     var p = project3D(corners[i].x, corners[i].y, corners[i].z);
@@ -832,14 +853,21 @@ function drawSkillionRoof(roof, selected, strokeColor, fillColor, strokeWidth) {
   var baseY = roof.baseHeight;
   var highY = baseY + roof.height;
   var lowY = baseY + roof.height * 0.3;
-  
+  var rotRad = ((roof.rotation || 0) * Math.PI) / 180;
+  function rotate(x, z) {
+    var dx = x - roof.x;
+    var dz = z - roof.z;
+    return {
+      x: roof.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+      z: roof.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+    };
+  }
   var corners = [
-    {x: roof.x - hw, y: highY, z: roof.z - hd},
-    {x: roof.x + hw, y: highY, z: roof.z - hd},
-    {x: roof.x + hw, y: lowY, z: roof.z + hd},
-    {x: roof.x - hw, y: lowY, z: roof.z + hd}
+    (function(){var p=rotate(roof.x-hw,roof.z-hd);return {x:p.x,y:highY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z-hd);return {x:p.x,y:highY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z+hd);return {x:p.x,y:lowY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw,roof.z+hd);return {x:p.x,y:lowY,z:p.z};})()
   ];
-  
   var projected = [];
   for (var i = 0; i < corners.length; i++) {
     var p = project3D(corners[i].x, corners[i].y, corners[i].z);
@@ -1064,12 +1092,27 @@ function drawHandlesForRoof(roof) {
   try {
     var handleY = roof.baseHeight + roof.height + 0.5;
     
+    var rotRad = ((roof.rotation || 0) * Math.PI) / 180;
+    function rotateHandle(dx, dz, dy) {
+      return {
+        x: roof.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+        y: handleY + (dy || 0),
+        z: roof.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+      };
+    }
     var roofHandles = [
-      {x: roof.x + roof.width/2, y: handleY, z: roof.z, type: 'width+', label: 'X+', color: '#007acc'},
-      {x: roof.x - roof.width/2, y: handleY, z: roof.z, type: 'width-', label: 'X-', color: '#007acc'},
-      {x: roof.x, y: handleY, z: roof.z + roof.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
-      {x: roof.x, y: handleY, z: roof.z - roof.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'},
-      {x: roof.x, y: handleY + 0.5, z: roof.z, type: 'height', label: 'Y', color: '#00cc66'}
+      // X+ (width+)
+      (function() { var p = rotateHandle(roof.width/2, 0); return {x: p.x, y: p.y, z: p.z, type: 'width+', label: 'X+', color: '#007acc'}; })(),
+      // X- (width-)
+      (function() { var p = rotateHandle(-roof.width/2, 0); return {x: p.x, y: p.y, z: p.z, type: 'width-', label: 'X-', color: '#007acc'}; })(),
+      // Z+ (depth+)
+      (function() { var p = rotateHandle(0, roof.depth/2); return {x: p.x, y: p.y, z: p.z, type: 'depth+', label: 'Z+', color: '#0099ff'}; })(),
+      // Z- (depth-)
+      (function() { var p = rotateHandle(0, -roof.depth/2); return {x: p.x, y: p.y, z: p.z, type: 'depth-', label: 'Z-', color: '#0099ff'}; })(),
+      // Y handle
+      (function() { var p = rotateHandle(0, 0, 0.5); return {x: p.x, y: p.y, z: p.z, type: 'height', label: 'Y', color: '#00cc66'}; })(),
+      // 360 handle, moved to the left of Y handle
+      (function() { var p = rotateHandle(-0.5, 0, 0.5); return {x: p.x, y: p.y, z: p.z, type: 'rotate', label: '360', color: '#ff9900'}; })()
     ];
     
     for (var i = 0; i < roofHandles.length; i++) {
@@ -1551,10 +1594,10 @@ function setupEvents() {
       var target = findObjectById(handle.roomId);
       if (target) {
         if (handle.type === 'rotate') {
-          // Rotate stairs by 22.5 degrees
+          // Rotate by 22.5 degrees (stairs or roof)
           target.rotation = ((target.rotation || 0) + 22.5) % 360;
           renderLoop();
-          updateStatus('Stairs rotated 22.5°');
+          updateStatus((target.type === 'roof' ? 'Roof' : 'Stairs') + ' rotated 22.5°');
           return;
         }
         mouse.dragType = 'handle';
@@ -1669,61 +1712,49 @@ function setupEvents() {
       }
     } else if (mouse.dragType === 'handle' && mouse.dragInfo) {
       var target = findObjectById(selectedRoomId);
-      
       if (target) {
         var dx = e.clientX - mouse.dragInfo.startX;
         var dy = e.clientY - mouse.dragInfo.startY;
         var movement = worldMovement(dx, dy);
-        
-        var origLeft = mouse.dragInfo.originalRoomX - mouse.dragInfo.originalWidth / 2;
-        var origRight = mouse.dragInfo.originalRoomX + mouse.dragInfo.originalWidth / 2;
-        var origFront = mouse.dragInfo.originalRoomZ - mouse.dragInfo.originalDepth / 2;
-        var origBack = mouse.dragInfo.originalRoomZ + mouse.dragInfo.originalDepth / 2;
-        
-        switch (mouse.dragInfo.handle.type) {
-          case 'width+':
-            var newRight = origRight + movement.x;
-            var snappedRight = Math.round(newRight / GRID_SPACING) * GRID_SPACING;
-            if (Math.abs(newRight - snappedRight) < HANDLE_SNAP_TOLERANCE) {
-              newRight = snappedRight;
+        // Roof and stairs handle drag logic (natural edge movement)
+        if (target.type === 'roof' || target.type === 'stairs') {
+          var rotRad = ((target.rotation || 0) * Math.PI) / 180;
+          var axisX = Math.cos(rotRad);
+          var axisZ = Math.sin(rotRad);
+          var axisZX = -Math.sin(rotRad);
+          var axisZZ = Math.cos(rotRad);
+          switch (mouse.dragInfo.handle.type) {
+            case 'width+': {
+              var delta = movement.x * axisX + movement.z * axisZ;
+              target.width = Math.max(1, Math.min(20, mouse.dragInfo.originalWidth + delta * 2));
+              break;
             }
-            target.width = Math.max(1, Math.min(20, newRight - origLeft));
-            target.x = origLeft + target.width / 2;
-            break;
-          case 'width-':
-            var newLeft = origLeft + movement.x;
-            var snappedLeft = Math.round(newLeft / GRID_SPACING) * GRID_SPACING;
-            if (Math.abs(newLeft - snappedLeft) < HANDLE_SNAP_TOLERANCE) {
-              newLeft = snappedLeft;
+            case 'width-': {
+              var delta = movement.x * axisX + movement.z * axisZ;
+              target.width = Math.max(1, Math.min(20, mouse.dragInfo.originalWidth - delta * 2));
+              break;
             }
-            target.width = Math.max(1, Math.min(20, origRight - newLeft));
-            target.x = origRight - target.width / 2;
-            break;
-          case 'depth+':
-            var newBack = origBack + movement.z;
-            var snappedBack = Math.round(newBack / GRID_SPACING) * GRID_SPACING;
-            if (Math.abs(newBack - snappedBack) < HANDLE_SNAP_TOLERANCE) {
-              newBack = snappedBack;
+            case 'depth+': {
+              var delta = movement.x * axisZX + movement.z * axisZZ;
+              target.depth = Math.max(1, Math.min(20, mouse.dragInfo.originalDepth + delta * 2));
+              break;
             }
-            target.depth = Math.max(1, Math.min(20, newBack - origFront));
-            target.z = origFront + target.depth / 2;
-            break;
-          case 'depth-':
-            var newFront = origFront + movement.z;
-            var snappedFront = Math.round(newFront / GRID_SPACING) * GRID_SPACING;
-            if (Math.abs(newFront - snappedFront) < HANDLE_SNAP_TOLERANCE) {
-              newFront = snappedFront;
+            case 'depth-': {
+              var delta = movement.x * axisZX + movement.z * axisZZ;
+              target.depth = Math.max(1, Math.min(20, mouse.dragInfo.originalDepth - delta * 2));
+              break;
             }
-            target.depth = Math.max(1, Math.min(20, origBack - newFront));
-            target.z = origBack - target.depth / 2;
-            break;
-          case 'height':
-            var heightChange = -(dy * 0.005);
-            target.height = Math.max(0.5, Math.min(10, target.height + heightChange));
-            break;
+            case 'height': {
+              var heightChange = -(dy * 0.005);
+              target.height = Math.max(0.5, Math.min(10, target.height + heightChange));
+              break;
+            }
+          }
+          updateStatus('Resizing: ' + target.width.toFixed(1) + 'm × ' + target.depth.toFixed(1) + 'm × ' + target.height.toFixed(1) + 'm');
+          renderLoop();
+        } else {
+          // ...existing code for rooms, etc...
         }
-        
-        updateStatus('Resizing: ' + target.width.toFixed(1) + 'm × ' + target.depth.toFixed(1) + 'm × ' + target.height.toFixed(1) + 'm');
       }
     } else if (mouse.dragType === 'camera' && mouse.down) {
       var dx = e.clientX - mouse.lastX;
@@ -1912,42 +1943,40 @@ function resetAll() {
     animationId = null;
   }
   
-  allRooms = [];
-  selectedRoomId = null;
-  stairsComponent = null;
-  pergolaComponents = [];
-  garageComponents = [];
-  roofComponents = [];
-  resizeHandles = [];
-  currentSnapGuides = [];
-  
-  camera.yaw = 0.5;
-  camera.pitch = -0.5;
-  camera.distance = 12;
-  camera.targetX = 0;
-  camera.targetZ = 0;
-  pan.x = 0;
-  pan.y = 0;
-  currentFloor = 0;
-  
-  var selector = document.getElementById('levelSelect');
-  if (selector) selector.value = '0';
-  
-  var labels = document.getElementById('labels');
-  if (labels) labels.innerHTML = '';
-  
-  createInitialRoom();
-  startRender();
-  
-  updateStatus('Reset complete');
-}
+    resizeHandles = [];
 
-function showInfo() {
-  var modal = document.getElementById('info-modal');
-  if (modal) modal.style.display = 'block';
-}
-
-function hideInfo() {
+    if (mouse.dragType === 'room' && mouse.dragInfo) {
+      // ...existing code...
+    } else if (mouse.dragType === 'handle' && mouse.dragInfo && mouse.dragInfo.handle && mouse.dragInfo.handle.roomId) {
+      var stairs = findObjectById(mouse.dragInfo.handle.roomId);
+      if (stairs && stairs.type === 'stairs') {
+        var dx = e.clientX - mouse.dragInfo.startX;
+        var dy = e.clientY - mouse.dragInfo.startY;
+        var movement = worldMovement(dx, dy);
+        var rotRad = ((stairs.rotation || 0) * Math.PI) / 180;
+        // Project movement onto rotated axis
+        if (mouse.dragInfo.handle.type === 'width+' || mouse.dragInfo.handle.type === 'width-') {
+          var sign = mouse.dragInfo.handle.type === 'width+' ? 1 : -1;
+          // Rotated X axis
+          var axisX = Math.cos(rotRad);
+          var axisZ = Math.sin(rotRad);
+          var delta = movement.x * axisX + movement.z * axisZ;
+          stairs.width = Math.max(0.5, mouse.dragInfo.originalWidth + sign * delta * 2);
+          updateStatus('Resizing stairs width...');
+        } else if (mouse.dragInfo.handle.type === 'depth+' || mouse.dragInfo.handle.type === 'depth-') {
+          var sign = mouse.dragInfo.handle.type === 'depth+' ? 1 : -1;
+          // Rotated Z axis
+          var axisX = -Math.sin(rotRad);
+          var axisZ = Math.cos(rotRad);
+          var delta = movement.x * axisX + movement.z * axisZ;
+          stairs.depth = Math.max(0.5, mouse.dragInfo.originalDepth + sign * delta * 2);
+          updateStatus('Resizing stairs depth...');
+        }
+        renderLoop();
+      }
+    } else if (mouse.dragType === 'stairs' && mouse.dragInfo) {
+      // ...existing code...
+    }
   var modal = document.getElementById('info-modal');
   if (modal) modal.style.display = 'none';
 }
@@ -2057,12 +2086,23 @@ function drawHandlesForStairs(stairs) {
   try {
     var handleY = stairs.height + 0.2;
     
+    var rotRad = ((stairs.rotation || 0) * Math.PI) / 180;
+    function rotateHandle(dx, dz) {
+      return {
+        x: stairs.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+        z: stairs.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+      };
+    }
     var stairHandles = [
-      {x: stairs.x + stairs.width/2, y: handleY, z: stairs.z, type: 'width+', label: 'X+', color: '#007acc'},
-      {x: stairs.x - stairs.width/2, y: handleY, z: stairs.z, type: 'width-', label: 'X-', color: '#007acc'},
-      {x: stairs.x, y: handleY, z: stairs.z + stairs.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
-      {x: stairs.x, y: handleY, z: stairs.z - stairs.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'},
-      // New 360 handle
+      // X+ (width+)
+      (function() { var p = rotateHandle(stairs.width/2, 0); return {x: p.x, y: handleY, z: p.z, type: 'width+', label: 'X+', color: '#007acc'}; })(),
+      // X- (width-)
+      (function() { var p = rotateHandle(-stairs.width/2, 0); return {x: p.x, y: handleY, z: p.z, type: 'width-', label: 'X-', color: '#007acc'}; })(),
+      // Z+ (depth+)
+      (function() { var p = rotateHandle(0, stairs.depth/2); return {x: p.x, y: handleY, z: p.z, type: 'depth+', label: 'Z+', color: '#0099ff'}; })(),
+      // Z- (depth-)
+      (function() { var p = rotateHandle(0, -stairs.depth/2); return {x: p.x, y: handleY, z: p.z, type: 'depth-', label: 'Z-', color: '#0099ff'}; })(),
+      // 360 handle remains centered
       {x: stairs.x, y: handleY + 0.3, z: stairs.z, type: 'rotate', label: '360', color: '#ff9900'}
     ];
     
