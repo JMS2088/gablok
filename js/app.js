@@ -1,174 +1,5 @@
-'use strict';
-
-var canvas = null;
-var ctx = null;
-var screenW = 0;
-var screenH = 0;
-var centerX = 0;
-var centerY = 0;
-var allRooms = [];
-var selectedRoomId = null;
-var currentFloor = 0;
-var resizeHandles = [];
-var animationId = null;
-var stairsComponent = null;
-var pergolaComponents = [];
-var garageComponents = [];
-var roofComponents = [];
-var currentSnapGuides = [];
-
-var HANDLE_RADIUS = 12;
-var GRID_SPACING = 0.5;
-var SNAP_GRID_TOLERANCE = 1.0;
-var SNAP_CENTER_TOLERANCE = 0.6;
-var HANDLE_SNAP_TOLERANCE = 0.25;
-
-var camera = {
-  yaw: 0.5,
-  pitch: -0.5,
-  distance: 12,
-  targetX: 0,
-  targetZ: 0,
-  minPitch: -Math.PI * 0.4,
-  maxPitch: 0.1,
-  minDistance: 3,
-  maxDistance: 80
-};
-
-var mouse = {
-  down: false,
-  lastX: 0,
-  lastY: 0,
-  dragType: null,
-  dragInfo: null
-};
-
-var pan = { x: 0, y: 0 };
-
-var PRICING = {
-  room: 600,
-  stairs: 1200,
-  pergola: 500,
-  garage: 500,
-  roof: 170 // increased by $50 per sqm
-};
-
-function startApp() {
-  canvas = document.getElementById('canvas');
-  ctx = canvas.getContext('2d');
-  setupCanvas();
-  createInitialRoom();
-  setupEvents();
-  startRender();
-  updateStatus('Ready');
-}
-
-function updateStatus(message) {
-  var status = document.getElementById('status');
-  if (status) status.textContent = message;
-}
-
-function setupCanvas() {
-  var ratio = Math.min(2, window.devicePixelRatio || 1);
-  screenW = window.innerWidth;
-  screenH = window.innerHeight;
-  
-  canvas.width = screenW * ratio;
-  canvas.height = screenH * ratio;
-  canvas.style.width = screenW + 'px';
-  canvas.style.height = screenH + 'px';
-  
-  centerX = screenW / 2;
-  centerY = screenH / 2 + 200;
-  
-  ctx.scale(ratio, ratio);
-  ctx.imageSmoothingEnabled = true;
-}
-
-function project3D(worldX, worldY, worldZ) {
-  try {
-    var dx = worldX - camera.targetX;
-    var dy = worldY;
-    var dz = worldZ - camera.targetZ;
-    
-    var cosYaw = Math.cos(camera.yaw);
-    var sinYaw = Math.sin(camera.yaw);
-    var rotX = cosYaw * dx + sinYaw * dz;
-    var rotZ = -sinYaw * dx + cosYaw * dz;
-    
-    var cosPitch = Math.cos(camera.pitch);
-    var sinPitch = Math.sin(camera.pitch);
-    var finalY = cosPitch * dy - sinPitch * rotZ;
-    var finalZ = sinPitch * dy + cosPitch * rotZ + camera.distance;
-    
-    if (finalZ <= 0.1) return null;
-    
-    var fov = 800;
-    var screenX = centerX + (rotX * fov) / finalZ + pan.x;
-    var screenY = centerY - (finalY * fov) / finalZ + pan.y;
-    
-    return { x: screenX, y: screenY, depth: finalZ };
-  } catch (e) {
-    return null;
-  }
-}
-
-function createRoom(x, z, level) {
-  var count = allRooms.filter(function(r) { return r.level === level; }).length;
-  return {
-    id: 'room_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-    x: x, z: z, width: 4, depth: 3, height: 3, level: level,
-    name: 'Room ' + (count + 1) + (level > 0 ? ' (Floor ' + (level + 1) + ')' : '')
-  };
-}
-
-function createInitialRoom() {
-  // Place first room exactly on grid lines (multiples of 1m)
-  var gridX = 0;
-  var gridZ = 0;
-  var room = createRoom(gridX, gridZ, 0);
-  allRooms.push(room);
-  selectedRoomId = room.id;
-}
-
-function addNewRoom() {
-  try {
-    var room = createRoom(0, 0, currentFloor);
-    var spot = findFreeSpot(room);
-  room.x = Math.round(spot.x / GRID_SPACING) * GRID_SPACING;
-  room.z = Math.round(spot.z / GRID_SPACING) * GRID_SPACING;
-    allRooms.push(room);
-    selectedRoomId = room.id;
-    updateStatus('Room added');
-  } catch (error) {
-    console.error('Add room error:', error);
-    updateStatus('Error adding room');
-  }
-}
-
-function createStairs() {
-  return {
-    id: 'stairs_' + Date.now(),
-    x: -6, z: -6, width: 3, depth: 8, height: 3.5, steps: 14,
-    name: 'Stairs', type: 'stairs', level: 0
-  };
-}
-
-function addStairs() {
-  if (stairsComponent) {
-    updateStatus('Stairs already exist');
-    return;
-  }
-  stairsComponent = createStairs();
-  var spot = findFreeSpot(stairsComponent);
-  stairsComponent.x = spot.x;
-  stairsComponent.z = spot.z;
-  currentFloor = 0;
-  selectedRoomId = stairsComponent.id;
-  var selector = document.getElementById('levelSelect');
-  if (selector) selector.value = '0';
-  updateStatus('Stairs added');
-}
+// Removed photorealistic render code
+// ...existing code...
 
 function createPergola(x, z) {
   var count = pergolaComponents.length;
@@ -182,16 +13,16 @@ function createPergola(x, z) {
     roofThickness: 0.3,
     totalHeight: 3,
     legWidth: 0.3,
-    slatCount: 8,
-    slatWidth: 0.15,
-    name: count === 0 ? 'Pergola' : 'Pergola ' + (count + 1),
-    type: 'pergola',
-    level: 0
-  };
-}
-
-function addPergola() {
-  var newPergola = createPergola();
+        if (stairsComponent && stairsComponent.width && stairsComponent.depth) {
+          var stairsArea = stairsComponent.width * stairsComponent.depth;
+          var stairsCost = stairsArea * PRICING.stairs;
+          breakdown.components.push({
+            name: stairsComponent.name,
+            area: stairsArea,
+            cost: stairsCost
+          });
+          breakdown.totalCost += stairsCost;
+        }
   var spot = findFreeSpot(newPergola);
   newPergola.x = spot.x;
   newPergola.z = spot.z;
@@ -262,55 +93,17 @@ function createRoof(x, z) {
   var roofCenterX = 0;
   var roofCenterZ = 0;
   
-  if (minX !== Infinity) {
-    roofWidth = Math.max(6, maxX - minX + 2);
-    roofDepth = Math.max(8, maxZ - minZ + 2);
-    roofCenterX = (minX + maxX) / 2;
-    roofCenterZ = (minZ + maxZ) / 2;
-  }
-  
-  return {
-    id: 'roof_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-    x: x || roofCenterX,
-    z: z || roofCenterZ,
-    width: roofWidth,
-    depth: roofDepth,
-    height: 1.5,
-    baseHeight: baseHeight,
-    roofType: 'gable',
-    name: count === 0 ? 'Roof' : 'Roof ' + (count + 1),
-    type: 'roof',
-    level: roofLevel
-  };
-}
-
-function addRoof() {
-  // Find bounding box of all rooms on the roof's level
-  var hasFirstFloor = allRooms.some(function(room) { return room.level === 1; });
-  var roofLevel = hasFirstFloor ? 1 : 0;
-  var minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  for (var i = 0; i < allRooms.length; i++) {
-    var room = allRooms[i];
-    if (room.level === roofLevel) {
-      var hw = room.width / 2;
-      var hd = room.depth / 2;
-      minX = Math.min(minX, room.x - hw);
-      maxX = Math.max(maxX, room.x + hw);
-      minZ = Math.min(minZ, room.z - hd);
-      maxZ = Math.max(maxZ, room.z + hd);
-    }
-  }
-  // If no rooms, use default
-  var roofWidth = 6;
-  var roofDepth = 8;
-  var roofCenterX = 0;
-  var roofCenterZ = 0;
-  if (minX !== Infinity) {
-    roofWidth = Math.max(6, maxX - minX);
-    roofDepth = Math.max(8, maxZ - minZ);
-    roofCenterX = (minX + maxX) / 2;
-    roofCenterZ = (minZ + maxZ) / 2;
-  }
+      // Removed photorealistic render code
+      if (stairsComponent) {
+        var stairsArea = stairsComponent.width * stairsComponent.depth;
+        var stairsCost = stairsArea * PRICING.stairs;
+        breakdown.components.push({
+          name: stairsComponent.name,
+          area: stairsArea,
+          cost: stairsCost
+        });
+        breakdown.totalCost += stairsCost;
+      }
   var newRoof = createRoof(roofCenterX, roofCenterZ);
   newRoof.width = roofWidth;
   newRoof.depth = roofDepth;
@@ -1193,54 +986,23 @@ function updateMeasurements() {
 
   var floorText = selectedObject.level === 0 ? 'Ground' : 'Floor ' + (selectedObject.level + 1);
   document.getElementById('measure-floor').textContent = floorText;
-// Save measurements from input fields to selected object
-function saveMeasurements() {
-  if (!selectedRoomId) return;
-  var selectedObject = findObjectById(selectedRoomId);
-  if (!selectedObject) return;
-  var width = parseFloat(document.getElementById('input-width').value);
-  var depth = parseFloat(document.getElementById('input-depth').value);
-  var height = parseFloat(document.getElementById('input-height').value);
-  var posX = parseFloat(document.getElementById('input-pos-x').value);
-  var posZ = parseFloat(document.getElementById('input-pos-z').value);
-  if (!isNaN(width) && width >= 1 && width <= 20) selectedObject.width = width;
-  if (!isNaN(depth) && depth >= 1 && depth <= 20) selectedObject.depth = depth;
-  if (!isNaN(height) && height >= 0.5 && height <= 10) selectedObject.height = height;
-  if (!isNaN(posX) && posX >= -100 && posX <= 100) selectedObject.x = posX;
-  if (!isNaN(posZ) && posZ >= -100 && posZ <= 100) selectedObject.z = posZ;
-  updateStatus('Measurements saved');
-}
 }
 
-function calculatePricing() {
-  var breakdown = {
-    rooms: [],
-    components: [],
-    totalCost: 0
-  };
-  
-  for (var i = 0; i < allRooms.length; i++) {
-    var room = allRooms[i];
-    var area = room.width * room.depth;
-    var cost = area * PRICING.room;
-    breakdown.rooms.push({
-      name: room.name,
-      area: area,
-      cost: cost
-    });
-    breakdown.totalCost += cost;
-  }
-  
-  if (stairsComponent) {
-    var stairsArea = stairsComponent.width * stairsComponent.depth;
-    var stairsCost = stairsArea * PRICING.stairs;
-    breakdown.components.push({
-      name: stairsComponent.name,
-      area: stairsArea,
-      cost: stairsCost
-    });
-    breakdown.totalCost += stairsCost;
-  }
+// Save measurements from input fields to selected object
+function renderLoop() {
+  try {
+    resizeHandles = [];
+    // ...existing code...
+    if (stairsComponent) {
+      var stairsArea = stairsComponent.width * stairsComponent.depth;
+      var stairsCost = stairsArea * PRICING.stairs;
+      breakdown.components.push({
+        name: stairsComponent.name,
+        area: stairsArea,
+        cost: stairsCost
+      });
+      breakdown.totalCost += stairsCost;
+    }
   
   for (var i = 0; i < pergolaComponents.length; i++) {
     var pergola = pergolaComponents[i];
@@ -1894,33 +1656,6 @@ function setupEvents() {
       }
       
       if (roofIndex > -1) {
-        var roof = roofComponents[roofIndex];
-        roofComponents.splice(roofIndex, 1);
-        selectedRoomId = null;
-        updateStatus(roof.name + ' deleted');
-        return;
-      }
-      
-      updateStatus('Cannot delete - select an object first');
-    }
-  });
-}
-
-function switchLevel() {
-  var selector = document.getElementById('levelSelect');
-  if (!selector) return;
-  
-  var value = selector.value;
-  
-  if (value === 'stairs') {
-    addStairs();
-    selector.value = '0';
-  } else if (value === 'pergola') {
-    addPergola();
-    selector.value = '0';
-  } else if (value === 'garage') {
-    addGarage();
-    selector.value = '0';
   } else if (value === 'roof') {
     addRoof();
     selector.value = '0';
@@ -2028,7 +1763,6 @@ document.addEventListener('click', function(e) {
   if (pricingModal && e.target === pricingModal) {
     hidePricing();
   }
-});
 
 function drawStairs(stairs) {
   if (!stairs) return;
