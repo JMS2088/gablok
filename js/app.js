@@ -891,16 +891,23 @@ function drawApexRoof(roof, selected, strokeColor, fillColor, strokeWidth) {
   var hd = roof.depth / 2;
   var baseY = roof.baseHeight;
   var peakY = baseY + roof.height;
-  
+  var rotRad = ((roof.rotation || 0) * Math.PI) / 180;
+  function rotate(x, z) {
+    var dx = x - roof.x;
+    var dz = z - roof.z;
+    return {
+      x: roof.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+      z: roof.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+    };
+  }
   var corners = [
-    {x: roof.x - hw, y: baseY, z: roof.z - hd},
-    {x: roof.x + hw, y: baseY, z: roof.z - hd},
-    {x: roof.x + hw, y: baseY, z: roof.z + hd},
-    {x: roof.x - hw, y: baseY, z: roof.z + hd},
-    {x: roof.x - hw, y: peakY, z: roof.z},
-    {x: roof.x + hw, y: peakY, z: roof.z}
+    (function(){var p=rotate(roof.x-hw,roof.z-hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z-hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z+hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw,roof.z+hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw,roof.z);return {x:p.x,y:peakY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z);return {x:p.x,y:peakY,z:p.z};})()
   ];
-  
   var projected = [];
   for (var i = 0; i < corners.length; i++) {
     var p = project3D(corners[i].x, corners[i].y, corners[i].z);
@@ -961,20 +968,27 @@ function drawBarnRoof(roof, selected, strokeColor, fillColor, strokeWidth) {
   var baseY = roof.baseHeight;
   var midY = baseY + roof.height * 0.6;
   var peakY = baseY + roof.height;
-  
+  var rotRad = ((roof.rotation || 0) * Math.PI) / 180;
+  function rotate(x, z) {
+    var dx = x - roof.x;
+    var dz = z - roof.z;
+    return {
+      x: roof.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+      z: roof.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+    };
+  }
   var corners = [
-    {x: roof.x - hw, y: baseY, z: roof.z - hd},
-    {x: roof.x + hw, y: baseY, z: roof.z - hd},
-    {x: roof.x + hw, y: baseY, z: roof.z + hd},
-    {x: roof.x - hw, y: baseY, z: roof.z + hd},
-    {x: roof.x - hw * 0.7, y: midY, z: roof.z - hd},
-    {x: roof.x + hw * 0.7, y: midY, z: roof.z - hd},
-    {x: roof.x + hw * 0.7, y: midY, z: roof.z + hd},
-    {x: roof.x - hw * 0.7, y: midY, z: roof.z + hd},
-    {x: roof.x - hw * 0.7, y: peakY, z: roof.z},
-    {x: roof.x + hw * 0.7, y: peakY, z: roof.z}
+    (function(){var p=rotate(roof.x-hw,roof.z-hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z-hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z+hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw,roof.z+hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw*0.7,roof.z-hd);return {x:p.x,y:midY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw*0.7,roof.z-hd);return {x:p.x,y:midY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw*0.7,roof.z+hd);return {x:p.x,y:midY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw*0.7,roof.z+hd);return {x:p.x,y:midY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw*0.7,roof.z);return {x:p.x,y:peakY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw*0.7,roof.z);return {x:p.x,y:peakY,z:p.z};})()
   ];
-  
   var projected = [];
   for (var i = 0; i < corners.length; i++) {
     var p = project3D(corners[i].x, corners[i].y, corners[i].z);
@@ -1012,19 +1026,27 @@ function drawCurvedRoof(roof, selected, strokeColor, fillColor, strokeWidth) {
   var hd = roof.depth / 2;
   var baseY = roof.baseHeight;
   var peakY = baseY + roof.height;
-  
+  var rotRad = ((roof.rotation || 0) * Math.PI) / 180;
+  function rotate(x, z) {
+    var dx = x - roof.x;
+    var dz = z - roof.z;
+    return {
+      x: roof.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+      z: roof.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+    };
+  }
   var segments = 8;
   var points = [];
-  
   for (var i = 0; i <= segments; i++) {
     var t = i / segments;
     var x = roof.x + (t - 0.5) * roof.width;
     var curveHeight = Math.sin(t * Math.PI) * roof.height;
     var y = baseY + curveHeight;
-    
+    var p1 = rotate(x, roof.z - hd);
+    var p2 = rotate(x, roof.z + hd);
     points.push([
-      project3D(x, y, roof.z - hd),
-      project3D(x, y, roof.z + hd)
+      project3D(p1.x, y, p1.z),
+      project3D(p2.x, y, p2.z)
     ]);
   }
   
@@ -1049,19 +1071,26 @@ function drawCrossedHipRoof(roof, selected, strokeColor, fillColor, strokeWidth)
   var hd = roof.depth / 2;
   var baseY = roof.baseHeight;
   var peakY = baseY + roof.height;
-  
+  var rotRad = ((roof.rotation || 0) * Math.PI) / 180;
+  function rotate(x, z) {
+    var dx = x - roof.x;
+    var dz = z - roof.z;
+    return {
+      x: roof.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+      z: roof.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+    };
+  }
   var corners = [
-    {x: roof.x - hw, y: baseY, z: roof.z - hd},
-    {x: roof.x + hw, y: baseY, z: roof.z - hd},
-    {x: roof.x + hw, y: baseY, z: roof.z + hd},
-    {x: roof.x - hw, y: baseY, z: roof.z + hd},
-    {x: roof.x, y: peakY, z: roof.z},
-    {x: roof.x - hw * 0.3, y: peakY * 0.9, z: roof.z},
-    {x: roof.x + hw * 0.3, y: peakY * 0.9, z: roof.z},
-    {x: roof.x, y: peakY * 0.9, z: roof.z - hd * 0.3},
-    {x: roof.x, y: peakY * 0.9, z: roof.z + hd * 0.3}
+    (function(){var p=rotate(roof.x-hw,roof.z-hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z-hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw,roof.z+hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw,roof.z+hd);return {x:p.x,y:baseY,z:p.z};})(),
+    (function(){var p=rotate(roof.x,roof.z);return {x:p.x,y:peakY,z:p.z};})(),
+    (function(){var p=rotate(roof.x-hw*0.3,roof.z);return {x:p.x,y:peakY*0.9,z:p.z};})(),
+    (function(){var p=rotate(roof.x+hw*0.3,roof.z);return {x:p.x,y:peakY*0.9,z:p.z};})(),
+    (function(){var p=rotate(roof.x,roof.z-hd*0.3);return {x:p.x,y:peakY*0.9,z:p.z};})(),
+    (function(){var p=rotate(roof.x,roof.z+hd*0.3);return {x:p.x,y:peakY*0.9,z:p.z};})()
   ];
-  
   var projected = [];
   for (var i = 0; i < corners.length; i++) {
     var p = project3D(corners[i].x, corners[i].y, corners[i].z);
@@ -1535,8 +1564,11 @@ function updateLabels() {
         dropdown.onchange = function() {
           var selectedRoof = findObjectById(selectedRoomId);
           if (selectedRoof && selectedRoof.type === 'roof') {
+            var prevRotation = selectedRoof.rotation || 0;
             selectedRoof.roofType = this.value;
-            updateStatus('Roof type changed to ' + this.options[this.selectedIndex].text);
+            selectedRoof.rotation = prevRotation; // Ensure rotation persists
+            updateStatus('Roof type changed to ' + this.options[this.selectedIndex].text + ' (Rotation: ' + prevRotation + '°)');
+            renderLoop();
           }
         };
         
@@ -1752,8 +1784,34 @@ function setupEvents() {
           }
           updateStatus('Resizing: ' + target.width.toFixed(1) + 'm × ' + target.depth.toFixed(1) + 'm × ' + target.height.toFixed(1) + 'm');
           renderLoop();
+        } else if (target.type === 'room' || target.type === 'pergola' || target.type === 'garage') {
+          // Room, pergola, garage handle drag logic (exact stairs logic)
+          var rotRad = ((target.rotation || 0) * Math.PI) / 180;
+          var dx = e.clientX - mouse.dragInfo.startX;
+          var dy = e.clientY - mouse.dragInfo.startY;
+          var movement = worldMovement(dx, dy);
+          if (mouse.dragInfo.handle.type === 'width+' || mouse.dragInfo.handle.type === 'width-') {
+            var sign = mouse.dragInfo.handle.type === 'width+' ? 1 : -1;
+            var axisX = Math.cos(rotRad);
+            var axisZ = Math.sin(rotRad);
+            var delta = movement.x * axisX + movement.z * axisZ;
+            target.width = Math.max(0.5, mouse.dragInfo.originalWidth + sign * delta * 2);
+            updateStatus('Resizing width...');
+          } else if (mouse.dragInfo.handle.type === 'depth+' || mouse.dragInfo.handle.type === 'depth-') {
+            var sign = mouse.dragInfo.handle.type === 'depth+' ? 1 : -1;
+            var axisX = -Math.sin(rotRad);
+            var axisZ = Math.cos(rotRad);
+            var delta = movement.x * axisX + movement.z * axisZ;
+            target.depth = Math.max(0.5, mouse.dragInfo.originalDepth + sign * delta * 2);
+            updateStatus('Resizing depth...');
+          } else if (mouse.dragInfo.handle.type === 'height') {
+            var heightChange = -(dy * 0.005);
+            target.height = Math.max(0.5, Math.min(10, target.height + heightChange));
+            updateStatus('Resizing height...');
+          }
+          renderLoop();
         } else {
-          // ...existing code for rooms, etc...
+          // ...existing code for other types...
         }
       }
     } else if (mouse.dragType === 'camera' && mouse.down) {
