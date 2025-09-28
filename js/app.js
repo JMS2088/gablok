@@ -1626,10 +1626,10 @@ function setupEvents() {
       var target = findObjectById(handle.roomId);
       if (target) {
         if (handle.type === 'rotate') {
-          // Rotate by 22.5 degrees (stairs or roof)
+          // Rotate by 22.5 degrees (stairs or roof or room)
           target.rotation = ((target.rotation || 0) + 22.5) % 360;
           renderLoop();
-          updateStatus((target.type === 'roof' ? 'Roof' : 'Stairs') + ' rotated 22.5°');
+          updateStatus((target.type === 'roof' ? 'Roof' : target.type === 'stairs' ? 'Stairs' : 'Room') + ' rotated 22.5°');
           return;
         }
         mouse.dragType = 'handle';
@@ -1642,6 +1642,7 @@ function setupEvents() {
           originalRoomX: target.x,
           originalRoomZ: target.z
         };
+        selectedRoomId = handle.roomId;
         canvas.style.cursor = 'grabbing';
         updateStatus('Resizing...');
         return;
