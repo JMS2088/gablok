@@ -440,7 +440,7 @@ function clearCanvas() {
 }
 
 function drawGrid() {
-  ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+  ctx.strokeStyle = '#f2f2f2'; // even lighter grey
   ctx.lineWidth = 1;
   
   var gridRange = Math.max(20, camera.distance * 1.5);
