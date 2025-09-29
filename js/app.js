@@ -1,3 +1,45 @@
+function drawHandlesForPergola(pergola) {
+  try {
+    var handleY = pergola.height + 0.2;
+    var handleData = [
+      {x: pergola.x + pergola.width/2, y: handleY, z: pergola.z, type: 'width+', label: 'X+', color: '#007acc'},
+      {x: pergola.x - pergola.width/2, y: handleY, z: pergola.z, type: 'width-', label: 'X-', color: '#007acc'},
+      {x: pergola.x, y: handleY, z: pergola.z + pergola.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
+      {x: pergola.x, y: handleY, z: pergola.z - pergola.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'}
+    ];
+
+    for (var i = 0; i < handleData.length; i++) {
+      var handle = handleData[i];
+      var screen = project3D(handle.x, handle.y, handle.z);
+      if (!screen) continue;
+
+      ctx.fillStyle = handle.color;
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y, HANDLE_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(handle.label, screen.x, screen.y);
+
+      resizeHandles.push({
+        screenX: screen.x - HANDLE_RADIUS,
+        screenY: screen.y - HANDLE_RADIUS,
+        width: HANDLE_RADIUS * 2,
+        height: HANDLE_RADIUS * 2,
+        type: handle.type,
+        roomId: pergola.id
+      });
+    }
+  } catch (error) {
+    console.error('Pergola handle error:', error);
+  }
+}
 'use strict';
 
 var canvas = null;
@@ -1625,6 +1667,8 @@ function setupEvents() {
     if (handle) {
       var target = findObjectById(handle.roomId);
       if (target) {
+        // Remove debug log
+        // console.log('[DEBUG] Room handle mousedown:', handle, 'Target:', target);
         if (handle.type === 'rotate') {
           // Rotate by 22.5 degrees (stairs or roof or room)
           target.rotation = ((target.rotation || 0) + 22.5) % 360;
@@ -1632,6 +1676,7 @@ function setupEvents() {
           updateStatus((target.type === 'roof' ? 'Roof' : target.type === 'stairs' ? 'Stairs' : 'Room') + ' rotated 22.5°');
           return;
         }
+        // Fix: Set dragType to 'handle' for room handles so drag logic resizes the room
         mouse.dragType = 'handle';
         mouse.dragInfo = {
           handle: handle,
@@ -1658,22 +1703,19 @@ function setupEvents() {
   
   document.addEventListener('mousemove', function(e) {
     resizeHandles = [];
-    
+
     if (mouse.dragType === 'room' && mouse.dragInfo) {
       var room = findObjectById(mouse.dragInfo.roomId);
       if (room) {
         var dx = e.clientX - mouse.dragInfo.startX;
         var dy = e.clientY - mouse.dragInfo.startY;
         var movement = worldMovement(dx, dy);
-        
         var newX = mouse.dragInfo.originalX + movement.x;
         var newZ = mouse.dragInfo.originalZ + movement.z;
-        
         var snap = applySnap({x: newX, z: newZ, width: room.width, depth: room.depth, level: room.level, id: room.id});
         room.x = snap.x;
         room.z = snap.z;
         currentSnapGuides = snap.guides;
-        
         updateStatus('Moving ' + room.name + '...');
       }
     } else if (mouse.dragType === 'stairs' && mouse.dragInfo) {
@@ -1681,15 +1723,12 @@ function setupEvents() {
         var dx = e.clientX - mouse.dragInfo.startX;
         var dy = e.clientY - mouse.dragInfo.startY;
         var movement = worldMovement(dx, dy);
-        
         var newX = mouse.dragInfo.originalX + movement.x;
         var newZ = mouse.dragInfo.originalZ + movement.z;
-        
         var snap = applySnap({x: newX, z: newZ, width: stairsComponent.width, depth: stairsComponent.depth, level: stairsComponent.level, id: stairsComponent.id, type: 'stairs'});
         stairsComponent.x = snap.x;
         stairsComponent.z = snap.z;
         currentSnapGuides = snap.guides;
-        
         updateStatus('Moving ' + stairsComponent.name + '...');
       }
     } else if (mouse.dragType === 'pergola' && mouse.dragInfo) {
@@ -1698,15 +1737,12 @@ function setupEvents() {
         var dx = e.clientX - mouse.dragInfo.startX;
         var dy = e.clientY - mouse.dragInfo.startY;
         var movement = worldMovement(dx, dy);
-        
         var newX = mouse.dragInfo.originalX + movement.x;
         var newZ = mouse.dragInfo.originalZ + movement.z;
-        
         var snap = applySnap({x: newX, z: newZ, width: pergola.width, depth: pergola.depth, level: pergola.level, id: pergola.id, type: 'pergola'});
         pergola.x = snap.x;
         pergola.z = snap.z;
         currentSnapGuides = snap.guides;
-        
         updateStatus('Moving ' + pergola.name + '...');
       }
     } else if (mouse.dragType === 'garage' && mouse.dragInfo) {
@@ -1715,15 +1751,12 @@ function setupEvents() {
         var dx = e.clientX - mouse.dragInfo.startX;
         var dy = e.clientY - mouse.dragInfo.startY;
         var movement = worldMovement(dx, dy);
-        
         var newX = mouse.dragInfo.originalX + movement.x;
         var newZ = mouse.dragInfo.originalZ + movement.z;
-        
         var snap = applySnap({x: newX, z: newZ, width: garage.width, depth: garage.depth, level: garage.level, id: garage.id, type: 'garage'});
         garage.x = snap.x;
         garage.z = snap.z;
         currentSnapGuides = snap.guides;
-        
         updateStatus('Moving ' + garage.name + '...');
       }
     } else if (mouse.dragType === 'roof' && mouse.dragInfo) {
@@ -1732,24 +1765,35 @@ function setupEvents() {
         var dx = e.clientX - mouse.dragInfo.startX;
         var dy = e.clientY - mouse.dragInfo.startY;
         var movement = worldMovement(dx, dy);
-        
         var newX = mouse.dragInfo.originalX + movement.x;
         var newZ = mouse.dragInfo.originalZ + movement.z;
-        
         var snap = applySnap({x: newX, z: newZ, width: roof.width, depth: roof.depth, level: roof.level, id: roof.id, type: 'roof'});
         roof.x = snap.x;
         roof.z = snap.z;
         currentSnapGuides = snap.guides;
-        
         updateStatus('Moving ' + roof.name + '...');
       }
     } else if (mouse.dragType === 'handle' && mouse.dragInfo) {
       var target = findObjectById(selectedRoomId);
+      console.log('[DEBUG] Handle drag, target:', target, 'handle:', mouse.dragInfo.handle);
       if (target) {
         var dx = e.clientX - mouse.dragInfo.startX;
         var dy = e.clientY - mouse.dragInfo.startY;
         var movement = worldMovement(dx, dy);
-        // Roof and stairs handle drag logic (natural edge movement)
+        
+        if (mouse.dragInfo.handle.type === 'width+' || mouse.dragInfo.handle.type === 'width-') {
+          var sign = mouse.dragInfo.handle.type === 'width+' ? 1 : -1;
+          target.width = Math.max(0.5, mouse.dragInfo.originalWidth + sign * movement.x * 2);
+          console.log('[DEBUG] Resizing width to:', target.width);
+          updateStatus('Resizing width...');
+        } else if (mouse.dragInfo.handle.type === 'depth+' || mouse.dragInfo.handle.type === 'depth-') {
+          var sign = mouse.dragInfo.handle.type === 'depth+' ? 1 : -1;
+          target.depth = Math.max(0.5, mouse.dragInfo.originalDepth + sign * movement.z * 2);
+          console.log('[DEBUG] Resizing depth to:', target.depth);
+          updateStatus('Resizing depth...');
+        }
+        renderLoop();
+        var movement = worldMovement(dx, dy);
         if (target.type === 'roof' || target.type === 'stairs') {
           var rotRad = ((target.rotation || 0) * Math.PI) / 180;
           var axisX = Math.cos(rotRad);
@@ -1786,7 +1830,6 @@ function setupEvents() {
           updateStatus('Resizing: ' + target.width.toFixed(1) + 'm × ' + target.depth.toFixed(1) + 'm × ' + target.height.toFixed(1) + 'm');
           renderLoop();
         } else if (target.type === 'room' || target.type === 'pergola' || target.type === 'garage') {
-          // Room, pergola, garage handle drag logic (exact stairs logic)
           var rotRad = ((target.rotation || 0) * Math.PI) / 180;
           var dx = e.clientX - mouse.dragInfo.startX;
           var dy = e.clientY - mouse.dragInfo.startY;
@@ -1818,7 +1861,6 @@ function setupEvents() {
     } else if (mouse.dragType === 'camera' && mouse.down) {
       var dx = e.clientX - mouse.lastX;
       var dy = e.clientY - mouse.lastY;
-      
       if (e.shiftKey) {
         pan.x += dx * 1.5;
         pan.y += dy * 1.5;
@@ -1827,7 +1869,6 @@ function setupEvents() {
         camera.pitch -= dy * 0.008;
         camera.pitch = Math.max(camera.minPitch, Math.min(camera.maxPitch, camera.pitch));
       }
-      
       mouse.lastX = e.clientX;
       mouse.lastY = e.clientY;
     }
@@ -2160,7 +2201,7 @@ function drawHandlesForStairs(stairs) {
       // Z+ (depth+)
       (function() { var p = rotateHandle(0, stairs.depth/2); return {x: p.x, y: handleY, z: p.z, type: 'depth+', label: 'Z+', color: '#0099ff'}; })(),
       // Z- (depth-)
-      (function() { var p = rotateHandle(0, -stairs.depth/2); return {x: p.x, y: handleY, z: p.z, type: 'depth-', label: 'Z-', color: '#0099ff'}; })(),
+      (function() { var p = rotateHandle(0, -stairs.depth/2); return {x:p.x, y:handleY, z:p.z, type: 'depth-', label: 'Z-', color: '#0099ff'}; })(),
       // 360 handle remains centered
       {x: stairs.x, y: handleY + 0.3, z: stairs.z, type: 'rotate', label: '360', color: '#ff9900'}
     ];
@@ -2390,50 +2431,6 @@ function drawPergola(pergola) {
     
   } catch (error) {
     console.error('Pergola draw error:', error);
-  }
-}
-
-function drawHandlesForPergola(pergola) {
-  try {
-    var handleY = pergola.totalHeight + 0.2;
-    
-    var pergolaHandles = [
-      {x: pergola.x + pergola.width/2, y: handleY, z: pergola.z, type: 'width+', label: 'X+', color: '#007acc'},
-      {x: pergola.x - pergola.width/2, y: handleY, z: pergola.z, type: 'width-', label: 'X-', color: '#007acc'},
-      {x: pergola.x, y: handleY, z: pergola.z + pergola.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
-      {x: pergola.x, y: handleY, z: pergola.z - pergola.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'}
-    ];
-    
-    for (var i = 0; i < pergolaHandles.length; i++) {
-      var handle = pergolaHandles[i];
-      var screen = project3D(handle.x, handle.y, handle.z);
-      if (!screen) continue;
-      
-      ctx.fillStyle = handle.color;
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(screen.x, screen.y, HANDLE_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(handle.label, screen.x, screen.y);
-      
-      resizeHandles.push({
-        screenX: screen.x - HANDLE_RADIUS,
-        screenY: screen.y - HANDLE_RADIUS,
-        width: HANDLE_RADIUS * 2,
-        height: HANDLE_RADIUS * 2,
-        type: handle.type,
-        roomId: pergola.id
-      });
-    }
-  } catch (error) {
-    console.error('Pergola handle error:', error);
   }
 }
 
