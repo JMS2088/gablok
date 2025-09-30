@@ -482,7 +482,7 @@ function clearCanvas() {
 }
 
 function drawGrid() {
-  ctx.strokeStyle = '#f2f2f2'; // even lighter grey
+  ctx.strokeStyle = '#e0e0e0'; // darker grey for better visibility
   ctx.lineWidth = 1;
   
   var gridRange = Math.max(20, camera.distance * 1.5);
@@ -1995,7 +1995,19 @@ function switchLevel() {
     if (newFloor !== currentFloor) {
       currentFloor = newFloor;
       selectedRoomId = null;
-      updateStatus('Floor ' + (newFloor + 1));
+
+      // If switching to first floor and there are no rooms on that floor, add one
+      if (newFloor === 1 && !allRooms.some(room => room.level === 1)) {
+        var newRoom = createRoom(0, 0, 1);
+        var spot = findFreeSpot(newRoom);
+        newRoom.x = spot.x;
+        newRoom.z = spot.z;
+        allRooms.push(newRoom);
+        selectedRoomId = newRoom.id;
+        updateStatus('Added room on Floor 2');
+      } else {
+        updateStatus('Floor ' + (newFloor + 1));
+      }
     }
   }
 }
