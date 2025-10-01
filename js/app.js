@@ -55,6 +55,7 @@ var resizeHandles = [];
 var animationId = null;
 var stairsComponent = null;
 var pergolaComponents = [];
+var balconyComponents = [];
 var garageComponents = [];
 var roofComponents = [];
 var currentSnapGuides = [];
@@ -92,8 +93,58 @@ var PRICING = {
   stairs: 1200,
   pergola: 500,
   garage: 500,
-  roof: 120
+  roof: 120,
+  balcony: 800
 };
+
+function createBalcony(x, z) {
+  var count = balconyComponents.length;
+  return {
+    id: 'balcony_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    x: x || 8,
+    z: z || 8,
+    width: 4,
+    depth: 3,
+    height: 2.7,
+    roofThickness: 0.3,
+    totalHeight: 3,
+    legWidth: 0.3,
+    slatCount: 8,
+    slatWidth: 0.15,
+    wallThickness: 0.2,
+    wallHeight: 1.0,
+    name: count === 0 ? 'Balcony' : 'Balcony ' + (count + 1),
+    type: 'balcony',
+    level: 1  // Always on first floor
+  };
+}
+
+function addBalcony() {
+  console.log('Adding new balcony...');
+  var newBalcony = createBalcony();
+  console.log('Created balcony:', newBalcony);
+  
+  var spot = findFreeSpot(newBalcony);
+  newBalcony.x = spot.x;
+  newBalcony.z = spot.z;
+  console.log('Found spot for balcony:', spot);
+  
+  balconyComponents.push(newBalcony);
+  console.log('Balcony components now:', balconyComponents);
+  
+  currentFloor = 1;  // Switch to first floor
+  selectedRoomId = newBalcony.id;
+  console.log('Set current floor to:', currentFloor, 'Selected ID:', selectedRoomId);
+  
+  var selector = document.getElementById('levelSelect');
+  if (selector) {
+    selector.value = '1';
+    console.log('Updated selector value to:', selector.value);
+  }
+  
+  renderLoop(); // Force a render update
+  updateStatus('Balcony added (' + balconyComponents.length + ' total)');
+}
 
 function startApp() {
   canvas = document.getElementById('canvas');
@@ -358,6 +409,12 @@ function findFreeSpot(newObject) {
   
   if (stairsComponent && stairsComponent.id !== newObject.id) {
     existing.push(stairsComponent);
+  }
+  
+  for (var i = 0; i < balconyComponents.length; i++) {
+    if (balconyComponents[i].id !== newObject.id && balconyComponents[i].level === newObject.level) {
+      existing.push(balconyComponents[i]);
+    }
   }
   
   for (var i = 0; i < pergolaComponents.length; i++) {
@@ -1419,6 +1476,10 @@ function findObjectById(objectId) {
     return stairsComponent;
   }
   
+  for (var i = 0; i < balconyComponents.length; i++) {
+    if (balconyComponents[i].id === objectId) return balconyComponents[i];
+  }
+  
   for (var i = 0; i < pergolaComponents.length; i++) {
     if (pergolaComponents[i].id === objectId) return pergolaComponents[i];
   }
@@ -1529,6 +1590,21 @@ function updateLabels() {
         screen: screen,
         object: garage,
         type: 'garage',
+        depth: screen.depth
+      });
+    }
+  }
+
+  for (var i = 0; i < balconyComponents.length; i++) {
+    var balcony = balconyComponents[i];
+    var labelY = balcony.level * 3.5 + 1.5;
+    var screen = project3D(balcony.x, labelY, balcony.z);
+    
+    if (screen && screen.x > -100 && screen.x < screenW + 100) {
+      allLabels.push({
+        screen: screen,
+        object: balcony,
+        type: 'balcony',
         depth: screen.depth
       });
     }
@@ -1704,19 +1780,27 @@ function setupEvents() {
   document.addEventListener('mousemove', function(e) {
     resizeHandles = [];
 
-    if (mouse.dragType === 'room' && mouse.dragInfo) {
-      var room = findObjectById(mouse.dragInfo.roomId);
-      if (room) {
+    if ((mouse.dragType === 'room' || mouse.dragType === 'balcony') && mouse.dragInfo) {
+      var object = findObjectById(mouse.dragInfo.roomId);
+      if (object) {
         var dx = e.clientX - mouse.dragInfo.startX;
         var dy = e.clientY - mouse.dragInfo.startY;
         var movement = worldMovement(dx, dy);
         var newX = mouse.dragInfo.originalX + movement.x;
         var newZ = mouse.dragInfo.originalZ + movement.z;
-        var snap = applySnap({x: newX, z: newZ, width: room.width, depth: room.depth, level: room.level, id: room.id});
-        room.x = snap.x;
-        room.z = snap.z;
+        var snap = applySnap({
+          x: newX, 
+          z: newZ, 
+          width: object.width, 
+          depth: object.depth, 
+          level: object.level, 
+          id: object.id,
+          type: object.type
+        });
+        object.x = snap.x;
+        object.z = snap.z;
         currentSnapGuides = snap.guides;
-        updateStatus('Moving ' + room.name + '...');
+        updateStatus('Moving ' + object.name + '...');
       }
     } else if (mouse.dragType === 'stairs' && mouse.dragInfo) {
       if (stairsComponent) {
@@ -1935,6 +2019,22 @@ function setupEvents() {
         return;
       }
       
+      var balconyIndex = -1;
+      for (var i = 0; i < balconyComponents.length; i++) {
+        if (balconyComponents[i].id === selectedRoomId) {
+          balconyIndex = i;
+          break;
+        }
+      }
+      
+      if (balconyIndex > -1) {
+        var balcony = balconyComponents[balconyIndex];
+        balconyComponents.splice(balconyIndex, 1);
+        selectedRoomId = null;
+        updateStatus(balcony.name + ' deleted');
+        return;
+      }
+      
       var garageIndex = -1;
       for (var i = 0; i < garageComponents.length; i++) {
         if (garageComponents[i].id === selectedRoomId) {
@@ -1990,6 +2090,13 @@ function switchLevel() {
   } else if (value === 'roof') {
     addRoof();
     selector.value = '0';
+  } else if (value === 'balcony') {
+    console.log('Balcony option selected in switchLevel');
+    addBalcony();
+    currentFloor = 1;  // Ensure we're on first floor
+    selector.value = '1';
+    console.log('Current floor after balcony added:', currentFloor);
+    renderLoop();  // Force an immediate render
   } else {
     var newFloor = parseInt(value) || 0;
     if (newFloor !== currentFloor) {
@@ -2023,6 +2130,9 @@ function fitView() {
     objects = objects.concat(pergolaComponents);
     objects = objects.concat(garageComponents);
     objects = objects.concat(roofComponents);
+  }
+  if (currentFloor === 1) {
+    objects = objects.concat(balconyComponents);
   }
   
   if (objects.length === 0) return;
@@ -2446,6 +2556,224 @@ function drawPergola(pergola) {
   }
 }
 
+function drawBalcony(balcony) {
+  console.log('Drawing balcony:', balcony);
+  if (!balcony) {
+    console.log('No balcony provided to draw');
+    return;
+  }
+  
+  try {
+    var selected = selectedRoomId === balcony.id;
+    var strokeColor = selected ? '#007acc' : '#D0D0D0';
+    var strokeWidth = selected ? 2 : 1.5;
+    var opacity = currentFloor === 1 ? 1.0 : 0.6;
+    
+    ctx.globalAlpha = opacity;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth;
+    
+    var legSize = balcony.legWidth;
+    var baseY = balcony.level * 3.5; // Floor level height
+    var legPositions = [
+      {x: balcony.x - balcony.width/2 + legSize/2, z: balcony.z - balcony.depth/2 + legSize/2},
+      {x: balcony.x + balcony.width/2 - legSize/2, z: balcony.z - balcony.depth/2 + legSize/2},
+      {x: balcony.x + balcony.width/2 - legSize/2, z: balcony.z + balcony.depth/2 - legSize/2},
+      {x: balcony.x - balcony.width/2 + legSize/2, z: balcony.z + balcony.depth/2 - legSize/2}
+    ];
+    
+    // Draw walls
+    var wallThickness = balcony.wallThickness;
+    var wallHeight = balcony.wallHeight;
+    var wallCorners = [
+      // Front wall
+      [
+        {x: balcony.x - balcony.width/2, y: baseY, z: balcony.z - balcony.depth/2},
+        {x: balcony.x + balcony.width/2, y: baseY, z: balcony.z - balcony.depth/2},
+        {x: balcony.x + balcony.width/2, y: baseY + wallHeight, z: balcony.z - balcony.depth/2},
+        {x: balcony.x - balcony.width/2, y: baseY + wallHeight, z: balcony.z - balcony.depth/2}
+      ],
+      // Right wall
+      [
+        {x: balcony.x + balcony.width/2, y: baseY, z: balcony.z - balcony.depth/2},
+        {x: balcony.x + balcony.width/2, y: baseY, z: balcony.z + balcony.depth/2},
+        {x: balcony.x + balcony.width/2, y: baseY + wallHeight, z: balcony.z + balcony.depth/2},
+        {x: balcony.x + balcony.width/2, y: baseY + wallHeight, z: balcony.z - balcony.depth/2}
+      ],
+      // Back wall
+      [
+        {x: balcony.x + balcony.width/2, y: baseY, z: balcony.z + balcony.depth/2},
+        {x: balcony.x - balcony.width/2, y: baseY, z: balcony.z + balcony.depth/2},
+        {x: balcony.x - balcony.width/2, y: baseY + wallHeight, z: balcony.z + balcony.depth/2},
+        {x: balcony.x + balcony.width/2, y: baseY + wallHeight, z: balcony.z + balcony.depth/2}
+      ],
+      // Left wall
+      [
+        {x: balcony.x - balcony.width/2, y: baseY, z: balcony.z + balcony.depth/2},
+        {x: balcony.x - balcony.width/2, y: baseY, z: balcony.z - balcony.depth/2},
+        {x: balcony.x - balcony.width/2, y: baseY + wallHeight, z: balcony.z - balcony.depth/2},
+        {x: balcony.x - balcony.width/2, y: baseY + wallHeight, z: balcony.z + balcony.depth/2}
+      ]
+    ];
+
+    // Draw each wall
+    for (var wallIdx = 0; wallIdx < wallCorners.length; wallIdx++) {
+      var wall = wallCorners[wallIdx];
+      var projectedWall = [];
+      var wallVisible = true;
+      
+      for (var i = 0; i < wall.length; i++) {
+        var p = project3D(wall[i].x, wall[i].y, wall[i].z);
+        if (!p) {
+          wallVisible = false;
+          break;
+        }
+        projectedWall.push(p);
+      }
+      
+      if (wallVisible) {
+        ctx.fillStyle = selected ? 'rgba(0,122,204,0.2)' : 'rgba(208,208,208,0.15)';
+        ctx.beginPath();
+        ctx.moveTo(projectedWall[0].x, projectedWall[0].y);
+        for (var i = 1; i < projectedWall.length; i++) {
+          ctx.lineTo(projectedWall[i].x, projectedWall[i].y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    
+    var roofY = baseY + balcony.height;
+    
+    // Draw legs
+    for (var legIdx = 0; legIdx < legPositions.length; legIdx++) {
+      var legPos = legPositions[legIdx];
+      var legHalf = legSize / 2;
+      
+      var legCorners = [
+        {x: legPos.x - legHalf, y: baseY + wallHeight, z: legPos.z - legHalf},
+        {x: legPos.x + legHalf, y: baseY + wallHeight, z: legPos.z - legHalf},
+        {x: legPos.x + legHalf, y: baseY + wallHeight, z: legPos.z + legHalf},
+        {x: legPos.x - legHalf, y: baseY + wallHeight, z: legPos.z + legHalf},
+        {x: legPos.x - legHalf, y: roofY, z: legPos.z - legHalf},
+        {x: legPos.x + legHalf, y: roofY, z: legPos.z - legHalf},
+        {x: legPos.x + legHalf, y: roofY, z: legPos.z + legHalf},
+        {x: legPos.x - legHalf, y: roofY, z: legPos.z + legHalf}
+      ];
+      
+      var projectedLeg = [];
+      var allVisible = true;
+      for (var i = 0; i < legCorners.length; i++) {
+        var p = project3D(legCorners[i].x, legCorners[i].y, legCorners[i].z);
+        if (!p) {
+          allVisible = false;
+          break;
+        }
+        projectedLeg.push(p);
+      }
+      
+      if (allVisible) {
+        var legEdges = [
+          [0,1],[1,2],[2,3],[3,0],
+          [4,5],[5,6],[6,7],[7,4],
+          [0,4],[1,5],[2,6],[3,7]
+        ];
+        
+        ctx.beginPath();
+        for (var i = 0; i < legEdges.length; i++) {
+          var edge = legEdges[i];
+          ctx.moveTo(projectedLeg[edge[0]].x, projectedLeg[edge[0]].y);
+          ctx.lineTo(projectedLeg[edge[1]].x, projectedLeg[edge[1]].y);
+        }
+        ctx.stroke();
+      }
+    }
+    
+    // Draw roof/floor
+    var roofCorners = [
+      {x: balcony.x - balcony.width/2, y: roofY, z: balcony.z - balcony.depth/2},
+      {x: balcony.x + balcony.width/2, y: roofY, z: balcony.z - balcony.depth/2},
+      {x: balcony.x + balcony.width/2, y: roofY, z: balcony.z + balcony.depth/2},
+      {x: balcony.x - balcony.width/2, y: roofY, z: balcony.z + balcony.depth/2}
+    ];
+    
+    var projectedRoof = [];
+    var roofVisible = true;
+    for (var i = 0; i < roofCorners.length; i++) {
+      var p = project3D(roofCorners[i].x, roofCorners[i].y, roofCorners[i].z);
+      if (!p) {
+        roofVisible = false;
+        break;
+      }
+      projectedRoof.push(p);
+    }
+    
+    if (roofVisible) {
+      ctx.fillStyle = selected ? 'rgba(0,122,204,0.2)' : 'rgba(208,208,208,0.15)';
+      ctx.beginPath();
+      ctx.moveTo(projectedRoof[0].x, projectedRoof[0].y);
+      ctx.lineTo(projectedRoof[1].x, projectedRoof[1].y);
+      ctx.lineTo(projectedRoof[2].x, projectedRoof[2].y);
+      ctx.lineTo(projectedRoof[3].x, projectedRoof[3].y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    
+    if (selected) {
+      drawHandlesForBalcony(balcony);
+    }
+    
+  } catch (error) {
+    console.error('Balcony draw error:', error);
+  }
+}
+
+function drawHandlesForBalcony(balcony) {
+  try {
+    var handleY = balcony.level * 3.5 + balcony.height + 0.2;
+    
+    var balconyHandles = [
+      {x: balcony.x + balcony.width/2, y: handleY, z: balcony.z, type: 'width+', label: 'X+', color: '#007acc'},
+      {x: balcony.x - balcony.width/2, y: handleY, z: balcony.z, type: 'width-', label: 'X-', color: '#007acc'},
+      {x: balcony.x, y: handleY, z: balcony.z + balcony.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
+      {x: balcony.x, y: handleY, z: balcony.z - balcony.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'}
+    ];
+    
+    for (var i = 0; i < balconyHandles.length; i++) {
+      var handle = balconyHandles[i];
+      var screen = project3D(handle.x, handle.y, handle.z);
+      if (!screen) continue;
+      
+      ctx.fillStyle = handle.color;
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y, HANDLE_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(handle.label, screen.x, screen.y);
+      
+      resizeHandles.push({
+        screenX: screen.x - HANDLE_RADIUS,
+        screenY: screen.y - HANDLE_RADIUS,
+        width: HANDLE_RADIUS * 2,
+        height: HANDLE_RADIUS * 2,
+        type: handle.type,
+        roomId: balcony.id
+      });
+    }
+  } catch (error) {
+    console.error('Balcony handle error:', error);
+  }
+}
+
 function drawGarage(garage) {
   if (!garage) return;
   
@@ -2658,6 +2986,24 @@ function renderLoop() {
       });
     }
     
+    console.log('Rendering balconies. Count:', balconyComponents.length);
+    for (var i = 0; i < balconyComponents.length; i++) {
+      var balcony = balconyComponents[i];
+      console.log('Processing balcony:', balcony);
+      var balconyCenterY = balcony.level * 3.5 + balcony.height / 2;
+      var balconyDistance = Math.sqrt(
+        (balcony.x - camera.targetX) * (balcony.x - camera.targetX) + 
+        (balconyCenterY) * (balconyCenterY) +
+        (balcony.z - camera.targetZ) * (balcony.z - camera.targetZ)
+      );
+      allObjects.push({
+        object: balcony,
+        type: 'balcony',
+        distance: balconyDistance,
+        maxHeight: balcony.level * 3.5 + balcony.height
+      });
+    }
+    
     for (var i = 0; i < pergolaComponents.length; i++) {
       var pergola = pergolaComponents[i];
       var pergolaCenterY = pergola.totalHeight / 2;
@@ -2706,6 +3052,8 @@ function renderLoop() {
       });
     }
     
+    console.log('All objects before sorting:', allObjects.map(obj => ({ type: obj.type, id: obj.object.id })));
+    
     allObjects.sort(function(a, b) {
       var distDiff = b.distance - a.distance;
       if (Math.abs(distDiff) > 1.0) {
@@ -2713,6 +3061,9 @@ function renderLoop() {
       }
       return a.maxHeight - b.maxHeight;
     });
+    
+    console.log('Current floor:', currentFloor);
+    console.log('All objects after sorting:', allObjects.map(obj => ({ type: obj.type, id: obj.object.id })));
     
     for (var i = 0; i < allObjects.length; i++) {
       var item = allObjects[i];
@@ -2722,6 +3073,10 @@ function renderLoop() {
           break;
         case 'stairs':
           drawStairs(item.object);
+          break;
+        case 'balcony':
+          console.log('Found balcony to draw:', item.object);
+          drawBalcony(item.object);
           break;
         case 'pergola':
           drawPergola(item.object);
