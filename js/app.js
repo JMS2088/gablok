@@ -302,6 +302,7 @@ function createGarage(x, z) {
     id: 'garage_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
     x: x || 10, z: z || 10, width: 4, depth: 3, height: 3, wallThickness: 0.2,
     doorSlatCount: 8, doorSlatHeight: 0.3, doorSlatDepth: 0.05,
+    rotation: 0, // Add rotation property
     name: count === 0 ? 'Garage' : 'Garage ' + (count + 1),
     type: 'garage', level: 0
   };
@@ -1743,13 +1744,12 @@ function setupEvents() {
     if (handle) {
       var target = findObjectById(handle.roomId);
       if (target) {
-        // Remove debug log
-        // console.log('[DEBUG] Room handle mousedown:', handle, 'Target:', target);
         if (handle.type === 'rotate') {
-          // Rotate by 22.5 degrees (stairs or roof or room)
-          target.rotation = ((target.rotation || 0) + 22.5) % 360;
+          // Different rotation angles for different components
+          var rotationAngle = target.type === 'garage' ? 90 : 22.5;
+          target.rotation = ((target.rotation || 0) + rotationAngle) % 360;
           renderLoop();
-          updateStatus((target.type === 'roof' ? 'Roof' : target.type === 'stairs' ? 'Stairs' : 'Room') + ' rotated 22.5°');
+          updateStatus(target.name + ' rotated ' + rotationAngle + '°');
           return;
         }
         // Fix: Set dragType to 'handle' for room handles so drag logic resizes the room
@@ -1857,10 +1857,19 @@ function setupEvents() {
         currentSnapGuides = snap.guides;
         updateStatus('Moving ' + roof.name + '...');
       }
-    } else if (mouse.dragType === 'handle' && mouse.dragInfo) {
+    } else if (mouse.dragType === 'handle' && mouse.dragInfo && mouse.dragInfo.handle) {
       var target = findObjectById(selectedRoomId);
-      console.log('[DEBUG] Handle drag, target:', target, 'handle:', mouse.dragInfo.handle);
       if (target) {
+        // Handle rotation for garage and other components
+        if (mouse.dragInfo.handle.type === 'rotate') {
+          if (target.type === 'garage') {
+            // Rotate garage by 90 degrees
+            target.rotation = ((target.rotation || 0) + 90) % 360;
+            renderLoop();
+            updateStatus('Garage rotated to ' + target.rotation + '°');
+            return;
+          }
+        }
         var dx = e.clientX - mouse.dragInfo.startX;
         var dy = e.clientY - mouse.dragInfo.startY;
         var movement = worldMovement(dx, dy);
@@ -2077,31 +2086,44 @@ function switchLevel() {
   if (!selector) return;
   
   var value = selector.value;
+  var resetToFloor = '0';
   
+  // Handle special components first
   if (value === 'stairs') {
     addStairs();
-    selector.value = '0';
+    selector.value = resetToFloor;
+    renderLoop();
+    return;
   } else if (value === 'pergola') {
     addPergola();
-    selector.value = '0';
+    selector.value = resetToFloor;
+    renderLoop();
+    return;
   } else if (value === 'garage') {
     addGarage();
-    selector.value = '0';
+    selector.value = resetToFloor;
+    renderLoop();
+    return;
   } else if (value === 'roof') {
     addRoof();
-    selector.value = '0';
+    selector.value = resetToFloor;
+    renderLoop();
+    return;
   } else if (value === 'balcony') {
     console.log('Balcony option selected in switchLevel');
     addBalcony();
     currentFloor = 1;  // Ensure we're on first floor
     selector.value = '1';
     console.log('Current floor after balcony added:', currentFloor);
-    renderLoop();  // Force an immediate render
-  } else {
-    var newFloor = parseInt(value) || 0;
-    if (newFloor !== currentFloor) {
-      currentFloor = newFloor;
-      selectedRoomId = null;
+    renderLoop();
+    return;
+  }
+
+  // Handle floor changes
+  var newFloor = parseInt(value) || 0;
+  if (newFloor !== currentFloor) {
+    currentFloor = newFloor;
+    selectedRoomId = null;
 
       // If switching to first floor and there are no rooms on that floor, add one
       if (newFloor === 1 && !allRooms.some(room => room.level === 1)) {
@@ -2115,6 +2137,7 @@ function switchLevel() {
       } else {
         updateStatus('Floor ' + (newFloor + 1));
       }
+      renderLoop();
     }
   }
 }
@@ -2782,6 +2805,7 @@ function drawGarage(garage) {
     var strokeColor = selected ? '#007acc' : '#D0D0D0';
     var fillColor = selected ? 'rgba(0,122,204,0.3)' : 'rgba(208,208,208,0.2)';
     var strokeWidth = selected ? 2 : 1.5;
+    var rotRad = ((garage.rotation || 0) * Math.PI) / 180; // Add rotation support
     var opacity = currentFloor === 0 ? 1.0 : 0.6;
     
     ctx.globalAlpha = opacity;
@@ -2791,7 +2815,16 @@ function drawGarage(garage) {
     var hw = garage.width / 2;
     var hd = garage.depth / 2;
     
-    var corners = [
+    function rotatePoint(x, z) {
+      var dx = x - garage.x;
+      var dz = z - garage.z;
+      return {
+        x: garage.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+        z: garage.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+      };
+    }
+    
+    var unrotatedCorners = [
       {x: garage.x - hw, y: 0, z: garage.z - hd},
       {x: garage.x + hw, y: 0, z: garage.z - hd},
       {x: garage.x + hw, y: 0, z: garage.z + hd},
@@ -2801,6 +2834,11 @@ function drawGarage(garage) {
       {x: garage.x + hw, y: garage.height, z: garage.z + hd},
       {x: garage.x - hw, y: garage.height, z: garage.z + hd}
     ];
+    
+    var corners = unrotatedCorners.map(function(c) {
+      var rotated = rotatePoint(c.x, c.z);
+      return {x: rotated.x, y: c.y, z: rotated.z};
+    });
     
     var projected = [];
     for (var i = 0; i < corners.length; i++) {
@@ -2904,12 +2942,27 @@ function drawGarage(garage) {
 function drawHandlesForGarage(garage) {
   try {
     var handleY = garage.height + 0.2;
+    var rotationHandleY = garage.height + 0.8; // Position rotation handle higher
+    var rotRad = ((garage.rotation || 0) * Math.PI) / 180;
     
+    function rotateHandle(dx, dz) {
+      return {
+        x: garage.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+        z: garage.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+      };
+    }
+    
+    var hw = garage.width/2;
+    var hd = garage.depth/2;
     var garageHandles = [
-      {x: garage.x + garage.width/2, y: handleY, z: garage.z, type: 'width+', label: 'X+', color: '#007acc'},
-      {x: garage.x - garage.width/2, y: handleY, z: garage.z, type: 'width-', label: 'X-', color: '#007acc'},
-      {x: garage.x, y: handleY, z: garage.z + garage.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
-      {x: garage.x, y: handleY, z: garage.z - garage.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'}
+      // Width handles
+      (function() { var p = rotateHandle(hw, 0); return {x: p.x, y: handleY, z: p.z, type: 'width+', label: 'X+', color: '#007acc'}; })(),
+      (function() { var p = rotateHandle(-hw, 0); return {x: p.x, y: handleY, z: p.z, type: 'width-', label: 'X-', color: '#007acc'}; })(),
+      // Depth handles
+      (function() { var p = rotateHandle(0, hd); return {x: p.x, y: handleY, z: p.z, type: 'depth+', label: 'Z+', color: '#0099ff'}; })(),
+      (function() { var p = rotateHandle(0, -hd); return {x: p.x, y: handleY, z: p.z, type: 'depth-', label: 'Z-', color: '#0099ff'}; })(),
+      // Rotation handle, higher above the garage
+      {x: garage.x, y: rotationHandleY, z: garage.z, type: 'rotate', label: '360°', color: '#ff9900'}
     ];
     
     for (var i = 0; i < garageHandles.length; i++) {
@@ -2952,6 +3005,14 @@ function renderLoop() {
     clearCanvas();
     drawGrid();
     drawSnapGuides();
+    
+    // Draw any selected garage first
+    if (selectedRoomId) {
+      var selectedGarage = garageComponents.find(g => g.id === selectedRoomId);
+      if (selectedGarage) {
+        drawGarage(selectedGarage);
+      }
+    }
     
     var allObjects = [];
     
