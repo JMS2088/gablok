@@ -1507,6 +1507,15 @@ function findHandle(mouseX, mouseY) {
   return null;
 }
 
+function getDistanceFromCamera(object) {
+  var objectY = (object.level || 0) * 3.5 + (object.height || 3) / 2;
+  return Math.sqrt(
+    Math.pow(object.x - camera.targetX, 2) +
+    Math.pow(objectY, 2) +
+    Math.pow(object.z - camera.targetZ, 2)
+  );
+}
+
 function worldMovement(screenDX, screenDY) {
   var scale = camera.distance / 800;
   var cos = Math.cos(camera.yaw);
@@ -2079,6 +2088,7 @@ function setupEvents() {
       updateStatus('Cannot delete - select an object first');
     }
   });
+
 }
 
 function switchLevel() {
@@ -2139,7 +2149,6 @@ function switchLevel() {
       }
       renderLoop();
     }
-  }
 }
 
 function fitView() {
@@ -2188,42 +2197,22 @@ function resetAll() {
     animationId = null;
   }
   
-    resizeHandles = [];
+  // Clear selections, handles, and snap guides
+  selectedRoomId = null;
+  resizeHandles = [];
+  currentSnapGuides = [];
+  mouse.down = false;
+  mouse.dragType = null;
+  mouse.dragInfo = null;
 
-    if (mouse.dragType === 'room' && mouse.dragInfo) {
-      // ...existing code...
-    } else if (mouse.dragType === 'handle' && mouse.dragInfo && mouse.dragInfo.handle && mouse.dragInfo.handle.roomId) {
-      var stairs = findObjectById(mouse.dragInfo.handle.roomId);
-      if (stairs && stairs.type === 'stairs') {
-        var dx = e.clientX - mouse.dragInfo.startX;
-        var dy = e.clientY - mouse.dragInfo.startY;
-        var movement = worldMovement(dx, dy);
-        var rotRad = ((stairs.rotation || 0) * Math.PI) / 180;
-        // Project movement onto rotated axis
-        if (mouse.dragInfo.handle.type === 'width+' || mouse.dragInfo.handle.type === 'width-') {
-          var sign = mouse.dragInfo.handle.type === 'width+' ? 1 : -1;
-          // Rotated X axis
-          var axisX = Math.cos(rotRad);
-          var axisZ = Math.sin(rotRad);
-          var delta = movement.x * axisX + movement.z * axisZ;
-          stairs.width = Math.max(0.5, mouse.dragInfo.originalWidth + sign * delta * 2);
-          updateStatus('Resizing stairs width...');
-        } else if (mouse.dragInfo.handle.type === 'depth+' || mouse.dragInfo.handle.type === 'depth-') {
-          var sign = mouse.dragInfo.handle.type === 'depth+' ? 1 : -1;
-          // Rotated Z axis
-          var axisX = -Math.sin(rotRad);
-          var axisZ = Math.cos(rotRad);
-          var delta = movement.x * axisX + movement.z * axisZ;
-          stairs.depth = Math.max(0.5, mouse.dragInfo.originalDepth + sign * delta * 2);
-          updateStatus('Resizing stairs depth...');
-        }
-        renderLoop();
-      }
-    } else if (mouse.dragType === 'stairs' && mouse.dragInfo) {
-      // ...existing code...
-    }
-  var modal = document.getElementById('info-modal');
-  if (modal) modal.style.display = 'none';
+  // Hide info/pricing modals if open
+  var infoModal = document.getElementById('info-modal');
+  if (infoModal) infoModal.style.display = 'none';
+  var pricingModal = document.getElementById('pricing-modal');
+  if (pricingModal) pricingModal.style.display = 'none';
+
+  updateStatus('Reset');
+  startRender();
 }
 
 document.addEventListener('click', function(e) {
@@ -2236,8 +2225,8 @@ document.addEventListener('click', function(e) {
   
   if (pricingModal && e.target === pricingModal) {
     hidePricing();
-  }
-});
+    }
+  });
 
 function drawStairs(stairs) {
   if (!stairs) return;
@@ -2801,6 +2790,7 @@ function drawGarage(garage) {
   if (!garage) return;
   
   try {
+    console.log('Drawing garage:', garage.id, 'Selected:', selectedRoomId);
     var selected = selectedRoomId === garage.id;
     var strokeColor = selected ? '#007acc' : '#D0D0D0';
     var fillColor = selected ? 'rgba(0,122,204,0.3)' : 'rgba(208,208,208,0.2)';
@@ -2941,8 +2931,14 @@ function drawGarage(garage) {
 
 function drawHandlesForGarage(garage) {
   try {
-    var handleY = garage.height + 0.2;
-    var rotationHandleY = garage.height + 0.8; // Position rotation handle higher
+    console.log('Drawing garage handles');
+    // Set constants
+    var REGULAR_HANDLE_RADIUS = 8;
+    var ROTATION_HANDLE_RADIUS = 12;
+    var BASE_HANDLE_Y = garage.height + 0.2;
+    var ROTATION_HANDLE_Y = garage.height + 1.0;
+    
+    var handleY = BASE_HANDLE_Y;
     var rotRad = ((garage.rotation || 0) * Math.PI) / 180;
     
     function rotateHandle(dx, dz) {
@@ -2954,45 +2950,88 @@ function drawHandlesForGarage(garage) {
     
     var hw = garage.width/2;
     var hd = garage.depth/2;
-    var garageHandles = [
-      // Width handles
-      (function() { var p = rotateHandle(hw, 0); return {x: p.x, y: handleY, z: p.z, type: 'width+', label: 'X+', color: '#007acc'}; })(),
-      (function() { var p = rotateHandle(-hw, 0); return {x: p.x, y: handleY, z: p.z, type: 'width-', label: 'X-', color: '#007acc'}; })(),
-      // Depth handles
-      (function() { var p = rotateHandle(0, hd); return {x: p.x, y: handleY, z: p.z, type: 'depth+', label: 'Z+', color: '#0099ff'}; })(),
-      (function() { var p = rotateHandle(0, -hd); return {x: p.x, y: handleY, z: p.z, type: 'depth-', label: 'Z-', color: '#0099ff'}; })(),
-      // Rotation handle, higher above the garage
-      {x: garage.x, y: rotationHandleY, z: garage.z, type: 'rotate', label: '360°', color: '#ff9900'}
+    
+    // Create resize handles first
+    var garageHandles = [];
+    
+    // Rotation handle - add this first so it's drawn underneath
+    garageHandles.push({
+      x: garage.x,
+      y: ROTATION_HANDLE_Y,
+      z: garage.z,
+      type: 'rotate',
+      label: '360°',
+      color: '#ff9900',
+      radius: ROTATION_HANDLE_RADIUS
+    });
+    
+    // Add resize handles
+    var resizeHandleData = [
+      {dx: hw, dz: 0, type: 'width+', label: 'X+'},
+      {dx: -hw, dz: 0, type: 'width-', label: 'X-'},
+      {dx: 0, dz: hd, type: 'depth+', label: 'Z+'},
+      {dx: 0, dz: -hd, type: 'depth-', label: 'Z-'}
     ];
     
-    for (var i = 0; i < garageHandles.length; i++) {
-      var handle = garageHandles[i];
+    resizeHandleData.forEach(function(data) {
+      var p = rotateHandle(data.dx, data.dz);
+      garageHandles.push({
+        x: p.x,
+        y: BASE_HANDLE_Y,
+        z: p.z,
+        type: data.type,
+        label: data.label,
+        color: data.type.includes('width') ? '#007acc' : '#0099ff',
+        radius: REGULAR_HANDLE_RADIUS
+      });
+    });
+    
+    console.log('Drawing handles:', garageHandles.length);
+    // Draw each handle
+    garageHandles.forEach(function(handle) {
       var screen = project3D(handle.x, handle.y, handle.z);
-      if (!screen) continue;
+      if (!screen) return;
       
+      // Draw handle circle
       ctx.fillStyle = handle.color;
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = handle.type === 'rotate' ? '#ffcc00' : 'white';
+      ctx.lineWidth = handle.type === 'rotate' ? 3 : 2;
+      
+      // Draw glow for rotation handle
+      if (handle.type === 'rotate') {
+        ctx.save();
+        ctx.shadowColor = '#ffcc00';
+        ctx.shadowBlur = 10;
+      }
+      
       ctx.beginPath();
-      ctx.arc(screen.x, screen.y, HANDLE_RADIUS, 0, Math.PI * 2);
+      ctx.arc(screen.x, screen.y, handle.radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
       
+      if (handle.type === 'rotate') {
+        ctx.restore();
+      }
+      
+      // Draw handle label
       ctx.fillStyle = 'white';
-      ctx.font = 'bold 9px sans-serif';
+      ctx.font = handle.type === 'rotate' ? 'bold 14px sans-serif' : 'bold 10px sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(handle.label, screen.x, screen.y);
       
+      // Register handle for interaction
       resizeHandles.push({
-        screenX: screen.x - HANDLE_RADIUS,
-        screenY: screen.y - HANDLE_RADIUS,
-        width: HANDLE_RADIUS * 2,
-        height: HANDLE_RADIUS * 2,
+        screenX: screen.x - handle.radius,
+        screenY: screen.y - handle.radius,
+        width: handle.radius * 2,
+        height: handle.radius * 2,
         type: handle.type,
         roomId: garage.id
       });
-    }
+      
+      console.log('Registered handle:', handle.type, 'for garage:', garage.id);
+    });
   } catch (error) {
     console.error('Garage handle error:', error);
   }
@@ -3005,6 +3044,52 @@ function renderLoop() {
     clearCanvas();
     drawGrid();
     drawSnapGuides();
+    
+    // Sort all objects by distance for proper rendering
+    var allObjects = [];
+    
+    // Add rooms
+    for (var i = 0; i < allRooms.length; i++) {
+      var room = allRooms[i];
+      allObjects.push({
+        object: room,
+        type: 'room',
+        distance: getDistanceFromCamera(room)
+      });
+    }
+    
+    // Add all components
+    if (stairsComponent) {
+      allObjects.push({
+        object: stairsComponent,
+        type: 'stairs',
+        distance: getDistanceFromCamera(stairsComponent)
+      });
+    }
+    
+    garageComponents.forEach(function(garage) {
+      allObjects.push({
+        object: garage,
+        type: 'garage',
+        distance: getDistanceFromCamera(garage)
+      });
+    });
+    
+    // Sort objects by distance (furthest first)
+    allObjects.sort(function(a, b) {
+      return b.distance - a.distance;
+    });
+    
+    // Draw all objects in order
+    allObjects.forEach(function(obj) {
+      if (obj.type === 'room') {
+        drawRoom(obj.object);
+      } else if (obj.type === 'stairs') {
+        drawStairs(obj.object);
+      } else if (obj.type === 'garage') {
+        drawGarage(obj.object);
+      }
+    });
     
     // Draw any selected garage first
     if (selectedRoomId) {
