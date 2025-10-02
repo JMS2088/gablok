@@ -1754,7 +1754,6 @@ function setupEvents() {
       var target = findObjectById(handle.roomId);
       if (target) {
         if (handle.type === 'rotate') {
-          // Different rotation angles for different components
           var rotationAngle = target.type === 'garage' ? 90 : 22.5;
           target.rotation = ((target.rotation || 0) + rotationAngle) % 360;
           renderLoop();
@@ -2864,6 +2863,7 @@ function drawGarage(garage) {
     var doorHeight = garage.height * 0.9;
     var doorY = 0;
     
+    // Compute door corners and rotate them with the garage
     var doorCorners = [
       {x: garage.x - doorWidth/2, y: doorY, z: garage.z - garage.depth/2},
       {x: garage.x + doorWidth/2, y: doorY, z: garage.z - garage.depth/2},
@@ -2874,7 +2874,8 @@ function drawGarage(garage) {
     var projectedDoor = [];
     var doorVisible = true;
     for (var i = 0; i < doorCorners.length; i++) {
-      var p = project3D(doorCorners[i].x, doorCorners[i].y, doorCorners[i].z);
+      var rp = rotatePoint(doorCorners[i].x, doorCorners[i].z);
+      var p = project3D(rp.x, doorCorners[i].y, rp.z);
       if (!p) {
         doorVisible = false;
         break;
@@ -2901,8 +2902,11 @@ function drawGarage(garage) {
       
       for (var slatIdx = 1; slatIdx < slatCount; slatIdx++) {
         var slatY = doorY + slatIdx * slatHeight;
-        var slatLeft = project3D(garage.x - doorWidth/2, slatY, garage.z - garage.depth/2);
-        var slatRight = project3D(garage.x + doorWidth/2, slatY, garage.z - garage.depth/2);
+  // Rotate slat endpoints along the door plane
+  var leftRot = rotatePoint(garage.x - doorWidth/2, garage.z - garage.depth/2);
+  var rightRot = rotatePoint(garage.x + doorWidth/2, garage.z - garage.depth/2);
+  var slatLeft = project3D(leftRot.x, slatY, leftRot.z);
+  var slatRight = project3D(rightRot.x, slatY, rightRot.z);
         
         if (slatLeft && slatRight) {
           ctx.strokeStyle = selected ? '#007acc' : '#D0D0D0';
