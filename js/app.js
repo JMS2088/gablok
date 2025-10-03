@@ -706,9 +706,8 @@ function drawRoom(room) {
     
     ctx.globalAlpha = 1.0;
     
-    if (selected) {
-      drawHandlesForRoom(room);
-    }
+    // Always draw handles so all handles are draggable, not only when selected
+    drawHandlesForRoom(room);
     
   } catch (error) {
     console.error('Room draw error:', error);
@@ -802,9 +801,8 @@ function drawRoof(roof) {
         drawGableRoof(roof, selected, strokeColor, fillColor, strokeWidth);
     }
     
-    if (selected) {
-      drawHandlesForRoof(roof);
-    }
+    // Always draw handles so all handles are draggable
+    drawHandlesForRoof(roof);
     
   } catch (error) {
     console.error('Roof draw error:', error);
@@ -1771,6 +1769,7 @@ function setupEvents() {
           originalRoomX: target.x,
           originalRoomZ: target.z
         };
+        mouse.down = true;
         selectedRoomId = handle.roomId;
         canvas.style.cursor = 'grabbing';
         updateStatus('Resizing...');
@@ -1900,6 +1899,7 @@ function setupEvents() {
         if (type === 'width+' || type === 'width-') {
           // Project motion onto local +X
           var proj = move.x * axisXx + move.z * axisXz;
+          // For X+: moving along +X grows; for X-: moving along -X grows
           sizeDelta = (type === 'width+') ? proj : -proj;
 
           var newW = clamp(mouse.dragInfo.originalWidth + sizeDelta, minSize, maxSize);
@@ -1907,12 +1907,15 @@ function setupEvents() {
           target.width = newW;
 
           // Move center by half the applied delta along the dragged side axis
-          target.x = mouse.dragInfo.originalRoomX + (applied / 2) * axisXx;
-          target.z = mouse.dragInfo.originalRoomZ + (applied / 2) * axisXz;
+          // Note: for width- handle, center should shift toward local -X
+          var dirX = (type === 'width-') ? -1 : 1;
+          target.x = mouse.dragInfo.originalRoomX + (applied / 2) * dirX * axisXx;
+          target.z = mouse.dragInfo.originalRoomZ + (applied / 2) * dirX * axisXz;
           updateStatus('Resizing width...');
         } else if (type === 'depth+' || type === 'depth-') {
           // Project motion onto local +Z
           var projZ = move.x * axisZx + move.z * axisZz;
+          // For Z+: moving along +Z grows; for Z-: moving along -Z grows
           sizeDelta = (type === 'depth+') ? projZ : -projZ;
 
           var newD = clamp(mouse.dragInfo.originalDepth + sizeDelta, minSize, maxSize);
@@ -1920,8 +1923,10 @@ function setupEvents() {
           target.depth = newD;
 
           // Move center by half the applied delta along the dragged side axis (local Z)
-          target.x = mouse.dragInfo.originalRoomX + (appliedD / 2) * axisZx;
-          target.z = mouse.dragInfo.originalRoomZ + (appliedD / 2) * axisZz;
+          // Note: for depth- handle, center should shift toward local -Z
+          var dirZ = (type === 'depth-') ? -1 : 1;
+          target.x = mouse.dragInfo.originalRoomX + (appliedD / 2) * dirZ * axisZx;
+          target.z = mouse.dragInfo.originalRoomZ + (appliedD / 2) * dirZ * axisZz;
           updateStatus('Resizing depth...');
         } else if (type === 'height') {
           var heightChange = -(dy * 0.005);
@@ -2278,9 +2283,8 @@ function drawStairs(stairs) {
     
     ctx.globalAlpha = 1.0;
     
-    if (selected) {
-      drawHandlesForStairs(stairs);
-    }
+    // Always draw handles so all handles are draggable
+    drawHandlesForStairs(stairs);
     
   } catch (error) {
     console.error('Stairs draw error:', error);
@@ -2530,9 +2534,8 @@ function drawPergola(pergola) {
     
     ctx.globalAlpha = 1.0;
     
-    if (selected) {
-      drawHandlesForPergola(pergola);
-    }
+    // Always draw handles so all handles are draggable
+    drawHandlesForPergola(pergola);
     
   } catch (error) {
     console.error('Pergola draw error:', error);
@@ -2704,9 +2707,8 @@ function drawBalcony(balcony) {
       ctx.stroke();
     }
     
-    if (selected) {
-      drawHandlesForBalcony(balcony);
-    }
+    // Always draw handles so all handles are draggable
+    drawHandlesForBalcony(balcony);
     
   } catch (error) {
     console.error('Balcony draw error:', error);
@@ -2896,9 +2898,8 @@ function drawGarage(garage) {
     
     ctx.globalAlpha = 1.0;
     
-    if (selected) {
-      drawHandlesForGarage(garage);
-    }
+    // Always draw handles so all handles are draggable
+    drawHandlesForGarage(garage);
     
   } catch (error) {
     console.error('Garage draw error:', error);
