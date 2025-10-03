@@ -1868,96 +1868,68 @@ function setupEvents() {
     } else if (mouse.dragType === 'handle' && mouse.dragInfo && mouse.dragInfo.handle) {
       var target = findObjectById(selectedRoomId);
       if (target) {
-        // Handle rotation for garage and other components
+        // Rotation handle
         if (mouse.dragInfo.handle.type === 'rotate') {
-          if (target.type === 'garage') {
-            // Rotate garage by 90 degrees
-            target.rotation = ((target.rotation || 0) + 90) % 360;
-            renderLoop();
-            updateStatus('Garage rotated to ' + target.rotation + '°');
-            return;
-          }
+          if (typeof target.rotation !== 'number') target.rotation = 0;
+          var step = target.type === 'garage' ? 90 : 22.5;
+          target.rotation = (target.rotation + step) % 360;
+          renderLoop();
+          updateStatus(target.name + ' rotated ' + step + '°');
+          return;
         }
+
         var dx = e.clientX - mouse.dragInfo.startX;
         var dy = e.clientY - mouse.dragInfo.startY;
-        var movement = worldMovement(dx, dy);
-        
-        if (mouse.dragInfo.handle.type === 'width+' || mouse.dragInfo.handle.type === 'width-') {
-          var sign = mouse.dragInfo.handle.type === 'width+' ? 1 : -1;
-          target.width = Math.max(0.5, mouse.dragInfo.originalWidth + sign * movement.x * 2);
-          console.log('[DEBUG] Resizing width to:', target.width);
+        var move = worldMovement(dx, dy);
+        var rotRad = ((target.rotation || 0) * Math.PI) / 180;
+
+        // Local axes
+        var axisXx = Math.cos(rotRad), axisXz = Math.sin(rotRad);       // local +X
+        var axisZx = -Math.sin(rotRad), axisZz = Math.cos(rotRad);      // local +Z
+
+        var type = mouse.dragInfo.handle.type;
+        var sizeDelta = 0;
+
+        // Helpers
+        function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+        // Defaults per type
+        var minSize = (target.type === 'roof' || target.type === 'stairs') ? 1 : 0.5;
+        var maxSize = 20;
+
+        if (type === 'width+' || type === 'width-') {
+          // Project motion onto local +X
+          var proj = move.x * axisXx + move.z * axisXz;
+          sizeDelta = (type === 'width+') ? proj : -proj;
+
+          var newW = clamp(mouse.dragInfo.originalWidth + sizeDelta, minSize, maxSize);
+          var applied = newW - mouse.dragInfo.originalWidth; // actual applied delta after clamp
+          target.width = newW;
+
+          // Move center by half the applied delta along the dragged side axis
+          target.x = mouse.dragInfo.originalRoomX + (applied / 2) * axisXx;
+          target.z = mouse.dragInfo.originalRoomZ + (applied / 2) * axisXz;
           updateStatus('Resizing width...');
-        } else if (mouse.dragInfo.handle.type === 'depth+' || mouse.dragInfo.handle.type === 'depth-') {
-          var sign = mouse.dragInfo.handle.type === 'depth+' ? 1 : -1;
-          target.depth = Math.max(0.5, mouse.dragInfo.originalDepth + sign * movement.z * 2);
-          console.log('[DEBUG] Resizing depth to:', target.depth);
+        } else if (type === 'depth+' || type === 'depth-') {
+          // Project motion onto local +Z
+          var projZ = move.x * axisZx + move.z * axisZz;
+          sizeDelta = (type === 'depth+') ? projZ : -projZ;
+
+          var newD = clamp(mouse.dragInfo.originalDepth + sizeDelta, minSize, maxSize);
+          var appliedD = newD - mouse.dragInfo.originalDepth;
+          target.depth = newD;
+
+          // Move center by half the applied delta along the dragged side axis (local Z)
+          target.x = mouse.dragInfo.originalRoomX + (appliedD / 2) * axisZx;
+          target.z = mouse.dragInfo.originalRoomZ + (appliedD / 2) * axisZz;
           updateStatus('Resizing depth...');
+        } else if (type === 'height') {
+          var heightChange = -(dy * 0.005);
+          target.height = clamp(target.height + heightChange, 0.5, 10);
+          updateStatus('Resizing height...');
         }
+
         renderLoop();
-        var movement = worldMovement(dx, dy);
-        if (target.type === 'roof' || target.type === 'stairs') {
-          var rotRad = ((target.rotation || 0) * Math.PI) / 180;
-          var axisX = Math.cos(rotRad);
-          var axisZ = Math.sin(rotRad);
-          var axisZX = -Math.sin(rotRad);
-          var axisZZ = Math.cos(rotRad);
-          switch (mouse.dragInfo.handle.type) {
-            case 'width+': {
-              var delta = movement.x * axisX + movement.z * axisZ;
-              target.width = Math.max(1, Math.min(20, mouse.dragInfo.originalWidth + delta * 2));
-              break;
-            }
-            case 'width-': {
-              var delta = movement.x * axisX + movement.z * axisZ;
-              target.width = Math.max(1, Math.min(20, mouse.dragInfo.originalWidth - delta * 2));
-              break;
-            }
-            case 'depth+': {
-              var delta = movement.x * axisZX + movement.z * axisZZ;
-              target.depth = Math.max(1, Math.min(20, mouse.dragInfo.originalDepth + delta * 2));
-              break;
-            }
-            case 'depth-': {
-              var delta = movement.x * axisZX + movement.z * axisZZ;
-              target.depth = Math.max(1, Math.min(20, mouse.dragInfo.originalDepth - delta * 2));
-              break;
-            }
-            case 'height': {
-              var heightChange = -(dy * 0.005);
-              target.height = Math.max(0.5, Math.min(10, target.height + heightChange));
-              break;
-            }
-          }
-          updateStatus('Resizing: ' + target.width.toFixed(1) + 'm × ' + target.depth.toFixed(1) + 'm × ' + target.height.toFixed(1) + 'm');
-          renderLoop();
-        } else if (target.type === 'room' || target.type === 'pergola' || target.type === 'garage') {
-          var rotRad = ((target.rotation || 0) * Math.PI) / 180;
-          var dx = e.clientX - mouse.dragInfo.startX;
-          var dy = e.clientY - mouse.dragInfo.startY;
-          var movement = worldMovement(dx, dy);
-          if (mouse.dragInfo.handle.type === 'width+' || mouse.dragInfo.handle.type === 'width-') {
-            var sign = mouse.dragInfo.handle.type === 'width+' ? 1 : -1;
-            var axisX = Math.cos(rotRad);
-            var axisZ = Math.sin(rotRad);
-            var delta = movement.x * axisX + movement.z * axisZ;
-            target.width = Math.max(0.5, mouse.dragInfo.originalWidth + sign * delta * 2);
-            updateStatus('Resizing width...');
-          } else if (mouse.dragInfo.handle.type === 'depth+' || mouse.dragInfo.handle.type === 'depth-') {
-            var sign = mouse.dragInfo.handle.type === 'depth+' ? 1 : -1;
-            var axisX = -Math.sin(rotRad);
-            var axisZ = Math.cos(rotRad);
-            var delta = movement.x * axisX + movement.z * axisZ;
-            target.depth = Math.max(0.5, mouse.dragInfo.originalDepth + sign * delta * 2);
-            updateStatus('Resizing depth...');
-          } else if (mouse.dragInfo.handle.type === 'height') {
-            var heightChange = -(dy * 0.005);
-            target.height = Math.max(0.5, Math.min(10, target.height + heightChange));
-            updateStatus('Resizing height...');
-          }
-          renderLoop();
-        } else {
-          // ...existing code for other types...
-        }
       }
     } else if (mouse.dragType === 'camera' && mouse.down) {
       var dx = e.clientX - mouse.lastX;
