@@ -1827,12 +1827,29 @@ function updateLabels() {
     var label = document.createElement('div');
     label.className = 'room-label';
     if (selectedRoomId === obj.id) label.className += ' selected';
-    label.textContent = obj.name;
     label.style.left = Math.round(screen.x) + 'px';
     label.style.top = Math.round(screen.y) + 'px';
-    
     label.style.backgroundColor = selectedRoomId === obj.id ? '#007acc' : 'white';
     label.style.color = selectedRoomId === obj.id ? 'white' : '#333';
+
+    // Editable name input
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.value = obj.name || '';
+    input.style.border = 'none';
+    input.style.background = 'transparent';
+    input.style.color = 'inherit';
+    input.style.font = 'bold 12px system-ui, sans-serif';
+    input.style.textAlign = 'center';
+    input.style.outline = 'none';
+    input.style.width = '120px';
+    input.style.transform = 'translate(-50%, -50%)';
+    input.style.pointerEvents = 'auto';
+    input.onfocus = function(e) { e.stopPropagation(); };
+    input.onmousedown = function(e) { e.stopPropagation(); };
+    input.onkeydown = function(e) { e.stopPropagation(); if (e.key === 'Enter') this.blur(); };
+    input.oninput = function() { obj.name = this.value; saveProjectSilently(); };
+    label.appendChild(input);
     
     if (labelData.type === 'room' && obj.level !== currentFloor) {
       label.style.opacity = '0.6';
@@ -2120,6 +2137,11 @@ function setupEvents() {
           var vz = fz - mouse.dragInfo.faceOppStart.z;
           var along = vx * (sX * axisXx) + vz * (sX * axisXz); // distance along dragged face normal
           var newW = clamp(Math.max(minSize, Math.min(maxSize, along)), minSize, maxSize);
+          // Snap width to nearest GRID_SPACING when within HANDLE_SNAP_TOLERANCE
+          var snappedW = Math.round(newW / GRID_SPACING) * GRID_SPACING;
+          if (Math.abs(newW - snappedW) <= HANDLE_SNAP_TOLERANCE) {
+            newW = clamp(snappedW, minSize, maxSize);
+          }
           target.width = newW;
 
           // Center is midpoint between opposite face and dragged face
@@ -2137,6 +2159,11 @@ function setupEvents() {
           var vzz = fzz - mouse.dragInfo.faceOppStart.z;
           var alongZ = vxz * (sZ * axisZx) + vzz * (sZ * axisZz);
           var newD = clamp(Math.max(minSize, Math.min(maxSize, alongZ)), minSize, maxSize);
+          // Snap depth to nearest GRID_SPACING when within HANDLE_SNAP_TOLERANCE
+          var snappedD = Math.round(newD / GRID_SPACING) * GRID_SPACING;
+          if (Math.abs(newD - snappedD) <= HANDLE_SNAP_TOLERANCE) {
+            newD = clamp(snappedD, minSize, maxSize);
+          }
           target.depth = newD;
 
           target.x = mouse.dragInfo.faceOppStart.x + (newD / 2) * (sZ * axisZx);
@@ -3396,3 +3423,146 @@ function startRender() {
 }
 
 document.addEventListener('DOMContentLoaded', startApp);
+
+// ---------- Save/Load and Export ----------
+function serializeProject() {
+  return JSON.stringify({
+    version: 1,
+    camera: camera,
+    rooms: allRooms,
+    stairs: stairsComponent,
+    pergolas: pergolaComponents,
+    garages: garageComponents,
+    roofs: roofComponents,
+    balconies: balconyComponents,
+    currentFloor: currentFloor
+  });
+}
+
+function restoreProject(json) {
+  try {
+    var data = JSON.parse(json);
+    if (!data) return;
+    camera = Object.assign(camera, data.camera || {});
+    allRooms = Array.isArray(data.rooms) ? data.rooms : [];
+    stairsComponent = data.stairs || null;
+    pergolaComponents = Array.isArray(data.pergolas) ? data.pergolas : [];
+    garageComponents = Array.isArray(data.garages) ? data.garages : [];
+    roofComponents = Array.isArray(data.roofs) ? data.roofs : [];
+    balconyComponents = Array.isArray(data.balconies) ? data.balconies : [];
+    currentFloor = typeof data.currentFloor === 'number' ? data.currentFloor : currentFloor;
+    selectedRoomId = null;
+    renderLoop();
+  } catch (e) {
+    console.error('Restore failed', e);
+  }
+}
+
+function saveProjectSilently() {
+  try { localStorage.setItem('gablok_project', serializeProject()); } catch (e) {}
+}
+
+function saveProject() {
+  try {
+    localStorage.setItem('gablok_project', serializeProject());
+    updateStatus('Project saved');
+  } catch (e) {
+    console.error(e); updateStatus('Save failed');
+  }
+}
+
+function loadProject() {
+  try {
+    var json = localStorage.getItem('gablok_project');
+    if (!json) { updateStatus('No saved project'); return; }
+    restoreProject(json);
+    updateStatus('Project loaded');
+  } catch (e) {
+    console.error(e); updateStatus('Load failed');
+  }
+}
+
+function exportOBJ() {
+  // Minimal OBJ exporter for boxes (rooms/components)
+  var lines = ['# Gablok Export'];
+  var vcount = 0;
+  function pushBox(obj, y0, y1, tag) {
+    var hw = obj.width/2, hd = obj.depth/2;
+    var cx = obj.x, cz = obj.z;
+    var rotRad = ((obj.rotation || 0) * Math.PI) / 180;
+    function rot(x, z) {
+      var dx = x - cx, dz = z - cz;
+      return { x: cx + dx * Math.cos(rotRad) - dz * Math.sin(rotRad), z: cz + dx * Math.sin(rotRad) + dz * Math.cos(rotRad) };
+    }
+    var corners = [
+      rot(cx-hw, cz-hd), rot(cx+hw, cz-hd), rot(cx+hw, cz+hd), rot(cx-hw, cz+hd)
+    ];
+    // 8 vertices
+    var verts = [
+      [corners[0].x, y0, corners[0].z], [corners[1].x, y0, corners[1].z], [corners[2].x, y0, corners[2].z], [corners[3].x, y0, corners[3].z],
+      [corners[0].x, y1, corners[0].z], [corners[1].x, y1, corners[1].z], [corners[2].x, y1, corners[2].z], [corners[3].x, y1, corners[3].z]
+    ];
+    verts.forEach(function(v){ lines.push('v ' + v[0] + ' ' + v[1] + ' ' + v[2]); });
+    if (tag) lines.push('g ' + tag);
+    // faces (1-indexed)
+    var f = function(a,b,c,d){ lines.push('f ' + (vcount+a) + ' ' + (vcount+b) + ' ' + (vcount+c) + ' ' + (vcount+d)); };
+    vcount += 8;
+    f(1,2,3,4); f(5,6,7,8); f(1,2,6,5); f(2,3,7,6); f(3,4,8,7); f(4,1,5,8);
+  }
+  // Rooms
+  allRooms.forEach(function(r){ var y0=r.level*3.5, y1=y0+r.height; pushBox(r,y0,y1,'room_'+(r.name||'')); });
+  if (stairsComponent) pushBox(stairsComponent, 0, stairsComponent.height, 'stairs');
+  pergolaComponents.forEach(function(p){ pushBox(p,0,p.totalHeight,'pergola'); });
+  garageComponents.forEach(function(g){ pushBox(g,0,g.height,'garage'); });
+  roofComponents.forEach(function(r){ pushBox({x:r.x,z:r.z,width:r.width,depth:r.depth,rotation:r.rotation||0}, r.baseHeight, r.baseHeight + r.height, 'roof'); });
+  balconyComponents.forEach(function(b){ var y0=b.level*3.5, y1=y0+b.height; pushBox(b,y0,y1,'balcony'); });
+  var blob = new Blob([lines.join('\n')], {type: 'text/plain'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'gablok-export.obj';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  updateStatus('Exported OBJ');
+}
+
+async function exportPDF() {
+  try {
+    var { jsPDF } = window.jspdf || {};
+    if (!jsPDF) { updateStatus('PDF library not loaded'); return; }
+    var pdf = new jsPDF({ unit: 'px', format: 'a4' });
+    var views = 20;
+    var yaw0 = camera.yaw;
+    for (var i=0;i<views;i++) {
+      camera.yaw = yaw0 + (i * 2*Math.PI / views);
+      // Render a frame and wait a tick for canvas to update
+      await new Promise(requestAnimationFrame);
+      var dataURL = canvas.toDataURL('image/png');
+      if (i>0) pdf.addPage();
+      pdf.addImage(dataURL, 'PNG', 0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight());
+    }
+    camera.yaw = yaw0;
+    pdf.save('gablok-views.pdf');
+    updateStatus('Exported PDF');
+  } catch (e) {
+    console.error(e); updateStatus('Export PDF failed');
+  }
+}
+
+// Wire buttons
+document.addEventListener('DOMContentLoaded', function(){
+  var bSave = document.getElementById('save-project'); if (bSave) bSave.onclick = saveProject;
+  var bLoad = document.getElementById('load-project'); if (bLoad) bLoad.onclick = loadProject;
+  var bObj = document.getElementById('export-obj'); if (bObj) bObj.onclick = exportOBJ;
+  var bPdf = document.getElementById('export-pdf'); if (bPdf) bPdf.onclick = exportPDF;
+  var bDl = document.getElementById('download-json'); if (bDl) bDl.onclick = function(){
+    var blob = new Blob([serializeProject()], {type:'application/json'});
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gablok-project.json'; a.click(); URL.revokeObjectURL(a.href);
+  };
+  var bUp = document.getElementById('upload-json'); if (bUp) bUp.onclick = function(){ document.getElementById('upload-file').click(); };
+  var fileInput = document.getElementById('upload-file'); if (fileInput) fileInput.onchange = function(e){
+    var f = e.target.files && e.target.files[0]; if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function(){ restoreProject(reader.result); updateStatus('Project loaded from file'); };
+    reader.readAsText(f);
+  };
+});

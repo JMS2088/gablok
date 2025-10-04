@@ -24,6 +24,12 @@
 	<button class="secondary" onclick="resetAll()">Reset</button>
 	<button class="secondary" onclick="showPricing()" title="Show pricing">💰 Price</button>
 	<button class="secondary" onclick="showInfo()" title="Show information">ℹ</button>
+	<button class="secondary" id="save-project" title="Save project">💾 Save</button>
+	<button class="secondary" id="load-project" title="Load project">📂 Load</button>
+	<button class="secondary" id="export-obj" title="Export 3D OBJ">⬇ 3D</button>
+	<button class="secondary" id="export-pdf" title="Export PDF (20 views)">📄 PDF</button>
+	<button class="secondary" id="download-json" title="Download project JSON">⬇ JSON</button>
+	<button class="secondary" id="upload-json" title="Upload project JSON">⬆ JSON</button>
 </div>
 
 <canvas id="canvas" width="1200" height="800" style="border:1px solid #ccc; background:#f8fbff; display:block; margin:20px auto;"></canvas>
@@ -105,6 +111,8 @@
 	</div>
 </div>
 
+<input type="file" id="upload-file" accept="application/json" style="display:none" />
+
 <div id="pricing-modal">
 	<div id="pricing-content">
 		<button class="close-button" onclick="hidePricing()">&times;</button>
@@ -126,6 +134,8 @@
 	</div>
 </div>
 
+<!-- jsPDF for multi-page PDF export -->
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="js/app.js?v=dev"></script>
 
 </body>
