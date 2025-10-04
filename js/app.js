@@ -1,11 +1,12 @@
 function drawHandlesForPergola(pergola) {
   try {
+    var isActive = selectedRoomId === pergola.id;
     var handleY = pergola.height + 0.2;
     var handleData = [
-      {x: pergola.x + pergola.width/2, y: handleY, z: pergola.z, type: 'width+', label: 'X+', color: '#007acc'},
-      {x: pergola.x - pergola.width/2, y: handleY, z: pergola.z, type: 'width-', label: 'X-', color: '#007acc'},
-      {x: pergola.x, y: handleY, z: pergola.z + pergola.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
-      {x: pergola.x, y: handleY, z: pergola.z - pergola.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'}
+      {x: pergola.x + pergola.width/2, y: handleY, z: pergola.z, type: 'width+', label: 'X+'},
+      {x: pergola.x - pergola.width/2, y: handleY, z: pergola.z, type: 'width-', label: 'X-'},
+      {x: pergola.x, y: handleY, z: pergola.z + pergola.depth/2, type: 'depth+', label: 'Z+'},
+      {x: pergola.x, y: handleY, z: pergola.z - pergola.depth/2, type: 'depth-', label: 'Z-'}
     ];
 
     for (var i = 0; i < handleData.length; i++) {
@@ -13,19 +14,7 @@ function drawHandlesForPergola(pergola) {
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) continue;
 
-      ctx.fillStyle = handle.color;
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(screen.x, screen.y, HANDLE_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 10px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(handle.label, screen.x, screen.y);
+      drawHandle(screen, handle.type, handle.label, isActive);
 
       resizeHandles.push({
         screenX: screen.x - HANDLE_RADIUS,
@@ -65,6 +54,82 @@ var GRID_SPACING = 0.5;
 var SNAP_GRID_TOLERANCE = 1.0;
 var SNAP_CENTER_TOLERANCE = 0.6;
 var HANDLE_SNAP_TOLERANCE = 0.25;
+
+// Global handle styles and helpers
+var HANDLE_STYLE = {
+  active: {
+    fill: { width: '#007acc', depth: '#0099ff', height: '#00cc66', rotate: '#ff9900' },
+    stroke: { default: 'white', rotate: '#ffcc00' },
+    label: '#ffffff',
+    opacity: 1.0
+  },
+  inactive: {
+    fill: { any: '#cfcfcf' },
+    stroke: { default: '#e0e0e0', rotate: '#e0e0e0' },
+    label: '#909090',
+    opacity: 0.5
+  }
+};
+
+function getHandleStyle(type, isActive) {
+  var s = isActive ? HANDLE_STYLE.active : HANDLE_STYLE.inactive;
+  function prefix(t) {
+    if (t.indexOf('width') === 0) return 'width';
+    if (t.indexOf('depth') === 0) return 'depth';
+    if (t === 'height') return 'height';
+    if (t === 'rotate') return 'rotate';
+    return 'any';
+  }
+  var p = prefix(type);
+  return {
+    fill: isActive ? (p === 'width' ? s.fill.width : p === 'depth' ? s.fill.depth : p === 'height' ? s.fill.height : s.fill.rotate) : s.fill.any,
+    stroke: isActive ? (type === 'rotate' ? s.stroke.rotate : s.stroke.default) : s.stroke.default,
+    label: s.label,
+    opacity: s.opacity
+  };
+}
+
+function drawHandle(screen, type, label, isActive, radius) {
+  var style = getHandleStyle(type, isActive);
+  var font = type === 'rotate' ? 'bold 14px sans-serif' : 'bold 10px sans-serif';
+
+  // Shadow glow only for active rotate handles
+  if (isActive && type === 'rotate') {
+    ctx.save();
+    ctx.shadowColor = HANDLE_STYLE.active.stroke.rotate;
+    ctx.shadowBlur = 10;
+    ctx.globalAlpha = style.opacity;
+    ctx.fillStyle = style.fill;
+    ctx.strokeStyle = style.stroke;
+    ctx.lineWidth = type === 'rotate' ? 3 : 2;
+    ctx.beginPath();
+    ctx.arc(screen.x, screen.y, radius || HANDLE_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.save();
+    ctx.globalAlpha = style.opacity;
+    ctx.fillStyle = style.fill;
+    ctx.strokeStyle = style.stroke;
+    ctx.lineWidth = type === 'rotate' ? 3 : 2;
+    ctx.beginPath();
+    ctx.arc(screen.x, screen.y, radius || HANDLE_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Label
+  ctx.save();
+  ctx.globalAlpha = style.opacity;
+  ctx.fillStyle = style.label;
+  ctx.font = font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, screen.x, screen.y);
+  ctx.restore();
+}
 
 var camera = {
   yaw: 0.5,
@@ -772,33 +837,22 @@ function drawRoom(room) {
 
 function drawHandlesForRoom(room) {
   try {
+    var isActive = selectedRoomId === room.id;
     var handleY = room.level * 3.5 + room.height + 0.2;
     
     var handleData = [
-      {x: room.x + room.width/2, y: handleY, z: room.z, type: 'width+', label: 'X+', color: '#007acc'},
-      {x: room.x - room.width/2, y: handleY, z: room.z, type: 'width-', label: 'X-', color: '#007acc'},
-      {x: room.x, y: handleY, z: room.z + room.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
-      {x: room.x, y: handleY, z: room.z - room.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'}
+      {x: room.x + room.width/2, y: handleY, z: room.z, type: 'width+', label: 'X+'},
+      {x: room.x - room.width/2, y: handleY, z: room.z, type: 'width-', label: 'X-'},
+      {x: room.x, y: handleY, z: room.z + room.depth/2, type: 'depth+', label: 'Z+'},
+      {x: room.x, y: handleY, z: room.z - room.depth/2, type: 'depth-', label: 'Z-'}
     ];
     
     for (var i = 0; i < handleData.length; i++) {
       var handle = handleData[i];
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) continue;
-      
-      ctx.fillStyle = handle.color;
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(screen.x, screen.y, HANDLE_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 10px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(handle.label, screen.x, screen.y);
+
+      drawHandle(screen, handle.type, handle.label, isActive);
       
       resizeHandles.push({
         screenX: screen.x - HANDLE_RADIUS,
@@ -1273,6 +1327,7 @@ function drawCrossedHipRoof(roof, selected, strokeColor, fillColor, strokeWidth)
 
 function drawHandlesForRoof(roof) {
   try {
+    var isActive = selectedRoomId === roof.id;
     var handleY = roof.baseHeight + roof.height + 0.5;
     
     var rotRad = ((roof.rotation || 0) * Math.PI) / 180;
@@ -1283,39 +1338,27 @@ function drawHandlesForRoof(roof) {
         z: roof.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
       };
     }
-    var roofHandles = [
+  var roofHandles = [
       // X+ (width+)
-      (function() { var p = rotateHandle(roof.width/2, 0); return {x: p.x, y: p.y, z: p.z, type: 'width+', label: 'X+', color: '#007acc'}; })(),
+  (function() { var p = rotateHandle(roof.width/2, 0); return {x: p.x, y: p.y, z: p.z, type: 'width+', label: 'X+'}; })(),
       // X- (width-)
-      (function() { var p = rotateHandle(-roof.width/2, 0); return {x: p.x, y: p.y, z: p.z, type: 'width-', label: 'X-', color: '#007acc'}; })(),
+  (function() { var p = rotateHandle(-roof.width/2, 0); return {x: p.x, y: p.y, z: p.z, type: 'width-', label: 'X-'}; })(),
       // Z+ (depth+)
-      (function() { var p = rotateHandle(0, roof.depth/2); return {x: p.x, y: p.y, z: p.z, type: 'depth+', label: 'Z+', color: '#0099ff'}; })(),
+  (function() { var p = rotateHandle(0, roof.depth/2); return {x: p.x, y: p.y, z: p.z, type: 'depth+', label: 'Z+'}; })(),
       // Z- (depth-)
-      (function() { var p = rotateHandle(0, -roof.depth/2); return {x: p.x, y: p.y, z: p.z, type: 'depth-', label: 'Z-', color: '#0099ff'}; })(),
+  (function() { var p = rotateHandle(0, -roof.depth/2); return {x: p.x, y: p.y, z: p.z, type: 'depth-', label: 'Z-'}; })(),
       // Y handle
-      (function() { var p = rotateHandle(0, 0, 0.5); return {x: p.x, y: p.y, z: p.z, type: 'height', label: 'Y', color: '#00cc66'}; })(),
+  (function() { var p = rotateHandle(0, 0, 0.5); return {x: p.x, y: p.y, z: p.z, type: 'height', label: 'Y'}; })(),
       // 360 handle, moved to the left of Y handle
-      (function() { var p = rotateHandle(-0.5, 0, 0.5); return {x: p.x, y: p.y, z: p.z, type: 'rotate', label: '360', color: '#ff9900'}; })()
+      (function() { var p = rotateHandle(-0.5, 0, 0.5); return {x: p.x, y: p.y, z: p.z, type: 'rotate', label: '360'}; })()
     ];
     
     for (var i = 0; i < roofHandles.length; i++) {
       var handle = roofHandles[i];
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) continue;
-      
-      ctx.fillStyle = handle.color;
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(screen.x, screen.y, HANDLE_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(handle.label, screen.x, screen.y);
+
+      drawHandle(screen, handle.type, handle.label, isActive);
       
       resizeHandles.push({
         screenX: screen.x - HANDLE_RADIUS,
@@ -2381,6 +2424,7 @@ function drawStairs(stairs) {
 
 function drawHandlesForStairs(stairs) {
   try {
+    var isActive = selectedRoomId === stairs.id;
     var handleY = stairs.height + 0.2;
     
     var rotRad = ((stairs.rotation || 0) * Math.PI) / 180;
@@ -2390,37 +2434,25 @@ function drawHandlesForStairs(stairs) {
         z: stairs.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
       };
     }
-    var stairHandles = [
+  var stairHandles = [
       // X+ (width+)
-      (function() { var p = rotateHandle(stairs.width/2, 0); return {x: p.x, y: handleY, z: p.z, type: 'width+', label: 'X+', color: '#007acc'}; })(),
+  (function() { var p = rotateHandle(stairs.width/2, 0); return {x: p.x, y: handleY, z: p.z, type: 'width+', label: 'X+'}; })(),
       // X- (width-)
-      (function() { var p = rotateHandle(-stairs.width/2, 0); return {x: p.x, y: handleY, z: p.z, type: 'width-', label: 'X-', color: '#007acc'}; })(),
+  (function() { var p = rotateHandle(-stairs.width/2, 0); return {x: p.x, y: handleY, z: p.z, type: 'width-', label: 'X-'}; })(),
       // Z+ (depth+)
-      (function() { var p = rotateHandle(0, stairs.depth/2); return {x: p.x, y: handleY, z: p.z, type: 'depth+', label: 'Z+', color: '#0099ff'}; })(),
+  (function() { var p = rotateHandle(0, stairs.depth/2); return {x: p.x, y: handleY, z: p.z, type: 'depth+', label: 'Z+'}; })(),
       // Z- (depth-)
-      (function() { var p = rotateHandle(0, -stairs.depth/2); return {x:p.x, y:handleY, z:p.z, type: 'depth-', label: 'Z-', color: '#0099ff'}; })(),
+  (function() { var p = rotateHandle(0, -stairs.depth/2); return {x:p.x, y:handleY, z:p.z, type: 'depth-', label: 'Z-'}; })(),
       // 360 handle remains centered
-      {x: stairs.x, y: handleY + 0.3, z: stairs.z, type: 'rotate', label: '360', color: '#ff9900'}
+      {x: stairs.x, y: handleY + 0.3, z: stairs.z, type: 'rotate', label: '360'}
     ];
     
     for (var i = 0; i < stairHandles.length; i++) {
       var handle = stairHandles[i];
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) continue;
-      
-      ctx.fillStyle = handle.color;
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(screen.x, screen.y, HANDLE_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(handle.label, screen.x, screen.y);
+
+      drawHandle(screen, handle.type, handle.label, isActive);
       
       resizeHandles.push({
         screenX: screen.x - HANDLE_RADIUS,
@@ -2805,33 +2837,22 @@ function drawBalcony(balcony) {
 
 function drawHandlesForBalcony(balcony) {
   try {
+    var isActive = selectedRoomId === balcony.id;
     var handleY = balcony.level * 3.5 + balcony.height + 0.2;
     
     var balconyHandles = [
-      {x: balcony.x + balcony.width/2, y: handleY, z: balcony.z, type: 'width+', label: 'X+', color: '#007acc'},
-      {x: balcony.x - balcony.width/2, y: handleY, z: balcony.z, type: 'width-', label: 'X-', color: '#007acc'},
-      {x: balcony.x, y: handleY, z: balcony.z + balcony.depth/2, type: 'depth+', label: 'Z+', color: '#0099ff'},
-      {x: balcony.x, y: handleY, z: balcony.z - balcony.depth/2, type: 'depth-', label: 'Z-', color: '#0099ff'}
+      {x: balcony.x + balcony.width/2, y: handleY, z: balcony.z, type: 'width+', label: 'X+'},
+      {x: balcony.x - balcony.width/2, y: handleY, z: balcony.z, type: 'width-', label: 'X-'},
+      {x: balcony.x, y: handleY, z: balcony.z + balcony.depth/2, type: 'depth+', label: 'Z+'},
+      {x: balcony.x, y: handleY, z: balcony.z - balcony.depth/2, type: 'depth-', label: 'Z-'}
     ];
     
     for (var i = 0; i < balconyHandles.length; i++) {
       var handle = balconyHandles[i];
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) continue;
-      
-      ctx.fillStyle = handle.color;
-      ctx.strokeStyle = 'white';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(screen.x, screen.y, HANDLE_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(handle.label, screen.x, screen.y);
+
+      drawHandle(screen, handle.type, handle.label, isActive);
       
       resizeHandles.push({
         screenX: screen.x - HANDLE_RADIUS,
@@ -2996,10 +3017,11 @@ function drawGarage(garage) {
 
 function drawHandlesForGarage(garage) {
   try {
+    var isActive = selectedRoomId === garage.id;
     console.log('Drawing garage handles');
     // Set constants
-    var REGULAR_HANDLE_RADIUS = 8;
-    var ROTATION_HANDLE_RADIUS = 12;
+    var REGULAR_HANDLE_RADIUS = HANDLE_RADIUS;
+    var ROTATION_HANDLE_RADIUS = 14;
     var BASE_HANDLE_Y = garage.height + 0.2;
     var ROTATION_HANDLE_Y = garage.height + 1.0;
     
@@ -3025,8 +3047,7 @@ function drawHandlesForGarage(garage) {
       y: ROTATION_HANDLE_Y,
       z: garage.z,
       type: 'rotate',
-      label: '360°',
-      color: '#ff9900',
+      label: '360',
       radius: ROTATION_HANDLE_RADIUS
     });
     
@@ -3046,7 +3067,6 @@ function drawHandlesForGarage(garage) {
         z: p.z,
         type: data.type,
         label: data.label,
-        color: data.type.includes('width') ? '#007acc' : '#0099ff',
         radius: REGULAR_HANDLE_RADIUS
       });
     });
@@ -3056,34 +3076,8 @@ function drawHandlesForGarage(garage) {
     garageHandles.forEach(function(handle) {
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) return;
-      
-      // Draw handle circle
-      ctx.fillStyle = handle.color;
-      ctx.strokeStyle = handle.type === 'rotate' ? '#ffcc00' : 'white';
-      ctx.lineWidth = handle.type === 'rotate' ? 3 : 2;
-      
-      // Draw glow for rotation handle
-      if (handle.type === 'rotate') {
-        ctx.save();
-        ctx.shadowColor = '#ffcc00';
-        ctx.shadowBlur = 10;
-      }
-      
-      ctx.beginPath();
-      ctx.arc(screen.x, screen.y, handle.radius, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      
-      if (handle.type === 'rotate') {
-        ctx.restore();
-      }
-      
-      // Draw handle label
-      ctx.fillStyle = 'white';
-      ctx.font = handle.type === 'rotate' ? 'bold 14px sans-serif' : 'bold 10px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(handle.label, screen.x, screen.y);
+
+      drawHandle(screen, handle.type, handle.label, isActive, handle.radius);
       
       // Register handle for interaction
       resizeHandles.push({
