@@ -661,6 +661,46 @@ function drawGrid() {
     ctx.lineTo(zEnd.x, zEnd.y);
     ctx.stroke();
   }
+
+  // Draw a small ground-level North arrow near the camera target to indicate +Z
+  try {
+    var nBaseW = { x: camera.targetX, y: 0.02, z: camera.targetZ + Math.min(4, gridRange * 0.2) };
+    var nTipW  = { x: camera.targetX, y: 0.02, z: camera.targetZ + Math.min(5.5, gridRange * 0.27) };
+    var nBase = project3D(nBaseW.x, nBaseW.y, nBaseW.z);
+    var nTip  = project3D(nTipW.x,  nTipW.y,  nTipW.z);
+    if (nBase && nTip) {
+      ctx.strokeStyle = '#e74c3c';
+      ctx.fillStyle = '#e74c3c';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(nBase.x, nBase.y);
+      ctx.lineTo(nTip.x, nTip.y);
+      ctx.stroke();
+
+      // Arrowhead
+      var ang = Math.atan2(nTip.y - nBase.y, nTip.x - nBase.x);
+      var headLen = 10;
+      var leftX = nTip.x - headLen * Math.cos(ang - Math.PI / 6);
+      var leftY = nTip.y - headLen * Math.sin(ang - Math.PI / 6);
+      var rightX = nTip.x - headLen * Math.cos(ang + Math.PI / 6);
+      var rightY = nTip.y - headLen * Math.sin(ang + Math.PI / 6);
+      ctx.beginPath();
+      ctx.moveTo(nTip.x, nTip.y);
+      ctx.lineTo(leftX, leftY);
+      ctx.lineTo(rightX, rightY);
+      ctx.closePath();
+      ctx.fill();
+
+      // Label 'N'
+      ctx.fillStyle = '#333';
+      ctx.font = 'bold 12px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('N', nTip.x, nTip.y - 4);
+    }
+  } catch (e) {
+    // non-fatal
+  }
 }
 
 function drawSnapGuides() {
