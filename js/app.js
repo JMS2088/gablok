@@ -633,6 +633,62 @@ function drawSnapGuides() {
   ctx.restore();
 }
 
+function drawCompass() {
+  try {
+    var size = 70;
+    var padding = 16;
+    var x = screenW - size - padding;
+    var y = screenH - size - padding;
+
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+
+    // Background with manual rounded rectangle (no roundRect dependency)
+    var r = 10;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + size - r, y);
+    ctx.quadraticCurveTo(x + size, y, x + size, y + r);
+    ctx.lineTo(x + size, y + size - r);
+    ctx.quadraticCurveTo(x + size, y + size, x + size - r, y + size);
+    ctx.lineTo(x + r, y + size);
+    ctx.quadraticCurveTo(x, y + size, x, y + size - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    ctx.fill();
+    ctx.stroke();
+
+    // Crosshair
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x + size/2, y + 8);
+    ctx.lineTo(x + size/2, y + size - 8);
+    ctx.moveTo(x + 8, y + size/2);
+    ctx.lineTo(x + size - 8, y + size/2);
+    ctx.stroke();
+
+    // Labels N/E/S/W based on screen directions
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('N', x + size/2, y + 12);
+    ctx.fillText('S', x + size/2, y + size - 12);
+    ctx.fillText('W', x + 12, y + size/2);
+    ctx.fillText('E', x + size - 12, y + size/2);
+
+    ctx.restore();
+  } catch (e) {
+    // Never let compass drawing break the frame
+    console.warn('Compass draw skipped:', e);
+  }
+}
+
 function drawRoom(room) {
   try {
     var selected = selectedRoomId === room.id;
@@ -1767,12 +1823,42 @@ function setupEvents() {
           originalWidth: target.width,
           originalDepth: target.depth,
           originalRoomX: target.x,
-          originalRoomZ: target.z
+          originalRoomZ: target.z,
+          // Store side axis and sign so we know which face is being dragged
+          sideAxis: (handle.type.indexOf('width') === 0 ? 'x' : (handle.type.indexOf('depth') === 0 ? 'z' : null)),
+          sideSign: (handle.type.endsWith('+') ? 1 : (handle.type.endsWith('-') ? -1 : 0))
         };
         mouse.down = true;
         selectedRoomId = handle.roomId;
         canvas.style.cursor = 'grabbing';
         updateStatus('Resizing...');
+
+        // Compute start positions for dragged face and opposite face in world space
+        try {
+          var rotRadS = ((target.rotation || 0) * Math.PI) / 180;
+          var axisXxS = Math.cos(rotRadS), axisXzS = Math.sin(rotRadS);
+          var axisZxS = -Math.sin(rotRadS), axisZzS = Math.cos(rotRadS);
+          var sSign = mouse.dragInfo.sideSign;
+          if (mouse.dragInfo.sideAxis === 'x') {
+            var halfW0 = target.width / 2;
+            var fx = target.x + sSign * halfW0 * axisXxS;
+            var fz = target.z + sSign * halfW0 * axisXzS;
+            var ox = target.x - sSign * halfW0 * axisXxS;
+            var oz = target.z - sSign * halfW0 * axisXzS;
+            mouse.dragInfo.faceDraggedStart = { x: fx, z: fz };
+            mouse.dragInfo.faceOppStart = { x: ox, z: oz };
+          } else if (mouse.dragInfo.sideAxis === 'z') {
+            var halfD0 = target.depth / 2;
+            var fxz = target.x + sSign * halfD0 * axisZxS;
+            var fzz = target.z + sSign * halfD0 * axisZzS;
+            var oxz = target.x - sSign * halfD0 * axisZxS;
+            var ozz = target.z - sSign * halfD0 * axisZzS;
+            mouse.dragInfo.faceDraggedStart = { x: fxz, z: fzz };
+            mouse.dragInfo.faceOppStart = { x: oxz, z: ozz };
+          }
+        } catch (err) {
+          console.warn('Face start compute failed:', err);
+        }
         return;
       }
     }
@@ -1897,36 +1983,38 @@ function setupEvents() {
         var maxSize = 20;
 
         if (type === 'width+' || type === 'width-') {
-          // Project motion onto local +X
-          var proj = move.x * axisXx + move.z * axisXz;
-          // For X+: moving along +X grows; for X-: moving along -X grows
-          sizeDelta = (type === 'width+') ? proj : -proj;
+          // Measure along dragged face normal (sX * axisX) so outward drag always increases
+          var sX = mouse.dragInfo.sideSign || (type === 'width+' ? 1 : -1);
+          var proj = move.x * axisXx + move.z * axisXz; // motion along +X
 
-          var newW = clamp(mouse.dragInfo.originalWidth + sizeDelta, minSize, maxSize);
-          var applied = newW - mouse.dragInfo.originalWidth; // actual applied delta after clamp
+          // New dragged face position
+          var fx = mouse.dragInfo.faceDraggedStart.x + proj * axisXx;
+          var fz = mouse.dragInfo.faceDraggedStart.z + proj * axisXz;
+          var vx = fx - mouse.dragInfo.faceOppStart.x;
+          var vz = fz - mouse.dragInfo.faceOppStart.z;
+          var along = vx * (sX * axisXx) + vz * (sX * axisXz); // distance along dragged face normal
+          var newW = clamp(Math.max(minSize, Math.min(maxSize, along)), minSize, maxSize);
           target.width = newW;
 
-          // Move center by half the applied delta along the dragged side axis
-          // Note: for width- handle, center should shift toward local -X
-          var dirX = (type === 'width-') ? -1 : 1;
-          target.x = mouse.dragInfo.originalRoomX + (applied / 2) * dirX * axisXx;
-          target.z = mouse.dragInfo.originalRoomZ + (applied / 2) * dirX * axisXz;
+          // Center is midpoint between opposite face and dragged face
+          target.x = mouse.dragInfo.faceOppStart.x + (newW / 2) * (sX * axisXx);
+          target.z = mouse.dragInfo.faceOppStart.z + (newW / 2) * (sX * axisXz);
           updateStatus('Resizing width...');
         } else if (type === 'depth+' || type === 'depth-') {
-          // Project motion onto local +Z
-          var projZ = move.x * axisZx + move.z * axisZz;
-          // For Z+: moving along +Z grows; for Z-: moving along -Z grows
-          sizeDelta = (type === 'depth+') ? projZ : -projZ;
+          // Measure along dragged face normal (sZ * axisZ)
+          var sZ = mouse.dragInfo.sideSign || (type === 'depth+' ? 1 : -1);
+          var projZ = move.x * axisZx + move.z * axisZz; // motion along +Z
 
-          var newD = clamp(mouse.dragInfo.originalDepth + sizeDelta, minSize, maxSize);
-          var appliedD = newD - mouse.dragInfo.originalDepth;
+          var fxz = mouse.dragInfo.faceDraggedStart.x + projZ * axisZx;
+          var fzz = mouse.dragInfo.faceDraggedStart.z + projZ * axisZz;
+          var vxz = fxz - mouse.dragInfo.faceOppStart.x;
+          var vzz = fzz - mouse.dragInfo.faceOppStart.z;
+          var alongZ = vxz * (sZ * axisZx) + vzz * (sZ * axisZz);
+          var newD = clamp(Math.max(minSize, Math.min(maxSize, alongZ)), minSize, maxSize);
           target.depth = newD;
 
-          // Move center by half the applied delta along the dragged side axis (local Z)
-          // Note: for depth- handle, center should shift toward local -Z
-          var dirZ = (type === 'depth-') ? -1 : 1;
-          target.x = mouse.dragInfo.originalRoomX + (appliedD / 2) * dirZ * axisZx;
-          target.z = mouse.dragInfo.originalRoomZ + (appliedD / 2) * dirZ * axisZz;
+          target.x = mouse.dragInfo.faceOppStart.x + (newD / 2) * (sZ * axisZx);
+          target.z = mouse.dragInfo.faceOppStart.z + (newD / 2) * (sZ * axisZz);
           updateStatus('Resizing depth...');
         } else if (type === 'height') {
           var heightChange = -(dy * 0.005);
@@ -3213,7 +3301,8 @@ function renderLoop() {
       }
     }
     
-    updateLabels();
+  updateLabels();
+  drawCompass();
     updateMeasurements();
     
   } catch (error) {
