@@ -132,7 +132,7 @@ function drawHandle(screen, type, label, isActive, radius) {
 }
 
 var camera = {
-  yaw: 0.5,
+  yaw: 0.0,
   pitch: -0.5,
   distance: 12,
   targetX: 0,
@@ -703,7 +703,7 @@ function drawCompass() {
     var size = 70;
     var padding = 16;
     var x = screenW - size - padding;
-    var y = screenH - size - padding;
+    var y = screenH - size - padding - 100; // moved up by 100px
 
     ctx.save();
     ctx.globalAlpha = 0.9;
@@ -727,25 +727,68 @@ function drawCompass() {
     ctx.fill();
     ctx.stroke();
 
-    // Crosshair
+    // Rotated crosshair based on camera yaw so N/E/S/W indicate world directions
+    var cx = x + size/2;
+    var cy = y + size/2;
+    var r = (size/2) - 10;
+
+    // Define angles for cardinal directions relative to screen
+    // North is world +Z. When yaw = 0, North points up (angle -PI/2 in canvas).
+    var angleN = -Math.PI/2 + camera.yaw;
+    var angleE = angleN + Math.PI/2;
+    var angleS = angleN + Math.PI;
+    var angleW = angleN + 3*Math.PI/2;
+
+    function dirPoint(angle, radius) {
+      return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
+    }
+
     ctx.strokeStyle = '#666';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(x + size/2, y + 8);
-    ctx.lineTo(x + size/2, y + size - 8);
-    ctx.moveTo(x + 8, y + size/2);
-    ctx.lineTo(x + size - 8, y + size/2);
+    var pN = dirPoint(angleN, r), pS = dirPoint(angleS, r);
+    ctx.moveTo(pN.x, pN.y); ctx.lineTo(pS.x, pS.y);
+    var pE = dirPoint(angleE, r), pW = dirPoint(angleW, r);
+    ctx.moveTo(pE.x, pE.y); ctx.lineTo(pW.x, pW.y);
     ctx.stroke();
 
-    // Labels N/E/S/W based on screen directions
+    // Labels positioned near the ring along their respective angles
     ctx.fillStyle = '#333';
     ctx.font = 'bold 12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('N', x + size/2, y + 12);
-    ctx.fillText('S', x + size/2, y + size - 12);
-    ctx.fillText('W', x + 12, y + size/2);
-    ctx.fillText('E', x + size - 12, y + size/2);
+    var labelR = r - 6;
+    var LN = dirPoint(angleN, labelR);
+    var LE = dirPoint(angleE, labelR);
+    var LS = dirPoint(angleS, labelR);
+    var LW = dirPoint(angleW, labelR);
+    ctx.fillText('N', LN.x, LN.y);
+    ctx.fillText('E', LE.x, LE.y);
+    ctx.fillText('S', LS.x, LS.y);
+    ctx.fillText('W', LW.x, LW.y);
+
+    // North needle (arrow) pointing to world North
+    var needleR = r - 2;
+    var tip = dirPoint(angleN, needleR);
+    ctx.strokeStyle = '#e74c3c';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(tip.x, tip.y);
+    ctx.stroke();
+
+    // Arrowhead at the tip
+    var headLen = 10;
+    var headSpread = 0.45; // radians
+    var left = dirPoint(angleN + headSpread, needleR - headLen);
+    var right = dirPoint(angleN - headSpread, needleR - headLen);
+    ctx.fillStyle = '#e74c3c';
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(left.x, left.y);
+    ctx.lineTo(right.x, right.y);
+    ctx.closePath();
+    ctx.fill();
 
     ctx.restore();
   } catch (e) {

@@ -2,5 +2,8 @@
   "name": "gablok",
   "version": "1.0.0",
   "description": "Static home configurator app for Gablok",
-  "homepage": "https://JMS2088.github.io/gablok/"
+  "homepage": "https://JMS2088.github.io/gablok/",
+  "scripts": {
+    "start": "python3 -m http.server 8000 --bind 0.0.0.0 --directory ."
+  }
 }
