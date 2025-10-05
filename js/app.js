@@ -2463,13 +2463,41 @@ function resetAll() {
     animationId = null;
   }
   
-  // Clear selections, handles, and snap guides
+  // Clear selections, handles, snap guides, and editing state
   selectedRoomId = null;
+  editingLabelId = null;
   resizeHandles = [];
   currentSnapGuides = [];
   mouse.down = false;
   mouse.dragType = null;
   mouse.dragInfo = null;
+
+  // Reset camera and pan
+  camera.yaw = 0.0;
+  camera.pitch = -0.5;
+  camera.distance = 12;
+  camera.targetX = 0;
+  camera.targetZ = 0;
+  pan.x = 0; pan.y = 0;
+
+  // Reset floor selector
+  currentFloor = 0;
+  var selector = document.getElementById('levelSelect');
+  if (selector) selector.value = '0';
+
+  // Remove any transient UI like roof dropdown
+  var roofDd = document.getElementById('roof-type-dropdown'); if (roofDd) roofDd.remove();
+
+  // Clear all objects
+  allRooms = [];
+  stairsComponent = null;
+  pergolaComponents = [];
+  garageComponents = [];
+  roofComponents = [];
+  balconyComponents = [];
+
+  // Start with a fresh initial room
+  createInitialRoom();
 
   // Hide info/pricing modals if open
   var infoModal = document.getElementById('info-modal');
@@ -2477,7 +2505,9 @@ function resetAll() {
   var pricingModal = document.getElementById('pricing-modal');
   if (pricingModal) pricingModal.style.display = 'none';
 
-  updateStatus('Reset');
+  // Persist new clean state
+  saveProjectSilently();
+  updateStatus('Reset to default');
   startRender();
 }
 
@@ -3618,17 +3648,36 @@ document.addEventListener('DOMContentLoaded', function(){
   var actionsMenu = document.getElementById('actionsMenu');
   if (actionsMenu) actionsMenu.onchange = function() {
     switch (this.value) {
-      case 'save': if (bSave) bSave.click(); break;
-      case 'load': if (bLoad) bLoad.click(); break;
-      case 'obj': if (bObj) bObj.click(); break;
-      case 'pdf': if (bPdf) bPdf.click(); break;
-      case 'json-download': if (bDl) bDl.click(); break;
-      case 'json-upload': if (bUp) bUp.click(); break;
-      case 'room1':
-        var r1 = (window.allRooms || []).find(function(r){ return (r.name||'').toLowerCase() === 'room 1' || (r.label||'').toLowerCase() === 'room 1' || r.id === 1; });
+      case 'save':
+        saveProject();
+        break;
+      case 'load':
+        loadProject();
+        break;
+      case 'obj':
+        exportOBJ();
+        break;
+      case 'pdf':
+        exportPDF();
+        break;
+      case 'json-download': {
+        var blob = new Blob([serializeProject()], {type:'application/json'});
+        var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gablok-project.json'; a.click(); URL.revokeObjectURL(a.href);
+        break;
+      }
+      case 'json-upload': {
+        var fi = document.getElementById('upload-file'); if (fi) fi.click();
+        break;
+      }
+      case 'room1': {
+        var r1 = (allRooms || []).find(function(r){
+          var n = (r.name||'').toLowerCase();
+          return n.startsWith('room 1') || n.includes('room 1');
+        }) || (allRooms && allRooms[0]);
         if (r1) { selectedRoomId = r1.id; updateStatus('Selected: ' + (r1.name || 'Room 1')); }
         else { updateStatus('Room 1 not found'); }
         break;
+      }
     }
     this.value = '';
   };
