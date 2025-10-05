@@ -36,7 +36,7 @@
     position: fixed; top: 20px; right: 20px; z-index: 100;
     background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
     padding: 15px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-    min-width: 200px; font-family: monospace; font-size: 12px;
+    min-width: 200px; width: 340px; font-family: monospace; font-size: 12px;
     display: none;
   }
   
@@ -48,9 +48,10 @@
   }
   
   #measurements .measurement-item {
-    display: flex; justify-content: space-between; margin: 5px 0;
+    display: flex; justify-content: space-between; align-items: center; margin: 5px 0;
     padding: 3px 0; border-bottom: 1px solid #eee;
   }
+  #measurements .measurement-label { min-width: 90px; }
   
   #measurements .measurement-label { color: #666; font-weight: 500; }
   #measurements .measurement-value { color: #333; font-weight: 600; }
@@ -69,8 +70,8 @@
 
   /* Wider name input for better readability */
   #input-name.measurement-input {
-    width: 240px;
-    max-width: 320px;
+    width: calc(100% - 90px - 8px);
+    max-width: none;
     text-align: left;
     font-family: system-ui, sans-serif;
   }
