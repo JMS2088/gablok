@@ -1,5 +1,6 @@
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import os
+import socket
 
 
 class NoCacheHandler(SimpleHTTPRequestHandler):
@@ -17,13 +18,26 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         super().end_headers()
 
 
+class ReusableHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
+
 def run(host='0.0.0.0', port=8000, directory=None):
     if directory is None:
         directory = os.path.abspath('.')
     handler = lambda *args, **kwargs: NoCacheHandler(*args, directory=directory, **kwargs)
-    httpd = HTTPServer((host, port), handler)
+    try:
+        httpd = ReusableHTTPServer((host, port), handler)
+    except OSError as e:
+        print(f"Failed to bind to {host}:{port} -> {e}")
+        raise
     print(f"Serving {directory} on http://{host}:{port} (no-cache)")
-    httpd.serve_forever()
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
 
 
 if __name__ == '__main__':

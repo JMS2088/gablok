@@ -3595,12 +3595,12 @@ function exportOBJ() {
       rot(cx-hw, cz-hd), rot(cx+hw, cz-hd), rot(cx+hw, cz+hd), rot(cx-hw, cz+hd)
     ];
     // 8 vertices
+    if (tag) lines.push('g ' + tag);
     var verts = [
       [corners[0].x, y0, corners[0].z], [corners[1].x, y0, corners[1].z], [corners[2].x, y0, corners[2].z], [corners[3].x, y0, corners[3].z],
       [corners[0].x, y1, corners[0].z], [corners[1].x, y1, corners[1].z], [corners[2].x, y1, corners[2].z], [corners[3].x, y1, corners[3].z]
     ];
     verts.forEach(function(v){ lines.push('v ' + v[0] + ' ' + v[1] + ' ' + v[2]); });
-    if (tag) lines.push('g ' + tag);
     // faces (1-indexed)
     var f = function(a,b,c,d){ lines.push('f ' + (vcount+a) + ' ' + (vcount+b) + ' ' + (vcount+c) + ' ' + (vcount+d)); };
     vcount += 8;
@@ -3620,6 +3620,91 @@ function exportOBJ() {
   a.click();
   URL.revokeObjectURL(a.href);
   updateStatus('Exported OBJ');
+}
+
+// Import OBJ produced by exportOBJ: rebuild boxes by group from 8 vertices
+function importOBJ(text) {
+  try {
+    var lines = text.split(/\r?\n/);
+    var groups = [];
+    var current = null;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line || line[0] === '#') continue;
+      if (line.startsWith('g ')) {
+        // finalize previous if had vertices
+        if (current && current.verts.length >= 8) groups.push(current);
+        current = { tag: line.substring(2).trim(), verts: [] };
+      } else if (line.startsWith('v ')) {
+        if (!current) { current = { tag: '', verts: [] }; }
+        var parts = line.split(/\s+/);
+        var x = parseFloat(parts[1]), y = parseFloat(parts[2]), z = parseFloat(parts[3]);
+        if (isFinite(x) && isFinite(y) && isFinite(z)) current.verts.push({x:x,y:y,z:z});
+      }
+      // ignore faces and others
+    }
+    if (current && current.verts.length >= 8) groups.push(current);
+
+    var created = 0;
+    for (var gi = 0; gi < groups.length; gi++) {
+      var g = groups[gi];
+      var vs = g.verts;
+      // compute bbox
+      var minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity,minZ=Infinity,maxZ=-Infinity;
+      for (var vi=0; vi<vs.length; vi++) {
+        var v = vs[vi];
+        if (v.x<minX) minX=v.x; if (v.x>maxX) maxX=v.x;
+        if (v.y<minY) minY=v.y; if (v.y>maxY) maxY=v.y;
+        if (v.z<minZ) minZ=v.z; if (v.z>maxZ) maxZ=v.z;
+      }
+      if (!isFinite(minX) || !isFinite(minY) || !isFinite(minZ)) continue;
+      var cx = (minX+maxX)/2;
+      var cz = (minZ+maxZ)/2;
+      var width = Math.max(0.1, maxX-minX);
+      var depth = Math.max(0.1, maxZ-minZ);
+      var height = Math.max(0.1, maxY-minY);
+      var level = Math.max(0, Math.round(minY/3.5));
+      var tag = (g.tag||'').toLowerCase();
+      function addRoom(name) {
+        var room = createRoom(cx, cz, level);
+        room.width = width; room.depth = depth; room.height = height; room.name = name || room.name;
+        allRooms.push(room);
+      }
+      if (tag.startsWith('room')) {
+        addRoom('Imported ' + (g.tag || 'Room'));
+        created++;
+      } else if (tag.indexOf('garage') !== -1) {
+        var garage = { id: 'garage_'+Date.now()+Math.random().toString(36).slice(2), x: cx, z: cz, width: width, depth: depth, height: height, name: 'Imported Garage', type: 'garage', rotation: 0 };
+        garageComponents.push(garage); created++;
+      } else if (tag.indexOf('pergola') !== -1) {
+        var pergola = { id: 'pergola_'+Date.now()+Math.random().toString(36).slice(2), x: cx, z: cz, width: width, depth: depth, height: height, totalHeight: height, legWidth: 0.3, slatCount: 8, slatWidth: 0.15, name: 'Imported Pergola', type: 'pergola', rotation: 0 };
+        pergolaComponents.push(pergola); created++;
+      } else if (tag.indexOf('stairs') !== -1) {
+        stairsComponent = { id: 'stairs_'+Date.now(), x: cx, z: cz, width: width, depth: depth, height: height, steps: Math.max(3, Math.round(height/0.25)), name: 'Imported Stairs', type: 'stairs', rotation: 0 };
+        created++;
+      } else if (tag.indexOf('roof') !== -1) {
+        var roof = { id: 'roof_'+Date.now()+Math.random().toString(36).slice(2), x: cx, z: cz, width: width, depth: depth, baseHeight: minY, height: height, name: 'Imported Roof', type: 'roof', roofType: 'flat', rotation: 0 };
+        roofComponents.push(roof); created++;
+      } else if (tag.indexOf('balcony') !== -1) {
+        var balcony = { id: 'balcony_'+Date.now()+Math.random().toString(36).slice(2), x: cx, z: cz, width: width, depth: depth, height: height, level: level, totalHeight: height, wallThickness: 0.2, wallHeight: Math.min(1.2, height), name: 'Imported Balcony', type: 'balcony', rotation: 0 };
+        balconyComponents.push(balcony); created++;
+      } else {
+        // default to a room on inferred level
+        addRoom('Imported Room'); created++;
+      }
+    }
+    if (created > 0) {
+      selectedRoomId = null;
+      saveProjectSilently();
+      renderLoop();
+      updateStatus('Imported ' + created + ' object(s) from OBJ');
+    } else {
+      updateStatus('No importable objects found in OBJ');
+    }
+  } catch (e) {
+    console.error('OBJ import failed', e);
+    updateStatus('OBJ import failed');
+  }
 }
 
 async function exportPDF() {
@@ -3666,12 +3751,6 @@ document.addEventListener('DOMContentLoaded', function(){
   var actionsMenu = document.getElementById('actionsMenu');
   if (actionsMenu) actionsMenu.onchange = function() {
     switch (this.value) {
-      case 'save':
-        saveProject();
-        break;
-      case 'load':
-        loadProject();
-        break;
       case 'obj':
         exportOBJ();
         break;
@@ -3701,9 +3780,7 @@ document.addEventListener('DOMContentLoaded', function(){
     var f = e.target.files && e.target.files[0]; if (!f) return;
     var reader = new FileReader();
     reader.onload = function(){
-      // Placeholder: parse reader.result (OBJ text) if needed
-      updateStatus('OBJ loaded: ' + f.name + ' (' + reader.result.length + ' chars)');
-      // TODO: Implement OBJ import into scene if desired
+      importOBJ(reader.result);
     };
     reader.readAsText(f);
   };
