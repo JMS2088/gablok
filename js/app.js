@@ -3691,15 +3691,6 @@ document.addEventListener('DOMContentLoaded', function(){
         var fi = document.getElementById('upload-file'); if (fi) fi.click();
         break;
       }
-      case 'room1': {
-        var r1 = (allRooms || []).find(function(r){
-          var n = (r.name||'').toLowerCase();
-          return n.startsWith('room 1') || n.includes('room 1');
-        }) || (allRooms && allRooms[0]);
-        if (r1) { selectedRoomId = r1.id; updateStatus('Selected: ' + (r1.name || 'Room 1')); }
-        else { updateStatus('Room 1 not found'); }
-        break;
-      }
     }
     this.value = '';
   };
