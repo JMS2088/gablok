@@ -1663,6 +1663,24 @@ function hidePricing() {
   }
 }
 
+// Info modal controls (for ℹ button)
+function showInfo() {
+  var modal = document.getElementById('info-modal');
+  if (!modal) return;
+  // Hide roof dropdown while modal is open
+  var existingDropdown = document.getElementById('roof-type-dropdown');
+  if (existingDropdown) existingDropdown.style.display = 'none';
+  modal.style.display = 'block';
+}
+
+function hideInfo() {
+  var modal = document.getElementById('info-modal');
+  if (modal) modal.style.display = 'none';
+  // Restore roof dropdown visibility after closing
+  var existingDropdown = document.getElementById('roof-type-dropdown');
+  if (existingDropdown) existingDropdown.style.display = 'block';
+}
+
 function findObjectById(objectId) {
   for (var i = 0; i < allRooms.length; i++) {
     if (allRooms[i].id === objectId) return allRooms[i];
@@ -3660,6 +3678,10 @@ document.addEventListener('DOMContentLoaded', function(){
       case 'pdf':
         exportPDF();
         break;
+      case 'obj-upload': {
+        var foi = document.getElementById('upload-obj-file'); if (foi) foi.click();
+        break;
+      }
       case 'json-download': {
         var blob = new Blob([serializeProject()], {type:'application/json'});
         var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gablok-project.json'; a.click(); URL.revokeObjectURL(a.href);
@@ -3680,5 +3702,18 @@ document.addEventListener('DOMContentLoaded', function(){
       }
     }
     this.value = '';
+  };
+
+  // Wire OBJ upload file input
+  var uploadObjInput = document.getElementById('upload-obj-file');
+  if (uploadObjInput) uploadObjInput.onchange = function(e){
+    var f = e.target.files && e.target.files[0]; if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      // Placeholder: parse reader.result (OBJ text) if needed
+      updateStatus('OBJ loaded: ' + f.name + ' (' + reader.result.length + ' chars)');
+      // TODO: Implement OBJ import into scene if desired
+    };
+    reader.readAsText(f);
   };
 });

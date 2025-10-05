@@ -20,7 +20,6 @@
 		<option value="roof">Add Roof</option>
 		<option value="balcony">Add Balcony</option>
 	</select>
-	<button class="secondary" onclick="fitView()">Fit View</button>
 	<button class="secondary" onclick="resetAll()">Reset</button>
 	<button class="secondary" onclick="showPricing()" title="Show pricing">💰 Price</button>
 	<button class="secondary" onclick="showInfo()" title="Show information">ℹ</button>
@@ -29,6 +28,7 @@
 		<option value="save">💾 Save</option>
 		<option value="load">📂 Load</option>
 		<option value="obj">⬇ 3D - OBJ</option>
+		<option value="obj-upload">⬆ 3D - OBJ</option>
 		<option value="pdf">📄 PDF</option>
 		<option value="json-download">⬇ JSON</option>
 		<option value="json-upload">⬆ JSON</option>
@@ -121,6 +121,7 @@
 </div>
 
 <input type="file" id="upload-file" accept="application/json" style="display:none" />
+<input type="file" id="upload-obj-file" accept=".obj" style="display:none" />
 
 <div id="pricing-modal">
 	<div id="pricing-content">
