@@ -1832,7 +1832,7 @@ function updateLabels() {
     label.style.backgroundColor = selectedRoomId === obj.id ? '#007acc' : 'white';
     label.style.color = selectedRoomId === obj.id ? 'white' : '#333';
 
-    // Editable name input
+    // Editable, centered name input
     var input = document.createElement('input');
     input.type = 'text';
     input.value = obj.name || '';
@@ -1842,14 +1842,34 @@ function updateLabels() {
     input.style.font = 'bold 12px system-ui, sans-serif';
     input.style.textAlign = 'center';
     input.style.outline = 'none';
-    input.style.width = '120px';
-    input.style.transform = 'translate(-50%, -50%)';
+    input.style.width = 'auto';
+    input.style.minWidth = '40px';
+    input.style.maxWidth = '220px';
     input.style.pointerEvents = 'auto';
-    input.onfocus = function(e) { e.stopPropagation(); };
+    input.style.caretColor = 'currentColor';
+    input.setAttribute('maxlength', '60');
+    // Prevent label drag/select while editing
+    input.onfocus = function(e) { e.stopPropagation(); label.style.cursor = 'text'; };
+    input.onblur = function() { label.style.cursor = 'grab'; };
     input.onmousedown = function(e) { e.stopPropagation(); };
     input.onkeydown = function(e) { e.stopPropagation(); if (e.key === 'Enter') this.blur(); };
-    input.oninput = function() { obj.name = this.value; saveProjectSilently(); };
+    input.oninput = function() { obj.name = this.value; saveProjectSilently(); autoSizeInput(this); };
     label.appendChild(input);
+    // Auto-size input to content for better centering
+    function autoSizeInput(el){
+      // Create a hidden mirror span to measure text width with same font
+      var mirror = document.createElement('span');
+      mirror.style.visibility = 'hidden';
+      mirror.style.position = 'absolute';
+      mirror.style.whiteSpace = 'pre';
+      mirror.style.font = el.style.font;
+      mirror.textContent = el.value || 'Room';
+      document.body.appendChild(mirror);
+      var w = mirror.getBoundingClientRect().width + 16; // padding allowance
+      document.body.removeChild(mirror);
+      el.style.width = Math.min(220, Math.max(40, Math.ceil(w))) + 'px';
+    }
+    autoSizeInput(input);
     
     if (labelData.type === 'room' && obj.level !== currentFloor) {
       label.style.opacity = '0.6';
@@ -3564,5 +3584,23 @@ document.addEventListener('DOMContentLoaded', function(){
     var reader = new FileReader();
     reader.onload = function(){ restoreProject(reader.result); updateStatus('Project loaded from file'); };
     reader.readAsText(f);
+  };
+
+  var actionsMenu = document.getElementById('actionsMenu');
+  if (actionsMenu) actionsMenu.onchange = function() {
+    switch (this.value) {
+      case 'save': if (bSave) bSave.click(); break;
+      case 'load': if (bLoad) bLoad.click(); break;
+      case 'obj': if (bObj) bObj.click(); break;
+      case 'pdf': if (bPdf) bPdf.click(); break;
+      case 'json-download': if (bDl) bDl.click(); break;
+      case 'json-upload': if (bUp) bUp.click(); break;
+      case 'room1':
+        var r1 = (window.allRooms || []).find(function(r){ return (r.name||'').toLowerCase() === 'room 1' || (r.label||'').toLowerCase() === 'room 1' || r.id === 1; });
+        if (r1) { selectedRoomId = r1.id; updateStatus('Selected: ' + (r1.name || 'Room 1')); }
+        else { updateStatus('Room 1 not found'); }
+        break;
+    }
+    this.value = '';
   };
 });

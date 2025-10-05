@@ -24,12 +24,17 @@
 	<button class="secondary" onclick="resetAll()">Reset</button>
 	<button class="secondary" onclick="showPricing()" title="Show pricing">💰 Price</button>
 	<button class="secondary" onclick="showInfo()" title="Show information">ℹ</button>
-	<button class="secondary" id="save-project" title="Save project">💾 Save</button>
-	<button class="secondary" id="load-project" title="Load project">📂 Load</button>
-	<button class="secondary" id="export-obj" title="Export 3D OBJ">⬇ 3D</button>
-	<button class="secondary" id="export-pdf" title="Export PDF (20 views)">📄 PDF</button>
-	<button class="secondary" id="download-json" title="Download project JSON">⬇ JSON</button>
-	<button class="secondary" id="upload-json" title="Upload project JSON">⬆ JSON</button>
+	<select id="actionsMenu" title="Actions Menu">
+		<option value="" selected disabled>☰ Menu</option>
+		<option value="save">💾 Save</option>
+		<option value="load">📂 Load</option>
+		<option value="obj">⬇ 3D</option>
+		<option value="pdf">📄 PDF</option>
+		<option value="json-download">⬇ JSON</option>
+		<option value="json-upload">⬆ JSON</option>
+		<option disabled>──────────</option>
+		<option value="room1">Room 1</option>
+	</select>
 </div>
 
 <canvas id="canvas" width="1200" height="800" style="border:1px solid #ccc; background:#f8fbff; display:block; margin:20px auto;"></canvas>
