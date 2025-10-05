@@ -39,6 +39,7 @@ var centerX = 0;
 var centerY = 0;
 var allRooms = [];
 var selectedRoomId = null;
+var editingLabelId = null; // which object's label is currently being edited
 var currentFloor = 0;
 var resizeHandles = [];
 var animationId = null;
@@ -1480,6 +1481,12 @@ function updateMeasurements() {
   var heightInput = document.getElementById('input-height');
   var posXInput = document.getElementById('input-pos-x');
   var posZInput = document.getElementById('input-pos-z');
+  var nameInput = document.getElementById('input-name');
+  if (nameInput) {
+    nameInput.value = selectedObject.name || '';
+    nameInput.disabled = false;
+    nameInput.oninput = function() { selectedObject.name = this.value; saveProjectSilently(); };
+  }
   widthInput.value = selectedObject.width.toFixed(1);
   depthInput.value = selectedObject.depth.toFixed(1);
   heightInput.value = selectedObject.height.toFixed(1);
@@ -1500,6 +1507,14 @@ function updateMeasurements() {
 
   var floorText = selectedObject.level === 0 ? 'Ground' : 'Floor ' + (selectedObject.level + 1);
   document.getElementById('measure-floor').textContent = floorText;
+
+  var saveBtn = document.getElementById('save-measurements');
+  if (saveBtn) {
+    saveBtn.onclick = function() {
+      saveProject();
+      updateStatus('Measurements saved');
+    };
+  }
 }
 
 function calculatePricing() {
@@ -1832,44 +1847,50 @@ function updateLabels() {
     label.style.backgroundColor = selectedRoomId === obj.id ? '#007acc' : 'white';
     label.style.color = selectedRoomId === obj.id ? 'white' : '#333';
 
-    // Editable, centered name input
-    var input = document.createElement('input');
-    input.type = 'text';
-    input.value = obj.name || '';
-    input.style.border = 'none';
-    input.style.background = 'transparent';
-    input.style.color = 'inherit';
-    input.style.font = 'bold 12px system-ui, sans-serif';
-    input.style.textAlign = 'center';
-    input.style.outline = 'none';
-    input.style.width = 'auto';
-    input.style.minWidth = '40px';
-    input.style.maxWidth = '220px';
-    input.style.pointerEvents = 'auto';
-    input.style.caretColor = 'currentColor';
-    input.setAttribute('maxlength', '60');
-    // Prevent label drag/select while editing
-    input.onfocus = function(e) { e.stopPropagation(); label.style.cursor = 'text'; };
-    input.onblur = function() { label.style.cursor = 'grab'; };
-    input.onmousedown = function(e) { e.stopPropagation(); };
-    input.onkeydown = function(e) { e.stopPropagation(); if (e.key === 'Enter') this.blur(); };
-    input.oninput = function() { obj.name = this.value; saveProjectSilently(); autoSizeInput(this); };
-    label.appendChild(input);
-    // Auto-size input to content for better centering
-    function autoSizeInput(el){
-      // Create a hidden mirror span to measure text width with same font
-      var mirror = document.createElement('span');
-      mirror.style.visibility = 'hidden';
-      mirror.style.position = 'absolute';
-      mirror.style.whiteSpace = 'pre';
-      mirror.style.font = el.style.font;
-      mirror.textContent = el.value || 'Room';
-      document.body.appendChild(mirror);
-      var w = mirror.getBoundingClientRect().width + 16; // padding allowance
-      document.body.removeChild(mirror);
-      el.style.width = Math.min(220, Math.max(40, Math.ceil(w))) + 'px';
+    // Show static text by default for drag-friendly labels; switch to input on dblclick
+    if (editingLabelId === obj.id) {
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.value = obj.name || '';
+      input.style.border = 'none';
+      input.style.background = 'transparent';
+      input.style.color = 'inherit';
+      input.style.font = 'bold 12px system-ui, sans-serif';
+      input.style.textAlign = 'center';
+      input.style.outline = 'none';
+      input.style.width = 'auto';
+      input.style.minWidth = '40px';
+      input.style.maxWidth = '220px';
+      input.style.pointerEvents = 'auto';
+      input.style.caretColor = 'currentColor';
+      input.setAttribute('maxlength', '60');
+      input.onfocus = function(e) { e.stopPropagation(); label.style.cursor = 'text'; };
+      input.onblur = function() { label.style.cursor = 'grab'; editingLabelId = null; saveProjectSilently(); renderLoop(); };
+      input.onmousedown = function(e) { e.stopPropagation(); };
+      input.onkeydown = function(e) { e.stopPropagation(); if (e.key === 'Enter') this.blur(); };
+      input.oninput = function() { obj.name = this.value; saveProjectSilently(); autoSizeInput(this); };
+      label.appendChild(input);
+      // Auto-size input to content for better centering
+      function autoSizeInput(el){
+        var mirror = document.createElement('span');
+        mirror.style.visibility = 'hidden';
+        mirror.style.position = 'absolute';
+        mirror.style.whiteSpace = 'pre';
+        mirror.style.font = el.style.font;
+        mirror.textContent = el.value || 'Room';
+        document.body.appendChild(mirror);
+        var w = mirror.getBoundingClientRect().width + 16;
+        document.body.removeChild(mirror);
+        el.style.width = Math.min(220, Math.max(40, Math.ceil(w))) + 'px';
+      }
+      autoSizeInput(input);
+      // Focus after append
+      setTimeout(function(){ try { input.focus(); input.select(); } catch(e){} }, 0);
+    } else {
+      var span = document.createElement('span');
+      span.textContent = obj.name || '';
+      label.appendChild(span);
     }
-    autoSizeInput(input);
     
     if (labelData.type === 'room' && obj.level !== currentFloor) {
       label.style.opacity = '0.6';
@@ -1931,7 +1952,7 @@ function updateLabels() {
     
     (function(objRef, dragType) {
       label.addEventListener('mousedown', function(e) {
-        if (e.target.tagName === 'SELECT' || e.target.tagName === 'OPTION') return;
+        if (e.target.tagName === 'SELECT' || e.target.tagName === 'OPTION' || e.target.tagName === 'INPUT') return;
         
         e.preventDefault();
         e.stopPropagation();
@@ -1951,6 +1972,14 @@ function updateLabels() {
         } else {
           updateStatus('Deselected');
         }
+      });
+      label.addEventListener('dblclick', function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        editingLabelId = objRef.id;
+        // Ensure selected to keep it visible and focused
+        selectedRoomId = objRef.id;
+        renderLoop();
       });
     })(obj, labelData.type);
     

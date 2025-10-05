@@ -66,6 +66,14 @@
     margin-left: 8px;
     text-align: right;
   }
+
+  /* Wider name input for better readability */
+  #input-name.measurement-input {
+    width: 240px;
+    max-width: 320px;
+    text-align: left;
+    font-family: system-ui, sans-serif;
+  }
   
   #status {
     position: fixed; bottom: 20px; right: 20px; z-index: 100;
