@@ -4028,9 +4028,15 @@ function openRoomPalette(roomId) {
   title.textContent = room.name || 'Room';
   // Hide roof dropdown while open
   var dd = document.getElementById('roof-type-dropdown'); if (dd) dd.style.display = 'none';
-  modal.style.display = 'block';
+  modal.style.display = 'flex';
   try { console.log('Room Palette opened for', roomId, '->', title.textContent); } catch(e){}
   renderRoomPreview(room);
+  // Keep preview responsive while open
+  try {
+    if (window.__paletteResizeHandler) window.removeEventListener('resize', window.__paletteResizeHandler);
+    window.__paletteResizeHandler = function(){ var r = findObjectById(paletteOpenForId); if (r) renderRoomPreview(r); };
+    window.addEventListener('resize', window.__paletteResizeHandler);
+  } catch(e){}
 }
 
 function hideRoomPalette() {
@@ -4038,26 +4044,51 @@ function hideRoomPalette() {
   if (modal) modal.style.display = 'none';
   paletteOpenForId = null;
   var dd = document.getElementById('roof-type-dropdown'); if (dd) dd.style.display = 'block';
+  try { if (window.__paletteResizeHandler) { window.removeEventListener('resize', window.__paletteResizeHandler); window.__paletteResizeHandler = null; } } catch(e){}
 }
 
 function renderRoomPreview(room) {
   var cv = document.getElementById('room-preview-canvas');
   if (!cv) return; var cx = cv.getContext('2d');
-  // Resize to fit left pane dynamically
-  try {
-    var leftPane = document.getElementById('room-palette-left');
-    if (leftPane) { cv.width = Math.max(300, leftPane.clientWidth - 40); cv.height = Math.max(260, leftPane.clientHeight - 100); }
-  } catch(e){}
-  cx.clearRect(0,0,cv.width,cv.height);
-  cx.fillStyle = '#f6f9ff'; cx.fillRect(0,0,cv.width,cv.height);
-  // Top-down schematic of the room rectangle
-  var pad = 30; var w = cv.width - pad*2; var h = cv.height - pad*2;
-  var aspectR = room.width / room.depth;
-  var rw = w, rh = rw / aspectR; if (rh > h) { rh = h; rw = rh * aspectR; }
-  var x = (cv.width - rw)/2, y = (cv.height - rh)/2;
-  cx.fillStyle = '#eaf2ff'; cx.strokeStyle = '#007acc'; cx.lineWidth = 2;
-  cx.fillRect(x,y,rw,rh); cx.strokeRect(x,y,rw,rh);
-  cx.fillStyle = '#007acc'; cx.font = '12px system-ui'; cx.fillText((room.width.toFixed(1)+' x '+room.depth.toFixed(1)+' m'), x+6, y+16);
+  // Match the canvas buffer to its displayed size with devicePixelRatio for crisp lines
+  var rect = cv.getBoundingClientRect();
+  var ratio = Math.min(2, window.devicePixelRatio || 1);
+  var targetW = Math.max(320, Math.floor(rect.width * ratio));
+  var targetH = Math.max(320, Math.floor(rect.height * ratio));
+  if (cv.width !== targetW || cv.height !== targetH) {
+    cv.width = targetW;
+    cv.height = targetH;
+  }
+  // Draw in CSS pixel coordinates
+  cx.setTransform(1,0,0,1,0,0);
+  cx.scale(ratio, ratio);
+  cx.clearRect(0,0,rect.width,rect.height);
+  // Subtle grid (very light)
+  var padG = 20; var step = 30; cx.save(); cx.globalAlpha = 0.45; cx.strokeStyle = '#f5f7fa'; cx.lineWidth = 1;
+  for (var gx = padG; gx <= cv.width - padG; gx += step) { cx.beginPath(); cx.moveTo(gx, padG); cx.lineTo(gx, cv.height - padG); cx.stroke(); }
+  for (var gy = padG; gy <= cv.height - padG; gy += step) { cx.beginPath(); cx.moveTo(padG, gy); cx.lineTo(cv.width - padG, gy); cx.stroke(); }
+  cx.restore();
+  // 3D-ish room wireframe box
+  var pad = 30; var w = rect.width - pad*2; var h = rect.height - pad*2;
+  var rw = room.width, rd = room.depth, ry = room.height;
+  var maxFoot = Math.max(rw, rd);
+  var scale = Math.min(w, h) * 0.8 / Math.max(maxFoot, 0.001);
+  var angle = Math.PI/6; var cos = Math.cos(angle), sin = Math.sin(angle);
+  function proj3(x,y,z){ var u=(x - z)*cos; var v=-y + (x + z)*sin*0.5; return { x: rect.width/2 + u*scale, y: rect.height/2 + v*scale }; }
+  var hw = rw/2, hd = rd/2, ht = ry;
+  var pts = [
+    proj3(-hw, 0, -hd), proj3(hw, 0, -hd), proj3(hw, 0, hd), proj3(-hw, 0, hd),
+    proj3(-hw, ht, -hd), proj3(hw, ht, -hd), proj3(hw, ht, hd), proj3(-hw, ht, hd)
+  ];
+  var edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  cx.strokeStyle = '#2d6cdf'; cx.lineWidth = 1.0; cx.fillStyle = 'rgba(45,108,223,0.08)';
+  // Top face fill
+  cx.beginPath(); cx.moveTo(pts[4].x, pts[4].y); cx.lineTo(pts[5].x, pts[5].y); cx.lineTo(pts[6].x, pts[6].y); cx.lineTo(pts[7].x, pts[7].y); cx.closePath(); cx.fill();
+  // Edges
+  cx.beginPath(); for (var i=0;i<edges.length;i++){ var e=edges[i]; cx.moveTo(pts[e[0]].x, pts[e[0]].y); cx.lineTo(pts[e[1]].x, pts[e[1]].y);} cx.stroke();
+  // Dimensions label
+  cx.fillStyle = '#2d6cdf'; cx.font = '12px system-ui'; cx.textAlign = 'left'; cx.textBaseline = 'top';
+  cx.fillText(room.width.toFixed(1)+' x '+room.depth.toFixed(1)+' x '+room.height.toFixed(1)+' m', 10, 10);
 }
 
 function addPaletteItem(def) {
