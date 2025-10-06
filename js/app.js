@@ -4087,11 +4087,12 @@ function renderRoomPreview(room) {
   var minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
   for (var i=0;i<ptsUnit.length;i++){ var p=ptsUnit[i]; if (p.u<minU)minU=p.u; if(p.u>maxU)maxU=p.u; if(p.v<minV)minV=p.v; if(p.v>maxV)maxV=p.v; }
   var bboxW = (maxU - minU); var bboxH = (maxV - minV);
+  var centerU = (minU + maxU) * 0.5; var centerV = (minV + maxV) * 0.5;
   var scale = 1.0;
   if (bboxW > 0 && bboxH > 0) {
     scale = Math.min(availW / bboxW, availH / bboxH) * 0.95;
   }
-  function toScreen(p){ return { x: rect.width/2 + p.u*scale, y: rect.height/2 + p.v*scale }; }
+  function toScreen(p){ return { x: rect.width/2 + (p.u - centerU)*scale, y: rect.height/2 + (p.v - centerV)*scale }; }
   var pts = ptsUnit.map(toScreen);
   // Floor (bottom face) fill as grey
   cx.fillStyle = '#e5e7eb';
