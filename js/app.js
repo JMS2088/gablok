@@ -4009,7 +4009,12 @@ function setupPalette() {
     var thumb = document.createElement('div'); thumb.className = 'palette-thumb';
     var c = document.createElement('canvas'); c.className = 'palette-thumb-canvas'; c.width = 220; c.height = 168; thumb.appendChild(c);
     item.appendChild(thumb);
-    var nameDiv = document.createElement('div'); nameDiv.className = 'palette-name'; nameDiv.textContent = it.name; item.appendChild(nameDiv);
+  var infoDiv = document.createElement('div');
+  var nameDiv = document.createElement('div'); nameDiv.className = 'palette-name'; nameDiv.textContent = it.name;
+  var dimsDiv = document.createElement('div'); dimsDiv.className = 'palette-dims'; dimsDiv.textContent = it.width.toFixed(1) + 'm × ' + it.depth.toFixed(1) + 'm × ' + it.height.toFixed(1) + 'm';
+    infoDiv.appendChild(nameDiv);
+    infoDiv.appendChild(dimsDiv);
+    item.appendChild(infoDiv);
     // draw simple 3D-ish wireframe thumbnail to scale
     renderItemThumb(c, it);
     (function(def){ item.onclick = function(){ addPaletteItem(def); }; })(it);
@@ -4068,23 +4073,32 @@ function renderRoomPreview(room) {
   for (var gx = padG; gx <= cv.width - padG; gx += step) { cx.beginPath(); cx.moveTo(gx, padG); cx.lineTo(gx, cv.height - padG); cx.stroke(); }
   for (var gy = padG; gy <= cv.height - padG; gy += step) { cx.beginPath(); cx.moveTo(padG, gy); cx.lineTo(cv.width - padG, gy); cx.stroke(); }
   cx.restore();
-  // 3D-ish room wireframe box
-  var pad = 30; var w = rect.width - pad*2; var h = rect.height - pad*2;
+  // 3D-ish room wireframe box that FITS the available space and draws a grey floor
+  var pad = 22; var availW = rect.width - pad*2; var availH = rect.height - pad*2;
   var rw = room.width, rd = room.depth, ry = room.height;
-  var maxFoot = Math.max(rw, rd);
-  var scale = Math.min(w, h) * 0.8 / Math.max(maxFoot, 0.001);
   var angle = Math.PI/6; var cos = Math.cos(angle), sin = Math.sin(angle);
-  function proj3(x,y,z){ var u=(x - z)*cos; var v=-y + (x + z)*sin*0.5; return { x: rect.width/2 + u*scale, y: rect.height/2 + v*scale }; }
+  // Compute projected points at unit scale to derive a fitting scale
+  function projUV(x,y,z){ return { u:(x - z)*cos, v:(-y + (x + z)*sin*0.5) }; }
   var hw = rw/2, hd = rd/2, ht = ry;
-  var pts = [
-    proj3(-hw, 0, -hd), proj3(hw, 0, -hd), proj3(hw, 0, hd), proj3(-hw, 0, hd),
-    proj3(-hw, ht, -hd), proj3(hw, ht, -hd), proj3(hw, ht, hd), proj3(-hw, ht, hd)
+  var ptsUnit = [
+    projUV(-hw, 0, -hd), projUV(hw, 0, -hd), projUV(hw, 0, hd), projUV(-hw, 0, hd),
+    projUV(-hw, ht, -hd), projUV(hw, ht, -hd), projUV(hw, ht, hd), projUV(-hw, ht, hd)
   ];
-  var edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
-  cx.strokeStyle = '#2d6cdf'; cx.lineWidth = 1.0; cx.fillStyle = 'rgba(45,108,223,0.08)';
-  // Top face fill
-  cx.beginPath(); cx.moveTo(pts[4].x, pts[4].y); cx.lineTo(pts[5].x, pts[5].y); cx.lineTo(pts[6].x, pts[6].y); cx.lineTo(pts[7].x, pts[7].y); cx.closePath(); cx.fill();
+  var minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+  for (var i=0;i<ptsUnit.length;i++){ var p=ptsUnit[i]; if (p.u<minU)minU=p.u; if(p.u>maxU)maxU=p.u; if(p.v<minV)minV=p.v; if(p.v>maxV)maxV=p.v; }
+  var bboxW = (maxU - minU); var bboxH = (maxV - minV);
+  var scale = 1.0;
+  if (bboxW > 0 && bboxH > 0) {
+    scale = Math.min(availW / bboxW, availH / bboxH) * 0.95;
+  }
+  function toScreen(p){ return { x: rect.width/2 + p.u*scale, y: rect.height/2 + p.v*scale }; }
+  var pts = ptsUnit.map(toScreen);
+  // Floor (bottom face) fill as grey
+  cx.fillStyle = '#e5e7eb';
+  cx.beginPath(); cx.moveTo(pts[0].x, pts[0].y); cx.lineTo(pts[1].x, pts[1].y); cx.lineTo(pts[2].x, pts[2].y); cx.lineTo(pts[3].x, pts[3].y); cx.closePath(); cx.fill();
   // Edges
+  var edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  cx.strokeStyle = '#2d6cdf'; cx.lineWidth = 1.0;
   cx.beginPath(); for (var i=0;i<edges.length;i++){ var e=edges[i]; cx.moveTo(pts[e[0]].x, pts[e[0]].y); cx.lineTo(pts[e[1]].x, pts[e[1]].y);} cx.stroke();
   // Dimensions label
   cx.fillStyle = '#2d6cdf'; cx.font = '12px system-ui'; cx.textAlign = 'left'; cx.textBaseline = 'top';

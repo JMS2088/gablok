@@ -194,13 +194,14 @@
   #room-palette-left { padding: 20px; border-right: 1px solid #eee; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
   #room-palette-right { padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 0; }
   #room-palette-right > h3 { margin: 0 0 8px 0; text-align: center; align-self: center; }
-  #palette-list { margin-top: 10px; overflow: auto; border: 1px solid #eee; border-radius: 8px; padding: 12px; gap: 12px; display: grid; grid-template-columns: 1fr; width: 100%; max-width: 720px; margin-left: auto; margin-right: auto; justify-items: stretch; flex: 1 1 auto; min-height: 0; }
-  .palette-item { border: 1px solid #ddd; border-radius: 8px; padding: 12px; cursor: pointer; display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: center; transition: box-shadow 0.2s, transform 0.1s ease; background: #fff; }
+  #palette-list { margin-top: 10px; overflow: auto; border: 1px solid #eee; border-radius: 8px; padding: 12px; gap: 12px; display: grid; grid-template-columns: 1fr; width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; justify-items: stretch; flex: 1 1 auto; min-height: 0; }
+  .palette-item { border: 1px solid #ddd; border-radius: 8px; padding: 12px; cursor: pointer; display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: center; transition: box-shadow 0.2s, transform 0.1s ease; background: #fff; }
   .palette-item:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
   .palette-item:active { transform: scale(0.98); }
   .palette-thumb { width: 110px; height: 84px; border: 1px solid #eee; border-radius: 6px; background: repeating-linear-gradient(45deg, #fafafa, #fafafa 10px, #f3f3f3 10px, #f3f3f3 20px); display: flex; align-items: center; justify-content: center; }
   .palette-thumb-canvas { width: 100%; height: 100%; display: block; }
   .palette-name { font-size: 14px; font-weight: 600; color: #333; }
+  .palette-dims { font-size: 12px; color: #666; margin-top: 2px; }
 
   /* Fixed 500x500 frame for the room preview */
   #room-palette-left h3 { align-self: flex-start; margin-bottom: 6px; }
