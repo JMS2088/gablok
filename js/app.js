@@ -3956,11 +3956,46 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 // ---------- Room Palette ----------
+// Catalog with rough real-world dimensions (meters) and a simple type tag for thumbnail rendering
+// Width (X), Depth (Z), Height (Y) are approximate; adjust as needed.
 var PALETTE_ITEMS = [
-  'Single Bed','Double Bed','Queen Bed','King Bed','Bath','Shower',
-  'Kitchen Design 01','Kitchen Design 02','Kitchen Design 03','Kitchen Design 04','Kitchen Design 05',
-  'Single Fridge','Double Fridge','42" TV','72" TV','84" TV','108" TV',
-  'Sofa 3 seats','Sofa 4 seats','Sofa 5 seats','Sofa 6 seats L','Sofa 7 seats L','Dishwasher'
+  { name: 'Single Bed',           width: 1.0, depth: 2.0, height: 0.6, kind: 'bed' },
+  { name: 'Double Bed',           width: 1.4, depth: 2.0, height: 0.6, kind: 'bed' },
+  { name: 'Queen Bed',            width: 1.6, depth: 2.0, height: 0.6, kind: 'bed' },
+  { name: 'King Bed',             width: 1.8, depth: 2.0, height: 0.6, kind: 'bed' },
+  { name: 'Bath',                 width: 0.8, depth: 1.7, height: 0.6, kind: 'bath' },
+  { name: 'Shower',               width: 0.9, depth: 0.9, height: 2.1, kind: 'shower' },
+  { name: 'Double Shower',        width: 1.6, depth: 0.9, height: 2.1, kind: 'shower' },
+  { name: 'Sink',                 width: 0.6, depth: 0.5, height: 0.9, kind: 'sink' },
+  { name: 'Double Sink',          width: 1.2, depth: 0.5, height: 0.9, kind: 'sink' },
+  { name: 'Bedside Table',        width: 0.5, depth: 0.4, height: 0.5, kind: 'table' },
+  { name: 'Kitchen Design 01',    width: 3.0, depth: 0.7, height: 0.9, kind: 'kitchen' },
+  { name: 'Kitchen Design 02',    width: 2.4, depth: 1.6, height: 0.9, kind: 'kitchen' },
+  { name: 'Kitchen Design 03',    width: 3.6, depth: 1.8, height: 0.9, kind: 'kitchen' },
+  { name: 'Kitchen Design 04',    width: 2.8, depth: 0.7, height: 0.9, kind: 'kitchen' },
+  { name: 'Kitchen Design 05',    width: 3.2, depth: 0.7, height: 0.9, kind: 'kitchen' },
+  { name: 'Single Fridge',        width: 0.7, depth: 0.7, height: 1.8, kind: 'fridge' },
+  { name: 'Double Fridge',        width: 0.9, depth: 0.8, height: 1.8, kind: 'fridge' },
+  { name: '42" TV',               width: 0.95, depth: 0.1, height: 0.6, kind: 'tv' },
+  { name: '72" TV',               width: 1.6,  depth: 0.1, height: 1.0, kind: 'tv' },
+  { name: '84" TV',               width: 1.9,  depth: 0.1, height: 1.1, kind: 'tv' },
+  { name: '108" TV',              width: 2.4,  depth: 0.1, height: 1.4, kind: 'tv' },
+  { name: 'Sofa 3 seats',         width: 2.0, depth: 0.9, height: 0.9, kind: 'sofa' },
+  { name: 'Sofa 4 seats',         width: 2.4, depth: 0.9, height: 0.9, kind: 'sofa' },
+  { name: 'Sofa 5 seats',         width: 2.8, depth: 0.9, height: 0.9, kind: 'sofa' },
+  { name: 'Sofa 6 seats L',       width: 2.8, depth: 2.0, height: 0.9, kind: 'sofaL' },
+  { name: 'Sofa 7 seats L',       width: 3.2, depth: 2.2, height: 0.9, kind: 'sofaL' },
+  { name: 'Armchair',             width: 0.9, depth: 0.9, height: 0.9, kind: 'armchair' },
+  { name: 'Dishwasher',           width: 0.6, depth: 0.6, height: 0.85, kind: 'appliance' },
+  { name: '4 Seat kitchen table', width: 1.2, depth: 0.8, height: 0.75, kind: 'table' },
+  { name: '6 Seat kitchen table', width: 1.6, depth: 0.9, height: 0.75, kind: 'table' },
+  { name: '8 seat kitchen table', width: 2.0, depth: 0.9, height: 0.75, kind: 'table' },
+  { name: '10 Seat Kitchen table',width: 2.4, depth: 1.0, height: 0.75, kind: 'table' },
+  { name: '4 Seat Dinning table', width: 1.2, depth: 0.8, height: 0.75, kind: 'table' },
+  { name: '6 Seat Dinning table', width: 1.6, depth: 0.9, height: 0.75, kind: 'table' },
+  { name: '8 seat Dinning table', width: 2.0, depth: 0.9, height: 0.75, kind: 'table' },
+  { name: '10 Seat Dinning table',width: 2.4, depth: 1.0, height: 0.75, kind: 'table' },
+  { name: 'Bar stool 1-8',        width: 0.45, depth: 0.45, height: 0.75, kind: 'stool' }
 ];
 
 function setupPalette() {
@@ -3968,11 +4003,16 @@ function setupPalette() {
   if (!list) return;
   list.innerHTML = '';
   for (var i=0;i<PALETTE_ITEMS.length;i++) {
-    var name = PALETTE_ITEMS[i];
+    var it = PALETTE_ITEMS[i];
     var item = document.createElement('div');
     item.className = 'palette-item';
-    item.innerHTML = '<div class="palette-thumb">3D</div><div class="palette-name">' + name + '</div>';
-    (function(n){ item.onclick = function(){ addPaletteItem(n); }; })(name);
+    var thumb = document.createElement('div'); thumb.className = 'palette-thumb';
+    var c = document.createElement('canvas'); c.className = 'palette-thumb-canvas'; c.width = 220; c.height = 168; thumb.appendChild(c);
+    item.appendChild(thumb);
+    var nameDiv = document.createElement('div'); nameDiv.className = 'palette-name'; nameDiv.textContent = it.name; item.appendChild(nameDiv);
+    // draw simple 3D-ish wireframe thumbnail to scale
+    renderItemThumb(c, it);
+    (function(def){ item.onclick = function(){ addPaletteItem(def); }; })(it);
     list.appendChild(item);
   }
 }
@@ -4003,6 +4043,11 @@ function hideRoomPalette() {
 function renderRoomPreview(room) {
   var cv = document.getElementById('room-preview-canvas');
   if (!cv) return; var cx = cv.getContext('2d');
+  // Resize to fit left pane dynamically
+  try {
+    var leftPane = document.getElementById('room-palette-left');
+    if (leftPane) { cv.width = Math.max(300, leftPane.clientWidth - 40); cv.height = Math.max(260, leftPane.clientHeight - 100); }
+  } catch(e){}
   cx.clearRect(0,0,cv.width,cv.height);
   cx.fillStyle = '#f6f9ff'; cx.fillRect(0,0,cv.width,cv.height);
   // Top-down schematic of the room rectangle
@@ -4015,15 +4060,43 @@ function renderRoomPreview(room) {
   cx.fillStyle = '#007acc'; cx.font = '12px system-ui'; cx.fillText((room.width.toFixed(1)+' x '+room.depth.toFixed(1)+' m'), x+6, y+16);
 }
 
-function addPaletteItem(name) {
+function addPaletteItem(def) {
   if (!paletteOpenForId) return;
   var room = findObjectById(paletteOpenForId);
   if (!room) return;
-  // Placeholder: add a generic furniture box with small size into the room center
-  var furn = { id: 'furn_'+Date.now()+Math.random().toString(36).slice(2), x: room.x, z: room.z, width: 1.6, depth: 0.8, height: 0.7, level: room.level, name: name, type: 'furniture', rotation: 0 };
+  // Add furniture with catalog dimensions
+  var furn = { id: 'furn_'+Date.now()+Math.random().toString(36).slice(2), x: room.x, z: room.z, width: def.width, depth: def.depth, height: def.height, level: room.level, name: def.name, type: 'furniture', rotation: 0, kind: def.kind };
   furnitureItems.push(furn);
-  updateStatus('Added: '+name+' to '+(room.name||'Room'));
+  updateStatus('Added: '+def.name+' to '+(room.name||'Room'));
   hideRoomPalette();
   saveProjectSilently();
   renderLoop();
+}
+
+// Draw a simple scaled 3D wireframe box for the item on its thumbnail canvas
+function renderItemThumb(canvas, def) {
+  var cx = canvas.getContext('2d');
+  cx.clearRect(0,0,canvas.width,canvas.height);
+  // Fit item within canvas with padding, using X/Z footprint for scale, hint of height
+  var pad = 12;
+  var w = canvas.width - pad*2, h = canvas.height - pad*2;
+  var sx = def.width, sz = def.depth, sy = Math.max(0.3, def.height || 0.7);
+  var maxFoot = Math.max(sx, sz);
+  var scale = (Math.min(w, h) * 0.9) / maxFoot;
+  // Isometric-ish projection parameters
+  var angle = Math.PI/6; // 30deg
+  var cos = Math.cos(angle), sin = Math.sin(angle);
+  function proj3(x,y,z){
+    var u = (x - z) * cos;
+    var v = -y + (x + z) * sin * 0.5;
+    return { x: canvas.width/2 + u*scale, y: canvas.height/2 + v*scale };
+  }
+  var hw = sx/2, hd = sz/2, ht = sy;
+  var pts = [
+    proj3(-hw, 0, -hd), proj3(hw, 0, -hd), proj3(hw, 0, hd), proj3(-hw, 0, hd),
+    proj3(-hw, ht, -hd), proj3(hw, ht, -hd), proj3(hw, ht, hd), proj3(-hw, ht, hd)
+  ];
+  var edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  cx.strokeStyle = '#007acc'; cx.lineWidth = 1.2;
+  cx.beginPath(); for (var i=0;i<edges.length;i++){ var e = edges[i]; cx.moveTo(pts[e[0]].x, pts[e[0]].y); cx.lineTo(pts[e[1]].x, pts[e[1]].y);} cx.stroke();
 }
