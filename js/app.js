@@ -40,6 +40,7 @@ var centerY = 0;
 var allRooms = [];
 var selectedRoomId = null;
 var editingLabelId = null; // which object's label is currently being edited
+var paletteOpenForId = null; // which room/component is open in palette
 var currentFloor = 0;
 var resizeHandles = [];
 var animationId = null;
@@ -49,6 +50,7 @@ var balconyComponents = [];
 var garageComponents = [];
 var roofComponents = [];
 var currentSnapGuides = [];
+var furnitureItems = [];
 
 var HANDLE_RADIUS = 12;
 var GRID_SPACING = 0.5;
@@ -1705,6 +1707,9 @@ function findObjectById(objectId) {
   for (var i = 0; i < roofComponents.length; i++) {
     if (roofComponents[i].id === objectId) return roofComponents[i];
   }
+  for (var i = 0; i < furnitureItems.length; i++) {
+    if (furnitureItems[i].id === objectId) return furnitureItems[i];
+  }
   
   return null;
 }
@@ -1847,6 +1852,21 @@ function updateLabels() {
       });
     }
   }
+
+  for (var i = 0; i < furnitureItems.length; i++) {
+    var furn = furnitureItems[i];
+    var labelY = (furn.level || 0) * 3.5 + Math.min(1.0, furn.height || 0.7);
+    var screen = project3D(furn.x, labelY, furn.z);
+    
+    if (screen && screen.x > -100 && screen.x < screenW + 100) {
+      allLabels.push({
+        screen: screen,
+        object: furn,
+        type: 'furniture',
+        depth: screen.depth
+      });
+    }
+  }
   
   allLabels.sort(function(a, b) {
     return b.depth - a.depth;
@@ -1859,6 +1879,9 @@ function updateLabels() {
     
     var label = document.createElement('div');
     label.className = 'room-label';
+    // Mark with data attributes for delegated events
+    label.dataset.id = obj.id;
+    label.dataset.type = labelData.type;
     if (selectedRoomId === obj.id) label.className += ' selected';
     label.style.left = Math.round(screen.x) + 'px';
     label.style.top = Math.round(screen.y) + 'px';
@@ -1909,6 +1932,8 @@ function updateLabels() {
       span.textContent = obj.name || '';
       label.appendChild(span);
     }
+
+    // No inline actions anymore
     
     if (labelData.type === 'room' && obj.level !== currentFloor) {
       label.style.opacity = '0.6';
@@ -1991,17 +2016,58 @@ function updateLabels() {
           updateStatus('Deselected');
         }
       });
-      label.addEventListener('dblclick', function(e){
-        e.preventDefault();
-        e.stopPropagation();
-        editingLabelId = objRef.id;
-        // Ensure selected to keep it visible and focused
-        selectedRoomId = objRef.id;
-        renderLoop();
-      });
+      // dblclick is now delegated on container for robustness
     })(obj, labelData.type);
     
     container.appendChild(label);
+
+    // External Edit button for rooms: sits outside to the right of the label
+    if (labelData.type === 'room') {
+      var btn = document.createElement('button');
+      btn.className = 'room-edit-btn';
+      btn.type = 'button';
+      btn.title = 'Open Room Palette';
+  btn.textContent = 'Edit';
+      btn.dataset.id = obj.id;
+      btn.style.position = 'fixed';
+      // Compute horizontal offset based on label width so it sits just outside the pill
+      var halfW = Math.round((label.offsetWidth || 60) / 2);
+  var offset = halfW + 26; // 26px gap outside the label edge (16px + 10px extra)
+      btn.style.left = (Math.round(screen.x) + offset) + 'px';
+      btn.style.top = Math.round(screen.y) + 'px';
+      // Open on mousedown to avoid losing click due to frequent re-renders
+      btn.onmousedown = function(e){ e.stopPropagation(); e.preventDefault(); openRoomPalette(this.dataset.id); };
+      container.appendChild(btn);
+    }
+
+    // (Removed duplicate smaller edit button)
+  }
+
+  // Delegated handlers once per update
+  if (!container._dblBound) {
+    container.addEventListener('dblclick', function(e) {
+      var target = e.target.closest('.room-label');
+      if (!target) return;
+      var type = target.dataset.type;
+      var id = target.dataset.id;
+      e.preventDefault();
+      e.stopPropagation();
+      if (type === 'room') {
+        openRoomPalette(id);
+      } else {
+        editingLabelId = id;
+        selectedRoomId = id;
+        renderLoop();
+      }
+    });
+    // Fallback delegated click for edit button
+    container.addEventListener('mousedown', function(e) {
+      var btn = e.target.closest('.room-edit-btn');
+      if (!btn) return;
+      e.preventDefault(); e.stopPropagation();
+      var id = btn.dataset.id; if (id) openRoomPalette(id);
+    });
+    container._dblBound = true;
   }
 }
 
@@ -2160,6 +2226,20 @@ function setupEvents() {
         currentSnapGuides = snap.guides;
         updateStatus('Moving ' + roof.name + '...');
       }
+    } else if (mouse.dragType === 'furniture' && mouse.dragInfo) {
+      var furn = findObjectById(mouse.dragInfo.roomId);
+      if (furn) {
+        var dx = e.clientX - mouse.dragInfo.startX;
+        var dy = e.clientY - mouse.dragInfo.startY;
+        var movement = worldMovement(dx, dy);
+        var newX = mouse.dragInfo.originalX + movement.x;
+        var newZ = mouse.dragInfo.originalZ + movement.z;
+        var snap = applySnap({x: newX, z: newZ, width: furn.width, depth: furn.depth, level: furn.level, id: furn.id, type: 'furniture'});
+        furn.x = snap.x;
+        furn.z = snap.z;
+        currentSnapGuides = snap.guides;
+        updateStatus('Moving ' + (furn.name || 'Item') + '...');
+      }
     } else if (mouse.dragType === 'handle' && mouse.dragInfo && mouse.dragInfo.handle) {
       var target = findObjectById(selectedRoomId);
       if (target) {
@@ -2277,8 +2357,13 @@ function setupEvents() {
   
   document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
-      selectedRoomId = null;
-      updateStatus('Selection cleared');
+      var rpm = document.getElementById('room-palette-modal');
+      if (rpm && rpm.style.display === 'block') {
+        hideRoomPalette();
+      } else {
+        selectedRoomId = null;
+        updateStatus('Selection cleared');
+      }
     } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedRoomId) {
       e.preventDefault();
       
@@ -2366,6 +2451,18 @@ function setupEvents() {
         roofComponents.splice(roofIndex, 1);
         selectedRoomId = null;
         updateStatus(roof.name + ' deleted');
+        return;
+      }
+      
+      var furnIndex = -1;
+      for (var i = 0; i < furnitureItems.length; i++) {
+        if (furnitureItems[i].id === selectedRoomId) { furnIndex = i; break; }
+      }
+      if (furnIndex > -1) {
+        var furn = furnitureItems[furnIndex];
+        furnitureItems.splice(furnIndex, 1);
+        selectedRoomId = null;
+        updateStatus((furn.name || 'Item') + ' deleted');
         return;
       }
       
@@ -2532,6 +2629,7 @@ function resetAll() {
 document.addEventListener('click', function(e) {
   var infoModal = document.getElementById('info-modal');
   var pricingModal = document.getElementById('pricing-modal');
+  var paletteModal = document.getElementById('room-palette-modal');
   
   if (infoModal && e.target === infoModal) {
     hideInfo();
@@ -2540,6 +2638,9 @@ document.addEventListener('click', function(e) {
   if (pricingModal && e.target === pricingModal) {
     hidePricing();
     }
+  if (paletteModal && e.target === paletteModal) {
+    hideRoomPalette();
+  }
   });
 
 function drawStairs(stairs) {
@@ -3042,6 +3143,51 @@ function drawBalcony(balcony) {
   }
 }
 
+function drawFurniture(f) {
+  try {
+    var selected = selectedRoomId === f.id;
+    var levelY = (f.level || 0) * 3.5;
+    var hw = (f.width || 1) / 2;
+    var hd = (f.depth || 1) / 2;
+    var h = f.height || 0.7;
+    var rotRad = ((f.rotation || 0) * Math.PI) / 180;
+    function rot(x, z) {
+      var dx = x - f.x, dz = z - f.z;
+      return { x: f.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad), z: f.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad) };
+    }
+    var corners = [
+      rot(f.x - hw, f.z - hd), rot(f.x + hw, f.z - hd), rot(f.x + hw, f.z + hd), rot(f.x - hw, f.z + hd)
+    ];
+    var pts = [
+      {x: corners[0].x, y: levelY, z: corners[0].z},
+      {x: corners[1].x, y: levelY, z: corners[1].z},
+      {x: corners[2].x, y: levelY, z: corners[2].z},
+      {x: corners[3].x, y: levelY, z: corners[3].z},
+      {x: corners[0].x, y: levelY + h, z: corners[0].z},
+      {x: corners[1].x, y: levelY + h, z: corners[1].z},
+      {x: corners[2].x, y: levelY + h, z: corners[2].z},
+      {x: corners[3].x, y: levelY + h, z: corners[3].z}
+    ];
+    var proj = [];
+    for (var i = 0; i < pts.length; i++) {
+      var p = project3D(pts[i].x, pts[i].y, pts[i].z);
+      if (!p) return;
+      proj.push(p);
+    }
+    ctx.strokeStyle = selected ? '#007acc' : '#A0A0A0';
+    ctx.lineWidth = selected ? 2 : 1;
+    var edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+    ctx.beginPath();
+    for (var i=0;i<edges.length;i++){ var e = edges[i]; ctx.moveTo(proj[e[0]].x, proj[e[0]].y); ctx.lineTo(proj[e[1]].x, proj[e[1]].y);} 
+    ctx.stroke();
+    // Simple top fill
+    ctx.fillStyle = selected ? 'rgba(0,122,204,0.18)' : 'rgba(180,180,180,0.15)';
+    ctx.beginPath();
+    ctx.moveTo(proj[4].x, proj[4].y); ctx.lineTo(proj[5].x, proj[5].y); ctx.lineTo(proj[6].x, proj[6].y); ctx.lineTo(proj[7].x, proj[7].y);
+    ctx.closePath(); ctx.fill();
+  } catch(e){ console.warn('drawFurniture failed', e); }
+}
+
 function drawHandlesForBalcony(balcony) {
   try {
     var isActive = selectedRoomId === balcony.id;
@@ -3464,6 +3610,17 @@ function renderLoop() {
       });
     }
     
+    for (var i = 0; i < furnitureItems.length; i++) {
+      var furn = furnitureItems[i];
+      var fCenterY = (furn.level || 0) * 3.5 + (furn.height || 0.7) / 2;
+      var fDist = Math.sqrt(
+        (furn.x - camera.targetX) * (furn.x - camera.targetX) + 
+        (fCenterY) * (fCenterY) +
+        (furn.z - camera.targetZ) * (furn.z - camera.targetZ)
+      );
+      allObjects.push({ object: furn, type: 'furniture', distance: fDist, maxHeight: (furn.level || 0) * 3.5 + (furn.height || 0.7) });
+    }
+    
     console.log('All objects before sorting:', allObjects.map(obj => ({ type: obj.type, id: obj.object.id })));
     
     allObjects.sort(function(a, b) {
@@ -3485,6 +3642,9 @@ function renderLoop() {
           break;
         case 'stairs':
           drawStairs(item.object);
+          break;
+        case 'furniture':
+          drawFurniture(item.object);
           break;
         case 'balcony':
           console.log('Found balcony to draw:', item.object);
@@ -3532,6 +3692,7 @@ function serializeProject() {
     garages: garageComponents,
     roofs: roofComponents,
     balconies: balconyComponents,
+    furniture: furnitureItems,
     currentFloor: currentFloor
   });
 }
@@ -3547,6 +3708,7 @@ function restoreProject(json) {
     garageComponents = Array.isArray(data.garages) ? data.garages : [];
     roofComponents = Array.isArray(data.roofs) ? data.roofs : [];
     balconyComponents = Array.isArray(data.balconies) ? data.balconies : [];
+  furnitureItems = Array.isArray(data.furniture) ? data.furniture : [];
     currentFloor = typeof data.currentFloor === 'number' ? data.currentFloor : currentFloor;
     selectedRoomId = null;
     renderLoop();
@@ -3613,6 +3775,7 @@ function exportOBJ() {
   garageComponents.forEach(function(g){ pushBox(g,0,g.height,'garage'); });
   roofComponents.forEach(function(r){ pushBox({x:r.x,z:r.z,width:r.width,depth:r.depth,rotation:r.rotation||0}, r.baseHeight, r.baseHeight + r.height, 'roof'); });
   balconyComponents.forEach(function(b){ var y0=b.level*3.5, y1=y0+b.height; pushBox(b,y0,y1,'balcony'); });
+  furnitureItems.forEach(function(f){ var y0=(f.level||0)*3.5, y1=y0+(f.height||0.7); pushBox(f,y0,y1,'furniture_'+(f.name||'')); });
   var blob = new Blob([lines.join('\n')], {type: 'text/plain'});
   var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -3688,6 +3851,9 @@ function importOBJ(text) {
       } else if (tag.indexOf('balcony') !== -1) {
         var balcony = { id: 'balcony_'+Date.now()+Math.random().toString(36).slice(2), x: cx, z: cz, width: width, depth: depth, height: height, level: level, totalHeight: height, wallThickness: 0.2, wallHeight: Math.min(1.2, height), name: 'Imported Balcony', type: 'balcony', rotation: 0 };
         balconyComponents.push(balcony); created++;
+      } else if (tag.indexOf('furniture') !== -1) {
+        var furn = { id: 'furn_'+Date.now()+Math.random().toString(36).slice(2), x: cx, z: cz, width: width, depth: depth, height: height, level: level, name: 'Imported Furniture', type: 'furniture', rotation: 0 };
+        furnitureItems.push(furn); created++;
       } else {
         // default to a room on inferred level
         addRoom('Imported Room'); created++;
@@ -3784,4 +3950,80 @@ document.addEventListener('DOMContentLoaded', function(){
     };
     reader.readAsText(f);
   };
+
+  // Populate palette items
+  setupPalette();
 });
+
+// ---------- Room Palette ----------
+var PALETTE_ITEMS = [
+  'Single Bed','Double Bed','Queen Bed','King Bed','Bath','Shower',
+  'Kitchen Design 01','Kitchen Design 02','Kitchen Design 03','Kitchen Design 04','Kitchen Design 05',
+  'Single Fridge','Double Fridge','42" TV','72" TV','84" TV','108" TV',
+  'Sofa 3 seats','Sofa 4 seats','Sofa 5 seats','Sofa 6 seats L','Sofa 7 seats L','Dishwasher'
+];
+
+function setupPalette() {
+  var list = document.getElementById('palette-list');
+  if (!list) return;
+  list.innerHTML = '';
+  for (var i=0;i<PALETTE_ITEMS.length;i++) {
+    var name = PALETTE_ITEMS[i];
+    var item = document.createElement('div');
+    item.className = 'palette-item';
+    item.innerHTML = '<div class="palette-thumb">3D</div><div class="palette-name">' + name + '</div>';
+    (function(n){ item.onclick = function(){ addPaletteItem(n); }; })(name);
+    list.appendChild(item);
+  }
+}
+
+function openRoomPalette(roomId) {
+  var modal = document.getElementById('room-palette-modal');
+  var title = document.getElementById('room-palette-title');
+  if (!modal || !title) return;
+  var room = findObjectById(roomId);
+  if (!room || room.type === 'roof') return;
+  paletteOpenForId = roomId;
+  selectedRoomId = roomId;
+  title.textContent = room.name || 'Room';
+  // Hide roof dropdown while open
+  var dd = document.getElementById('roof-type-dropdown'); if (dd) dd.style.display = 'none';
+  modal.style.display = 'block';
+  try { console.log('Room Palette opened for', roomId, '->', title.textContent); } catch(e){}
+  renderRoomPreview(room);
+}
+
+function hideRoomPalette() {
+  var modal = document.getElementById('room-palette-modal');
+  if (modal) modal.style.display = 'none';
+  paletteOpenForId = null;
+  var dd = document.getElementById('roof-type-dropdown'); if (dd) dd.style.display = 'block';
+}
+
+function renderRoomPreview(room) {
+  var cv = document.getElementById('room-preview-canvas');
+  if (!cv) return; var cx = cv.getContext('2d');
+  cx.clearRect(0,0,cv.width,cv.height);
+  cx.fillStyle = '#f6f9ff'; cx.fillRect(0,0,cv.width,cv.height);
+  // Top-down schematic of the room rectangle
+  var pad = 30; var w = cv.width - pad*2; var h = cv.height - pad*2;
+  var aspectR = room.width / room.depth;
+  var rw = w, rh = rw / aspectR; if (rh > h) { rh = h; rw = rh * aspectR; }
+  var x = (cv.width - rw)/2, y = (cv.height - rh)/2;
+  cx.fillStyle = '#eaf2ff'; cx.strokeStyle = '#007acc'; cx.lineWidth = 2;
+  cx.fillRect(x,y,rw,rh); cx.strokeRect(x,y,rw,rh);
+  cx.fillStyle = '#007acc'; cx.font = '12px system-ui'; cx.fillText((room.width.toFixed(1)+' x '+room.depth.toFixed(1)+' m'), x+6, y+16);
+}
+
+function addPaletteItem(name) {
+  if (!paletteOpenForId) return;
+  var room = findObjectById(paletteOpenForId);
+  if (!room) return;
+  // Placeholder: add a generic furniture box with small size into the room center
+  var furn = { id: 'furn_'+Date.now()+Math.random().toString(36).slice(2), x: room.x, z: room.z, width: 1.6, depth: 0.8, height: 0.7, level: room.level, name: name, type: 'furniture', rotation: 0 };
+  furnitureItems.push(furn);
+  updateStatus('Added: '+name+' to '+(room.name||'Room'));
+  hideRoomPalette();
+  saveProjectSilently();
+  renderLoop();
+}

@@ -71,6 +71,22 @@
 	<button id="save-measurements" style="margin-top:10px;padding:6px 16px;">Save</button>
 </div>
 
+<!-- Room palette modal for adding furniture -->
+<div id="room-palette-modal" style="display:none;">
+	<div id="room-palette-content">
+		<button class="close-button" onclick="hideRoomPalette()">&times;</button>
+		<div id="room-palette-left">
+			<h3 id="room-palette-title">Room</h3>
+			<canvas id="room-preview-canvas" width="360" height="260"></canvas>
+		</div>
+		<div id="room-palette-right">
+			<h3>Add items</h3>
+			<div id="palette-list"></div>
+		</div>
+	</div>
+	<div id="room-palette-backdrop" onclick="hideRoomPalette()"></div>
+	</div>
+
 <div id="info-modal">
 	<div id="info-content">
 		<button class="close-button" onclick="hideInfo()">&times;</button>
