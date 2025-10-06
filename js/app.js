@@ -3959,15 +3959,15 @@ document.addEventListener('DOMContentLoaded', function(){
 // Catalog with rough real-world dimensions (meters) and a simple type tag for thumbnail rendering
 // Width (X), Depth (Z), Height (Y) are approximate; adjust as needed.
 var PALETTE_ITEMS = [
-  { name: 'Single Bed',           width: 1.0, depth: 2.0, height: 0.6, kind: 'bed' },
-  { name: 'Double Bed',           width: 1.4, depth: 2.0, height: 0.6, kind: 'bed' },
-  { name: 'Queen Bed',            width: 1.6, depth: 2.0, height: 0.6, kind: 'bed' },
-  { name: 'King Bed',             width: 1.8, depth: 2.0, height: 0.6, kind: 'bed' },
-  { name: 'Bath',                 width: 0.8, depth: 1.7, height: 0.6, kind: 'bath' },
-  { name: 'Shower',               width: 0.9, depth: 0.9, height: 2.1, kind: 'shower' },
-  { name: 'Double Shower',        width: 1.6, depth: 0.9, height: 2.1, kind: 'shower' },
+  { name: 'Single Bed',           width: 1.1, depth: 2.2, height: 0.6, kind: 'bed' },
+  { name: 'Double Bed',           width: 1.6, depth: 2.2, height: 0.6, kind: 'bed' },
+  { name: 'Queen Bed',            width: 1.8, depth: 2.2, height: 0.6, kind: 'bed' },
+  { name: 'King Bed',             width: 2.0, depth: 2.2, height: 0.6, kind: 'bed' },
+  { name: 'Bath',                 width: 1.0, depth: 1.8, height: 0.6, kind: 'bath' },
+  { name: 'Shower',               width: 1.1, depth: 1.1, height: 3.0, kind: 'shower' },
+  { name: 'Double Shower',        width: 1.8, depth: 1.1, height: 3.0, kind: 'shower' },
   { name: 'Sink',                 width: 0.6, depth: 0.5, height: 0.9, kind: 'sink' },
-  { name: 'Double Sink',          width: 1.2, depth: 0.5, height: 0.9, kind: 'sink' },
+  { name: 'Double Sink',          width: 1.6, depth: 0.5, height: 0.9, kind: 'sink' },
   { name: 'Bedside Table',        width: 0.5, depth: 0.4, height: 0.5, kind: 'table' },
   { name: 'Kitchen Design 01',    width: 3.0, depth: 0.7, height: 0.9, kind: 'kitchen' },
   { name: 'Kitchen Design 02',    width: 2.4, depth: 1.6, height: 0.9, kind: 'kitchen' },
@@ -3975,7 +3975,7 @@ var PALETTE_ITEMS = [
   { name: 'Kitchen Design 04',    width: 2.8, depth: 0.7, height: 0.9, kind: 'kitchen' },
   { name: 'Kitchen Design 05',    width: 3.2, depth: 0.7, height: 0.9, kind: 'kitchen' },
   { name: 'Single Fridge',        width: 0.7, depth: 0.7, height: 1.8, kind: 'fridge' },
-  { name: 'Double Fridge',        width: 0.9, depth: 0.8, height: 1.8, kind: 'fridge' },
+  { name: 'Double Fridge',        width: 1.2, depth: 0.8, height: 1.9, kind: 'fridge' },
   { name: '42" TV',               width: 0.95, depth: 0.1, height: 0.6, kind: 'tv' },
   { name: '72" TV',               width: 1.6,  depth: 0.1, height: 1.0, kind: 'tv' },
   { name: '84" TV',               width: 1.9,  depth: 0.1, height: 1.1, kind: 'tv' },
@@ -3985,18 +3985,27 @@ var PALETTE_ITEMS = [
   { name: 'Sofa 5 seats',         width: 2.8, depth: 0.9, height: 0.9, kind: 'sofa' },
   { name: 'Sofa 6 seats L',       width: 2.8, depth: 2.0, height: 0.9, kind: 'sofaL' },
   { name: 'Sofa 7 seats L',       width: 3.2, depth: 2.2, height: 0.9, kind: 'sofaL' },
-  { name: 'Armchair',             width: 0.9, depth: 0.9, height: 0.9, kind: 'armchair' },
-  { name: 'Dishwasher',           width: 0.6, depth: 0.6, height: 0.85, kind: 'appliance' },
-  { name: '4 Seat kitchen table', width: 1.2, depth: 0.8, height: 0.75, kind: 'table' },
-  { name: '6 Seat kitchen table', width: 1.6, depth: 0.9, height: 0.75, kind: 'table' },
-  { name: '8 seat kitchen table', width: 2.0, depth: 0.9, height: 0.75, kind: 'table' },
-  { name: '10 Seat Kitchen table',width: 2.4, depth: 1.0, height: 0.75, kind: 'table' },
-  { name: '4 Seat Dinning table', width: 1.2, depth: 0.8, height: 0.75, kind: 'table' },
-  { name: '6 Seat Dinning table', width: 1.6, depth: 0.9, height: 0.75, kind: 'table' },
-  { name: '8 seat Dinning table', width: 2.0, depth: 0.9, height: 0.75, kind: 'table' },
-  { name: '10 Seat Dinning table',width: 2.4, depth: 1.0, height: 0.75, kind: 'table' },
+  { name: 'Armchair',             width: 1.0, depth: 1.0, height: 1.1, kind: 'armchair' },
+  { name: 'Dishwasher',           width: 0.7, depth: 0.7, height: 0.90, kind: 'appliance' },
+  { name: '4 Seat kitchen table', width: 1.5, depth: 1.0, height: 0.75, kind: 'table' },
+  { name: '6 Seat kitchen table', width: 1.8, depth: 1.0, height: 0.75, kind: 'table' },
+  { name: '8 seat kitchen table', width: 2.3, depth: 1.0, height: 0.75, kind: 'table' },
+  { name: '10 Seat Kitchen table',width: 2.8, depth: 1.0, height: 0.75, kind: 'table' },
+  { name: '4 Seat Dinning table', width: 1.5, depth: 0.8, height: 0.75, kind: 'table' },
+  { name: '6 Seat Dinning table', width: 1.8, depth: 0.9, height: 0.75, kind: 'table' },
+  { name: '8 seat Dinning table', width: 2.3, depth: 0.9, height: 0.75, kind: 'table' },
+  { name: '10 Seat Dinning table',width: 2.9, depth: 1.0, height: 0.75, kind: 'table' },
   { name: 'Bar stool 1-8',        width: 0.45, depth: 0.45, height: 0.75, kind: 'stool' }
 ];
+
+// Temporary preview state for the room palette (items are previewed here before committing)
+var __paletteState = {
+  yaw: 0.6,         // radians
+  pitch: 0.5,       // radians (slightly looking down)
+  items: [],        // {width, depth, height, x, z, name, kind}
+  draggingIndex: -1,
+  lastMouse: null
+};
 
 function setupPalette() {
   var list = document.getElementById('palette-list');
@@ -4017,7 +4026,8 @@ function setupPalette() {
     item.appendChild(infoDiv);
     // draw simple 3D-ish wireframe thumbnail to scale
     renderItemThumb(c, it);
-    (function(def){ item.onclick = function(){ addPaletteItem(def); }; })(it);
+    // In preview mode, clicking adds to the palette preview without closing
+    (function(def){ item.onclick = function(){ addPalettePreviewItem(def); }; })(it);
     list.appendChild(item);
   }
 }
@@ -4035,12 +4045,86 @@ function openRoomPalette(roomId) {
   var dd = document.getElementById('roof-type-dropdown'); if (dd) dd.style.display = 'none';
   modal.style.display = 'flex';
   try { console.log('Room Palette opened for', roomId, '->', title.textContent); } catch(e){}
+  // Reset preview state
+  __paletteState = { yaw: 0.6, pitch: 0.5, items: [], draggingIndex: -1, lastMouse: null };
   renderRoomPreview(room);
   // Keep preview responsive while open
   try {
     if (window.__paletteResizeHandler) window.removeEventListener('resize', window.__paletteResizeHandler);
     window.__paletteResizeHandler = function(){ var r = findObjectById(paletteOpenForId); if (r) renderRoomPreview(r); };
     window.addEventListener('resize', window.__paletteResizeHandler);
+  } catch(e){}
+
+  // Wire preview canvas interactions (orbit + drag, no zoom)
+  try {
+    var cv = document.getElementById('room-preview-canvas');
+    if (cv) {
+      if (window.__paletteMouseDown) cv.removeEventListener('mousedown', window.__paletteMouseDown);
+      if (window.__paletteMouseMove) window.removeEventListener('mousemove', window.__paletteMouseMove);
+      if (window.__paletteMouseUp) window.removeEventListener('mouseup', window.__paletteMouseUp);
+      if (window.__paletteWheel) cv.removeEventListener('wheel', window.__paletteWheel, { passive: false });
+
+      window.__paletteMouseDown = function(e){
+        var rect = cv.getBoundingClientRect();
+        var mx = e.clientX - rect.left; var my = e.clientY - rect.top;
+        __paletteState.lastMouse = { x: mx, y: my };
+        // Hit-test items (prefer top-most)
+        var idx = hitTestPaletteItem(mx, my, findObjectById(paletteOpenForId));
+        if (idx >= 0) {
+          __paletteState.draggingIndex = idx;
+          e.preventDefault();
+        } else {
+          __paletteState.draggingIndex = -1;
+          __paletteState.isOrbiting = true;
+        }
+      };
+      cv.addEventListener('mousedown', window.__paletteMouseDown);
+
+      window.__paletteMouseMove = function(e){
+        if (!paletteOpenForId) return;
+        var room = findObjectById(paletteOpenForId); if (!room) return;
+        var rect = cv.getBoundingClientRect();
+        var mx = e.clientX - rect.left; var my = e.clientY - rect.top;
+        var lm = __paletteState.lastMouse; if (!lm) { __paletteState.lastMouse = {x:mx,y:my}; return; }
+        var du = mx - lm.x; var dv = my - lm.y; __paletteState.lastMouse = {x:mx,y:my};
+        if (__paletteState.draggingIndex >= 0) {
+          // Move item on ground using inverse mapping
+          var k = Math.sin(__paletteState.pitch) * 0.5; var yaw = __paletteState.yaw;
+          var scaleInfo = getPaletteScaleInfo(room, cv);
+          var s = scaleInfo.scale;
+          var inv = 1 / Math.max(1e-4, s * Math.max(1e-4, k));
+          var cos = Math.cos(yaw), sin = Math.sin(yaw);
+          var dxw = inv * (cos * k * du - sin * dv); // simplified from derived inverse
+          var dzw = inv * (sin * k * du + cos * dv);
+          var it = __paletteState.items[__paletteState.draggingIndex];
+          it.x += dxw; it.z += dzw;
+          // Clamp inside room footprint
+          var maxX = room.width/2 - it.width/2; var maxZ = room.depth/2 - it.depth/2;
+          it.x = Math.max(-maxX, Math.min(maxX, it.x));
+          it.z = Math.max(-maxZ, Math.min(maxZ, it.z));
+          renderRoomPreview(room);
+        } else if (__paletteState.isOrbiting) {
+          __paletteState.yaw += du * 0.01;
+          __paletteState.pitch = Math.max(-1.0, Math.min(1.0, __paletteState.pitch + dv * 0.01));
+          renderRoomPreview(room);
+        }
+      };
+      window.addEventListener('mousemove', window.__paletteMouseMove);
+
+      window.__paletteMouseUp = function(){ __paletteState.draggingIndex = -1; __paletteState.isOrbiting = false; };
+      window.addEventListener('mouseup', window.__paletteMouseUp);
+
+      window.__paletteWheel = function(e){ e.preventDefault(); };
+      cv.addEventListener('wheel', window.__paletteWheel, { passive: false });
+    }
+  } catch(e){}
+
+  // Wire actions (commit / clear)
+  try {
+    var commitBtn = document.getElementById('palette-commit');
+    if (commitBtn) commitBtn.onclick = function(){ commitPaletteItems(); };
+    var clearBtn = document.getElementById('palette-clear');
+    if (clearBtn) clearBtn.onclick = function(){ clearPalettePreview(); var r = findObjectById(paletteOpenForId); if (r) renderRoomPreview(r); };
   } catch(e){}
 }
 
@@ -4050,6 +4134,15 @@ function hideRoomPalette() {
   paletteOpenForId = null;
   var dd = document.getElementById('roof-type-dropdown'); if (dd) dd.style.display = 'block';
   try { if (window.__paletteResizeHandler) { window.removeEventListener('resize', window.__paletteResizeHandler); window.__paletteResizeHandler = null; } } catch(e){}
+  try {
+    var cv = document.getElementById('room-preview-canvas');
+    if (cv) {
+      if (window.__paletteMouseDown) cv.removeEventListener('mousedown', window.__paletteMouseDown);
+      if (window.__paletteWheel) cv.removeEventListener('wheel', window.__paletteWheel);
+    }
+    if (window.__paletteMouseMove) window.removeEventListener('mousemove', window.__paletteMouseMove);
+    if (window.__paletteMouseUp) window.removeEventListener('mouseup', window.__paletteMouseUp);
+  } catch(e){}
 }
 
 function renderRoomPreview(room) {
@@ -4073,12 +4166,20 @@ function renderRoomPreview(room) {
   for (var gx = padG; gx <= cv.width - padG; gx += step) { cx.beginPath(); cx.moveTo(gx, padG); cx.lineTo(gx, cv.height - padG); cx.stroke(); }
   for (var gy = padG; gy <= cv.height - padG; gy += step) { cx.beginPath(); cx.moveTo(padG, gy); cx.lineTo(cv.width - padG, gy); cx.stroke(); }
   cx.restore();
-  // 3D-ish room wireframe box that FITS the available space and draws a grey floor
+  // 3D-ish room wireframe box that fits the available space and draws a grey floor
   var pad = 22; var availW = rect.width - pad*2; var availH = rect.height - pad*2;
   var rw = room.width, rd = room.depth, ry = room.height;
-  var angle = Math.PI/6; var cos = Math.cos(angle), sin = Math.sin(angle);
-  // Compute projected points at unit scale to derive a fitting scale
-  function projUV(x,y,z){ return { u:(x - z)*cos, v:(-y + (x + z)*sin*0.5) }; }
+  var yaw = __paletteState.yaw || 0.6; var pitch = __paletteState.pitch || 0.5;
+  var cy = Math.cos(yaw), sy = Math.sin(yaw);
+  var cp = Math.cos(pitch), sp = Math.sin(pitch);
+  // Compute projected points at unit scale to derive a fitting scale (orthographic-ish)
+  function projUV(x,y,z){
+    var rx = cy * x + sy * z;
+    var rz = -sy * x + cy * z;
+    var u = rx;
+    var v = -y * cp + rz * sp * 0.5;
+    return { u: u, v: v };
+  }
   var hw = rw/2, hd = rd/2, ht = ry;
   var ptsUnit = [
     projUV(-hw, 0, -hd), projUV(hw, 0, -hd), projUV(hw, 0, hd), projUV(-hw, 0, hd),
@@ -4093,6 +4194,8 @@ function renderRoomPreview(room) {
     scale = Math.min(availW / bboxW, availH / bboxH) * 0.95;
   }
   function toScreen(p){ return { x: rect.width/2 + (p.u - centerU)*scale, y: rect.height/2 + (p.v - centerV)*scale }; }
+  // Save scale info for interaction
+  __paletteState.__scaleInfo = { centerU: centerU, centerV: centerV, scale: scale, yaw: yaw, pitch: pitch, cy: cy, sy: sy, cp: cp, sp: sp, rect: rect };
   var pts = ptsUnit.map(toScreen);
   // Floor (bottom face) fill as grey
   cx.fillStyle = '#e5e7eb';
@@ -4104,6 +4207,98 @@ function renderRoomPreview(room) {
   // Dimensions label
   cx.fillStyle = '#2d6cdf'; cx.font = '12px system-ui'; cx.textAlign = 'left'; cx.textBaseline = 'top';
   cx.fillText(room.width.toFixed(1)+' x '+room.depth.toFixed(1)+' x '+room.height.toFixed(1)+' m', 10, 10);
+
+  // Draw preview items
+  for (var ii=0; ii<__paletteState.items.length; ii++) {
+    var it = __paletteState.items[ii];
+    var ihw = it.width/2, ihd = it.depth/2, iht = Math.max(0.3, it.height);
+    var ipts = [
+      projUV(it.x - ihw, 0,  it.z - ihd),
+      projUV(it.x + ihw, 0,  it.z - ihd),
+      projUV(it.x + ihw, 0,  it.z + ihd),
+      projUV(it.x - ihw, 0,  it.z + ihd),
+      projUV(it.x - ihw, iht, it.z - ihd),
+      projUV(it.x + ihw, iht, it.z - ihd),
+      projUV(it.x + ihw, iht, it.z + ihd),
+      projUV(it.x - ihw, iht, it.z + ihd)
+    ].map(toScreen);
+    // Base fill (light)
+    cx.fillStyle = 'rgba(0,0,0,0.05)';
+    cx.beginPath(); cx.moveTo(ipts[0].x,ipts[0].y); cx.lineTo(ipts[1].x,ipts[1].y); cx.lineTo(ipts[2].x,ipts[2].y); cx.lineTo(ipts[3].x,ipts[3].y); cx.closePath(); cx.fill();
+    // Edges
+    cx.strokeStyle = '#7a8aa0'; cx.lineWidth = 1.0;
+    cx.beginPath(); for (var j=0;j<edges.length;j++){ var eg=edges[j]; cx.moveTo(ipts[eg[0]].x,ipts[eg[0]].y); cx.lineTo(ipts[eg[1]].x,ipts[eg[1]].y);} cx.stroke();
+  }
+}
+
+function getPaletteScaleInfo(room, cv){
+  if (!__paletteState.__scaleInfo) { renderRoomPreview(room); }
+  return __paletteState.__scaleInfo;
+}
+
+function addPalettePreviewItem(def){
+  var room = findObjectById(paletteOpenForId); if (!room) return;
+  // Place near center with slight offset to avoid overlap
+  var offset = (__paletteState.items.length % 5) * 0.3;
+  var it = { width: def.width, depth: def.depth, height: def.height, x: 0 + offset, z: 0 + offset, name: def.name, kind: def.kind };
+  // Clamp within room immediately
+  var maxX = room.width/2 - it.width/2; var maxZ = room.depth/2 - it.depth/2;
+  it.x = Math.max(-maxX, Math.min(maxX, it.x));
+  it.z = Math.max(-maxZ, Math.min(maxZ, it.z));
+  __paletteState.items.push(it);
+  renderRoomPreview(room);
+}
+
+function commitPaletteItems(){
+  if (!paletteOpenForId || __paletteState.items.length === 0) return;
+  var room = findObjectById(paletteOpenForId); if (!room) return;
+  for (var i=0;i<__paletteState.items.length;i++){
+    var it = __paletteState.items[i];
+    var furn = { id: 'furn_'+Date.now()+Math.random().toString(36).slice(2), x: room.x + it.x, z: room.z + it.z, width: it.width, depth: it.depth, height: it.height, level: room.level, name: it.name, type: 'furniture', rotation: 0, kind: it.kind };
+    furnitureItems.push(furn);
+  }
+  saveProjectSilently();
+  updateStatus('Added '+__paletteState.items.length+' item(s) to '+(room.name||'Room'));
+  __paletteState.items = [];
+  hideRoomPalette();
+  renderLoop();
+}
+
+function clearPalettePreview(){ __paletteState.items = []; }
+
+function hitTestPaletteItem(mx, my, room){
+  if (!__paletteState || __paletteState.items.length === 0) return -1;
+  // Test from top-most
+  for (var i=__paletteState.items.length-1;i>=0;i--){
+    var it = __paletteState.items[i];
+    var pts = projectItemBase(it, room);
+    if (pointInPolygon(mx, my, pts)) return i;
+  }
+  return -1;
+}
+
+function projectItemBase(it, room){
+  var info = __paletteState.__scaleInfo; if (!info) { renderRoomPreview(room); info = __paletteState.__scaleInfo; }
+  var cy = info.cy, sy = info.sy, cp = info.cp, sp = info.sp, scale = info.scale, centerU = info.centerU, centerV = info.centerV, rect = info.rect;
+  function projUV(x,y,z){ var rx = cy*x + sy*z; var rz = -sy*x + cy*z; return { u: rx, v: -y*cp + rz*sp*0.5 }; }
+  function toScreen(p){ return { x: rect.width/2 + (p.u - centerU)*scale, y: rect.height/2 + (p.v - centerV)*scale }; }
+  var ihw = it.width/2, ihd = it.depth/2;
+  return [
+    projUV(it.x - ihw, 0, it.z - ihd),
+    projUV(it.x + ihw, 0, it.z - ihd),
+    projUV(it.x + ihw, 0, it.z + ihd),
+    projUV(it.x - ihw, 0, it.z + ihd)
+  ].map(toScreen);
+}
+
+function pointInPolygon(x, y, pts){
+  var inside = false;
+  for (var i=0, j=pts.length-1; i<pts.length; j=i++){
+    var xi = pts[i].x, yi = pts[i].y; var xj = pts[j].x, yj = pts[j].y;
+    var intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / Math.max(1e-6, (yj - yi)) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 function addPaletteItem(def) {

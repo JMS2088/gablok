@@ -205,4 +205,5 @@
 
   /* Fixed 500x500 frame for the room preview */
   #room-palette-left h3 { align-self: center; text-align: center; margin-bottom: 6px; }
-  #room-preview-canvas { flex: 1 1 auto; width: 100%; border: 1px solid #e6e8eb; border-radius: 8px; background: #ffffff; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03); }
+  #room-preview-canvas { flex: 1 1 auto; width: 100%; border: 1px solid #e6e8eb; border-radius: 8px; background: #ffffff; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03); cursor: grab; }
+  #room-preview-canvas:active { cursor: grabbing; }
