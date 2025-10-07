@@ -3147,6 +3147,7 @@ function drawFurniture(f) {
   try {
     var selected = selectedRoomId === f.id;
     var levelY = (f.level || 0) * 3.5;
+    var elev = Math.max(0, f.elevation || 0);
     var hw = (f.width || 1) / 2;
     var hd = (f.depth || 1) / 2;
     var h = f.height || 0.7;
@@ -3159,14 +3160,14 @@ function drawFurniture(f) {
       rot(f.x - hw, f.z - hd), rot(f.x + hw, f.z - hd), rot(f.x + hw, f.z + hd), rot(f.x - hw, f.z + hd)
     ];
     var pts = [
-      {x: corners[0].x, y: levelY, z: corners[0].z},
-      {x: corners[1].x, y: levelY, z: corners[1].z},
-      {x: corners[2].x, y: levelY, z: corners[2].z},
-      {x: corners[3].x, y: levelY, z: corners[3].z},
-      {x: corners[0].x, y: levelY + h, z: corners[0].z},
-      {x: corners[1].x, y: levelY + h, z: corners[1].z},
-      {x: corners[2].x, y: levelY + h, z: corners[2].z},
-      {x: corners[3].x, y: levelY + h, z: corners[3].z}
+      {x: corners[0].x, y: levelY + elev, z: corners[0].z},
+      {x: corners[1].x, y: levelY + elev, z: corners[1].z},
+      {x: corners[2].x, y: levelY + elev, z: corners[2].z},
+      {x: corners[3].x, y: levelY + elev, z: corners[3].z},
+      {x: corners[0].x, y: levelY + elev + h, z: corners[0].z},
+      {x: corners[1].x, y: levelY + elev + h, z: corners[1].z},
+      {x: corners[2].x, y: levelY + elev + h, z: corners[2].z},
+      {x: corners[3].x, y: levelY + elev + h, z: corners[3].z}
     ];
     var proj = [];
     for (var i = 0; i < pts.length; i++) {
@@ -3185,6 +3186,141 @@ function drawFurniture(f) {
     ctx.beginPath();
     ctx.moveTo(proj[4].x, proj[4].y); ctx.lineTo(proj[5].x, proj[5].y); ctx.lineTo(proj[6].x, proj[6].y); ctx.lineTo(proj[7].x, proj[7].y);
     ctx.closePath(); ctx.fill();
+
+    // Kitchen details: sink as cuboid with taps, oven front aligned with hobs, and four hot plates (non-overlapping sink)
+    if (f.kind === 'kitchen') {
+      var topY = levelY + elev + h;
+      // Decide double sink for large kitchens
+      var isLargeKitch = (f.name && (/large|03/i).test(f.name)) || (f.depth >= 1.6 || f.width >= 3.4);
+      // Sizes (meters)
+    var sinkW = isLargeKitch ? 0.9 : 0.55; // double or single basin width (footprint)
+    var sinkD = 0.45;
+    var sinkGap = isLargeKitch ? 0.04 : 0.0; // divider gap for double sink
+    var sinkH = 0.12; // tap stem height
+    var sinkDepthDown = 0.18; // how deep the sink recess goes below the worktop
+      var plateR = 0.12;
+      var plateGap = 0.28;
+      // Place sinks towards left half, mid-depth
+      var sinkCx = f.x - hw * 0.35;
+      var sinkCz = f.z + 0; // center depth
+      // Draw sink as a downward recess: inner walls + bottom
+      function drawSinkCube(cx0, cz0, w, d, hSink) {
+        var bx0 = cx0 - w/2, bx1 = cx0 + w/2;
+        var bz0 = cz0 - d/2, bz1 = cz0 + d/2;
+        var b00 = rot(bx0, bz0), b10 = rot(bx1, bz0), b11 = rot(bx1, bz1), b01 = rot(bx0, bz1);
+        var yTop = topY, yBot = topY - sinkDepthDown;
+        var pTop = [ project3D(b00.x, yTop, b00.z), project3D(b10.x, yTop, b10.z), project3D(b11.x, yTop, b11.z), project3D(b01.x, yTop, b01.z) ];
+        var pBot = [ project3D(b00.x, yBot, b00.z), project3D(b10.x, yBot, b10.z), project3D(b11.x, yBot, b11.z), project3D(b01.x, yBot, b01.z) ];
+        if (pTop.every(Boolean) && pBot.every(Boolean)) {
+          // Inner side walls
+          var walls = [[0,1],[1,2],[2,3],[3,0]];
+          ctx.fillStyle = 'rgba(200,210,220,0.45)';
+          ctx.strokeStyle = '#5b6773';
+          ctx.lineWidth = 1;
+          for (var wi=0; wi<walls.length; wi++){
+            var a = walls[wi][0], c = walls[wi][1];
+            ctx.beginPath();
+            ctx.moveTo(pTop[a].x, pTop[a].y);
+            ctx.lineTo(pTop[c].x, pTop[c].y);
+            ctx.lineTo(pBot[c].x, pBot[c].y);
+            ctx.lineTo(pBot[a].x, pBot[a].y);
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+          }
+          // Bottom
+          ctx.fillStyle = 'rgba(35,40,48,0.55)';
+          ctx.strokeStyle = '#4b5563';
+          ctx.beginPath(); ctx.moveTo(pBot[0].x, pBot[0].y); ctx.lineTo(pBot[1].x, pBot[1].y); ctx.lineTo(pBot[2].x, pBot[2].y); ctx.lineTo(pBot[3].x, pBot[3].y); ctx.closePath(); ctx.fill(); ctx.stroke();
+          // Drain at bottom center
+          (function(){
+            var steps = 18; var dr = Math.min(w,d) * 0.07; var cxw = (bx0+bx1)/2, czw = (bz0+bz1)/2;
+            ctx.strokeStyle = '#9aa3ad'; ctx.lineWidth = 1.2; ctx.beginPath();
+            for (var i=0;i<=steps;i++){ var a=(i/steps)*Math.PI*2; var pxz=rot(cxw+Math.cos(a)*dr, czw+Math.sin(a)*dr); var p=project3D(pxz.x, yBot+0.005, pxz.z); if(!p) continue; if(i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y);} ctx.stroke();
+          })();
+          // Top rim outline
+          ctx.strokeStyle = '#5b6773'; ctx.beginPath(); ctx.moveTo(pTop[0].x,pTop[0].y); ctx.lineTo(pTop[1].x,pTop[1].y); ctx.lineTo(pTop[2].x,pTop[2].y); ctx.lineTo(pTop[3].x,pTop[3].y); ctx.closePath(); ctx.stroke();
+        }
+      }
+      function drawCircleTop(cxw, czw, rw, strokeCol) {
+        var steps = 18;
+        ctx.strokeStyle = strokeCol || '#333';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        for (var i=0;i<=steps;i++) {
+          var a = (i/steps) * Math.PI * 2;
+          var pxz = rot(cxw + Math.cos(a)*rw, czw + Math.sin(a)*rw);
+          var p = project3D(pxz.x, topY, pxz.z);
+          if (!p) continue;
+          if (i===0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+      }
+      // Draw sink(s) as downward recesses
+      if (isLargeKitch) {
+        var w2 = (sinkW - sinkGap) / 2;
+        drawSinkCube(sinkCx - (w2+sinkGap/2), sinkCz, w2, sinkD, sinkH);
+        drawSinkCube(sinkCx + (w2+sinkGap/2), sinkCz, w2, sinkD, sinkH);
+      } else {
+        drawSinkCube(sinkCx, sinkCz, sinkW, sinkD, sinkH);
+      }
+      // Draw taps (two taps on the worktop just behind sink, towards -Z)
+      function drawTap(tx, tz) {
+        var stemH = sinkH, spoutL = 0.07;
+        var p0w = rot(tx, tz - sinkD/2 - 0.03);
+        var p1w = p0w;
+        var base = project3D(p0w.x, topY, p0w.z);
+        var top = project3D(p1w.x, topY + stemH, p1w.z);
+        if (base && top) {
+          ctx.strokeStyle = '#6b7280'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(top.x, top.y); ctx.stroke();
+          // spout towards +Z
+          var sp = rot(tx, tz - sinkD/2 - 0.03 + spoutL);
+          var spP = project3D(sp.x, topY + stemH, sp.z);
+          if (spP) { ctx.beginPath(); ctx.moveTo(top.x, top.y); ctx.lineTo(spP.x, spP.y); ctx.stroke(); }
+        }
+      }
+      if (isLargeKitch) {
+        var w2c = (sinkW - sinkGap) / 2;
+        drawTap(sinkCx - (w2c+sinkGap/2) - w2c*0.2, sinkCz);
+        drawTap(sinkCx + (w2c+sinkGap/2) + w2c*0.2, sinkCz);
+      } else {
+        drawTap(sinkCx - sinkW*0.15, sinkCz);
+        drawTap(sinkCx + sinkW*0.15, sinkCz);
+      }
+      // Compute hob area ensuring no overlap with sink; place on the opposite half
+      var platesOnRight = sinkCx <= f.x; // if sink on left, place plates on right
+      var plateBaseX = f.x + (platesOnRight ? hw * 0.30 : -hw * 0.30);
+      var plateBaseZ = f.z - plateGap/2;
+      // Ensure separation in X from sink footprint
+      var sinkMinX = sinkCx - (isLargeKitch ? (sinkW/2) : (sinkW/2));
+      var sinkMaxX = sinkCx + (isLargeKitch ? (sinkW/2) : (sinkW/2));
+      var plateMinX = plateBaseX - plateR;
+      var plateMaxX = plateBaseX + plateGap + plateR;
+      if (!(plateMaxX < sinkMinX - 0.05 || plateMinX > sinkMaxX + 0.05)) {
+        // push further away within the chosen half
+        plateBaseX = f.x + (platesOnRight ? hw * 0.40 : -hw * 0.40);
+      }
+      drawCircleTop(plateBaseX, plateBaseZ, plateR, '#111');
+      drawCircleTop(plateBaseX + plateGap, plateBaseZ, plateR, '#111');
+      drawCircleTop(plateBaseX, plateBaseZ + plateGap, plateR, '#111');
+      drawCircleTop(plateBaseX + plateGap, plateBaseZ + plateGap, plateR, '#111');
+      // Oven front on +Z face
+      var ovenW = Math.min(0.7, f.width*0.5), ovenH = 0.45;
+      var oy0 = levelY + 0.15, oy1 = Math.min(levelY + h - 0.1, oy0 + ovenH);
+      // Align oven horizontally with hob center
+      var hobCenterX = plateBaseX + plateGap/2;
+      var ox0 = hobCenterX - ovenW/2, ox1 = hobCenterX + ovenW/2, oz = f.z + hd;
+      var v0 = rot(ox0, oz), v1 = rot(ox1, oz);
+      var p0 = project3D(v0.x, oy0, v0.z), p1 = project3D(v1.x, oy0, v1.z), p2 = project3D(v1.x, oy1, v1.z), p3 = project3D(v0.x, oy1, v0.z);
+      if (p0 && p1 && p2 && p3) {
+        ctx.fillStyle = 'rgba(20,20,25,0.35)';
+        ctx.strokeStyle = '#444';
+        ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+        // handle
+        var hy = (p2.y + p3.y)*0.5 - 4;
+        ctx.strokeStyle = '#c0c0c0'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(p0.x+6, hy); ctx.lineTo(p1.x-6, hy); ctx.stroke();
+      }
+    }
   } catch(e){ console.warn('drawFurniture failed', e); }
 }
 
@@ -3610,7 +3746,7 @@ function renderLoop() {
         (fCenterY) * (fCenterY) +
         (furn.z - camera.targetZ) * (furn.z - camera.targetZ)
       );
-      allObjects.push({ object: furn, type: 'furniture', distance: fDist, maxHeight: (furn.level || 0) * 3.5 + (furn.height || 0.7) });
+  allObjects.push({ object: furn, type: 'furniture', distance: fDist, maxHeight: (furn.level || 0) * 3.5 + (furn.elevation || 0) + (furn.height || 0.7) });
     }
     
     console.log('All objects before sorting:', allObjects.map(obj => ({ type: obj.type, id: obj.object.id })));
@@ -3704,6 +3840,12 @@ function restoreProject(json) {
     roofComponents = Array.isArray(data.roofs) ? data.roofs : [];
     balconyComponents = Array.isArray(data.balconies) ? data.balconies : [];
   furnitureItems = Array.isArray(data.furniture) ? data.furniture : [];
+  // Normalize: all kitchens must have 0.7m depth
+  for (var i=0;i<furnitureItems.length;i++) {
+    if (furnitureItems[i] && furnitureItems[i].kind === 'kitchen') {
+      furnitureItems[i].depth = 0.7;
+    }
+  }
     currentFloor = typeof data.currentFloor === 'number' ? data.currentFloor : currentFloor;
     selectedRoomId = null;
     renderLoop();
@@ -3965,8 +4107,8 @@ var PALETTE_ITEMS = [
   { name: 'Double Sink',          width: 1.6, depth: 0.5, height: 0.9, kind: 'sink',      desc: 'Double vanity sink.' },
   { name: 'Bedside Table',        width: 0.5, depth: 0.4, height: 0.5, kind: 'table',     desc: 'Compact bedside table.' },
   { name: 'Kitchen Design 01',    width: 3.0, depth: 0.7, height: 0.9, kind: 'kitchen',   desc: 'Straight-line kitchen run.' },
-  { name: 'Kitchen Design 02',    width: 2.4, depth: 1.6, height: 0.9, kind: 'kitchen',   desc: 'Corner kitchen layout.' },
-  { name: 'Kitchen Design 03',    width: 3.6, depth: 1.8, height: 0.9, kind: 'kitchen',   desc: 'Large corner kitchen.' },
+  { name: 'Kitchen Design 02',    width: 2.4, depth: 0.7, height: 0.9, kind: 'kitchen',   desc: 'Corner kitchen layout.' },
+  { name: 'Kitchen Design 03',    width: 3.6, depth: 0.7, height: 0.9, kind: 'kitchen',   desc: 'Large corner kitchen.' },
   { name: 'Kitchen Design 04',    width: 2.8, depth: 0.7, height: 0.9, kind: 'kitchen',   desc: 'Compact kitchen run.' },
   { name: 'Kitchen Design 05',    width: 3.2, depth: 0.7, height: 0.9, kind: 'kitchen',   desc: 'Extended kitchen run.' },
   { name: 'Single Fridge',        width: 0.7, depth: 0.7, height: 1.8, kind: 'fridge',    desc: 'Single-door fridge.' },
@@ -4016,7 +4158,7 @@ function setupPalette() {
   var infoDiv = document.createElement('div');
   var nameDiv = document.createElement('div'); nameDiv.className = 'palette-name'; nameDiv.textContent = it.name;
   var dimsDiv = document.createElement('div'); dimsDiv.className = 'palette-dims';
-  dimsDiv.textContent = 'Width: ' + it.width.toFixed(1) + 'm · Length: ' + it.depth.toFixed(1) + 'm · Height: ' + it.height.toFixed(1) + 'm';
+  dimsDiv.textContent = 'Width: ' + it.width.toFixed(1) + 'm · Depth: ' + it.depth.toFixed(1) + 'm · Height: ' + it.height.toFixed(1) + 'm';
   var descDiv = document.createElement('div'); descDiv.className = 'palette-desc'; descDiv.textContent = it.desc || '';
     infoDiv.appendChild(nameDiv);
     infoDiv.appendChild(dimsDiv);
@@ -4222,15 +4364,16 @@ function renderRoomPreview(room) {
   for (var ii=0; ii<__paletteState.items.length; ii++) {
     var it = __paletteState.items[ii];
     var ihw = it.width/2, ihd = it.depth/2, iht = Math.max(0.3, it.height);
+    var elev = Math.max(0, it.elevation || 0);
     var ipts = [
-      projUV(it.x - ihw, 0,  it.z - ihd),
-      projUV(it.x + ihw, 0,  it.z - ihd),
-      projUV(it.x + ihw, 0,  it.z + ihd),
-      projUV(it.x - ihw, 0,  it.z + ihd),
-      projUV(it.x - ihw, iht, it.z - ihd),
-      projUV(it.x + ihw, iht, it.z - ihd),
-      projUV(it.x + ihw, iht, it.z + ihd),
-      projUV(it.x - ihw, iht, it.z + ihd)
+      projUV(it.x - ihw, elev,            it.z - ihd),
+      projUV(it.x + ihw, elev,            it.z - ihd),
+      projUV(it.x + ihw, elev,            it.z + ihd),
+      projUV(it.x - ihw, elev,            it.z + ihd),
+      projUV(it.x - ihw, elev + iht,      it.z - ihd),
+      projUV(it.x + ihw, elev + iht,      it.z - ihd),
+      projUV(it.x + ihw, elev + iht,      it.z + ihd),
+      projUV(it.x - ihw, elev + iht,      it.z + ihd)
     ].map(toScreen);
     // Base fill (light)
     cx.fillStyle = 'rgba(0,0,0,0.05)';
@@ -4238,7 +4381,171 @@ function renderRoomPreview(room) {
     // Edges
     cx.strokeStyle = '#7a8aa0'; cx.lineWidth = 1.0;
     cx.beginPath(); for (var j=0;j<edges.length;j++){ var eg=edges[j]; cx.moveTo(ipts[eg[0]].x,ipts[eg[0]].y); cx.lineTo(ipts[eg[1]].x,ipts[eg[1]].y);} cx.stroke();
+
+    // Kitchen details in preview (cube sink with taps, hob alignment, oven alignment)
+    if (it.kind === 'kitchen') {
+      var topY = elev + iht;
+      var isLargeKitchP = (it.name && (/large|03/i).test(it.name)) || (it.depth >= 1.6 || it.width >= 3.4);
+    var sinkW = isLargeKitchP ? 0.9 : 0.55;
+    var sinkD = 0.45;
+    var sinkH = 0.12; // tap stem height
+    var sinkDepthDown = 0.18; // recess depth below top
+      var sinkGap = isLargeKitchP ? 0.04 : 0.0;
+      var plateR = 0.12;
+      var plateGap = 0.28;
+      function projTop(x,z){ return toScreen(projUV(x, topY, z)); }
+      function drawRectTop(x0,z0,x1,z1, fill, stroke){
+        var p0 = projTop(x0,z0), p1 = projTop(x1,z0), p2 = projTop(x1,z1), p3 = projTop(x0,z1);
+        cx.fillStyle = fill; cx.strokeStyle = stroke; cx.lineWidth = 1;
+        cx.beginPath(); cx.moveTo(p0.x,p0.y); cx.lineTo(p1.x,p1.y); cx.lineTo(p2.x,p2.y); cx.lineTo(p3.x,p3.y); cx.closePath(); cx.fill(); cx.stroke();
+      }
+      function drawRectSide(x0,z0,x1,z1,h, fill, stroke){
+        var p0 = toScreen(projUV(x0, topY, z0)), p1 = toScreen(projUV(x1, topY, z1)), p2 = toScreen(projUV(x1, topY + h, z1)), p3 = toScreen(projUV(x0, topY + h, z0));
+        cx.fillStyle = fill; cx.strokeStyle = stroke; cx.lineWidth = 1; cx.beginPath(); cx.moveTo(p0.x,p0.y); cx.lineTo(p1.x,p1.y); cx.lineTo(p2.x,p2.y); cx.lineTo(p3.x,p3.y); cx.closePath(); cx.fill(); cx.stroke();
+      }
+      function drawCircleTopP(cxw,czw,rw,col){
+        var steps=18; cx.strokeStyle = col || '#333'; cx.lineWidth = 1.2; cx.beginPath();
+        for (var k=0;k<=steps;k++){ var a=(k/steps)*Math.PI*2; var p=projTop(cxw+Math.cos(a)*rw, czw+Math.sin(a)*rw); if(k===0) cx.moveTo(p.x,p.y); else cx.lineTo(p.x,p.y);} cx.stroke();
+      }
+      // sink(s)
+      var sinkCx = it.x - ihw * 0.35;
+      var sinkCz = it.z + 0;
+      function drawRecessTopAndWalls(x0,x1,zc){
+        // top rim
+        drawRectTop(x0, zc - sinkD/2, x1, zc + sinkD/2, 'rgba(200,210,220,0.55)', '#5b6773');
+        // inner walls and bottom
+        function polyAt(y, X0,X1,Z0,Z1){ return [ projTop(X0,Z0), projTop(X1,Z0), projTop(X1,Z1), projTop(X0,Z1) ]; }
+        var pTop = polyAt(topY, x0,x1, sinkCz - sinkD/2, sinkCz + sinkD/2);
+        var pBot = [ toScreen(projUV(x0, topY - sinkDepthDown, sinkCz - sinkD/2)), toScreen(projUV(x1, topY - sinkDepthDown, sinkCz - sinkD/2)), toScreen(projUV(x1, topY - sinkDepthDown, sinkCz + sinkD/2)), toScreen(projUV(x0, topY - sinkDepthDown, sinkCz + sinkD/2)) ];
+        cx.fillStyle = 'rgba(200,210,220,0.45)'; cx.strokeStyle = '#5b6773'; cx.lineWidth = 1;
+        var idx=[[0,1],[1,2],[2,3],[3,0]];
+        for (var i=0;i<4;i++){ var a=idx[i][0], b=idx[i][1]; cx.beginPath(); cx.moveTo(pTop[a].x,pTop[a].y); cx.lineTo(pTop[b].x,pTop[b].y); cx.lineTo(pBot[b].x,pBot[b].y); cx.lineTo(pBot[a].x,pBot[a].y); cx.closePath(); cx.fill(); cx.stroke(); }
+        // bottom
+        cx.fillStyle = 'rgba(35,40,48,0.55)'; cx.strokeStyle='#4b5563'; cx.beginPath(); cx.moveTo(pBot[0].x,pBot[0].y); cx.lineTo(pBot[1].x,pBot[1].y); cx.lineTo(pBot[2].x,pBot[2].y); cx.lineTo(pBot[3].x,pBot[3].y); cx.closePath(); cx.fill(); cx.stroke();
+        // drain at bottom center
+        var drainR = Math.min(sinkW, sinkD) * 0.07; var dcx=(x0+x1)/2; var dcz=zc; drawCircleTopP(dcx, dcz, drainR, '#9aa3ad');
+      }
+      if (isLargeKitchP) {
+        var w2 = (sinkW - sinkGap)/2; var a0x0 = sinkCx - (w2+sinkGap/2) - w2/2, a0x1 = sinkCx - (w2+sinkGap/2) + w2/2; var a1x0 = sinkCx + (w2+sinkGap/2) - w2/2, a1x1 = sinkCx + (w2+sinkGap/2) + w2/2; drawRecessTopAndWalls(a0x0,a0x1,sinkCz); drawRecessTopAndWalls(a1x0,a1x1,sinkCz);
+      } else {
+        var sx0 = sinkCx - sinkW/2, sx1 = sinkCx + sinkW/2; drawRecessTopAndWalls(sx0,sx1,sinkCz);
+      }
+      // taps
+      function drawTapP(tx, tz) {
+        var stemH = 0.10, spoutL = 0.07;
+        var base = toScreen(projUV(tx, topY, tz - sinkD/2 - 0.03));
+        var topP = toScreen(projUV(tx, topY + stemH, tz - sinkD/2 - 0.03));
+        cx.strokeStyle = '#6b7280'; cx.lineWidth = 2; cx.beginPath(); cx.moveTo(base.x, base.y); cx.lineTo(topP.x, topP.y); cx.stroke();
+        var sp = toScreen(projUV(tx, topY + stemH, tz - sinkD/2 - 0.03 + spoutL));
+        cx.beginPath(); cx.moveTo(topP.x, topP.y); cx.lineTo(sp.x, sp.y); cx.stroke();
+      }
+      if (isLargeKitchP) {
+        var w2t = (sinkW - sinkGap)/2;
+        drawTapP(sinkCx - (w2t+sinkGap/2) - w2t*0.2, sinkCz);
+        drawTapP(sinkCx + (w2t+sinkGap/2) + w2t*0.2, sinkCz);
+      } else {
+        drawTapP(sinkCx - sinkW*0.15, sinkCz);
+        drawTapP(sinkCx + sinkW*0.15, sinkCz);
+      }
+      // hot plates
+      var platesOnRight = sinkCx <= it.x;
+      var plateBaseX = it.x + (platesOnRight ? ihw * 0.30 : -ihw * 0.30);
+      var plateBaseZ = it.z - plateGap/2;
+      var sinkMinX = sinkCx - (isLargeKitchP ? (sinkW/2) : (sinkW/2));
+      var sinkMaxX = sinkCx + (isLargeKitchP ? (sinkW/2) : (sinkW/2));
+      var plateMinX = plateBaseX - plateR;
+      var plateMaxX = plateBaseX + plateGap + plateR;
+      if (!(plateMaxX < sinkMinX - 0.05 || plateMinX > sinkMaxX + 0.05)) {
+        plateBaseX = it.x + (platesOnRight ? ihw * 0.40 : -ihw * 0.40);
+      }
+      drawCircleTopP(plateBaseX, plateBaseZ, plateR, '#111');
+      drawCircleTopP(plateBaseX + plateGap, plateBaseZ, plateR, '#111');
+      drawCircleTopP(plateBaseX, plateBaseZ + plateGap, plateR, '#111');
+      drawCircleTopP(plateBaseX + plateGap, plateBaseZ + plateGap, plateR, '#111');
+      // oven front as simple rectangle on +Z face projection (approximate)
+      var ovenW = Math.min(0.7, it.width*0.5), ovenH = 0.45;
+      var hobCenterX = plateBaseX + plateGap/2;
+      var ox0 = hobCenterX - ovenW/2, ox1 = hobCenterX + ovenW/2, oz = it.z + ihd;
+      var oy0 = elev + 0.15, oy1 = Math.min(elev + iht - 0.1, oy0 + ovenH);
+      var p0 = toScreen(projUV(ox0, oy0, oz)), p1 = toScreen(projUV(ox1, oy0, oz)), p2 = toScreen(projUV(ox1, oy1, oz)), p3 = toScreen(projUV(ox0, oy1, oz));
+      cx.fillStyle = 'rgba(20,20,25,0.35)'; cx.strokeStyle='#444';
+      cx.beginPath(); cx.moveTo(p0.x,p0.y); cx.lineTo(p1.x,p1.y); cx.lineTo(p2.x,p2.y); cx.lineTo(p3.x,p3.y); cx.closePath(); cx.fill(); cx.stroke();
+      // handle
+      var hy = (p2.y + p3.y)*0.5 - 3; cx.strokeStyle = '#c0c0c0'; cx.lineWidth = 1.5; cx.beginPath(); cx.moveTo(p0.x+5, hy); cx.lineTo(p1.x-5, hy); cx.stroke();
+    }
   }
+
+  // Overlay: small compass indicating world directions (based on preview yaw)
+  try { drawPaletteCompass(cx, rect, yaw); } catch(e) {}
+}
+
+// Draw a small compass in the top-right corner of the popover preview
+function drawPaletteCompass(cx, rect, yaw) {
+  var size = 56; // compass box size in px
+  var padding = 10;
+  var x = rect.width - size - padding;
+  var y = padding;
+
+  cx.save();
+  cx.globalAlpha = 0.95;
+
+  // Rounded background
+  var r = 10;
+  cx.beginPath();
+  cx.moveTo(x + r, y);
+  cx.lineTo(x + size - r, y);
+  cx.quadraticCurveTo(x + size, y, x + size, y + r);
+  cx.lineTo(x + size, y + size - r);
+  cx.quadraticCurveTo(x + size, y + size, x + size - r, y + size);
+  cx.lineTo(x + r, y + size);
+  cx.quadraticCurveTo(x, y + size, x, y + size - r);
+  cx.lineTo(x, y + r);
+  cx.quadraticCurveTo(x, y, x + r, y);
+  cx.closePath();
+  cx.fillStyle = 'rgba(255,255,255,0.88)';
+  cx.strokeStyle = '#cfcfcf';
+  cx.lineWidth = 1;
+  cx.fill();
+  cx.stroke();
+
+  // Static crosshair (does not spin)
+  var cx0 = x + size/2;
+  var cy0 = y + size/2;
+  var rad = (size/2) - 9;
+  function pt(a, rr){ return { x: cx0 + Math.cos(a)*rr, y: cy0 + Math.sin(a)*rr }; }
+
+  cx.strokeStyle = '#6b7280';
+  cx.lineWidth = 1.5;
+  cx.beginPath();
+  // Vertical line (up/down)
+  cx.moveTo(cx0, cy0 - rad); cx.lineTo(cx0, cy0 + rad);
+  // Horizontal line (left/right)
+  cx.moveTo(cx0 - rad, cy0); cx.lineTo(cx0 + rad, cy0);
+  cx.stroke();
+
+  // Fixed labels N/E/S/W
+  cx.fillStyle = '#374151';
+  cx.font = 'bold 11px system-ui, sans-serif';
+  cx.textAlign = 'center';
+  cx.textBaseline = 'middle';
+  var lr = rad - 5;
+  var LN = pt(-Math.PI/2, lr);   // Up
+  var LE = pt(0, lr);            // Right
+  var LS = pt(Math.PI/2, lr);    // Down
+  var LW = pt(Math.PI, lr);      // Left
+  cx.fillText('N', LN.x, LN.y);
+  cx.fillText('E', LE.x, LE.y);
+  cx.fillText('S', LS.x, LS.y);
+  cx.fillText('W', LW.x, LW.y);
+
+  // North needle rotates to indicate world +Z relative to screen
+  var angleNeedle = -Math.PI/2 + yaw; // when yaw=0, points up
+  var needle = pt(angleNeedle, rad - 1);
+  cx.strokeStyle = '#ef4444';
+  cx.lineWidth = 2;
+  cx.beginPath(); cx.moveTo(cx0, cy0); cx.lineTo(needle.x, needle.y); cx.stroke();
+
+  cx.restore();
 }
 
 function getPaletteScaleInfo(room, cv){
@@ -4250,7 +4557,8 @@ function addPalettePreviewItem(def){
   var room = findObjectById(paletteOpenForId); if (!room) return;
   // Place near center with slight offset to avoid overlap
   var offset = (__paletteState.items.length % 5) * 0.3;
-  var it = { width: def.width, depth: def.depth, height: def.height, x: 0 + offset, z: 0 + offset, name: def.name, kind: def.kind, isExisting: false };
+  var depth = def.kind === 'kitchen' ? 0.7 : def.depth;
+  var it = { width: def.width, depth: depth, height: def.height, x: 0 + offset, z: 0 + offset, name: def.name, kind: def.kind, elevation: (def.kind==='tv'?0.8:0), isExisting: false };
   // Clamp within room immediately
   var maxX = room.width/2 - it.width/2; var maxZ = room.depth/2 - it.depth/2;
   it.x = Math.max(-maxX, Math.min(maxX, it.x));
@@ -4265,7 +4573,9 @@ function commitPaletteItems(){
   for (var i=0;i<__paletteState.items.length;i++){
     var it = __paletteState.items[i];
     if (it.isExisting) continue;
-    var furn = { id: 'furn_'+Date.now()+Math.random().toString(36).slice(2), x: room.x + it.x, z: room.z + it.z, width: it.width, depth: it.depth, height: it.height, level: room.level, name: it.name, type: 'furniture', rotation: 0, kind: it.kind };
+  var elevation = (it.kind === 'tv') ? 0.8 : 0.0;
+  var depth = it.kind === 'kitchen' ? 0.7 : it.depth;
+  var furn = { id: 'furn_'+Date.now()+Math.random().toString(36).slice(2), x: room.x + it.x, z: room.z + it.z, width: it.width, depth: depth, height: it.height, level: room.level, elevation: elevation, name: it.name, type: 'furniture', rotation: 0, kind: it.kind };
     furnitureItems.push(furn);
   }
   saveProjectSilently();
@@ -4299,11 +4609,12 @@ function projectItemBase(it, room){
   function projUV(x,y,z){ var rx = cy*x + sy*z; var rz = -sy*x + cy*z; return { u: rx, v: -y*cp + rz*sp*0.5 }; }
   function toScreen(p){ return { x: rect.width/2 + (p.u - centerU)*scale, y: rect.height/2 + (p.v - centerV)*scale }; }
   var ihw = it.width/2, ihd = it.depth/2;
+  var elev = Math.max(0, it.elevation || 0);
   return [
-    projUV(it.x - ihw, 0, it.z - ihd),
-    projUV(it.x + ihw, 0, it.z - ihd),
-    projUV(it.x + ihw, 0, it.z + ihd),
-    projUV(it.x - ihw, 0, it.z + ihd)
+    projUV(it.x - ihw, elev, it.z - ihd),
+    projUV(it.x + ihw, elev, it.z - ihd),
+    projUV(it.x + ihw, elev, it.z + ihd),
+    projUV(it.x - ihw, elev, it.z + ihd)
   ].map(toScreen);
 }
 
@@ -4326,7 +4637,7 @@ function loadExistingFurniturePreview(room){
     var relX = f.x - room.x; var relZ = f.z - room.z;
     var inside = Math.abs(relX) <= (room.width/2) && Math.abs(relZ) <= (room.depth/2);
     if (!inside) continue;
-    list.push({ width: f.width, depth: f.depth, height: f.height, x: relX, z: relZ, name: f.name, kind: f.kind, isExisting: true });
+    list.push({ width: f.width, depth: f.depth, height: f.height, x: relX, z: relZ, name: f.name, kind: f.kind, elevation: (f.elevation||0), isExisting: true });
   }
   return list;
 }
@@ -4336,7 +4647,9 @@ function addPaletteItem(def) {
   var room = findObjectById(paletteOpenForId);
   if (!room) return;
   // Add furniture with catalog dimensions
-  var furn = { id: 'furn_'+Date.now()+Math.random().toString(36).slice(2), x: room.x, z: room.z, width: def.width, depth: def.depth, height: def.height, level: room.level, name: def.name, type: 'furniture', rotation: 0, kind: def.kind };
+  var elevation = (def.kind === 'tv') ? 0.8 : 0.0;
+  var depth = def.kind === 'kitchen' ? 0.7 : def.depth;
+  var furn = { id: 'furn_'+Date.now()+Math.random().toString(36).slice(2), x: room.x, z: room.z, width: def.width, depth: depth, height: def.height, level: room.level, elevation: elevation, name: def.name, type: 'furniture', rotation: 0, kind: def.kind };
   furnitureItems.push(furn);
   updateStatus('Added: '+def.name+' to '+(room.name||'Room'));
   hideRoomPalette();
@@ -4370,4 +4683,32 @@ function renderItemThumb(canvas, def) {
   var edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
   cx.strokeStyle = '#007acc'; cx.lineWidth = 1.2;
   cx.beginPath(); for (var i=0;i<edges.length;i++){ var e = edges[i]; cx.moveTo(pts[e[0]].x, pts[e[0]].y); cx.lineTo(pts[e[1]].x, pts[e[1]].y);} cx.stroke();
+
+  // Kitchen hints on thumbnail
+  if (def.kind === 'kitchen') {
+    // Draw top indicators on the top face
+    function to2(x,y,z){ var p = proj3(x,y,z); return p; }
+    // compute rough top plane rectangle
+    // sink position
+    var isLargeK = (def.name && (/large|03/i).test(def.name)) || (def.depth >= 1.6 || def.width >= 3.4);
+    var sinkW = isLargeK ? 0.9 : 0.55;
+    var sinkD = 0.45;
+    var sinkCx = -hw * 0.35;
+    var sinkCz = 0;
+    function drawRectTop(x0,z0,x1,z1){ var p0=to2(x0,ht,z0), p1=to2(x1,ht,z0), p2=to2(x1,ht,z1), p3=to2(x0,ht,z1); cx.fillStyle='rgba(200,210,220,0.55)'; cx.strokeStyle='#5b6773'; cx.lineWidth=1; cx.beginPath(); cx.moveTo(p0.x,p0.y); cx.lineTo(p1.x,p1.y); cx.lineTo(p2.x,p2.y); cx.lineTo(p3.x,p3.y); cx.closePath(); cx.fill(); cx.stroke(); }
+    function drawCircleTop(cxw,czw,rw){ cx.strokeStyle='#111'; cx.lineWidth=1.2; cx.beginPath(); for (var k=0;k<=18;k++){ var a=(k/18)*Math.PI*2; var p=to2(cxw+Math.cos(a)*rw, ht, czw+Math.sin(a)*rw); if(k===0) cx.moveTo(p.x,p.y); else cx.lineTo(p.x,p.y);} cx.stroke(); }
+    if (isLargeK) {
+      var w2 = sinkW/2 - 0.02; drawRectTop(sinkCx - 0.02 - w2, sinkCz - sinkD/2, sinkCx - 0.02 + w2, sinkCz + sinkD/2); drawRectTop(sinkCx + 0.02 - w2, sinkCz - sinkD/2, sinkCx + 0.02 + w2, sinkCz + sinkD/2);
+    } else {
+      drawRectTop(sinkCx - sinkW/2, sinkCz - sinkD/2, sinkCx + sinkW/2, sinkCz + sinkD/2);
+    }
+    // hot plates
+    var plateR = 0.12, plateGap = 0.28;
+    var plateBaseX = hw * 0.25;
+    var plateBaseZ = -plateGap/2;
+    drawCircleTop(plateBaseX, plateBaseZ, plateR);
+    drawCircleTop(plateBaseX + plateGap, plateBaseZ, plateR);
+    drawCircleTop(plateBaseX, plateBaseZ + plateGap, plateR);
+    drawCircleTop(plateBaseX + plateGap, plateBaseZ + plateGap, plateR);
+  }
 }

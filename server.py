@@ -33,6 +33,16 @@ def run(host='0.0.0.0', port=8000, directory=None):
         print(f"Failed to bind to {host}:{port} -> {e}")
         raise
     print(f"Serving {directory} on http://{host}:{port} (no-cache)")
+    # If running inside GitHub Codespaces, print the forwarded URL for convenience
+    codespace = os.environ.get('CODESPACE_NAME') or os.environ.get('CODESPACES')
+    fwd_domain = os.environ.get('GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN')
+    if codespace and fwd_domain:
+        forwarded_url = f"https://{port}-{codespace}.{fwd_domain}"
+        print(f"Forwarded URL (Codespaces): {forwarded_url}")
+    elif os.environ.get('CODESPACES'):
+        # Fallback common domain used by Codespaces
+        forwarded_url = f"https://{port}-{os.environ.get('CODESPACES')}.githubpreview.dev"
+        print(f"Forwarded URL (Codespaces, default domain): {forwarded_url}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
