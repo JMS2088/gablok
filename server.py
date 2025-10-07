@@ -1,6 +1,7 @@
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import os
 import socket
+import argparse
 
 
 class NoCacheHandler(SimpleHTTPRequestHandler):
@@ -41,5 +42,20 @@ def run(host='0.0.0.0', port=8000, directory=None):
 
 
 if __name__ == '__main__':
-    serve_dir = os.path.abspath(os.environ.get('SERVE_DIR', '.'))
-    run(directory=serve_dir)
+    # Defaults from env vars with sensible fallbacks
+    default_host = os.environ.get('HOST', '0.0.0.0')
+    # Support common platforms that inject PORT
+    default_port_env = os.environ.get('PORT')
+    try:
+        default_port = int(default_port_env) if default_port_env else 8000
+    except ValueError:
+        default_port = 8000
+    default_dir = os.path.abspath(os.environ.get('SERVE_DIR', '.'))
+
+    parser = argparse.ArgumentParser(description='Lightweight no-cache static server for development.')
+    parser.add_argument('--host', default=default_host, help=f'Host interface to bind (default: {default_host})')
+    parser.add_argument('--port', type=int, default=default_port, help=f'Port to listen on (default: {default_port})')
+    parser.add_argument('--dir', dest='directory', default=default_dir, help=f'Directory to serve (default: {default_dir})')
+    args = parser.parse_args()
+
+    run(host=args.host, port=args.port, directory=os.path.abspath(args.directory))

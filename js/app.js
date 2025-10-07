@@ -1501,8 +1501,8 @@ function updateMeasurements() {
   posZInput.disabled = false;
 
   // Update object immediately on input change or arrow key
-  widthInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.width = Math.max(1, Math.min(20, parseFloat(this.value))); } };
-  depthInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.depth = Math.max(1, Math.min(20, parseFloat(this.value))); } };
+  widthInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.width = Math.max(1, Math.min(40, parseFloat(this.value))); } };
+  depthInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.depth = Math.max(1, Math.min(40, parseFloat(this.value))); } };
   heightInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.height = Math.max(0.5, Math.min(10, parseFloat(this.value))); } };
   posXInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.x = Math.max(-100, Math.min(100, parseFloat(this.value))); } };
   posZInput.oninput = function() { if (!isNaN(this.value) && this.value !== '') { selectedObject.z = Math.max(-100, Math.min(100, parseFloat(this.value))); } };
@@ -2270,7 +2270,7 @@ function setupEvents() {
 
         // Defaults per type
         var minSize = (target.type === 'roof' || target.type === 'stairs') ? 1 : 0.5;
-        var maxSize = 20;
+  var maxSize = 40;
 
         if (type === 'width+' || type === 'width-') {
           // Measure along dragged face normal (sX * axisX) so outward drag always increases
@@ -3503,14 +3503,6 @@ function renderLoop() {
       }
     });
     
-    // Draw any selected garage first
-    if (selectedRoomId) {
-      var selectedGarage = garageComponents.find(g => g.id === selectedRoomId);
-      if (selectedGarage) {
-        drawGarage(selectedGarage);
-      }
-    }
-    
     var allObjects = [];
     
     for (var i = 0; i < allRooms.length; i++) {
@@ -3634,31 +3626,34 @@ function renderLoop() {
     console.log('Current floor:', currentFloor);
     console.log('All objects after sorting:', allObjects.map(obj => ({ type: obj.type, id: obj.object.id })));
     
+    // Draw all non-selected objects first
+    var selectedEntry = null;
     for (var i = 0; i < allObjects.length; i++) {
-      var item = allObjects[i];
-      switch (item.type) {
-        case 'room':
-          drawRoom(item.object);
-          break;
-        case 'stairs':
-          drawStairs(item.object);
-          break;
-        case 'furniture':
-          drawFurniture(item.object);
-          break;
-        case 'balcony':
-          console.log('Found balcony to draw:', item.object);
-          drawBalcony(item.object);
-          break;
-        case 'pergola':
-          drawPergola(item.object);
-          break;
-        case 'garage':
-          drawGarage(item.object);
-          break;
-        case 'roof':
-          drawRoof(item.object);
-          break;
+      var it = allObjects[i];
+      if (selectedRoomId && it.object && it.object.id === selectedRoomId) {
+        selectedEntry = it;
+        continue;
+      }
+      switch (it.type) {
+        case 'room':      drawRoom(it.object); break;
+        case 'stairs':    drawStairs(it.object); break;
+        case 'furniture': drawFurniture(it.object); break;
+        case 'balcony':   console.log('Found balcony to draw:', it.object); drawBalcony(it.object); break;
+        case 'pergola':   drawPergola(it.object); break;
+        case 'garage':    drawGarage(it.object); break;
+        case 'roof':      drawRoof(it.object); break;
+      }
+    }
+    // Draw selected object last to ensure it and its handles are on top
+    if (selectedEntry) {
+      switch (selectedEntry.type) {
+        case 'room':      drawRoom(selectedEntry.object); break;
+        case 'stairs':    drawStairs(selectedEntry.object); break;
+        case 'furniture': drawFurniture(selectedEntry.object); break;
+        case 'balcony':   drawBalcony(selectedEntry.object); break;
+        case 'pergola':   drawPergola(selectedEntry.object); break;
+        case 'garage':    drawGarage(selectedEntry.object); break;
+        case 'roof':      drawRoof(selectedEntry.object); break;
       }
     }
     
@@ -3959,43 +3954,43 @@ document.addEventListener('DOMContentLoaded', function(){
 // Catalog with rough real-world dimensions (meters) and a simple type tag for thumbnail rendering
 // Width (X), Depth (Z), Height (Y) are approximate; adjust as needed.
 var PALETTE_ITEMS = [
-  { name: 'Single Bed',           width: 1.1, depth: 2.2, height: 0.6, kind: 'bed' },
-  { name: 'Double Bed',           width: 1.6, depth: 2.2, height: 0.6, kind: 'bed' },
-  { name: 'Queen Bed',            width: 1.8, depth: 2.2, height: 0.6, kind: 'bed' },
-  { name: 'King Bed',             width: 2.0, depth: 2.2, height: 0.6, kind: 'bed' },
-  { name: 'Bath',                 width: 1.0, depth: 1.8, height: 0.6, kind: 'bath' },
-  { name: 'Shower',               width: 1.1, depth: 1.1, height: 3.0, kind: 'shower' },
-  { name: 'Double Shower',        width: 1.8, depth: 1.1, height: 3.0, kind: 'shower' },
-  { name: 'Sink',                 width: 0.6, depth: 0.5, height: 0.9, kind: 'sink' },
-  { name: 'Double Sink',          width: 1.6, depth: 0.5, height: 0.9, kind: 'sink' },
-  { name: 'Bedside Table',        width: 0.5, depth: 0.4, height: 0.5, kind: 'table' },
-  { name: 'Kitchen Design 01',    width: 3.0, depth: 0.7, height: 0.9, kind: 'kitchen' },
-  { name: 'Kitchen Design 02',    width: 2.4, depth: 1.6, height: 0.9, kind: 'kitchen' },
-  { name: 'Kitchen Design 03',    width: 3.6, depth: 1.8, height: 0.9, kind: 'kitchen' },
-  { name: 'Kitchen Design 04',    width: 2.8, depth: 0.7, height: 0.9, kind: 'kitchen' },
-  { name: 'Kitchen Design 05',    width: 3.2, depth: 0.7, height: 0.9, kind: 'kitchen' },
-  { name: 'Single Fridge',        width: 0.7, depth: 0.7, height: 1.8, kind: 'fridge' },
-  { name: 'Double Fridge',        width: 1.2, depth: 0.8, height: 1.9, kind: 'fridge' },
-  { name: '42" TV',               width: 0.95, depth: 0.1, height: 0.6, kind: 'tv' },
-  { name: '72" TV',               width: 1.6,  depth: 0.1, height: 1.0, kind: 'tv' },
-  { name: '84" TV',               width: 1.9,  depth: 0.1, height: 1.1, kind: 'tv' },
-  { name: '108" TV',              width: 2.4,  depth: 0.1, height: 1.4, kind: 'tv' },
-  { name: 'Sofa 3 seats',         width: 2.0, depth: 0.9, height: 0.9, kind: 'sofa' },
-  { name: 'Sofa 4 seats',         width: 2.4, depth: 0.9, height: 0.9, kind: 'sofa' },
-  { name: 'Sofa 5 seats',         width: 2.8, depth: 0.9, height: 0.9, kind: 'sofa' },
-  { name: 'Sofa 6 seats L',       width: 2.8, depth: 2.0, height: 0.9, kind: 'sofaL' },
-  { name: 'Sofa 7 seats L',       width: 3.2, depth: 2.2, height: 0.9, kind: 'sofaL' },
-  { name: 'Armchair',             width: 1.0, depth: 1.0, height: 1.1, kind: 'armchair' },
-  { name: 'Dishwasher',           width: 0.7, depth: 0.7, height: 0.90, kind: 'appliance' },
-  { name: '4 Seat kitchen table', width: 1.5, depth: 1.0, height: 0.75, kind: 'table' },
-  { name: '6 Seat kitchen table', width: 1.8, depth: 1.0, height: 0.75, kind: 'table' },
-  { name: '8 seat kitchen table', width: 2.3, depth: 1.0, height: 0.75, kind: 'table' },
-  { name: '10 Seat Kitchen table',width: 2.8, depth: 1.0, height: 0.75, kind: 'table' },
-  { name: '4 Seat Dinning table', width: 1.5, depth: 0.8, height: 0.75, kind: 'table' },
-  { name: '6 Seat Dinning table', width: 1.8, depth: 0.9, height: 0.75, kind: 'table' },
-  { name: '8 seat Dinning table', width: 2.3, depth: 0.9, height: 0.75, kind: 'table' },
-  { name: '10 Seat Dinning table',width: 2.9, depth: 1.0, height: 0.75, kind: 'table' },
-  { name: 'Bar stool 1-8',        width: 0.45, depth: 0.45, height: 0.75, kind: 'stool' }
+  { name: 'Single Bed',           width: 1.1, depth: 2.2, height: 0.6, kind: 'bed',       desc: 'Standard single bed.' },
+  { name: 'Double Bed',           width: 1.6, depth: 2.2, height: 0.6, kind: 'bed',       desc: 'Comfortable double bed.' },
+  { name: 'Queen Bed',            width: 1.8, depth: 2.2, height: 0.6, kind: 'bed',       desc: 'Popular queen-size bed.' },
+  { name: 'King Bed',             width: 2.0, depth: 2.2, height: 0.6, kind: 'bed',       desc: 'Spacious king-size bed.' },
+  { name: 'Bath',                 width: 1.0, depth: 1.8, height: 0.6, kind: 'bath',      desc: 'Freestanding bathtub.' },
+  { name: 'Shower',               width: 1.1, depth: 1.1, height: 3.0, kind: 'shower',    desc: 'Single shower enclosure.' },
+  { name: 'Double Shower',        width: 1.8, depth: 1.1, height: 3.0, kind: 'shower',    desc: 'Double-width shower.' },
+  { name: 'Sink',                 width: 0.6, depth: 0.5, height: 0.9, kind: 'sink',      desc: 'Single vanity sink.' },
+  { name: 'Double Sink',          width: 1.6, depth: 0.5, height: 0.9, kind: 'sink',      desc: 'Double vanity sink.' },
+  { name: 'Bedside Table',        width: 0.5, depth: 0.4, height: 0.5, kind: 'table',     desc: 'Compact bedside table.' },
+  { name: 'Kitchen Design 01',    width: 3.0, depth: 0.7, height: 0.9, kind: 'kitchen',   desc: 'Straight-line kitchen run.' },
+  { name: 'Kitchen Design 02',    width: 2.4, depth: 1.6, height: 0.9, kind: 'kitchen',   desc: 'Corner kitchen layout.' },
+  { name: 'Kitchen Design 03',    width: 3.6, depth: 1.8, height: 0.9, kind: 'kitchen',   desc: 'Large corner kitchen.' },
+  { name: 'Kitchen Design 04',    width: 2.8, depth: 0.7, height: 0.9, kind: 'kitchen',   desc: 'Compact kitchen run.' },
+  { name: 'Kitchen Design 05',    width: 3.2, depth: 0.7, height: 0.9, kind: 'kitchen',   desc: 'Extended kitchen run.' },
+  { name: 'Single Fridge',        width: 0.7, depth: 0.7, height: 1.8, kind: 'fridge',    desc: 'Single-door fridge.' },
+  { name: 'Double Fridge',        width: 1.2, depth: 0.8, height: 1.9, kind: 'fridge',    desc: 'Double-door fridge.' },
+  { name: '42" TV',               width: 0.95, depth: 0.1, height: 0.6, kind: 'tv',       desc: 'Compact TV for wall or stand.' },
+  { name: '72" TV',               width: 1.6,  depth: 0.1, height: 1.0, kind: 'tv',       desc: 'Large 72-inch television.' },
+  { name: '84" TV',               width: 1.9,  depth: 0.1, height: 1.1, kind: 'tv',       desc: 'Extra-large 84-inch TV.' },
+  { name: '108" TV',              width: 2.4,  depth: 0.1, height: 1.4, kind: 'tv',       desc: 'Home theater scale screen.' },
+  { name: 'Sofa 3 seats',         width: 2.0, depth: 0.9, height: 0.9, kind: 'sofa',      desc: 'Three-seat sofa.' },
+  { name: 'Sofa 4 seats',         width: 2.4, depth: 0.9, height: 0.9, kind: 'sofa',      desc: 'Four-seat sofa.' },
+  { name: 'Sofa 5 seats',         width: 2.8, depth: 0.9, height: 0.9, kind: 'sofa',      desc: 'Five-seat sofa.' },
+  { name: 'Sofa 6 seats L',       width: 2.8, depth: 2.0, height: 0.9, kind: 'sofaL',     desc: 'L-shaped sofa (6 seats).' },
+  { name: 'Sofa 7 seats L',       width: 3.2, depth: 2.2, height: 0.9, kind: 'sofaL',     desc: 'L-shaped sofa (7 seats).' },
+  { name: 'Armchair',             width: 1.0, depth: 1.0, height: 1.1, kind: 'armchair',  desc: 'Single armchair.' },
+  { name: 'Dishwasher',           width: 0.7, depth: 0.7, height: 0.90, kind: 'appliance',desc: 'Standard dishwasher.' },
+  { name: '4 Seat kitchen table', width: 1.5, depth: 1.0, height: 0.75, kind: 'table',    desc: 'Dining table for 4.' },
+  { name: '6 Seat kitchen table', width: 1.8, depth: 1.0, height: 0.75, kind: 'table',    desc: 'Dining table for 6.' },
+  { name: '8 seat kitchen table', width: 2.3, depth: 1.0, height: 0.75, kind: 'table',    desc: 'Dining table for 8.' },
+  { name: '10 Seat Kitchen table',width: 2.8, depth: 1.0, height: 0.75, kind: 'table',    desc: 'Dining table for 10.' },
+  { name: '4 Seat Dinning table', width: 1.5, depth: 0.8, height: 0.75, kind: 'table',    desc: 'Dining table for 4.' },
+  { name: '6 Seat Dinning table', width: 1.8, depth: 0.9, height: 0.75, kind: 'table',    desc: 'Dining table for 6.' },
+  { name: '8 seat Dinning table', width: 2.3, depth: 0.9, height: 0.75, kind: 'table',    desc: 'Dining table for 8.' },
+  { name: '10 Seat Dinning table',width: 2.9, depth: 1.0, height: 0.75, kind: 'table',    desc: 'Dining table for 10.' },
+  { name: 'Bar stool 1-8',        width: 0.45, depth: 0.45, height: 0.75, kind: 'stool',  desc: 'Kitchen bar stool.' }
 ];
 
 // Temporary preview state for the room palette (items are previewed here before committing)
@@ -4020,9 +4015,12 @@ function setupPalette() {
     item.appendChild(thumb);
   var infoDiv = document.createElement('div');
   var nameDiv = document.createElement('div'); nameDiv.className = 'palette-name'; nameDiv.textContent = it.name;
-  var dimsDiv = document.createElement('div'); dimsDiv.className = 'palette-dims'; dimsDiv.textContent = it.width.toFixed(1) + 'm × ' + it.depth.toFixed(1) + 'm × ' + it.height.toFixed(1) + 'm';
+  var dimsDiv = document.createElement('div'); dimsDiv.className = 'palette-dims';
+  dimsDiv.textContent = 'Width: ' + it.width.toFixed(1) + 'm · Length: ' + it.depth.toFixed(1) + 'm · Height: ' + it.height.toFixed(1) + 'm';
+  var descDiv = document.createElement('div'); descDiv.className = 'palette-desc'; descDiv.textContent = it.desc || '';
     infoDiv.appendChild(nameDiv);
     infoDiv.appendChild(dimsDiv);
+  infoDiv.appendChild(descDiv);
     item.appendChild(infoDiv);
     // draw simple 3D-ish wireframe thumbnail to scale
     renderItemThumb(c, it);
@@ -4045,8 +4043,9 @@ function openRoomPalette(roomId) {
   var dd = document.getElementById('roof-type-dropdown'); if (dd) dd.style.display = 'none';
   modal.style.display = 'flex';
   try { console.log('Room Palette opened for', roomId, '->', title.textContent); } catch(e){}
-  // Reset preview state
-  __paletteState = { yaw: 0.6, pitch: 0.5, items: [], draggingIndex: -1, lastMouse: null };
+  // Reset preview state and preload existing furniture for this room
+  var preload = loadExistingFurniturePreview(room);
+  __paletteState = { yaw: 0.6, pitch: 0.5, items: preload, draggingIndex: -1, lastMouse: null };
   renderRoomPreview(room);
   // Keep preview responsive while open
   try {
@@ -4161,13 +4160,16 @@ function renderRoomPreview(room) {
   cx.setTransform(1,0,0,1,0,0);
   cx.scale(ratio, ratio);
   cx.clearRect(0,0,rect.width,rect.height);
-  // Subtle grid (very light)
+  // Subtle grid (very light) — draw in CSS pixel space (context already scaled by DPR)
   var padG = 20; var step = 30; cx.save(); cx.globalAlpha = 0.45; cx.strokeStyle = '#f5f7fa'; cx.lineWidth = 1;
-  for (var gx = padG; gx <= cv.width - padG; gx += step) { cx.beginPath(); cx.moveTo(gx, padG); cx.lineTo(gx, cv.height - padG); cx.stroke(); }
-  for (var gy = padG; gy <= cv.height - padG; gy += step) { cx.beginPath(); cx.moveTo(padG, gy); cx.lineTo(cv.width - padG, gy); cx.stroke(); }
+  for (var gx = padG; gx <= rect.width - padG; gx += step) { cx.beginPath(); cx.moveTo(gx, padG); cx.lineTo(gx, rect.height - padG); cx.stroke(); }
+  for (var gy = padG; gy <= rect.height - padG; gy += step) { cx.beginPath(); cx.moveTo(padG, gy); cx.lineTo(rect.width - padG, gy); cx.stroke(); }
   cx.restore();
   // 3D-ish room wireframe box that fits the available space and draws a grey floor
-  var pad = 22; var availW = rect.width - pad*2; var availH = rect.height - pad*2;
+  // Reserve a bit more horizontal padding so there is clear space left and right of the room.
+  var padX = 48; // horizontal padding (px)
+  var padY = 48; // vertical padding (px) — increased to ensure clear space at bottom
+  var availW = rect.width - padX*2; var availH = rect.height - padY*2;
   var rw = room.width, rd = room.depth, ry = room.height;
   var yaw = __paletteState.yaw || 0.6; var pitch = __paletteState.pitch || 0.5;
   var cy = Math.cos(yaw), sy = Math.sin(yaw);
@@ -4189,10 +4191,18 @@ function renderRoomPreview(room) {
   for (var i=0;i<ptsUnit.length;i++){ var p=ptsUnit[i]; if (p.u<minU)minU=p.u; if(p.u>maxU)maxU=p.u; if(p.v<minV)minV=p.v; if(p.v>maxV)maxV=p.v; }
   var bboxW = (maxU - minU); var bboxH = (maxV - minV);
   var centerU = (minU + maxU) * 0.5; var centerV = (minV + maxV) * 0.5;
-  var scale = 1.0;
-  if (bboxW > 0 && bboxH > 0) {
-    scale = Math.min(availW / bboxW, availH / bboxH) * 0.95;
+  // Width-locked scaling: keep a constant scale based purely on room.width and available width.
+  // Recompute only when the canvas width/height (availW) changes to remain responsive.
+  var fixed = __paletteState.__fixedScale;
+  // Use a width fit fraction so the room renders narrower than the available width to leave clear left/right space
+  var widthFitFraction = 0.8; // 80% of available width (after padX), leaves ~10% gap on each side
+  if (!fixed || fixed.availW !== availW || fixed.roomWidth !== rw) {
+    var baseDenom = Math.max(0.1, rw); // avoid divide by zero
+    var fixedValue = (availW * widthFitFraction) / baseDenom;
+    __paletteState.__fixedScale = { value: fixedValue, availW: availW, roomWidth: rw };
+    fixed = __paletteState.__fixedScale;
   }
+  var scale = fixed.value;
   function toScreen(p){ return { x: rect.width/2 + (p.u - centerU)*scale, y: rect.height/2 + (p.v - centerV)*scale }; }
   // Save scale info for interaction
   __paletteState.__scaleInfo = { centerU: centerU, centerV: centerV, scale: scale, yaw: yaw, pitch: pitch, cy: cy, sy: sy, cp: cp, sp: sp, rect: rect };
@@ -4240,7 +4250,7 @@ function addPalettePreviewItem(def){
   var room = findObjectById(paletteOpenForId); if (!room) return;
   // Place near center with slight offset to avoid overlap
   var offset = (__paletteState.items.length % 5) * 0.3;
-  var it = { width: def.width, depth: def.depth, height: def.height, x: 0 + offset, z: 0 + offset, name: def.name, kind: def.kind };
+  var it = { width: def.width, depth: def.depth, height: def.height, x: 0 + offset, z: 0 + offset, name: def.name, kind: def.kind, isExisting: false };
   // Clamp within room immediately
   var maxX = room.width/2 - it.width/2; var maxZ = room.depth/2 - it.depth/2;
   it.x = Math.max(-maxX, Math.min(maxX, it.x));
@@ -4254,17 +4264,23 @@ function commitPaletteItems(){
   var room = findObjectById(paletteOpenForId); if (!room) return;
   for (var i=0;i<__paletteState.items.length;i++){
     var it = __paletteState.items[i];
+    if (it.isExisting) continue;
     var furn = { id: 'furn_'+Date.now()+Math.random().toString(36).slice(2), x: room.x + it.x, z: room.z + it.z, width: it.width, depth: it.depth, height: it.height, level: room.level, name: it.name, type: 'furniture', rotation: 0, kind: it.kind };
     furnitureItems.push(furn);
   }
   saveProjectSilently();
-  updateStatus('Added '+__paletteState.items.length+' item(s) to '+(room.name||'Room'));
-  __paletteState.items = [];
+  var addedCount = __paletteState.items.filter(function(it){ return !it.isExisting; }).length;
+  updateStatus('Added '+addedCount+' item(s) to '+(room.name||'Room'));
+  // Keep existing previews, drop newly added ones
+  __paletteState.items = __paletteState.items.filter(function(it){ return it.isExisting; });
   hideRoomPalette();
   renderLoop();
 }
 
-function clearPalettePreview(){ __paletteState.items = []; }
+function clearPalettePreview(){
+  // Remove only newly added preview items
+  __paletteState.items = __paletteState.items.filter(function(it){ return it.isExisting; });
+}
 
 function hitTestPaletteItem(mx, my, room){
   if (!__paletteState || __paletteState.items.length === 0) return -1;
@@ -4299,6 +4315,20 @@ function pointInPolygon(x, y, pts){
     if (intersect) inside = !inside;
   }
   return inside;
+}
+
+function loadExistingFurniturePreview(room){
+  var list = [];
+  for (var i=0;i<furnitureItems.length;i++){
+    var f = furnitureItems[i];
+    if (f.level !== room.level) continue;
+    // Check if within room footprint
+    var relX = f.x - room.x; var relZ = f.z - room.z;
+    var inside = Math.abs(relX) <= (room.width/2) && Math.abs(relZ) <= (room.depth/2);
+    if (!inside) continue;
+    list.push({ width: f.width, depth: f.depth, height: f.height, x: relX, z: relZ, name: f.name, kind: f.kind, isExisting: true });
+  }
+  return list;
 }
 
 function addPaletteItem(def) {
