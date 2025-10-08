@@ -5,5 +5,8 @@
   "homepage": "https://JMS2088.github.io/gablok/",
   "scripts": {
     "start": "python3 server.py"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^3.11.174"
   }
 }
