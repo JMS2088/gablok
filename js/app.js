@@ -4148,7 +4148,10 @@ document.addEventListener('DOMContentLoaded', function(){
         exportPDF();
         break;
       case 'pdf-floorplan-upload': {
-        var fpf = document.getElementById('upload-pdf-floorplan'); if (fpf) fpf.click();
+        // Ensure PDF.js is available; lazy load if needed, then open file picker
+        ensurePdfJsReady().then(function(ok){
+          if (!ok) return; var fpf = document.getElementById('upload-pdf-floorplan'); if (fpf) fpf.click();
+        });
         break;
       }
       case 'obj-upload': {
@@ -4183,7 +4186,10 @@ document.addEventListener('DOMContentLoaded', function(){
   var uploadPdfFloorplan = document.getElementById('upload-pdf-floorplan');
   if (uploadPdfFloorplan) uploadPdfFloorplan.onchange = async function(e){
     var f = e.target.files && e.target.files[0]; if (!f) return;
-    if (!window.pdfjsLib) { updateStatus('PDF.js not available'); return; }
+    if (!window.pdfjsLib) {
+      var ok = await ensurePdfJsReady();
+      if (!ok) { updateStatus('PDF Import not available'); return; }
+    }
     try {
       var arrayBuf = await f.arrayBuffer();
       var loadingTask = window.pdfjsLib.getDocument({ data: arrayBuf });
@@ -4203,10 +4209,54 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 
 // ---------------- Floorplan Import (PDF) ----------------
+// Lazy loader for PDF.js in case CDN script hasn't arrived yet
+var PDFJS_VERSION = '4.5.136';
+function loadScript(url){
+  return new Promise(function(resolve, reject){
+    try {
+      var s = document.createElement('script'); s.src = url; s.async = true;
+      s.onload = function(){ resolve(true); };
+      s.onerror = function(){ reject(new Error('Failed to load '+url)); };
+      document.head.appendChild(s);
+    } catch (e) { reject(e); }
+  });
+}
+async function ensurePdfJsReady(){
+  if (window.pdfjsLib) return true;
+  try { updateStatus('Loading PDF engine…'); } catch(e){}
+  // Prefer local vendored files first, then CDNs (including a stable v3 path)
+  var sources = [
+    'vendor/pdfjs/pdf.min.js',
+    'https://cdn.jsdelivr.net/npm/pdfjs-dist@'+PDFJS_VERSION+'/build/pdf.min.js',
+    'https://unpkg.com/pdfjs-dist@'+PDFJS_VERSION+'/build/pdf.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
+  ];
+  for (var i=0;i<sources.length;i++){
+    try {
+      await loadScript(sources[i]);
+      if (window.pdfjsLib) {
+        // Set worker to matching CDN if possible
+        try {
+          var base = sources[i].replace(/pdf\.min\.js$/, '');
+          var worker = base + 'pdf.worker.min.js';
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = worker;
+        } catch(e){}
+        try { updateStatus('PDF engine ready'); } catch(e){}
+        return true;
+      }
+    } catch (e) {
+      // try next source
+    }
+  }
+  try { updateStatus('PDF Import not available (offline or blocked)'); } catch(e){}
+  return false;
+}
 var __fp = {
   active: false,
   pdf: null,
   page: null,
+  pageNum: 1,
+  pageCount: 1,
   pageBitmap: null,
   viewport: null,
   pxPerMeter: null,
@@ -4215,7 +4265,9 @@ var __fp = {
   rooms: [], // {x0,y0,x1,y1} in overlay canvas pixels
   dragging: false,
   dragStart: null,
-  anchorWorld: null // {x,z} world anchor
+  anchorWorld: null, // {x,z} world anchor
+  hintText: '',
+  hintUntil: 0
 };
 
 function openFloorplanModal(opts){
@@ -4224,6 +4276,8 @@ function openFloorplanModal(opts){
   __fp.active = true;
   __fp.pdf = opts.pdf || null;
   __fp.page = opts.page || null;
+  __fp.pageNum = 1;
+  __fp.pageCount = (__fp.pdf && __fp.pdf.numPages) ? __fp.pdf.numPages : 1;
   __fp.pageBitmap = null;
   __fp.viewport = null;
   __fp.pxPerMeter = null;
@@ -4287,6 +4341,9 @@ async function renderFloorplanPage(){
       ctx2d.fillStyle = '#0b1020'; ctx2d.fillRect(0,0,c.width,c.height);
     }
     drawFloorplanOverlay();
+    // Update page UI
+    var totalSpan = document.getElementById('fp-page-total'); if (totalSpan) totalSpan.textContent = String(__fp.pageCount || 1);
+    var input = document.getElementById('fp-page-input'); if (input) input.value = String(__fp.pageNum || 1);
   } catch (e) {
     console.error('renderFloorplanPage error', e);
   }
@@ -4348,6 +4405,17 @@ function drawFloorplanOverlay(){
       cx.setLineDash([6,4]); cx.strokeStyle = '#2563eb'; cx.lineWidth = 1.5; cx.beginPath(); cx.rect(Math.min(x0,x1), Math.min(y0,y1), Math.abs(x1-x0), Math.abs(y1-y0)); cx.stroke(); cx.setLineDash([]);
     }
   }
+  // Hint overlay
+  var now = Date.now();
+  if (__fp.hintText && __fp.hintUntil > now) {
+    cx.save();
+    var pad = 10; cx.font = 'bold 14px system-ui, sans-serif';
+    var text = __fp.hintText; var tw = cx.measureText(text).width; var tx = Math.floor((ov.width - tw) / 2) - pad; var ty = 16;
+    cx.fillStyle = 'rgba(0,0,0,0.65)'; cx.fillRect(tx, ty, tw + pad*2, 28);
+    cx.fillStyle = '#ffffff'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    cx.fillText(text, tx + tw/2 + pad, ty + 14);
+    cx.restore();
+  }
 }
 
 function wireFloorplanUI(){
@@ -4355,17 +4423,22 @@ function wireFloorplanUI(){
   var bClose = document.getElementById('floorplan-close'); if (bClose) bClose.onclick = closeFloorplanModal;
   var bCancel = document.getElementById('fp-cancel'); if (bCancel) bCancel.onclick = closeFloorplanModal;
   var back = document.getElementById('floorplan-backdrop'); if (back) back.onclick = closeFloorplanModal;
-  var bCal = document.getElementById('fp-mode-calibrate'); if (bCal) bCal.onclick = function(){ __fp.mode = 'calibrate'; };
-  var bPlace = document.getElementById('fp-mode-place'); if (bPlace) bPlace.onclick = function(){ __fp.mode = 'place'; };
+  var bCal = document.getElementById('fp-mode-calibrate'); if (bCal) bCal.onclick = function(){ __fp.mode = 'calibrate'; updateFloorplanCursor(); showFpHint('Click two points a known distance apart, enter it, then Apply.', 2800); drawFloorplanOverlay(); };
+  var bPlace = document.getElementById('fp-mode-place'); if (bPlace) bPlace.onclick = function(){ __fp.mode = 'place'; updateFloorplanCursor(); showFpHint('Drag on the plan to draw room rectangles', 2200); drawFloorplanOverlay(); };
   var bUndo = document.getElementById('fp-undo'); if (bUndo) bUndo.onclick = function(){ if (__fp.rooms.length>0) { __fp.rooms.pop(); drawFloorplanOverlay(); updateFpInfo(); } };
   var bApply = document.getElementById('fp-apply-scale'); if (bApply) bApply.onclick = function(){ applyCalibration(); };
   var bCommit = document.getElementById('fp-commit'); if (bCommit) bCommit.onclick = function(){ commitFloorplanRooms(); };
+  // Page controls
+  var inPage = document.getElementById('fp-page-input'); if (inPage) inPage.onchange = function(){ var n = Math.max(1, Math.min(__fp.pageCount||1, parseInt(this.value||'1',10)||1)); goToFloorplanPage(n); };
+  var bPrev = document.getElementById('fp-page-prev'); if (bPrev) bPrev.onclick = function(){ if (__fp.pageNum>1) goToFloorplanPage(__fp.pageNum-1); };
+  var bNext = document.getElementById('fp-page-next'); if (bNext) bNext.onclick = function(){ if (__fp.pageNum<(__fp.pageCount||1)) goToFloorplanPage(__fp.pageNum+1); };
   // Canvas interactions
   var ov = document.getElementById('floorplan-overlay');
-  if (ov) {
-    // Map mouse event client coords to canvas device pixels
-    function getPos(e){ var rect = ov.getBoundingClientRect(); var ratio = ov.width / Math.max(1, rect.width); return { x: (e.clientX - rect.left) * ratio, y: (e.clientY - rect.top) * ratio }; }
-    ov.addEventListener('mousedown', function(e){
+  var base = document.getElementById('floorplan-canvas');
+  function attachCanvasHandlers(cv){
+    if (!cv) return;
+    function getPos(e){ var rect = cv.getBoundingClientRect(); var ratio = cv.width / Math.max(1, rect.width); return { x: (e.clientX - rect.left) * ratio, y: (e.clientY - rect.top) * ratio }; }
+    var onDown = function(e){
       if (!__fp.active) return; var p = getPos(e); __fp.__lastMouse = p;
       if (__fp.mode === 'calibrate') {
         __fp.clicks.push({ x:p.x, y:p.y }); if (__fp.clicks.length > 2) __fp.clicks.shift();
@@ -4373,21 +4446,51 @@ function wireFloorplanUI(){
       } else if (__fp.mode === 'place') {
         __fp.dragging = true; __fp.dragStart = p; drawFloorplanOverlay();
       }
-    });
-    window.__fpMouseMove = function(e){ if (!__fp.active) return; var p = getPos(e); __fp.__lastMouse = p; if (__fp.dragging) drawFloorplanOverlay(); };
-    window.__fpMouseUp = function(){ if (!__fp.active) return; if (__fp.dragging && __fp.dragStart && __fp.__lastMouse) { var s = __fp.dragStart, c = __fp.__lastMouse; __fp.rooms.push({ x0:s.x, y0:s.y, x1:c.x, y1:c.y }); updateFpInfo(); } __fp.dragging = false; __fp.dragStart = null; drawFloorplanOverlay(); };
-    window.addEventListener('mousemove', window.__fpMouseMove);
-    window.addEventListener('mouseup', window.__fpMouseUp);
+      updateFloorplanCursor();
+    };
+    cv.addEventListener('mousedown', onDown);
+    // Store refs for potential cleanup
+    cv.__fpOnDown = onDown;
   }
+  attachCanvasHandlers(ov);
+  attachCanvasHandlers(base);
+  // Shared move/up on window to track outside canvas
+  window.__fpMouseMove = function(e){
+    if (!__fp.active) return;
+    // Prefer overlay for coordinate mapping if present, else base
+    var cv = ov || base; if (!cv) return;
+    var rect = cv.getBoundingClientRect(); var ratio = cv.width / Math.max(1, rect.width);
+    var p = { x: (e.clientX - rect.left) * ratio, y: (e.clientY - rect.top) * ratio };
+    __fp.__lastMouse = p;
+    if (__fp.dragging) drawFloorplanOverlay();
+  };
+  window.__fpMouseUp = function(){
+    if (!__fp.active) return;
+    if (__fp.dragging && __fp.dragStart && __fp.__lastMouse) {
+      var s = __fp.dragStart, c = __fp.__lastMouse;
+      __fp.rooms.push({ x0:s.x, y0:s.y, x1:c.x, y1:c.y });
+      updateFpInfo();
+    }
+    __fp.dragging = false; __fp.dragStart = null; drawFloorplanOverlay(); updateFloorplanCursor();
+  };
+  window.addEventListener('mousemove', window.__fpMouseMove);
+  window.addEventListener('mouseup', window.__fpMouseUp);
   // Resize handler
   window.__fpResize = function(){ if (!__fp.active) return; renderFloorplanPage(); };
   window.addEventListener('resize', window.__fpResize);
+  updateFloorplanCursor();
 }
 
 function unbindFloorplanUI(){
   try { if (window.__fpMouseMove) window.removeEventListener('mousemove', window.__fpMouseMove); } catch(e){}
   try { if (window.__fpMouseUp) window.removeEventListener('mouseup', window.__fpMouseUp); } catch(e){}
   try { if (window.__fpResize) window.removeEventListener('resize', window.__fpResize); } catch(e){}
+  try {
+    var ov = document.getElementById('floorplan-overlay');
+    var base = document.getElementById('floorplan-canvas');
+    if (ov && ov.__fpOnDown) { ov.removeEventListener('mousedown', ov.__fpOnDown); ov.__fpOnDown = null; }
+    if (base && base.__fpOnDown) { base.removeEventListener('mousedown', base.__fpOnDown); base.__fpOnDown = null; }
+  } catch(e){}
 }
 
 function applyCalibration(){
@@ -4398,7 +4501,11 @@ function applyCalibration(){
   if (!(real > 0)) { updateStatus('Enter a valid real distance'); return; }
   __fp.pxPerMeter = distPx / real;
   updateFpInfo();
+  // Switch to place mode and guide the user
+  __fp.mode = 'place';
+  showFpHint('Scale set. Drag on the plan to draw room rectangles, then click Commit.', 3500);
   drawFloorplanOverlay();
+  updateFloorplanCursor();
 }
 
 function updateFpInfo(){
@@ -4406,9 +4513,29 @@ function updateFpInfo(){
   var cnt = document.getElementById('fp-rooms-count'); if (cnt) cnt.textContent = (__fp.rooms||[]).length;
 }
 
+async function goToFloorplanPage(n){
+  if (!__fp.pdf) return;
+  try {
+    __fp.pageNum = n;
+    __fp.page = await __fp.pdf.getPage(n);
+    renderFloorplanPage();
+    // reset calibration clicks when switching pages (keeps scale value, as it may be a multi-page plan)
+    __fp.clicks = [];
+    drawFloorplanOverlay();
+  } catch(e) {
+    console.error('Failed to switch PDF page', e);
+  }
+}
+
 function commitFloorplanRooms(){
   if (!__fp.pxPerMeter) { updateStatus('Calibrate scale first'); return; }
-  if (!__fp.rooms || __fp.rooms.length === 0) { updateStatus('No rooms to import'); return; }
+  if (!__fp.rooms || __fp.rooms.length === 0) {
+    updateStatus('No rooms to import. Use "Place Room" and drag to draw rectangles over rooms, then Commit.');
+    __fp.mode = 'place';
+    showFpHint('Drag to draw room rectangles on the plan', 3000);
+    drawFloorplanOverlay();
+    return;
+  }
   var created = 0;
   // Use the first room center as origin for relative placement
   var first = __fp.rooms[0]; var fx = (Math.min(first.x0, first.x1) + Math.max(first.x0, first.x1)) / 2; var fz = (Math.min(first.y0, first.y1) + Math.max(first.y0, first.y1)) / 2;
@@ -4433,6 +4560,26 @@ function commitFloorplanRooms(){
   renderLoop();
   updateStatus('Added ' + created + ' room(s) from floorplan');
   closeFloorplanModal();
+}
+
+// Small helper to show a transient hint overlay in the floorplan modal
+function showFpHint(msg, durationMs){
+  __fp.hintText = String(msg || '');
+  __fp.hintUntil = Date.now() + Math.max(500, durationMs || 2000);
+  drawFloorplanOverlay();
+}
+
+// Update cursor style in floorplan canvases based on current mode/drag state
+function updateFloorplanCursor(){
+  var ov = document.getElementById('floorplan-overlay');
+  var base = document.getElementById('floorplan-canvas');
+  var cur = 'default';
+  if (__fp.active) {
+    if (__fp.mode === 'calibrate') cur = 'crosshair';
+    else if (__fp.mode === 'place') cur = __fp.dragging ? 'crosshair' : 'crosshair';
+  }
+  if (ov) ov.style.cursor = cur;
+  if (base) base.style.cursor = cur;
 }
 
 // ---------- Room Palette ----------

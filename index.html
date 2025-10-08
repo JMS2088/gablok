@@ -135,6 +135,13 @@
 				<canvas id="floorplan-overlay" style="position:absolute; inset:0; pointer-events:none;"></canvas>
 			</div>
 			<div style="width:280px; border-left:1px solid #e5e7eb; padding:10px; display:flex; flex-direction:column; gap:10px; background:#fff;">
+				<div style="display:flex; align-items:center; gap:6px;">
+					<span style="font-size:12px; color:#374151;">Page</span>
+					<button id="fp-page-prev" class="secondary" title="Previous page">◀</button>
+					<input id="fp-page-input" type="number" min="1" value="1" style="width:56px;" />
+					<span style="font-size:12px; color:#374151;">/ <span id="fp-page-total">1</span></span>
+					<button id="fp-page-next" class="secondary" title="Next page">▶</button>
+				</div>
 				<div>
 					<div style="font-weight:600; margin-bottom:6px;">Steps</div>
 					<ol style="margin:0 0 6px 18px; padding:0;">
@@ -190,13 +197,13 @@
 
 <!-- jsPDF for multi-page PDF export -->
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-<!-- PDF.js for PDF floorplan import -->
-<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.5.136/build/pdf.min.js"></script>
+<!-- PDF.js for PDF floorplan import (vendored for offline use) -->
+<script src="vendor/pdfjs/pdf.min.js"></script>
 <script>
-	if (window['pdfjsLib']) {
-		pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.5.136/build/pdf.worker.min.js';
+	if (window['pdfjsLib'] && (!pdfjsLib.GlobalWorkerOptions.workerSrc || pdfjsLib.GlobalWorkerOptions.workerSrc.indexOf('http') === 0)) {
+		pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js';
 	}
-	// else the app will gracefully prompt when user tries to import
+	// If this fails, the app will lazy-load from CDN as a secondary fallback when importing
 </script>
 <script src="js/app.js?v=20251006-1"></script>
 
