@@ -4147,6 +4147,10 @@ document.addEventListener('DOMContentLoaded', function(){
       case 'pdf':
         exportPDF();
         break;
+      case 'pdf-floorplan-upload': {
+        var fpf = document.getElementById('upload-pdf-floorplan'); if (fpf) fpf.click();
+        break;
+      }
       case 'obj-upload': {
         var foi = document.getElementById('upload-obj-file'); if (foi) foi.click();
         break;
@@ -4175,9 +4179,261 @@ document.addEventListener('DOMContentLoaded', function(){
     reader.readAsText(f);
   };
 
+  // Wire Floorplan PDF upload
+  var uploadPdfFloorplan = document.getElementById('upload-pdf-floorplan');
+  if (uploadPdfFloorplan) uploadPdfFloorplan.onchange = async function(e){
+    var f = e.target.files && e.target.files[0]; if (!f) return;
+    if (!window.pdfjsLib) { updateStatus('PDF.js not available'); return; }
+    try {
+      var arrayBuf = await f.arrayBuffer();
+      var loadingTask = window.pdfjsLib.getDocument({ data: arrayBuf });
+      var pdf = await loadingTask.promise;
+      var page = await pdf.getPage(1);
+      openFloorplanModal({ pdf: pdf, page: page, fileName: f.name });
+    } catch (err) {
+      console.error('PDF load failed', err); updateStatus('Failed to load PDF');
+    } finally {
+      // reset the input so selecting the same file again will trigger change
+      uploadPdfFloorplan.value = '';
+    }
+  };
+
   // Populate palette items
   setupPalette();
 });
+
+// ---------------- Floorplan Import (PDF) ----------------
+var __fp = {
+  active: false,
+  pdf: null,
+  page: null,
+  pageBitmap: null,
+  viewport: null,
+  pxPerMeter: null,
+  mode: 'calibrate', // 'calibrate' | 'place'
+  clicks: [], // last clicks for calibration: [{x,y}, {x,y}]
+  rooms: [], // {x0,y0,x1,y1} in overlay canvas pixels
+  dragging: false,
+  dragStart: null,
+  anchorWorld: null // {x,z} world anchor
+};
+
+function openFloorplanModal(opts){
+  var m = document.getElementById('floorplan-modal'); if (!m) return;
+  m.style.display = 'flex';
+  __fp.active = true;
+  __fp.pdf = opts.pdf || null;
+  __fp.page = opts.page || null;
+  __fp.pageBitmap = null;
+  __fp.viewport = null;
+  __fp.pxPerMeter = null;
+  __fp.mode = 'calibrate';
+  __fp.clicks = [];
+  __fp.rooms = [];
+  __fp.dragging = false;
+  __fp.dragStart = null;
+  __fp.anchorWorld = { x: camera.targetX, z: camera.targetZ };
+  // Enable pointer events on overlay for interaction
+  var ov = document.getElementById('floorplan-overlay'); if (ov) ov.style.pointerEvents = 'auto';
+  // Wire buttons
+  wireFloorplanUI();
+  // Render first page
+  renderFloorplanPage();
+  updateFpInfo();
+}
+
+function closeFloorplanModal(){
+  var m = document.getElementById('floorplan-modal'); if (m) m.style.display = 'none';
+  __fp.active = false;
+  // remove listeners if any
+  unbindFloorplanUI();
+}
+
+async function renderFloorplanPage(){
+  try {
+    var c = document.getElementById('floorplan-canvas'); if (!c) return;
+    var ov = document.getElementById('floorplan-overlay'); if (!ov) return;
+    // Match canvas size to container css pixels with DPR for quality
+    var container = c.parentElement;
+    var rect = container.getBoundingClientRect();
+    var ratio = Math.min(2, window.devicePixelRatio || 1);
+    var cssW = Math.max(400, Math.floor(rect.width));
+    var cssH = Math.max(300, Math.floor(rect.height));
+    function sizeCanvas(cv){
+      var targetW = Math.floor(cssW * ratio), targetH = Math.floor(cssH * ratio);
+      if (cv.width !== targetW || cv.height !== targetH) { cv.width = targetW; cv.height = targetH; cv.style.width = cssW + 'px'; cv.style.height = cssH + 'px'; }
+    }
+    sizeCanvas(c); sizeCanvas(ov);
+    var ctx2d = c.getContext('2d');
+    ctx2d.setTransform(1,0,0,1,0,0);
+    ctx2d.clearRect(0,0,c.width,c.height);
+    // If we have a PDF page, render it to an offscreen then fit into c
+    if (__fp.page) {
+      // Render at a scale that keeps memory modest
+      var vp = __fp.page.getViewport({ scale: 1.5 });
+      __fp.viewport = vp;
+      var off = document.createElement('canvas'); off.width = Math.floor(vp.width); off.height = Math.floor(vp.height);
+      var octx = off.getContext('2d');
+      await __fp.page.render({ canvasContext: octx, viewport: vp }).promise;
+      // draw fitted into visible canvas (account for DPR by drawing at device pixels)
+      var scaleFit = Math.min(c.width / off.width, c.height / off.height);
+      var drawW = Math.floor(off.width * scaleFit), drawH = Math.floor(off.height * scaleFit);
+      var dx = Math.floor((c.width - drawW) / 2), dy = Math.floor((c.height - drawH) / 2);
+      ctx2d.drawImage(off, 0, 0, off.width, off.height, dx, dy, drawW, drawH);
+      // Save fitted transform metadata
+      __fp.pageBitmap = { img: off, dx: dx, dy: dy, dw: drawW, dh: drawH };
+    } else {
+      // No page, fill bg
+      ctx2d.fillStyle = '#0b1020'; ctx2d.fillRect(0,0,c.width,c.height);
+    }
+    drawFloorplanOverlay();
+  } catch (e) {
+    console.error('renderFloorplanPage error', e);
+  }
+}
+
+function canvasToImageCoords(px, py){
+  // Map overlay canvas pixel to PDF image pixel coordinates (in the offscreen image space)
+  var c = document.getElementById('floorplan-canvas'); if (!c || !__fp.pageBitmap) return { ix: px, iy: py };
+  var bm = __fp.pageBitmap;
+  // The visible canvas draws the offscreen image inside rect [dx,dy, dw,dh] within [0, c.width/c.height] (device pixels)
+  var x = (px - bm.dx) * (bm.img.width / Math.max(1, bm.dw));
+  var y = (py - bm.dy) * (bm.img.height / Math.max(1, bm.dh));
+  return { ix: x, iy: y };
+}
+
+function imageToCanvasCoords(ix, iy){
+  var c = document.getElementById('floorplan-canvas'); if (!c || !__fp.pageBitmap) return { x: ix, y: iy };
+  var bm = __fp.pageBitmap;
+  var x = bm.dx + (ix * (bm.dw / Math.max(1, bm.img.width)));
+  var y = bm.dy + (iy * (bm.dh / Math.max(1, bm.img.height)));
+  return { x: x, y: y };
+}
+
+function drawFloorplanOverlay(){
+  var ov = document.getElementById('floorplan-overlay'); if (!ov) return; var cx = ov.getContext('2d');
+  // Clear and scale to device pixels
+  cx.setTransform(1,0,0,1,0,0);
+  cx.clearRect(0,0,ov.width, ov.height);
+  // Draw calibration clicks
+  if (__fp.clicks.length > 0) {
+    cx.strokeStyle = '#16a34a'; cx.fillStyle = '#16a34a'; cx.lineWidth = 2;
+    for (var i=0;i<__fp.clicks.length;i++) {
+      var p = __fp.clicks[i];
+      cx.beginPath(); cx.arc(p.x, p.y, 6, 0, Math.PI*2); cx.fill();
+    }
+    if (__fp.clicks.length >= 2) {
+      cx.beginPath(); cx.moveTo(__fp.clicks[0].x, __fp.clicks[0].y); cx.lineTo(__fp.clicks[1].x, __fp.clicks[1].y); cx.stroke();
+    }
+  }
+  // Draw placed rooms
+  cx.strokeStyle = '#3b82f6'; cx.lineWidth = 2; cx.fillStyle = 'rgba(59,130,246,0.12)';
+  for (var r=0;r<__fp.rooms.length;r++){
+    var rm = __fp.rooms[r]; var x0 = Math.min(rm.x0, rm.x1), y0 = Math.min(rm.y0, rm.y1), x1 = Math.max(rm.x0, rm.x1), y1 = Math.max(rm.y0, rm.y1);
+    cx.beginPath(); cx.rect(x0, y0, x1-x0, y1-y0); cx.fill(); cx.stroke();
+    // Show size if scale known
+    if (__fp.pxPerMeter) {
+      var w = (x1-x0) / __fp.pxPerMeter; var d = (y1-y0) / __fp.pxPerMeter;
+      var label = w.toFixed(2)+'m × '+d.toFixed(2)+'m';
+      cx.fillStyle = '#111827'; cx.font = 'bold 14px system-ui, sans-serif'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+      cx.fillText(label, (x0+x1)/2, (y0+y1)/2);
+      cx.fillStyle = 'rgba(59,130,246,0.12)'; // restore
+    }
+  }
+  // Dragging preview
+  if (__fp.dragging && __fp.dragStart) {
+    var cur = __fp.__lastMouse;
+    if (cur) {
+      var x0 = __fp.dragStart.x, y0 = __fp.dragStart.y, x1 = cur.x, y1 = cur.y;
+      cx.setLineDash([6,4]); cx.strokeStyle = '#2563eb'; cx.lineWidth = 1.5; cx.beginPath(); cx.rect(Math.min(x0,x1), Math.min(y0,y1), Math.abs(x1-x0), Math.abs(y1-y0)); cx.stroke(); cx.setLineDash([]);
+    }
+  }
+}
+
+function wireFloorplanUI(){
+  // Buttons
+  var bClose = document.getElementById('floorplan-close'); if (bClose) bClose.onclick = closeFloorplanModal;
+  var bCancel = document.getElementById('fp-cancel'); if (bCancel) bCancel.onclick = closeFloorplanModal;
+  var back = document.getElementById('floorplan-backdrop'); if (back) back.onclick = closeFloorplanModal;
+  var bCal = document.getElementById('fp-mode-calibrate'); if (bCal) bCal.onclick = function(){ __fp.mode = 'calibrate'; };
+  var bPlace = document.getElementById('fp-mode-place'); if (bPlace) bPlace.onclick = function(){ __fp.mode = 'place'; };
+  var bUndo = document.getElementById('fp-undo'); if (bUndo) bUndo.onclick = function(){ if (__fp.rooms.length>0) { __fp.rooms.pop(); drawFloorplanOverlay(); updateFpInfo(); } };
+  var bApply = document.getElementById('fp-apply-scale'); if (bApply) bApply.onclick = function(){ applyCalibration(); };
+  var bCommit = document.getElementById('fp-commit'); if (bCommit) bCommit.onclick = function(){ commitFloorplanRooms(); };
+  // Canvas interactions
+  var ov = document.getElementById('floorplan-overlay');
+  if (ov) {
+    // Map mouse event client coords to canvas device pixels
+    function getPos(e){ var rect = ov.getBoundingClientRect(); var ratio = ov.width / Math.max(1, rect.width); return { x: (e.clientX - rect.left) * ratio, y: (e.clientY - rect.top) * ratio }; }
+    ov.addEventListener('mousedown', function(e){
+      if (!__fp.active) return; var p = getPos(e); __fp.__lastMouse = p;
+      if (__fp.mode === 'calibrate') {
+        __fp.clicks.push({ x:p.x, y:p.y }); if (__fp.clicks.length > 2) __fp.clicks.shift();
+        drawFloorplanOverlay();
+      } else if (__fp.mode === 'place') {
+        __fp.dragging = true; __fp.dragStart = p; drawFloorplanOverlay();
+      }
+    });
+    window.__fpMouseMove = function(e){ if (!__fp.active) return; var p = getPos(e); __fp.__lastMouse = p; if (__fp.dragging) drawFloorplanOverlay(); };
+    window.__fpMouseUp = function(){ if (!__fp.active) return; if (__fp.dragging && __fp.dragStart && __fp.__lastMouse) { var s = __fp.dragStart, c = __fp.__lastMouse; __fp.rooms.push({ x0:s.x, y0:s.y, x1:c.x, y1:c.y }); updateFpInfo(); } __fp.dragging = false; __fp.dragStart = null; drawFloorplanOverlay(); };
+    window.addEventListener('mousemove', window.__fpMouseMove);
+    window.addEventListener('mouseup', window.__fpMouseUp);
+  }
+  // Resize handler
+  window.__fpResize = function(){ if (!__fp.active) return; renderFloorplanPage(); };
+  window.addEventListener('resize', window.__fpResize);
+}
+
+function unbindFloorplanUI(){
+  try { if (window.__fpMouseMove) window.removeEventListener('mousemove', window.__fpMouseMove); } catch(e){}
+  try { if (window.__fpMouseUp) window.removeEventListener('mouseup', window.__fpMouseUp); } catch(e){}
+  try { if (window.__fpResize) window.removeEventListener('resize', window.__fpResize); } catch(e){}
+}
+
+function applyCalibration(){
+  if (__fp.clicks.length < 2) { updateStatus('Pick two points for calibration'); return; }
+  var a = __fp.clicks[0], b = __fp.clicks[1];
+  var dx = b.x - a.x, dy = b.y - a.y; var distPx = Math.sqrt(dx*dx + dy*dy);
+  var input = document.getElementById('fp-real-distance'); var real = parseFloat(input && input.value ? input.value : '');
+  if (!(real > 0)) { updateStatus('Enter a valid real distance'); return; }
+  __fp.pxPerMeter = distPx / real;
+  updateFpInfo();
+  drawFloorplanOverlay();
+}
+
+function updateFpInfo(){
+  var scaleSpan = document.getElementById('fp-scale-display'); if (scaleSpan) scaleSpan.textContent = __fp.pxPerMeter ? __fp.pxPerMeter.toFixed(2) : '—';
+  var cnt = document.getElementById('fp-rooms-count'); if (cnt) cnt.textContent = (__fp.rooms||[]).length;
+}
+
+function commitFloorplanRooms(){
+  if (!__fp.pxPerMeter) { updateStatus('Calibrate scale first'); return; }
+  if (!__fp.rooms || __fp.rooms.length === 0) { updateStatus('No rooms to import'); return; }
+  var created = 0;
+  // Use the first room center as origin for relative placement
+  var first = __fp.rooms[0]; var fx = (Math.min(first.x0, first.x1) + Math.max(first.x0, first.x1)) / 2; var fz = (Math.min(first.y0, first.y1) + Math.max(first.y0, first.y1)) / 2;
+  var worldOrigin = __fp.anchorWorld || { x: 0, z: 0 };
+  for (var i=0;i<__fp.rooms.length;i++){
+    var r = __fp.rooms[i];
+    var x0 = Math.min(r.x0, r.x1), x1 = Math.max(r.x0, r.x1), y0 = Math.min(r.y0, r.y1), y1 = Math.max(r.y0, r.y1);
+    var w = Math.max(0.5, (x1 - x0) / __fp.pxPerMeter);
+    var d = Math.max(0.5, (y1 - y0) / __fp.pxPerMeter);
+    var cx = (x0 + x1)/2, cz = (y0 + y1)/2;
+    var rx = worldOrigin.x + (cx - fx) / __fp.pxPerMeter;
+    var rz = worldOrigin.z + (cz - fz) / __fp.pxPerMeter;
+    var room = createRoom(rx, rz, 0);
+    room.width = parseFloat(w.toFixed(2));
+    room.depth = parseFloat(d.toFixed(2));
+    room.height = 3;
+    room.name = 'Imported ' + (i+1);
+    allRooms.push(room); created++;
+  }
+  saveProjectSilently();
+  selectedRoomId = null;
+  renderLoop();
+  updateStatus('Added ' + created + ' room(s) from floorplan');
+  closeFloorplanModal();
+}
 
 // ---------- Room Palette ----------
 // Catalog with rough real-world dimensions (meters) and a simple type tag for thumbnail rendering

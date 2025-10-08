@@ -27,7 +27,8 @@
 		<option value="" selected disabled>☰ Menu</option>
 		<option value="obj">⬇ 3D - OBJ</option>
 		<option value="obj-upload">⬆ 3D - OBJ</option>
-		<option value="pdf">📄 PDF</option>
+		<option value="pdf">📄 PDF (Export Views)</option>
+		<option value="pdf-floorplan-upload">⬆ Floorplan (PDF)</option>
 		<option value="json-download">⬇ JSON</option>
 		<option value="json-upload">⬆ JSON</option>
 		<option disabled>──────────</option>
@@ -116,29 +117,55 @@
 	</div>
 </div>
 
-<div id="pricing-modal">
-	<div id="pricing-content">
-		<button class="close-button" onclick="hidePricing()">&times;</button>
-		<h2>Project Pricing</h2>
-		<div id="pricing-breakdown">
-			<div class="pricing-section">
-				<h3>Rooms</h3>
-				<div id="room-pricing"></div>
+<input type="file" id="upload-file" accept="application/json" style="display:none" />
+<input type="file" id="upload-obj-file" accept=".obj" style="display:none" />
+<input type="file" id="upload-pdf-floorplan" accept="application/pdf" style="display:none" />
+
+<!-- Floorplan Import Modal -->
+<div id="floorplan-modal" style="display:none; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center;">
+	<div id="floorplan-backdrop" style="position:absolute; inset:0; background:rgba(0,0,0,0.45);"></div>
+	<div id="floorplan-content" style="position:relative; width: min(1100px, 92vw); height: min(80vh, 820px); background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden;">
+		<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid #e5e7eb; background:#f8fafc;">
+			<strong style="flex:1">Import Floorplan (PDF)</strong>
+			<button id="floorplan-close" class="secondary" title="Close">✕</button>
+		</div>
+		<div style="display:flex; min-height:0; height:100%;">
+			<div style="flex:1; position:relative; background:#0b1020; display:flex; align-items:center; justify-content:center;">
+				<canvas id="floorplan-canvas" style="max-width:100%; max-height:100%; background:#0b1020;"></canvas>
+				<canvas id="floorplan-overlay" style="position:absolute; inset:0; pointer-events:none;"></canvas>
 			</div>
-			<div class="pricing-section">
-				<h3>Additional Components</h3>
-				<div id="component-pricing"></div>
-			</div>
-			<div class="pricing-section total-section">
-				<h3>Total Estimate</h3>
-				<div id="total-pricing"></div>
+			<div style="width:280px; border-left:1px solid #e5e7eb; padding:10px; display:flex; flex-direction:column; gap:10px; background:#fff;">
+				<div>
+					<div style="font-weight:600; margin-bottom:6px;">Steps</div>
+					<ol style="margin:0 0 6px 18px; padding:0;">
+						<li>Calibrate scale: click two points, enter real distance</li>
+						<li>Draw rooms: drag to place rectangles</li>
+						<li>Commit rooms to scene</li>
+					</ol>
+				</div>
+				<div style="display:flex; gap:6px; flex-wrap:wrap;">
+					<button id="fp-mode-calibrate">Calibrate</button>
+					<button id="fp-mode-place">Place Room</button>
+					<button id="fp-undo" class="secondary">Undo</button>
+				</div>
+				<div style="display:flex; flex-direction:column; gap:6px;">
+					<label style="font-size:12px; color:#374151;">Real distance (m) for last two clicks</label>
+					<input id="fp-real-distance" type="number" min="0.1" max="1000" step="0.1" value="1.0" />
+					<button id="fp-apply-scale" class="secondary">Apply Scale</button>
+				</div>
+				<div style="font-size:12px; color:#374151;">
+					<div>Scale: <span id="fp-scale-display">—</span> px/m</div>
+					<div>Rooms queued: <span id="fp-rooms-count">0</span></div>
+				</div>
+				<div style="margin-top:auto; display:flex; gap:8px;">
+					<button id="fp-commit" style="flex:1;">Commit to Scene</button>
+					<button id="fp-cancel" class="secondary">Cancel</button>
+				</div>
 			</div>
 		</div>
 	</div>
+  
 </div>
-
-<input type="file" id="upload-file" accept="application/json" style="display:none" />
-<input type="file" id="upload-obj-file" accept=".obj" style="display:none" />
 
 <div id="pricing-modal">
 	<div id="pricing-content">
@@ -163,6 +190,14 @@
 
 <!-- jsPDF for multi-page PDF export -->
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<!-- PDF.js for PDF floorplan import -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.5.136/build/pdf.min.js"></script>
+<script>
+	if (window['pdfjsLib']) {
+		pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.5.136/build/pdf.worker.min.js';
+	}
+	// else the app will gracefully prompt when user tries to import
+</script>
 <script src="js/app.js?v=20251006-1"></script>
 
 </body>
