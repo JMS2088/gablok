@@ -4240,6 +4240,7 @@ function openFloorplanModal(opts){
   // Render first page
   renderFloorplanPage();
   updateFpInfo();
+  updateStatus('PDF loaded. Click two points on a known distance to calibrate scale');
 }
 
 function closeFloorplanModal(){
@@ -4355,8 +4356,8 @@ function wireFloorplanUI(){
   var bClose = document.getElementById('floorplan-close'); if (bClose) bClose.onclick = closeFloorplanModal;
   var bCancel = document.getElementById('fp-cancel'); if (bCancel) bCancel.onclick = closeFloorplanModal;
   var back = document.getElementById('floorplan-backdrop'); if (back) back.onclick = closeFloorplanModal;
-  var bCal = document.getElementById('fp-mode-calibrate'); if (bCal) bCal.onclick = function(){ __fp.mode = 'calibrate'; };
-  var bPlace = document.getElementById('fp-mode-place'); if (bPlace) bPlace.onclick = function(){ __fp.mode = 'place'; };
+  var bCal = document.getElementById('fp-mode-calibrate'); if (bCal) bCal.onclick = function(){ __fp.mode = 'calibrate'; updateStatus('Click two points on the floorplan with a known distance between them'); };
+  var bPlace = document.getElementById('fp-mode-place'); if (bPlace) bPlace.onclick = function(){ __fp.mode = 'place'; updateStatus('Drag on the floorplan to draw rectangles over rooms'); };
   var bUndo = document.getElementById('fp-undo'); if (bUndo) bUndo.onclick = function(){ if (__fp.rooms.length>0) { __fp.rooms.pop(); drawFloorplanOverlay(); updateFpInfo(); } };
   var bApply = document.getElementById('fp-apply-scale'); if (bApply) bApply.onclick = function(){ applyCalibration(); };
   var bCommit = document.getElementById('fp-commit'); if (bCommit) bCommit.onclick = function(){ commitFloorplanRooms(); };
@@ -4399,6 +4400,9 @@ function applyCalibration(){
   __fp.pxPerMeter = distPx / real;
   updateFpInfo();
   drawFloorplanOverlay();
+  // Auto-switch to Place Room mode after calibration
+  __fp.mode = 'place';
+  updateStatus('Scale calibrated. Now drag rectangles over rooms in the floorplan');
 }
 
 function updateFpInfo(){
@@ -4408,7 +4412,12 @@ function updateFpInfo(){
 
 function commitFloorplanRooms(){
   if (!__fp.pxPerMeter) { updateStatus('Calibrate scale first'); return; }
-  if (!__fp.rooms || __fp.rooms.length === 0) { updateStatus('No rooms to import'); return; }
+  if (!__fp.rooms || __fp.rooms.length === 0) { 
+    updateStatus('No rooms drawn. Click "Place Room" and drag rectangles over rooms in the floorplan'); 
+    // Auto-switch to place mode to help user
+    __fp.mode = 'place';
+    return; 
+  }
   var created = 0;
   // Use the first room center as origin for relative placement
   var first = __fp.rooms[0]; var fx = (Math.min(first.x0, first.x1) + Math.max(first.x0, first.x1)) / 2; var fz = (Math.min(first.y0, first.y1) + Math.max(first.y0, first.y1)) / 2;
