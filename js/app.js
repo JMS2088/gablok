@@ -37,6 +37,7 @@ var screenW = 0;
 var screenH = 0;
 var centerX = 0;
 var centerY = 0;
+var deviceRatio = 1;
 var allRooms = [];
 var selectedRoomId = null;
 var editingLabelId = null; // which object's label is currently being edited
@@ -52,11 +53,75 @@ var roofComponents = [];
 var currentSnapGuides = [];
 var furnitureItems = [];
 
+// Lightweight debug logger to avoid per-frame console overhead
+var DEBUG = false;
+function dbg() {
+  if (DEBUG && typeof console !== 'undefined' && console.log) {
+    try { console.log.apply(console, arguments); } catch (e) {}
+  }
+}
+
+// Projection cache to avoid repeated trig in hot path
+var _projCache = {
+  yaw: null,
+  pitch: null,
+  cosYaw: 1,
+  sinYaw: 0,
+  cosPitch: 1,
+  sinPitch: 0,
+  fov: 800
+};
+function updateProjectionCache() {
+  if (_projCache.yaw !== camera.yaw) {
+    _projCache.yaw = camera.yaw;
+    _projCache.cosYaw = Math.cos(camera.yaw);
+    _projCache.sinYaw = Math.sin(camera.yaw);
+  }
+  if (_projCache.pitch !== camera.pitch) {
+    _projCache.pitch = camera.pitch;
+    _projCache.cosPitch = Math.cos(camera.pitch);
+    _projCache.sinPitch = Math.sin(camera.pitch);
+  }
+}
+
+// Quick offscreen culling using object center with generous margins
+function isOffscreenByCenter(screenPt) {
+  if (!screenPt) return true;
+  var margin = 200; // generous margin to avoid pop-in
+  return (screenPt.x < -margin || screenPt.x > (screenW + margin) || screenPt.y < -margin || screenPt.y > (screenH + margin));
+}
+
 var HANDLE_RADIUS = 12;
 var GRID_SPACING = 0.5;
 var SNAP_GRID_TOLERANCE = 1.0;
 var SNAP_CENTER_TOLERANCE = 0.6;
 var HANDLE_SNAP_TOLERANCE = 0.25;
+
+// Throttles for expensive DOM updates
+var LABEL_UPDATE_INTERVAL_MS = 120;
+var MEASURE_UPDATE_INTERVAL_MS = 250;
+var _lastLabelsUpdate = 0;
+var _lastMeasurementsUpdate = 0;
+
+// Offscreen grid cache
+var _gridCache = {
+  canvas: null,
+  ctx: null,
+  key: '',
+  w: 0,
+  h: 0
+};
+function getGridCacheKey(interacting, spacing, rangeFactor, minGrid) {
+  // Include pan and use finer rounding to avoid visible drift
+  var rx = camera.targetX.toFixed(2);
+  var rz = camera.targetZ.toFixed(2);
+  var rd = camera.distance.toFixed(2);
+  var ry = (camera.yaw % (Math.PI * 2)).toFixed(3);
+  var rp = camera.pitch.toFixed(3);
+  var px = (pan.x || 0).toFixed(0);
+  var py = (pan.y || 0).toFixed(0);
+  return [rx, rz, rd, ry, rp, px, py, interacting ? 1 : 0, spacing, rangeFactor, minGrid, screenW, screenH, deviceRatio].join('|');
+}
 
 // Global handle styles and helpers
 var HANDLE_STYLE = {
@@ -188,26 +253,26 @@ function createBalcony(x, z) {
 }
 
 function addBalcony() {
-  console.log('Adding new balcony...');
+  dbg('Adding new balcony...');
   var newBalcony = createBalcony();
-  console.log('Created balcony:', newBalcony);
+  dbg('Created balcony:', newBalcony);
   
   var spot = findFreeSpot(newBalcony);
   newBalcony.x = spot.x;
   newBalcony.z = spot.z;
-  console.log('Found spot for balcony:', spot);
+  dbg('Found spot for balcony:', spot);
   
   balconyComponents.push(newBalcony);
-  console.log('Balcony components now:', balconyComponents);
+  dbg('Balcony components now:', balconyComponents);
   
   currentFloor = 1;  // Switch to first floor
   selectedRoomId = newBalcony.id;
-  console.log('Set current floor to:', currentFloor, 'Selected ID:', selectedRoomId);
+  dbg('Set current floor to:', currentFloor, 'Selected ID:', selectedRoomId);
   
   var selector = document.getElementById('levelSelect');
   if (selector) {
     selector.value = '1';
-    console.log('Updated selector value to:', selector.value);
+  dbg('Updated selector value to:', selector.value);
   }
   
   renderLoop(); // Force a render update
@@ -244,6 +309,7 @@ function setupCanvas() {
   
   ctx.scale(ratio, ratio);
   ctx.imageSmoothingEnabled = true;
+  deviceRatio = ratio;
 }
 
 function project3D(worldX, worldY, worldZ) {
@@ -251,23 +317,20 @@ function project3D(worldX, worldY, worldZ) {
     var dx = worldX - camera.targetX;
     var dy = worldY;
     var dz = worldZ - camera.targetZ;
-    
-    var cosYaw = Math.cos(camera.yaw);
-    var sinYaw = Math.sin(camera.yaw);
-    var rotX = cosYaw * dx + sinYaw * dz;
-    var rotZ = -sinYaw * dx + cosYaw * dz;
-    
-    var cosPitch = Math.cos(camera.pitch);
-    var sinPitch = Math.sin(camera.pitch);
-    var finalY = cosPitch * dy - sinPitch * rotZ;
-    var finalZ = sinPitch * dy + cosPitch * rotZ + camera.distance;
-    
+
+    // Use cached trig
+    var rotX = _projCache.cosYaw * dx + _projCache.sinYaw * dz;
+    var rotZ = -_projCache.sinYaw * dx + _projCache.cosYaw * dz;
+
+    var finalY = _projCache.cosPitch * dy - _projCache.sinPitch * rotZ;
+    var finalZ = _projCache.sinPitch * dy + _projCache.cosPitch * rotZ + camera.distance;
+
     if (finalZ <= 0.1) return null;
-    
-    var fov = 800;
+
+    var fov = _projCache.fov;
     var screenX = centerX + (rotX * fov) / finalZ + pan.x;
     var screenY = centerY - (finalY * fov) / finalZ + pan.y;
-    
+
     return { x: screenX, y: screenY, depth: finalZ };
   } catch (e) {
     return null;
@@ -608,101 +671,137 @@ function clearCanvas() {
 }
 
 function drawGrid() {
-  ctx.strokeStyle = '#e0e0e0'; // darker grey for better visibility
-  ctx.lineWidth = 1;
-  
-  var gridRange = Math.max(20, camera.distance * 1.5);
-  var minX = camera.targetX - gridRange;
-  var maxX = camera.targetX + gridRange;
-  var minZ = camera.targetZ - gridRange;
-  var maxZ = camera.targetZ + gridRange;
-  
-  minX = Math.floor(minX / GRID_SPACING) * GRID_SPACING;
-  maxX = Math.ceil(maxX / GRID_SPACING) * GRID_SPACING;
-  minZ = Math.floor(minZ / GRID_SPACING) * GRID_SPACING;
-  maxZ = Math.ceil(maxZ / GRID_SPACING) * GRID_SPACING;
-  
-  for (var z = minZ; z <= maxZ; z += GRID_SPACING) {
-    var h1 = project3D(minX, 0, z);
-    var h2 = project3D(maxX, 0, z);
-    if (h1 && h2) {
-      ctx.beginPath();
-      ctx.moveTo(h1.x, h1.y);
-      ctx.lineTo(h2.x, h2.y);
-      ctx.stroke();
+  // Params depend on interaction to reduce cost while dragging
+  var interacting = !!mouse.down;
+  var spacing = GRID_SPACING; // keep spacing constant for consistent alignment
+  var rangeFactor = interacting ? 1.0 : 1.5; // only reduce range during interaction
+  var minGrid = interacting ? 12 : 20;
+  var gridRange = Math.max(minGrid, camera.distance * rangeFactor);
+
+  // Ensure projection cache is current for this frame
+  updateProjectionCache();
+
+  // Build a coarse key and reuse cached grid if possible
+  var key = getGridCacheKey(interacting, spacing, rangeFactor, minGrid);
+  var needsRebuild = !_gridCache.canvas || _gridCache.key !== key || _gridCache.w !== screenW || _gridCache.h !== screenH;
+
+  if (needsRebuild) {
+    // Create or resize offscreen canvas
+    var oc = _gridCache.canvas || document.createElement('canvas');
+    var octx = _gridCache.ctx || oc.getContext('2d');
+    oc.width = Math.max(1, Math.floor(screenW * deviceRatio));
+    oc.height = Math.max(1, Math.floor(screenH * deviceRatio));
+    // Clear
+    octx.setTransform(1, 0, 0, 1, 0, 0);
+    octx.clearRect(0, 0, oc.width, oc.height);
+    // Draw in device pixels; match main canvas scale
+    octx.scale(deviceRatio, deviceRatio);
+
+    // Draw grid onto offscreen
+    octx.strokeStyle = '#e0e0e0';
+    octx.lineWidth = 1;
+
+    var minX = camera.targetX - gridRange;
+    var maxX = camera.targetX + gridRange;
+    var minZ = camera.targetZ - gridRange;
+    var maxZ = camera.targetZ + gridRange;
+
+    // Snap to spacing to avoid jitter
+    minX = Math.floor(minX / spacing) * spacing;
+    maxX = Math.ceil(maxX / spacing) * spacing;
+    minZ = Math.floor(minZ / spacing) * spacing;
+    maxZ = Math.ceil(maxZ / spacing) * spacing;
+
+    for (var z = minZ; z <= maxZ; z += spacing) {
+      var h1 = project3D(minX, 0, z);
+      var h2 = project3D(maxX, 0, z);
+      if (h1 && h2) {
+        octx.beginPath();
+        octx.moveTo(h1.x, h1.y);
+        octx.lineTo(h2.x, h2.y);
+        octx.stroke();
+      }
     }
-  }
-  
-  for (var x = minX; x <= maxX; x += GRID_SPACING) {
-    var v1 = project3D(x, 0, minZ);
-    var v2 = project3D(x, 0, maxZ);
-    if (v1 && v2) {
-      ctx.beginPath();
-      ctx.moveTo(v1.x, v1.y);
-      ctx.lineTo(v2.x, v2.y);
-      ctx.stroke();
+
+    for (var x = minX; x <= maxX; x += spacing) {
+      var v1 = project3D(x, 0, minZ);
+      var v2 = project3D(x, 0, maxZ);
+      if (v1 && v2) {
+        octx.beginPath();
+        octx.moveTo(v1.x, v1.y);
+        octx.lineTo(v2.x, v2.y);
+        octx.stroke();
+      }
     }
-  }
-  
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#ff4444';
-  var xStart = project3D(-gridRange, 0, 0);
-  var xEnd = project3D(gridRange, 0, 0);
-  if (xStart && xEnd) {
-    ctx.beginPath();
-    ctx.moveTo(xStart.x, xStart.y);
-    ctx.lineTo(xEnd.x, xEnd.y);
-    ctx.stroke();
-  }
-  
-  ctx.strokeStyle = '#4444ff';
-  var zStart = project3D(0, 0, -gridRange);
-  var zEnd = project3D(0, 0, gridRange);
-  if (zStart && zEnd) {
-    ctx.beginPath();
-    ctx.moveTo(zStart.x, zStart.y);
-    ctx.lineTo(zEnd.x, zEnd.y);
-    ctx.stroke();
+
+    // Axis lines
+    octx.lineWidth = 2;
+    // X axis
+    octx.strokeStyle = '#ff4444';
+    var xStart = project3D(-gridRange, 0, 0);
+    var xEnd = project3D(gridRange, 0, 0);
+    if (xStart && xEnd) {
+      octx.beginPath();
+      octx.moveTo(xStart.x, xStart.y);
+      octx.lineTo(xEnd.x, xEnd.y);
+      octx.stroke();
+    }
+    // Z axis
+    octx.strokeStyle = '#4444ff';
+    var zStart = project3D(0, 0, -gridRange);
+    var zEnd = project3D(0, 0, gridRange);
+    if (zStart && zEnd) {
+      octx.beginPath();
+      octx.moveTo(zStart.x, zStart.y);
+      octx.lineTo(zEnd.x, zEnd.y);
+      octx.stroke();
+    }
+
+    // North arrow
+    try {
+      var nBaseW = { x: camera.targetX, y: 0.02, z: camera.targetZ + Math.min(4, gridRange * 0.2) };
+      var nTipW  = { x: camera.targetX, y: 0.02, z: camera.targetZ + Math.min(5.5, gridRange * 0.27) };
+      var nBase = project3D(nBaseW.x, nBaseW.y, nBaseW.z);
+      var nTip  = project3D(nTipW.x,  nTipW.y,  nTipW.z);
+      if (nBase && nTip) {
+        octx.strokeStyle = '#e74c3c';
+        octx.fillStyle = '#e74c3c';
+        octx.lineWidth = 2;
+        octx.beginPath();
+        octx.moveTo(nBase.x, nBase.y);
+        octx.lineTo(nTip.x, nTip.y);
+        octx.stroke();
+
+        var ang = Math.atan2(nTip.y - nBase.y, nTip.x - nBase.x);
+        var headLen = 10;
+        var leftX = nTip.x - headLen * Math.cos(ang - Math.PI / 6);
+        var leftY = nTip.y - headLen * Math.sin(ang - Math.PI / 6);
+        var rightX = nTip.x - headLen * Math.cos(ang + Math.PI / 6);
+        var rightY = nTip.y - headLen * Math.sin(ang + Math.PI / 6);
+        octx.beginPath();
+        octx.moveTo(nTip.x, nTip.y);
+        octx.lineTo(leftX, leftY);
+        octx.lineTo(rightX, rightY);
+        octx.closePath();
+        octx.fill();
+
+        octx.fillStyle = '#333';
+        octx.font = 'bold 12px system-ui, sans-serif';
+        octx.textAlign = 'center';
+        octx.textBaseline = 'bottom';
+        octx.fillText('N', nTip.x, nTip.y - 4);
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // Save cache
+    _gridCache.canvas = oc; _gridCache.ctx = octx; _gridCache.key = key; _gridCache.w = screenW; _gridCache.h = screenH;
   }
 
-  // Draw a small ground-level North arrow near the camera target to indicate +Z
-  try {
-    var nBaseW = { x: camera.targetX, y: 0.02, z: camera.targetZ + Math.min(4, gridRange * 0.2) };
-    var nTipW  = { x: camera.targetX, y: 0.02, z: camera.targetZ + Math.min(5.5, gridRange * 0.27) };
-    var nBase = project3D(nBaseW.x, nBaseW.y, nBaseW.z);
-    var nTip  = project3D(nTipW.x,  nTipW.y,  nTipW.z);
-    if (nBase && nTip) {
-      ctx.strokeStyle = '#e74c3c';
-      ctx.fillStyle = '#e74c3c';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(nBase.x, nBase.y);
-      ctx.lineTo(nTip.x, nTip.y);
-      ctx.stroke();
-
-      // Arrowhead
-      var ang = Math.atan2(nTip.y - nBase.y, nTip.x - nBase.x);
-      var headLen = 10;
-      var leftX = nTip.x - headLen * Math.cos(ang - Math.PI / 6);
-      var leftY = nTip.y - headLen * Math.sin(ang - Math.PI / 6);
-      var rightX = nTip.x - headLen * Math.cos(ang + Math.PI / 6);
-      var rightY = nTip.y - headLen * Math.sin(ang + Math.PI / 6);
-      ctx.beginPath();
-      ctx.moveTo(nTip.x, nTip.y);
-      ctx.lineTo(leftX, leftY);
-      ctx.lineTo(rightX, rightY);
-      ctx.closePath();
-      ctx.fill();
-
-      // Label 'N'
-      ctx.fillStyle = '#333';
-      ctx.font = 'bold 12px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'bottom';
-      ctx.fillText('N', nTip.x, nTip.y - 4);
-    }
-  } catch (e) {
-    // non-fatal
+  // Blit cached grid using the current canvas transform (already scaled to CSS px)
+  if (_gridCache.canvas) {
+    ctx.drawImage(_gridCache.canvas, 0, 0, screenW, screenH);
   }
 }
 
@@ -836,7 +935,7 @@ function drawCompass() {
     ctx.restore();
   } catch (e) {
     // Never let compass drawing break the frame
-    console.warn('Compass draw skipped:', e);
+    dbg('Compass draw skipped:', e);
   }
 }
 
@@ -860,7 +959,7 @@ function drawRoom(room) {
       {x: room.x - hw, y: roomFloorY + room.height, z: room.z + hd}
     ];
     
-    var projected = [];
+  var projected = [];
     for (var i = 0; i < corners.length; i++) {
       var p = project3D(corners[i].x, corners[i].y, corners[i].z);
       if (!p) return;
@@ -2501,11 +2600,11 @@ function switchLevel() {
     renderLoop();
     return;
   } else if (value === 'balcony') {
-    console.log('Balcony option selected in switchLevel');
+    dbg('Balcony option selected in switchLevel');
     addBalcony();
     currentFloor = 1;  // Ensure we're on first floor
     selector.value = '1';
-    console.log('Current floor after balcony added:', currentFloor);
+    dbg('Current floor after balcony added:', currentFloor);
     renderLoop();
     return;
   }
@@ -2971,9 +3070,9 @@ function drawPergola(pergola) {
 }
 
 function drawBalcony(balcony) {
-  console.log('Drawing balcony:', balcony);
+  dbg('Drawing balcony:', balcony);
   if (!balcony) {
-    console.log('No balcony provided to draw');
+    dbg('No balcony provided to draw');
     return;
   }
   
@@ -3361,7 +3460,7 @@ function drawGarage(garage) {
   if (!garage) return;
   
   try {
-    console.log('Drawing garage:', garage.id, 'Selected:', selectedRoomId);
+    dbg('Drawing garage:', garage.id, 'Selected:', selectedRoomId);
     var selected = selectedRoomId === garage.id;
     var strokeColor = selected ? '#007acc' : '#D0D0D0';
     var fillColor = selected ? 'rgba(0,122,204,0.3)' : 'rgba(208,208,208,0.2)';
@@ -3507,7 +3606,7 @@ function drawGarage(garage) {
 function drawHandlesForGarage(garage) {
   try {
     var isActive = selectedRoomId === garage.id;
-    console.log('Drawing garage handles');
+    dbg('Drawing garage handles');
     // Set constants
     var REGULAR_HANDLE_RADIUS = HANDLE_RADIUS;
     var ROTATION_HANDLE_RADIUS = 14;
@@ -3560,7 +3659,7 @@ function drawHandlesForGarage(garage) {
       });
     });
     
-    console.log('Drawing handles:', garageHandles.length);
+  dbg('Drawing handles:', garageHandles.length);
     // Draw each handle
     garageHandles.forEach(function(handle) {
       var screen = project3D(handle.x, handle.y, handle.z);
@@ -3578,7 +3677,7 @@ function drawHandlesForGarage(garage) {
         roomId: garage.id
       });
       
-      console.log('Registered handle:', handle.type, 'for garage:', garage.id);
+  dbg('Registered handle:', handle.type, 'for garage:', garage.id);
     });
   } catch (error) {
     console.error('Garage handle error:', error);
@@ -3589,57 +3688,16 @@ function renderLoop() {
   try {
     resizeHandles = [];
     
+    // Refresh trig cache for this frame
+    updateProjectionCache();
+
     clearCanvas();
     drawGrid();
     drawSnapGuides();
     
-    // Sort all objects by distance for proper rendering
+    // Build one unified object list (distance + maxHeight) with simple culling
     var allObjects = [];
-    
-    // Add rooms
-    for (var i = 0; i < allRooms.length; i++) {
-      var room = allRooms[i];
-      allObjects.push({
-        object: room,
-        type: 'room',
-        distance: getDistanceFromCamera(room)
-      });
-    }
-    
-    // Add all components
-    if (stairsComponent) {
-      allObjects.push({
-        object: stairsComponent,
-        type: 'stairs',
-        distance: getDistanceFromCamera(stairsComponent)
-      });
-    }
-    
-    garageComponents.forEach(function(garage) {
-      allObjects.push({
-        object: garage,
-        type: 'garage',
-        distance: getDistanceFromCamera(garage)
-      });
-    });
-    
-    // Sort objects by distance (furthest first)
-    allObjects.sort(function(a, b) {
-      return b.distance - a.distance;
-    });
-    
-    // Draw all objects in order
-    allObjects.forEach(function(obj) {
-      if (obj.type === 'room') {
-        drawRoom(obj.object);
-      } else if (obj.type === 'stairs') {
-        drawStairs(obj.object);
-      } else if (obj.type === 'garage') {
-        drawGarage(obj.object);
-      }
-    });
-    
-    var allObjects = [];
+    var cullRadius = Math.max(40, camera.distance * 4); // skip very far objects
     
     for (var i = 0; i < allRooms.length; i++) {
       var room = allRooms[i];
@@ -3649,12 +3707,15 @@ function renderLoop() {
         (roomCenterY) * (roomCenterY) +
         (room.z - camera.targetZ) * (room.z - camera.targetZ)
       );
-      allObjects.push({
-        object: room,
-        type: 'room',
-        distance: distFromCamera,
-        maxHeight: room.level * 3.5 + room.height
-      });
+      var centerScreen = project3D(room.x, roomCenterY, room.z);
+      if (distFromCamera <= cullRadius && !isOffscreenByCenter(centerScreen)) {
+        allObjects.push({
+          object: room,
+          type: 'room',
+          distance: distFromCamera,
+          maxHeight: room.level * 3.5 + room.height
+        });
+      }
     }
     
     if (stairsComponent) {
@@ -3664,30 +3725,36 @@ function renderLoop() {
         (stairsCenterY) * (stairsCenterY) +
         (stairsComponent.z - camera.targetZ) * (stairsComponent.z - camera.targetZ)
       );
-      allObjects.push({
-        object: stairsComponent,
-        type: 'stairs',
-        distance: stairsDistance,
-        maxHeight: stairsComponent.height
-      });
+      var stairsScreen = project3D(stairsComponent.x, stairsCenterY, stairsComponent.z);
+      if (stairsDistance <= cullRadius && !isOffscreenByCenter(stairsScreen)) {
+        allObjects.push({
+          object: stairsComponent,
+          type: 'stairs',
+          distance: stairsDistance,
+          maxHeight: stairsComponent.height
+        });
+      }
     }
     
-    console.log('Rendering balconies. Count:', balconyComponents.length);
+    dbg('Rendering balconies. Count:', balconyComponents.length);
     for (var i = 0; i < balconyComponents.length; i++) {
       var balcony = balconyComponents[i];
-      console.log('Processing balcony:', balcony);
+      dbg('Processing balcony:', balcony);
       var balconyCenterY = balcony.level * 3.5 + balcony.height / 2;
       var balconyDistance = Math.sqrt(
         (balcony.x - camera.targetX) * (balcony.x - camera.targetX) + 
         (balconyCenterY) * (balconyCenterY) +
         (balcony.z - camera.targetZ) * (balcony.z - camera.targetZ)
       );
-      allObjects.push({
-        object: balcony,
-        type: 'balcony',
-        distance: balconyDistance,
-        maxHeight: balcony.level * 3.5 + balcony.height
-      });
+      var balcScreen = project3D(balcony.x, balconyCenterY, balcony.z);
+      if (balconyDistance <= cullRadius && !isOffscreenByCenter(balcScreen)) {
+        allObjects.push({
+          object: balcony,
+          type: 'balcony',
+          distance: balconyDistance,
+          maxHeight: balcony.level * 3.5 + balcony.height
+        });
+      }
     }
     
     for (var i = 0; i < pergolaComponents.length; i++) {
@@ -3698,12 +3765,15 @@ function renderLoop() {
         (pergolaCenterY) * (pergolaCenterY) +
         (pergola.z - camera.targetZ) * (pergola.z - camera.targetZ)
       );
-      allObjects.push({
-        object: pergola,
-        type: 'pergola',
-        distance: pergolaDistance,
-        maxHeight: pergola.totalHeight
-      });
+      var pergScreen = project3D(pergola.x, pergolaCenterY, pergola.z);
+      if (pergolaDistance <= cullRadius && !isOffscreenByCenter(pergScreen)) {
+        allObjects.push({
+          object: pergola,
+          type: 'pergola',
+          distance: pergolaDistance,
+          maxHeight: pergola.totalHeight
+        });
+      }
     }
     
     for (var i = 0; i < garageComponents.length; i++) {
@@ -3714,12 +3784,15 @@ function renderLoop() {
         (garageCenterY) * (garageCenterY) +
         (garage.z - camera.targetZ) * (garage.z - camera.targetZ)
       );
-      allObjects.push({
-        object: garage,
-        type: 'garage',
-        distance: garageDistance,
-        maxHeight: garage.height
-      });
+      var garScreen = project3D(garage.x, garageCenterY, garage.z);
+      if (garageDistance <= cullRadius && !isOffscreenByCenter(garScreen)) {
+        allObjects.push({
+          object: garage,
+          type: 'garage',
+          distance: garageDistance,
+          maxHeight: garage.height
+        });
+      }
     }
     
     for (var i = 0; i < roofComponents.length; i++) {
@@ -3730,12 +3803,15 @@ function renderLoop() {
         (roofCenterY) * (roofCenterY) +
         (roof.z - camera.targetZ) * (roof.z - camera.targetZ)
       );
-      allObjects.push({
-        object: roof,
-        type: 'roof',
-        distance: roofDistance,
-        maxHeight: roof.baseHeight + roof.height
-      });
+      var roofScreen = project3D(roof.x, roofCenterY, roof.z);
+      if (roofDistance <= cullRadius && !isOffscreenByCenter(roofScreen)) {
+        allObjects.push({
+          object: roof,
+          type: 'roof',
+          distance: roofDistance,
+          maxHeight: roof.baseHeight + roof.height
+        });
+      }
     }
     
     for (var i = 0; i < furnitureItems.length; i++) {
@@ -3746,10 +3822,13 @@ function renderLoop() {
         (fCenterY) * (fCenterY) +
         (furn.z - camera.targetZ) * (furn.z - camera.targetZ)
       );
-  allObjects.push({ object: furn, type: 'furniture', distance: fDist, maxHeight: (furn.level || 0) * 3.5 + (furn.elevation || 0) + (furn.height || 0.7) });
+      var fScreen = project3D(furn.x, fCenterY, furn.z);
+      if (fDist <= cullRadius && !isOffscreenByCenter(fScreen)) {
+        allObjects.push({ object: furn, type: 'furniture', distance: fDist, maxHeight: (furn.level || 0) * 3.5 + (furn.elevation || 0) + (furn.height || 0.7) });
+      }
     }
     
-    console.log('All objects before sorting:', allObjects.map(obj => ({ type: obj.type, id: obj.object.id })));
+    dbg('All objects before sorting:', allObjects.map(function(obj){ return { type: obj.type, id: obj.object.id }; }));
     
     allObjects.sort(function(a, b) {
       var distDiff = b.distance - a.distance;
@@ -3759,8 +3838,8 @@ function renderLoop() {
       return a.maxHeight - b.maxHeight;
     });
     
-    console.log('Current floor:', currentFloor);
-    console.log('All objects after sorting:', allObjects.map(obj => ({ type: obj.type, id: obj.object.id })));
+    dbg('Current floor:', currentFloor);
+    dbg('All objects after sorting:', allObjects.map(function(obj){ return { type: obj.type, id: obj.object.id }; }));
     
     // Draw all non-selected objects first
     var selectedEntry = null;
@@ -3774,7 +3853,7 @@ function renderLoop() {
         case 'room':      drawRoom(it.object); break;
         case 'stairs':    drawStairs(it.object); break;
         case 'furniture': drawFurniture(it.object); break;
-        case 'balcony':   console.log('Found balcony to draw:', it.object); drawBalcony(it.object); break;
+        case 'balcony':   dbg('Found balcony to draw:', it.object); drawBalcony(it.object); break;
         case 'pergola':   drawPergola(it.object); break;
         case 'garage':    drawGarage(it.object); break;
         case 'roof':      drawRoof(it.object); break;
@@ -3793,9 +3872,17 @@ function renderLoop() {
       }
     }
     
-  updateLabels();
-  drawCompass();
-    updateMeasurements();
+    // Throttle DOM-heavy updates
+    var now = performance && performance.now ? performance.now() : Date.now();
+    if (now - _lastLabelsUpdate > LABEL_UPDATE_INTERVAL_MS) {
+      updateLabels();
+      _lastLabelsUpdate = now;
+    }
+    drawCompass();
+    if (now - _lastMeasurementsUpdate > MEASURE_UPDATE_INTERVAL_MS) {
+      updateMeasurements();
+      _lastMeasurementsUpdate = now;
+    }
     
   } catch (error) {
     console.error('Render error:', error);
