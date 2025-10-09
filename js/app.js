@@ -3685,210 +3685,65 @@ function drawHandlesForGarage(garage) {
 }
 
 function renderLoop() {
+  var frameStart = (performance && performance.now) ? performance.now() : Date.now();
   try {
-    resizeHandles = [];
-    
-    // Refresh trig cache for this frame
-    updateProjectionCache();
+    // Detect camera / selection changes to decide if a re-render is necessary
+    var camChanged = false;
+    var lc = __perf.lastCamera;
+    if (lc.yaw !== camera.yaw || lc.pitch !== camera.pitch || lc.targetX !== camera.targetX || lc.targetZ !== camera.targetZ || lc.distance !== camera.distance || lc.floor !== currentFloor || lc.sel !== selectedRoomId) {
+      camChanged = true;
+      lc.yaw = camera.yaw; lc.pitch = camera.pitch; lc.targetX = camera.targetX; lc.targetZ = camera.targetZ; lc.distance = camera.distance; lc.floor = currentFloor; lc.sel = selectedRoomId;
+    }
+    var dynamicActivity = camChanged || _needsFullRender;
+    var nowTs = frameStart;
+    var dtSinceLast = nowTs - __perf.lastFrameTime;
+    var minInterval = dynamicActivity ? _minFrameInterval : (1000 / MIN_DYNAMIC_FPS);
+    if (!dynamicActivity && dtSinceLast < minInterval) {
+      __perf.skipStreak++;
+      animationId = requestAnimationFrame(renderLoop);
+      return;
+    }
+    __perf.skipStreak = 0;
+    __perf.lastFrameTime = nowTs;
 
+    resizeHandles = [];
+    updateProjectionCache();
     clearCanvas();
     drawGrid();
     drawSnapGuides();
-    
-    // Build one unified object list (distance + maxHeight) with simple culling
+
+    // Build unified object list with squared distance culling
     var allObjects = [];
-    var cullRadius = Math.max(40, camera.distance * 4); // skip very far objects
-    
-    for (var i = 0; i < allRooms.length; i++) {
-      var room = allRooms[i];
-      var roomCenterY = room.level * 3.5 + room.height / 2;
-      var distFromCamera = Math.sqrt(
-        (room.x - camera.targetX) * (room.x - camera.targetX) + 
-        (roomCenterY) * (roomCenterY) +
-        (room.z - camera.targetZ) * (room.z - camera.targetZ)
-      );
-      var centerScreen = project3D(room.x, roomCenterY, room.z);
-      if (distFromCamera <= cullRadius && !isOffscreenByCenter(centerScreen)) {
-        allObjects.push({
-          object: room,
-          type: 'room',
-          distance: distFromCamera,
-          maxHeight: room.level * 3.5 + room.height
-        });
-      }
+    var cullR = Math.max(40, camera.distance * 4);
+    var cullR2 = cullR * cullR;
+    function withinCull(x,y,z){ var dx=x-camera.targetX, dz=z-camera.targetZ; var d2=dx*dx+dz*dz; return d2 <= cullR2; }
+
+    for (var i=0;i<allRooms.length;i++){
+      var room=allRooms[i]; var roomCenterY=room.level*3.5+room.height/2; if(!withinCull(room.x,roomCenterY,room.z)) continue; var centerScreen=project3D(room.x,roomCenterY,room.z); if(centerScreen && !isOffscreenByCenter(centerScreen)){ var dx=room.x-camera.targetX, dz=room.z-camera.targetZ; var d=Math.sqrt(dx*dx+dz*dz); allObjects.push({object:room,type:'room',distance:d,maxHeight:room.level*3.5+room.height}); }
     }
-    
-    if (stairsComponent) {
-      var stairsCenterY = stairsComponent.height / 2;
-      var stairsDistance = Math.sqrt(
-        (stairsComponent.x - camera.targetX) * (stairsComponent.x - camera.targetX) + 
-        (stairsCenterY) * (stairsCenterY) +
-        (stairsComponent.z - camera.targetZ) * (stairsComponent.z - camera.targetZ)
-      );
-      var stairsScreen = project3D(stairsComponent.x, stairsCenterY, stairsComponent.z);
-      if (stairsDistance <= cullRadius && !isOffscreenByCenter(stairsScreen)) {
-        allObjects.push({
-          object: stairsComponent,
-          type: 'stairs',
-          distance: stairsDistance,
-          maxHeight: stairsComponent.height
-        });
-      }
-    }
-    
-    dbg('Rendering balconies. Count:', balconyComponents.length);
-    for (var i = 0; i < balconyComponents.length; i++) {
-      var balcony = balconyComponents[i];
-      dbg('Processing balcony:', balcony);
-      var balconyCenterY = balcony.level * 3.5 + balcony.height / 2;
-      var balconyDistance = Math.sqrt(
-        (balcony.x - camera.targetX) * (balcony.x - camera.targetX) + 
-        (balconyCenterY) * (balconyCenterY) +
-        (balcony.z - camera.targetZ) * (balcony.z - camera.targetZ)
-      );
-      var balcScreen = project3D(balcony.x, balconyCenterY, balcony.z);
-      if (balconyDistance <= cullRadius && !isOffscreenByCenter(balcScreen)) {
-        allObjects.push({
-          object: balcony,
-          type: 'balcony',
-          distance: balconyDistance,
-          maxHeight: balcony.level * 3.5 + balcony.height
-        });
-      }
-    }
-    
-    for (var i = 0; i < pergolaComponents.length; i++) {
-      var pergola = pergolaComponents[i];
-      var pergolaCenterY = pergola.totalHeight / 2;
-      var pergolaDistance = Math.sqrt(
-        (pergola.x - camera.targetX) * (pergola.x - camera.targetX) + 
-        (pergolaCenterY) * (pergolaCenterY) +
-        (pergola.z - camera.targetZ) * (pergola.z - camera.targetZ)
-      );
-      var pergScreen = project3D(pergola.x, pergolaCenterY, pergola.z);
-      if (pergolaDistance <= cullRadius && !isOffscreenByCenter(pergScreen)) {
-        allObjects.push({
-          object: pergola,
-          type: 'pergola',
-          distance: pergolaDistance,
-          maxHeight: pergola.totalHeight
-        });
-      }
-    }
-    
-    for (var i = 0; i < garageComponents.length; i++) {
-      var garage = garageComponents[i];
-      var garageCenterY = garage.height / 2;
-      var garageDistance = Math.sqrt(
-        (garage.x - camera.targetX) * (garage.x - camera.targetX) + 
-        (garageCenterY) * (garageCenterY) +
-        (garage.z - camera.targetZ) * (garage.z - camera.targetZ)
-      );
-      var garScreen = project3D(garage.x, garageCenterY, garage.z);
-      if (garageDistance <= cullRadius && !isOffscreenByCenter(garScreen)) {
-        allObjects.push({
-          object: garage,
-          type: 'garage',
-          distance: garageDistance,
-          maxHeight: garage.height
-        });
-      }
-    }
-    
-    for (var i = 0; i < roofComponents.length; i++) {
-      var roof = roofComponents[i];
-      var roofCenterY = roof.baseHeight + roof.height / 2;
-      var roofDistance = Math.sqrt(
-        (roof.x - camera.targetX) * (roof.x - camera.targetX) + 
-        (roofCenterY) * (roofCenterY) +
-        (roof.z - camera.targetZ) * (roof.z - camera.targetZ)
-      );
-      var roofScreen = project3D(roof.x, roofCenterY, roof.z);
-      if (roofDistance <= cullRadius && !isOffscreenByCenter(roofScreen)) {
-        allObjects.push({
-          object: roof,
-          type: 'roof',
-          distance: roofDistance,
-          maxHeight: roof.baseHeight + roof.height
-        });
-      }
-    }
-    
-    for (var i = 0; i < furnitureItems.length; i++) {
-      var furn = furnitureItems[i];
-      var fCenterY = (furn.level || 0) * 3.5 + (furn.height || 0.7) / 2;
-      var fDist = Math.sqrt(
-        (furn.x - camera.targetX) * (furn.x - camera.targetX) + 
-        (fCenterY) * (fCenterY) +
-        (furn.z - camera.targetZ) * (furn.z - camera.targetZ)
-      );
-      var fScreen = project3D(furn.x, fCenterY, furn.z);
-      if (fDist <= cullRadius && !isOffscreenByCenter(fScreen)) {
-        allObjects.push({ object: furn, type: 'furniture', distance: fDist, maxHeight: (furn.level || 0) * 3.5 + (furn.elevation || 0) + (furn.height || 0.7) });
-      }
-    }
-    
-    dbg('All objects before sorting:', allObjects.map(function(obj){ return { type: obj.type, id: obj.object.id }; }));
-    
-    allObjects.sort(function(a, b) {
-      var distDiff = b.distance - a.distance;
-      if (Math.abs(distDiff) > 1.0) {
-        return distDiff;
-      }
-      return a.maxHeight - b.maxHeight;
-    });
-    
-    dbg('Current floor:', currentFloor);
-    dbg('All objects after sorting:', allObjects.map(function(obj){ return { type: obj.type, id: obj.object.id }; }));
-    
-    // Draw all non-selected objects first
-    var selectedEntry = null;
-    for (var i = 0; i < allObjects.length; i++) {
-      var it = allObjects[i];
-      if (selectedRoomId && it.object && it.object.id === selectedRoomId) {
-        selectedEntry = it;
-        continue;
-      }
-      switch (it.type) {
-        case 'room':      drawRoom(it.object); break;
-        case 'stairs':    drawStairs(it.object); break;
-        case 'furniture': drawFurniture(it.object); break;
-        case 'balcony':   dbg('Found balcony to draw:', it.object); drawBalcony(it.object); break;
-        case 'pergola':   drawPergola(it.object); break;
-        case 'garage':    drawGarage(it.object); break;
-        case 'roof':      drawRoof(it.object); break;
-      }
-    }
-    // Draw selected object last to ensure it and its handles are on top
-    if (selectedEntry) {
-      switch (selectedEntry.type) {
-        case 'room':      drawRoom(selectedEntry.object); break;
-        case 'stairs':    drawStairs(selectedEntry.object); break;
-        case 'furniture': drawFurniture(selectedEntry.object); break;
-        case 'balcony':   drawBalcony(selectedEntry.object); break;
-        case 'pergola':   drawPergola(selectedEntry.object); break;
-        case 'garage':    drawGarage(selectedEntry.object); break;
-        case 'roof':      drawRoof(selectedEntry.object); break;
-      }
-    }
-    
-    // Throttle DOM-heavy updates
-    var now = performance && performance.now ? performance.now() : Date.now();
-    if (now - _lastLabelsUpdate > LABEL_UPDATE_INTERVAL_MS) {
-      updateLabels();
-      _lastLabelsUpdate = now;
-    }
+    if(stairsComponent){ var scY=stairsComponent.height/2; if(withinCull(stairsComponent.x,scY,stairsComponent.z)){ var sScreen=project3D(stairsComponent.x,scY,stairsComponent.z); if(sScreen && !isOffscreenByCenter(sScreen)){ var dxs=stairsComponent.x-camera.targetX, dzs=stairsComponent.z-camera.targetZ; var ds=Math.sqrt(dxs*dxs+dzs*dzs); allObjects.push({object:stairsComponent,type:'stairs',distance:ds,maxHeight:stairsComponent.height}); } } }
+    for (var iB=0;iB<balconyComponents.length;iB++){ var balcony=balconyComponents[iB]; var bCY=balcony.level*3.5+balcony.height/2; if(!withinCull(balcony.x,bCY,balcony.z)) continue; var bScreen=project3D(balcony.x,bCY,balcony.z); if(bScreen && !isOffscreenByCenter(bScreen)){ var dxb=balcony.x-camera.targetX, dzb=balcony.z-camera.targetZ; var db=Math.sqrt(dxb*dxb+dzb*dzb); allObjects.push({object:balcony,type:'balcony',distance:db,maxHeight:balcony.level*3.5+balcony.height}); } }
+    for (var iP=0;iP<pergolaComponents.length;iP++){ var perg=pergolaComponents[iP]; var pCY=perg.totalHeight/2; if(!withinCull(perg.x,pCY,perg.z)) continue; var pScreen=project3D(perg.x,pCY,perg.z); if(pScreen && !isOffscreenByCenter(pScreen)){ var dxp=perg.x-camera.targetX, dzp=perg.z-camera.targetZ; var dp=Math.sqrt(dxp*dxp+dzp*dzp); allObjects.push({object:perg,type:'pergola',distance:dp,maxHeight:perg.totalHeight}); } }
+    for (var iG=0;iG<garageComponents.length;iG++){ var gar=garageComponents[iG]; var gCY=gar.height/2; if(!withinCull(gar.x,gCY,gar.z)) continue; var gScreen=project3D(gar.x,gCY,gar.z); if(gScreen && !isOffscreenByCenter(gScreen)){ var dxg=gar.x-camera.targetX, dzg=gar.z-camera.targetZ; var dg=Math.sqrt(dxg*dxg+dzg*dzg); allObjects.push({object:gar,type:'garage',distance:dg,maxHeight:gar.height}); } }
+    for (var iR=0;iR<roofComponents.length;iR++){ var roof=roofComponents[iR]; var rCY=roof.baseHeight+roof.height/2; if(!withinCull(roof.x,rCY,roof.z)) continue; var rScreen=project3D(roof.x,rCY,roof.z); if(rScreen && !isOffscreenByCenter(rScreen)){ var dxr=roof.x-camera.targetX, dzr=roof.z-camera.targetZ; var dr=Math.sqrt(dxr*dxr+dzr*dzr); allObjects.push({object:roof,type:'roof',distance:dr,maxHeight:roof.baseHeight+roof.height}); } }
+    for (var iF=0;iF<furnitureItems.length;iF++){ var furn=furnitureItems[iF]; var fCY=(furn.level||0)*3.5+(furn.height||0.7)/2; if(!withinCull(furn.x,fCY,furn.z)) continue; var fScreen=project3D(furn.x,fCY,furn.z); if(fScreen && !isOffscreenByCenter(fScreen)){ var dxf=furn.x-camera.targetX, dzf=furn.z-camera.targetZ; var df=Math.sqrt(dxf*dxf+dzf*dzf); allObjects.push({object:furn,type:'furniture',distance:df,maxHeight:(furn.level||0)*3.5+(furn.elevation||0)+(furn.height||0.7)}); } }
+
+    allObjects.sort(function(a,b){ var distDiff=b.distance-a.distance; if(Math.abs(distDiff)>1.0) return distDiff; return a.maxHeight-b.maxHeight; });
+
+    var selectedEntry=null; for (var iO=0;iO<allObjects.length;iO++){ var it=allObjects[iO]; if(selectedRoomId && it.object && it.object.id===selectedRoomId){ selectedEntry=it; continue;} switch(it.type){ case 'room': drawRoom(it.object); break; case 'stairs': drawStairs(it.object); break; case 'furniture': drawFurniture(it.object); break; case 'balcony': drawBalcony(it.object); break; case 'pergola': drawPergola(it.object); break; case 'garage': drawGarage(it.object); break; case 'roof': drawRoof(it.object); break; } }
+    if(selectedEntry){ switch(selectedEntry.type){ case 'room': drawRoom(selectedEntry.object); break; case 'stairs': drawStairs(selectedEntry.object); break; case 'furniture': drawFurniture(selectedEntry.object); break; case 'balcony': drawBalcony(selectedEntry.object); break; case 'pergola': drawPergola(selectedEntry.object); break; case 'garage': drawGarage(selectedEntry.object); break; case 'roof': drawRoof(selectedEntry.object); break; }}
+
+    var now = (performance && performance.now)? performance.now(): Date.now();
+    if (now - _lastLabelsUpdate > LABEL_UPDATE_INTERVAL_MS) { updateLabels(); _lastLabelsUpdate = now; }
     drawCompass();
-    if (now - _lastMeasurementsUpdate > MEASURE_UPDATE_INTERVAL_MS) {
-      updateMeasurements();
-      _lastMeasurementsUpdate = now;
-    }
-    
+    if (now - _lastMeasurementsUpdate > MEASURE_UPDATE_INTERVAL_MS) { updateMeasurements(); _lastMeasurementsUpdate = now; }
+    _needsFullRender = false;
   } catch (error) {
-    console.error('Render error:', error);
-    updateStatus('Render error');
+    console.error('Render error:', error); updateStatus('Render error');
   }
-  
+  var frameEnd = (performance && performance.now) ? performance.now() : Date.now();
+  var frameDur = frameEnd - frameStart; __perf.frameMs = frameDur; __perf.frames++;
+  if(frameEnd - __perf.lastFpsSample > 1000){ __perf.fps = (__perf.frames * 1000)/(frameEnd-__perf.lastFpsSample); __perf.frames=0; __perf.lastFpsSample=frameEnd; updatePerfStatsOverlay(); }
   animationId = requestAnimationFrame(renderLoop);
 }
 
@@ -3898,6 +3753,29 @@ function startRender() {
 }
 
 document.addEventListener('DOMContentLoaded', startApp);
+
+// ================= PERFORMANCE & RENDER OPTIMIZATIONS =================
+// Lightweight instrumentation & adaptive rendering to reduce CPU/GPU usage when scene is static.
+var __perf = {
+  frames:0, fps:0, lastFpsSample:0, lastFrameTime:0, frameMs:0,
+  lastCamera:{yaw:null,pitch:null,targetX:null,targetZ:null,distance:null,floor:null, sel:null},
+  skipStreak:0
+};
+var ENABLE_PERF_OVERLAY = true; // toggle overlay
+var DISABLE_DEBUG_LOGS = true;  // silences dbg() heavy logging loops
+var TARGET_FPS = 60;            // base target
+var MIN_DYNAMIC_FPS = 10;       // when idle we allow dropping to 10fps equivalent checks
+var _minFrameInterval = 1000 / TARGET_FPS;
+function ensurePerfOverlay(){ if(!ENABLE_PERF_OVERLAY) return; var el=document.getElementById('perf-stats'); if(!el){ el=document.createElement('div'); el.id='perf-stats'; el.style.cssText='position:fixed;left:4px;top:4px;font:11px/1.2 monospace;z-index:9999;background:rgba(0,0,0,0.45);color:#9fef00;padding:4px 6px;border-radius:4px;pointer-events:none;'; document.body.appendChild(el);} return el; }
+function updatePerfStatsOverlay(){ var el=ensurePerfOverlay(); if(!el) return; el.textContent = 'fps '+__perf.fps.toFixed(0)+'  frame '+__perf.frameMs.toFixed(2)+'ms'+(__perf.skipStreak>0?'  idle-skip:'+__perf.skipStreak:''); }
+// Wrap dbg so we can globally silence frequent logs
+if(typeof dbg === 'function'){
+  var _dbgRef = dbg;
+  dbg = function(){ if(DISABLE_DEBUG_LOGS) return; _dbgRef.apply(this, arguments); };
+}
+// Flag-based invalidation: call invalidateScene() when something structural changes
+var _needsFullRender = true; function invalidateScene(){ _needsFullRender = true; }
+
 
 // ---------- Save/Load and Export ----------
 function serializeProject() {
@@ -4154,6 +4032,10 @@ document.addEventListener('DOMContentLoaded', function(){
         });
         break;
       }
+      case 'svg-floorplan-upload': {
+        var svgIn = document.getElementById('upload-svg-floorplan'); if (svgIn) svgIn.click();
+        break;
+      }
       case 'obj-upload': {
         var foi = document.getElementById('upload-obj-file'); if (foi) foi.click();
         break;
@@ -4206,7 +4088,69 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // Populate palette items
   setupPalette();
+
+  // Wire SVG floorplan upload input
+  var uploadSvg = document.getElementById('upload-svg-floorplan');
+  if (uploadSvg) uploadSvg.onchange = async function(e){
+    var f = e.target.files && e.target.files[0]; if(!f) return; try {
+      var text = await f.text();
+      importSVGFloorplan(text, f.name || 'floorplan.svg');
+    } catch(err){ console.error('SVG load failed', err); updateStatus('Failed to load SVG'); }
+    finally { uploadSvg.value=''; }
+  };
+
+  // Floor Plan 2D button
+  var fp2dBtn = document.getElementById('btn-floorplan'); if (fp2dBtn) fp2dBtn.onclick = openPlan2DModal;
 });
+
+// ---------------- Floorplan Import (SVG) ----------------
+// Basic heuristic: extract <rect> and top-level <path> elements, compute bounding boxes in SVG user units, map to meters.
+// Assumes SVG units ~ meters OR attempts scale by guessing if overall extent > 200 then divide by 100 (treat cm) etc.
+function importSVGFloorplan(svgText, fileName){
+  try {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(svgText, 'image/svg+xml');
+    var svg = doc.documentElement;
+    if(!svg || svg.tagName.toLowerCase()!=='svg'){ updateStatus('Invalid SVG'); return; }
+    var viewW = parseFloat(svg.getAttribute('width')) || null;
+    var viewH = parseFloat(svg.getAttribute('height')) || null;
+    // Collect rects
+    var rects = Array.from(svg.getElementsByTagName('rect'));
+    var paths = Array.from(svg.getElementsByTagName('path'));
+    var roomsCreated = 0;
+    var boxes = [];
+    rects.forEach(function(r){
+      var x=parseFloat(r.getAttribute('x')||0), y=parseFloat(r.getAttribute('y')||0);
+      var w=parseFloat(r.getAttribute('width')||0), h=parseFloat(r.getAttribute('height')||0);
+      if (w>0.2 && h>0.2) boxes.push({x:x,y:y,w:w,h:h});
+    });
+    // Rough path bbox (limited: uses native getBBox if available via offscreen SVG in DOM)
+    // We import only if path has a reasonable bbox
+    var temp = document.createElementNS('http://www.w3.org/2000/svg','svg'); temp.setAttribute('xmlns','http://www.w3.org/2000/svg'); temp.style.position='absolute'; temp.style.left='-9999px'; document.body.appendChild(temp);
+    paths.slice(0,200).forEach(function(p){ // limit to first 200 paths
+      try {
+        var clone = p.cloneNode(true); temp.appendChild(clone); var bb = clone.getBBox(); temp.removeChild(clone);
+        if(bb.width>0.2 && bb.height>0.2 && bb.width*bb.height<50000){ boxes.push({x:bb.x,y:bb.y,w:bb.width,h:bb.height}); }
+      } catch(e){}
+    });
+    document.body.removeChild(temp);
+    if(boxes.length===0){ updateStatus('No usable shapes in SVG'); return; }
+    // Determine scale heuristic
+    var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; boxes.forEach(function(b){ if(b.x<minX)minX=b.x; if(b.y<minY)minY=b.y; if(b.x+b.w>maxX)maxX=b.x+b.w; if(b.y+b.h>maxY)maxY=b.y+b.h; });
+    var spanX = maxX-minX, spanY=maxY-minY; var scaleGuess = 1; // svg units -> meters
+    var maxSpan = Math.max(spanX, spanY);
+    if(maxSpan>500){ scaleGuess = 0.01; } else if (maxSpan>100){ scaleGuess = 0.1; }
+    // Create rooms
+    boxes.forEach(function(b){
+      var cx = (b.x + b.w/2 - minX - spanX/2) * scaleGuess + camera.targetX;
+      var cz = (b.y + b.h/2 - minY - spanY/2) * scaleGuess + camera.targetZ;
+      var rw = b.w * scaleGuess; var rd = b.h * scaleGuess;
+      if(rw<0.5 || rd<0.5) return;
+      var room = addRoom('SVG'); room.width = rw; room.depth = rd; room.x = cx; room.z = cz; roomsCreated++;
+    });
+    if(roomsCreated>0){ saveProjectSilently(); renderLoop(); updateStatus('Imported '+roomsCreated+' room(s) from SVG'); }
+  } catch(err){ console.error('SVG parse error', err); updateStatus('SVG parse failed'); }
+}
 
 // ---------------- Floorplan Import (PDF) ----------------
 // Lazy loader for PDF.js in case CDN script hasn't arrived yet
@@ -5320,3 +5264,111 @@ function renderItemThumb(canvas, def) {
     drawCircleTop(plateBaseX + plateGap, plateBaseZ + plateGap, plateR);
   }
 }
+
+// ================= 2D FLOOR PLAN EDITOR (IMPLEMENTATION) =================
+// Provides: openPlan2DModal, closePlan2DModal, drawing walls (300mm), windows (thin), erase, clear, export/import.
+
+var __plan2d = {
+  active:false,
+  scale:50,          // px per meter
+  wallThicknessM:0.3,
+  elements:[],       // { type:'wall'|'window', x0,y0,x1,y1, thickness }
+  tool:'wall',       // current tool
+  start:null,        // world coords of drag start
+  last:null,         // world coords of current mouse during drag
+  hoverIndex:-1
+};
+
+function openPlan2DModal(){
+  var m=document.getElementById('plan2d-modal'); if(!m) return;
+  m.style.display='block';
+  __plan2d.active=true;
+  plan2dBind();
+  plan2dResize();
+  plan2dDraw();
+  updatePlan2DInfo();
+}
+function closePlan2DModal(){
+  var m=document.getElementById('plan2d-modal'); if(m) m.style.display='none';
+  __plan2d.active=false;
+  plan2dUnbind();
+}
+
+function worldToScreen2D(wx,wy){ var c=document.getElementById('plan2d-canvas'); if(!c)return {x:0,y:0}; return { x:c.width/2 + wx*__plan2d.scale, y:c.height/2 + wy*__plan2d.scale }; }
+function screenToWorld2D(px,py){ var c=document.getElementById('plan2d-canvas'); if(!c)return {x:0,y:0}; return { x:(px - c.width/2)/__plan2d.scale, y:(py - c.height/2)/__plan2d.scale }; }
+
+function plan2dBind(){
+  var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return;
+  if(!window.__plan2dResize){
+    window.__plan2dResize=function(){ if(__plan2d.active){ plan2dResize(); plan2dDraw(); } };
+    window.addEventListener('resize', window.__plan2dResize);
+  }
+  // Tool buttons
+  var bWall=document.getElementById('plan2d-tool-wall'); if(bWall) bWall.onclick=function(){ __plan2d.tool='wall'; plan2dCursor(); };
+  var bWin=document.getElementById('plan2d-tool-window'); if(bWin) bWin.onclick=function(){ __plan2d.tool='window'; plan2dCursor(); };
+  var bErase=document.getElementById('plan2d-tool-erase'); if(bErase) bErase.onclick=function(){ __plan2d.tool='erase'; plan2dCursor(); };
+  var bClear=document.getElementById('plan2d-clear'); if(bClear) bClear.onclick=function(){ if(confirm('Clear all elements?')) { __plan2d.elements=[]; plan2dDraw(); updatePlan2DInfo(); } };
+  var bClose=document.getElementById('plan2d-close'); if(bClose) bClose.onclick=closePlan2DModal;
+  var bExp=document.getElementById('plan2d-export'); if(bExp) bExp.onclick=plan2dExport;
+  var bImp=document.getElementById('plan2d-import'); if(bImp) bImp.onclick=function(){ var f=document.getElementById('plan2d-import-file'); if(f) f.click(); };
+  var fi=document.getElementById('plan2d-import-file'); if(fi) fi.onchange=function(e){ var f=e.target.files&&e.target.files[0]; if(!f)return; var r=new FileReader(); r.onload=function(){ try{ var arr=JSON.parse(r.result); if(Array.isArray(arr)){ __plan2d.elements=arr; plan2dDraw(); updatePlan2DInfo(); updateStatus('2D plan imported'); } }catch(err){ updateStatus('Import failed'); } }; r.readAsText(f); fi.value=''; };
+  if(!c.__plan2dBound){
+    c.__plan2dBound=true;
+    c.addEventListener('mousedown', function(e){
+      if(!__plan2d.active) return;
+      var rect=c.getBoundingClientRect();
+      var p=screenToWorld2D((e.clientX-rect.left)*(c.width/rect.width),(e.clientY-rect.top)*(c.height/rect.height));
+      if(__plan2d.tool==='erase'){ plan2dEraseAt(p); return; }
+      __plan2d.start=p; __plan2d.last=p; plan2dDraw();
+    });
+    c.addEventListener('mousemove', function(e){
+      if(!__plan2d.active) return;
+      var rect=c.getBoundingClientRect();
+      var p=screenToWorld2D((e.clientX-rect.left)*(c.width/rect.width),(e.clientY-rect.top)*(c.height/rect.height));
+      if(__plan2d.start){ __plan2d.last=p; plan2dDraw(); }
+      else if(__plan2d.tool==='erase'){ plan2dHoverErase(p); }
+    });
+    window.addEventListener('mouseup', function(){
+      if(!__plan2d.active) return;
+      if(__plan2d.start && __plan2d.last){ var a=__plan2d.start, b=__plan2d.last; plan2dFinalize(a,b); updatePlan2DInfo(); }
+      __plan2d.start=null; __plan2d.last=null; plan2dDraw();
+    });
+  }
+  plan2dCursor();
+}
+function plan2dUnbind(){ try{ if(window.__plan2dResize) window.removeEventListener('resize', window.__plan2dResize); }catch(e){} }
+
+function plan2dResize(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var rect=c.getBoundingClientRect(); var dpr=window.devicePixelRatio||1; var W=Math.floor(rect.width*dpr), H=Math.floor(rect.height*dpr); if(c.width!==W||c.height!==H){ c.width=W; c.height=H; ov.width=W; ov.height=H; } }
+function plan2dCursor(){ var c=document.getElementById('plan2d-canvas'); if(!c) return; c.style.cursor = (__plan2d.tool==='erase') ? 'not-allowed' : 'crosshair'; }
+
+function plan2dFinalize(a,b){ if(!a||!b) return; // snap to straight axis
+  var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:0.05}); } }
+
+function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height);
+  // Grid (1m)
+  var step=__plan2d.scale, w=c.width, h=c.height; ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,0.04)';
+  for(var x=w/2 % step; x<w; x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+  for(var y=h/2 % step; y<h; y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+  // Elements
+  for(var i=0;i<__plan2d.elements.length;i++){
+    var el=__plan2d.elements[i]; var a=worldToScreen2D(el.x0,el.y0), b=worldToScreen2D(el.x1,el.y1);
+    if(el.type==='wall'){
+      var dx=b.x-a.x, dy=b.y-a.y; var L=Math.sqrt(dx*dx+dy*dy)||1; var nx=-dy/L, ny=dx/L; var half=(el.thickness*__plan2d.scale)/2;
+      ctx.beginPath(); ctx.fillStyle='#e5e7eb'; ctx.strokeStyle='#334155'; ctx.lineWidth=1.2;
+      ctx.moveTo(a.x+nx*half,a.y+ny*half); ctx.lineTo(b.x+nx*half,b.y+ny*half); ctx.lineTo(b.x-nx*half,b.y-ny*half); ctx.lineTo(a.x-nx*half,a.y-ny*half); ctx.closePath(); ctx.fill(); ctx.stroke();
+    } else if(el.type==='window'){
+      ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.lineWidth=2; ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    }
+  }
+  // Preview during drag
+  if(__plan2d.start && __plan2d.last){ var a=worldToScreen2D(__plan2d.start.x,__plan2d.start.y); var b=worldToScreen2D(__plan2d.last.x,__plan2d.last.y); var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; if(__plan2d.tool==='wall'){ var L2=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2)||1; var nx2=-(b.y-a.y)/L2, ny2=(b.x-a.x)/L2; var half2=(__plan2d.wallThicknessM*__plan2d.scale)/2; ctx.beginPath(); ctx.fillStyle='rgba(226,232,240,0.55)'; ctx.strokeStyle='#64748b'; ctx.setLineDash([6,4]); ctx.moveTo(a.x+nx2*half2,a.y+ny2*half2); ctx.lineTo(b.x+nx2*half2,b.y+ny2*half2); ctx.lineTo(b.x-nx2*half2,b.y-ny2*half2); ctx.lineTo(a.x-nx2*half2,a.y-ny2*half2); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.setLineDash([]); } else if(__plan2d.tool==='window'){ ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.setLineDash([4,3]); ctx.lineWidth=2; ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.setLineDash([]); } }
+  // Hover erase highlight
+  if(__plan2d.tool==='erase' && __plan2d.hoverIndex>=0){ var e=__plan2d.elements[__plan2d.hoverIndex]; var a2=worldToScreen2D(e.x0,e.y0), b2=worldToScreen2D(e.x1,e.y1); ctx.beginPath(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.setLineDash([4,4]); ctx.moveTo(a2.x,a2.y); ctx.lineTo(b2.x,b2.y); ctx.stroke(); ctx.setLineDash([]); }
+  var ox=ov.getContext('2d'); ox.setTransform(1,0,0,1,0,0); ox.clearRect(0,0,ov.width,ov.height);
+}
+function plan2dHoverErase(p){ var best=-1, bestDist=0.25; for(var i=0;i<__plan2d.elements.length;i++){ var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; } } __plan2d.hoverIndex=best; plan2dDraw(); }
+function plan2dEraseAt(p){ plan2dHoverErase(p); if(__plan2d.hoverIndex>=0){ __plan2d.elements.splice(__plan2d.hoverIndex,1); __plan2d.hoverIndex=-1; plan2dDraw(); updatePlan2DInfo(); } }
+function plan2dPointSegDist(px,py,e){ var x0=e.x0,y0=e.y0,x1=e.x1,y1=e.y1; var dx=x1-x0, dy=y1-y0; var t=((px-x0)*dx+(py-y0)*dy)/(dx*dx+dy*dy); t=Math.max(0,Math.min(1,t)); var cx=x0+t*dx, cy=y0+t*dy; var ddx=px-cx, ddy=py-cy; return Math.sqrt(ddx*ddx+ddy*ddy); }
+function updatePlan2DInfo(){ var cnt=document.getElementById('plan2d-count'); if(cnt) cnt.textContent=__plan2d.elements.length; }
+function plan2dExport(){ try{ var data=JSON.stringify(__plan2d.elements); var blob=new Blob([data],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='plan2d.json'; a.click(); URL.revokeObjectURL(a.href); updateStatus('2D plan exported'); }catch(e){ updateStatus('Export failed'); } }
+// ================= END 2D FLOOR PLAN EDITOR =================

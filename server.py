@@ -18,6 +18,26 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         self.send_header('Expires', '0')
         super().end_headers()
 
+    def log_message(self, format, *args):
+        # Include Host header to debug forwarded URL issues
+        host = self.headers.get('Host', '-') if hasattr(self, 'headers') else '-'
+        client = self.address_string()
+        try:
+            msg = format % args
+        except Exception:
+            msg = format
+        print(f"{client} host={host} :: {msg}")
+
+    def do_GET(self):
+        # Simple health check endpoint
+        if self.path in ('/__health','/__ping'):
+            self.send_response(200)
+            self.send_header('Content-Type','text/plain; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(b'OK')
+            return
+        return super().do_GET()
+
 
 class ReusableHTTPServer(HTTPServer):
     allow_reuse_address = True
