@@ -4148,7 +4148,7 @@ document.addEventListener('DOMContentLoaded', function(){
         exportPDF();
         break;
       case 'pdf-floorplan-upload': {
-        // Ensure PDF.js is available; lazy load if needed, then open file picker
+         // Ensure PDF.js is available; lazy load if needed, then open file picker
         ensurePdfJsReady().then(function(ok){
           if (!ok) return; var fpf = document.getElementById('upload-pdf-floorplan'); if (fpf) fpf.click();
         });
@@ -4267,7 +4267,8 @@ var __fp = {
   dragStart: null,
   anchorWorld: null, // {x,z} world anchor
   hintText: '',
-  hintUntil: 0
+  hintUntil: 0,
+  autoDetected: false
 };
 
 function openFloorplanModal(opts){
@@ -4387,7 +4388,8 @@ function drawFloorplanOverlay(){
   cx.strokeStyle = '#3b82f6'; cx.lineWidth = 2; cx.fillStyle = 'rgba(59,130,246,0.12)';
   for (var r=0;r<__fp.rooms.length;r++){
     var rm = __fp.rooms[r]; var x0 = Math.min(rm.x0, rm.x1), y0 = Math.min(rm.y0, rm.y1), x1 = Math.max(rm.x0, rm.x1), y1 = Math.max(rm.y0, rm.y1);
-    cx.beginPath(); cx.rect(x0, y0, x1-x0, y1-y0); cx.fill(); cx.stroke();
+    if (rm.auto) { cx.save(); cx.setLineDash([5,4]); cx.strokeStyle = '#1d4ed8'; cx.fillStyle = 'rgba(59,130,246,0.07)'; }
+    cx.beginPath(); cx.rect(x0, y0, x1-x0, y1-y0); cx.fill(); cx.stroke(); if (rm.auto) cx.restore();
     // Show size if scale known
     if (__fp.pxPerMeter) {
       var w = (x1-x0) / __fp.pxPerMeter; var d = (y1-y0) / __fp.pxPerMeter;
@@ -4428,6 +4430,7 @@ function wireFloorplanUI(){
   var bUndo = document.getElementById('fp-undo'); if (bUndo) bUndo.onclick = function(){ if (__fp.rooms.length>0) { __fp.rooms.pop(); drawFloorplanOverlay(); updateFpInfo(); } };
   var bApply = document.getElementById('fp-apply-scale'); if (bApply) bApply.onclick = function(){ applyCalibration(); };
   var bCommit = document.getElementById('fp-commit'); if (bCommit) bCommit.onclick = function(){ commitFloorplanRooms(); };
+  var bRefine = document.getElementById('fp-refine-detect'); if (bRefine) bRefine.onclick = function(){ if (!__fp.pxPerMeter) { updateStatus('Calibrate first'); return; } __fp.rooms = __fp.rooms.filter(function(r){ return !r.auto; }); __fp.autoDetected = false; autoDetectGroundFloor(true); };
   // Page controls
   var inPage = document.getElementById('fp-page-input'); if (inPage) inPage.onchange = function(){ var n = Math.max(1, Math.min(__fp.pageCount||1, parseInt(this.value||'1',10)||1)); goToFloorplanPage(n); };
   var bPrev = document.getElementById('fp-page-prev'); if (bPrev) bPrev.onclick = function(){ if (__fp.pageNum>1) goToFloorplanPage(__fp.pageNum-1); };
@@ -4506,6 +4509,10 @@ function applyCalibration(){
   showFpHint('Scale set. Drag on the plan to draw room rectangles, then click Commit.', 3500);
   drawFloorplanOverlay();
   updateFloorplanCursor();
+  // Attempt automatic ground floor detection (one-time) so the user can commit immediately
+  setTimeout(function(){
+    try { if (__fp.active && !__fp.autoDetected) { autoDetectGroundFloor(); } } catch(e) { console.warn('Auto floor detect failed', e); }
+  }, 30);
 }
 
 function updateFpInfo(){
@@ -4521,6 +4528,7 @@ async function goToFloorplanPage(n){
     renderFloorplanPage();
     // reset calibration clicks when switching pages (keeps scale value, as it may be a multi-page plan)
     __fp.clicks = [];
+    __fp.autoDetected = false;
     drawFloorplanOverlay();
   } catch(e) {
     console.error('Failed to switch PDF page', e);
@@ -4560,6 +4568,116 @@ function commitFloorplanRooms(){
   renderLoop();
   updateStatus('Added ' + created + ' room(s) from floorplan');
   closeFloorplanModal();
+}
+
+// Attempt to automatically detect ground floor rectangular rooms from the PDF page bitmap.
+// Heuristic approach: analyze a downscaled grayscale image, threshold walls, find large whitespace rectangles.
+function autoDetectGroundFloor(manual){
+  if (!__fp.pageBitmap || !__fp.pageBitmap.img || !__fp.pxPerMeter) return;
+  if (__fp.rooms.length > 0) return; // don't override user work
+  var img = __fp.pageBitmap.img;
+  try {
+    var minInput = document.getElementById('fp-auto-min');
+    var arInput = document.getElementById('fp-auto-ar');
+    var borderInput = document.getElementById('fp-auto-border');
+    var minMeters = Math.max(1, parseFloat(minInput && minInput.value || '2'));
+    var maxAspect = Math.max(2, parseFloat(arInput && arInput.value || '8'));
+    var minBorderRatio = Math.min(1, Math.max(0, parseFloat(borderInput && borderInput.value || '0.15')));
+    var downScale = 0.25; // process at quarter size for speed
+    var w = Math.max(20, Math.floor(img.width * downScale));
+    var h = Math.max(20, Math.floor(img.height * downScale));
+    var can = document.createElement('canvas'); can.width = w; can.height = h; var ctx = can.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    var data = ctx.getImageData(0,0,w,h).data;
+    // Build occupancy map: wall/ink pixels vs background (assume darker is wall)
+    var occ = new Uint8Array(w*h);
+    for (var y=0;y<h;y++){
+      for (var x=0;x<w;x++){
+        var idx = (y*w + x)*4;
+        var r=data[idx], g=data[idx+1], b=data[idx+2];
+        var lum = 0.299*r + 0.587*g + 0.114*b; // 0..255
+        occ[y*w + x] = lum < 200 ? 1 : 0; // treat darker areas as ink
+      }
+    }
+    // Integral image for fast sum queries of ink density
+    var integral = new Uint32Array((w+1)*(h+1));
+    for (var y2=1;y2<=h;y2++){
+      var rowSum=0;
+      for (var x2=1;x2<=w;x2++){
+        rowSum += occ[(y2-1)*w + (x2-1)];
+        integral[y2*(w+1)+x2] = integral[(y2-1)*(w+1)+x2] + rowSum;
+      }
+    }
+    function rectInk(x0,y0,x1,y1){ // inclusive-exclusive coordinates in downscaled space
+      return integral[y1*(w+1)+x1] - integral[y0*(w+1)+x1] - integral[y1*(w+1)+x0] + integral[y0*(w+1)+x0];
+    }
+    var candidates = [];
+    // Scan for rectangles larger than minimal size (in meters) and low ink fill inside (rooms interior) with surrounding ink border.
+  var maxMeters = 30.0;
+    var minPx = minMeters * __fp.pxPerMeter * downScale; // interior size in downscaled px
+    var maxPx = maxMeters * __fp.pxPerMeter * downScale;
+    // Limit loops for performance by stepping
+    var step = Math.max(4, Math.floor(w/120));
+    for (var y0=0;y0<h-10;y0+=step){
+      for (var x0=0;x0<w-10;x0+=step){
+        for (var y1=y0+Math.floor(minPx); y1<h && y1-y0<=maxPx; y1+=step){
+          var height = y1 - y0; if (height < minPx) continue;
+          for (var x1=x0+Math.floor(minPx); x1<w && x1-x0<=maxPx; x1+=step){
+            var width = x1 - x0; if (width < minPx) continue;
+            var area = width*height; if (area <= 0) continue;
+            var inkInside = rectInk(x0,y0,x1,y1);
+            var fillRatio = inkInside / area;
+            if (fillRatio < 0.10) { // mostly empty interior
+              // Check a rough border having ink (sample perimeter cells)
+              var borderHits=0, borderSamples=0;
+              for (var xx=x0; xx<x1; xx+=Math.max(1, Math.floor((x1-x0)/8))){
+                var top = occ[y0*w+xx]; var bot = occ[(y1-1)*w+xx];
+                borderHits += top + bot; borderSamples += 2;
+              }
+              for (var yy=y0; yy<y1; yy+=Math.max(1, Math.floor((y1-y0)/8))){
+                var left = occ[yy*w + x0]; var right = occ[yy*w + (x1-1)];
+                borderHits += left + right; borderSamples += 2;
+              }
+              var borderRatio = borderHits / Math.max(1, borderSamples);
+              if (borderRatio > minBorderRatio) {
+                candidates.push({ x0:x0, y0:y0, x1:x1, y1:y1, area: area });
+              }
+            }
+          }
+        }
+      }
+    }
+    // Sort by area descending, then perform non-overlap selection
+    candidates.sort(function(a,b){ return b.area - a.area; });
+    var selected = [];
+    function overlap(a,b){ return !(a.x1<=b.x0 || b.x1<=a.x0 || a.y1<=b.y0 || b.y1<=a.y0); }
+    for (var c=0;c<candidates.length;c++){
+      var cand = candidates[c];
+      // Filter extremely elongated shapes (aspect ratio > 8) which are probably corridors or artifacts
+      var wCand = cand.x1 - cand.x0, hCand = cand.y1 - cand.y0;
+      var ar = wCand > hCand ? wCand / Math.max(1,hCand) : hCand / Math.max(1,wCand);
+      if (ar > maxAspect) continue;
+      var keep = true;
+      for (var k=0;k<selected.length;k++){ if (overlap(cand, selected[k])) { keep=false; break; } }
+      if (keep) selected.push(cand);
+      if (selected.length >= 20) break; // safety cap
+    }
+    if (selected.length === 0) { console.log('Auto-detect: no candidates'); return; }
+    // Map back to overlay canvas coordinates using imageToCanvasCoords
+    for (var s=0;s<selected.length;s++){
+      var R = selected[s];
+      // Convert downscaled rectangle corners to original image coords
+      var ix0 = R.x0 / downScale, iy0 = R.y0 / downScale, ix1 = R.x1 / downScale, iy1 = R.y1 / downScale;
+      var c0 = imageToCanvasCoords(ix0, iy0); var c1 = imageToCanvasCoords(ix1, iy1);
+      __fp.rooms.push({ x0: c0.x, y0: c0.y, x1: c1.x, y1: c1.y, auto:true });
+    }
+    __fp.autoDetected = true;
+    updateFpInfo();
+    drawFloorplanOverlay();
+    showFpHint('Auto-detected '+selected.length+' room(s). '+(manual?'(Refined) ':'')+'Review & Commit or adjust.', 4000);
+  } catch (e) {
+    console.warn('autoDetectGroundFloor error', e);
+  }
 }
 
 // Small helper to show a transient hint overlay in the floorplan modal

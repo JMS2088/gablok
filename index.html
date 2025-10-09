@@ -124,17 +124,17 @@
 <!-- Floorplan Import Modal -->
 <div id="floorplan-modal" style="display:none; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center;">
 	<div id="floorplan-backdrop" style="position:absolute; inset:0; background:rgba(0,0,0,0.45);"></div>
-	<div id="floorplan-content" style="position:relative; width: min(1100px, 92vw); height: min(80vh, 820px); background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden;">
+	<div id="floorplan-content" style="position:relative; width: min(1200px, 95vw); height: calc(100vh - 40px); max-height:100vh; background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden;">
 		<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid #e5e7eb; background:#f8fafc;">
 			<strong style="flex:1">Import Floorplan (PDF)</strong>
 			<button id="floorplan-close" class="secondary" title="Close">✕</button>
 		</div>
 		<div style="display:flex; min-height:0; height:100%;">
-			<div style="flex:1; position:relative; background:#0b1020; display:flex; align-items:center; justify-content:center;">
-				<canvas id="floorplan-canvas" style="max-width:100%; max-height:100%; background:#0b1020;"></canvas>
+			<div style="flex:1; position:relative; background:#0b1020; display:flex; align-items:stretch; justify-content:stretch;">
+				<canvas id="floorplan-canvas" style="width:100%; height:100%; background:#0b1020; display:block;"></canvas>
 				<canvas id="floorplan-overlay" style="position:absolute; inset:0; pointer-events:none;"></canvas>
 			</div>
-			<div style="width:280px; border-left:1px solid #e5e7eb; padding:10px; display:flex; flex-direction:column; gap:10px; background:#fff;">
+			<div style="width:280px; border-left:1px solid #e5e7eb; padding:10px; display:flex; flex-direction:column; gap:10px; background:#fff; overflow:auto;">
 				<div style="display:flex; align-items:center; gap:6px;">
 					<span style="font-size:12px; color:#374151;">Page</span>
 					<button id="fp-page-prev" class="secondary" title="Previous page">◀</button>
@@ -154,11 +154,24 @@
 					<button id="fp-mode-calibrate">Calibrate</button>
 					<button id="fp-mode-place">Place Room</button>
 					<button id="fp-undo" class="secondary">Undo</button>
+					<button id="fp-refine-detect" class="secondary" title="Re-run automatic detection">Refine Detect</button>
 				</div>
 				<div style="display:flex; flex-direction:column; gap:6px;">
 					<label style="font-size:12px; color:#374151;">Real distance (m) for last two clicks</label>
 					<input id="fp-real-distance" type="number" min="0.1" max="1000" step="0.1" value="1.0" />
 					<button id="fp-apply-scale" class="secondary">Apply Scale</button>
+				</div>
+				<div style="display:flex; flex-direction:column; gap:4px; background:#f8fafc; padding:8px; border:1px solid #e5e7eb; border-radius:8px;">
+					<div style="font-size:12px; font-weight:600; color:#1e293b; display:flex; align-items:center; gap:4px;">Auto Detection</div>
+					<label style="font-size:11px; color:#475569; display:flex; flex-direction:column; gap:2px;">Min Room (m)
+						<input id="fp-auto-min" type="number" step="0.5" min="1" value="2" style="width:100%; font-size:11px;" />
+					</label>
+					<label style="font-size:11px; color:#475569; display:flex; flex-direction:column; gap:2px;">Max Aspect Ratio
+						<input id="fp-auto-ar" type="number" step="0.5" min="2" value="8" style="width:100%; font-size:11px;" />
+					</label>
+					<label style="font-size:11px; color:#475569; display:flex; flex-direction:column; gap:2px;">Border Ink ≥
+						<input id="fp-auto-border" type="number" step="0.05" min="0" max="1" value="0.15" style="width:100%; font-size:11px;" />
+					</label>
 				</div>
 				<div style="font-size:12px; color:#374151;">
 					<div>Scale: <span id="fp-scale-display">—</span> px/m</div>
