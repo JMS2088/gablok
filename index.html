@@ -18,6 +18,7 @@
 		<option value="pergola">Add Pergola</option>
 		<option value="garage">Add Garage</option>
 		<option value="roof">Add Roof</option>
+		<option value="pool">Add Pool</option>
 		<option value="balcony">Add Balcony</option>
 	</select>
 	<button class="secondary" onclick="resetAll()">Reset</button>
@@ -194,6 +195,17 @@
 	<div id="pricing-content">
 		<button class="close-button" onclick="hidePricing()">&times;</button>
 		<h2>Project Pricing</h2>
+			<div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin:8px 0 12px; padding:10px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;">
+				<label style="font-size:12px; color:#374151; display:flex; flex-direction:column; gap:4px;">
+					Concrete thickness (mm)
+					<input id="pricing-slab-mm" type="number" min="50" max="300" step="5" value="100" style="width:120px;" />
+				</label>
+				<label style="font-size:12px; color:#374151; display:flex; flex-direction:column; gap:4px;">
+					Soil rate ($/m³)
+					<input id="pricing-soil-per-m3" type="number" min="0" step="10" value="600" style="width:120px;" />
+				</label>
+				<button id="pricing-apply" class="secondary" title="Apply pricing settings">Apply</button>
+			</div>
 		<div id="pricing-breakdown">
 			<div class="pricing-section">
 				<h3>Rooms</h3>
@@ -202,6 +214,10 @@
 			<div class="pricing-section">
 				<h3>Additional Components</h3>
 				<div id="component-pricing"></div>
+			</div>
+			<div class="pricing-section">
+				<h3>Concrete & Site Works</h3>
+				<div id="concrete-pricing"></div>
 			</div>
 			<div class="pricing-section total-section">
 				<h3>Total Estimate</h3>

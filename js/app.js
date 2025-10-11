@@ -49,6 +49,7 @@ var stairsComponent = null;
 var pergolaComponents = [];
 var balconyComponents = [];
 var garageComponents = [];
+var poolComponents = [];
 var roofComponents = [];
 var currentSnapGuides = [];
 var furnitureItems = [];
@@ -96,6 +97,12 @@ var GRID_SPACING = 0.5;
 var SNAP_GRID_TOLERANCE = 1.0;
 var SNAP_CENTER_TOLERANCE = 0.6;
 var HANDLE_SNAP_TOLERANCE = 0.25;
+// Screen-space offset for the world height bar: push left by N pixels from camera target
+var HEIGHT_BAR_SCREEN_OFFSET_PX = 500;
+// Fade settings for the height bar (fade out when camera inactive)
+var HEIGHT_BAR_INACTIVITY_MS = 1200;
+var _camLastMoveTime = 0;
+var _heightBarAlpha = 1;
 
 // Throttles for expensive DOM updates
 var LABEL_UPDATE_INTERVAL_MS = 120;
@@ -226,8 +233,14 @@ var PRICING = {
   stairs: 1200,
   pergola: 500,
   garage: 500,
+  pool: 700,
   roof: 120,
-  balcony: 800
+  balcony: 800,
+  // Concrete slab and soil prep (AUD)
+  concreteSlabPerSqm: 330,      // $/m² (includes reinforcement)
+  slabThicknessM: 0.10,         // meters (100mm typical)
+  soilCostPerTonne: 600,        // $/tonne of soil for formwork/prep/disposal
+  soilDensityTPerM3: 1.5        // tonnes per m³ (typical bulk density)
 };
 
 function createBalcony(x, z) {
@@ -452,6 +465,30 @@ function addGarage() {
   updateStatus('Garage added (' + garageComponents.length + ' total)');
 }
 
+function createPool(x, z) {
+  var count = poolComponents.length;
+  return {
+    id: 'pool_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    x: x || 6, z: z || 6, width: 6, depth: 3, height: 1.5,
+    wallThickness: 0.3, rotation: 0,
+    name: count === 0 ? 'Pool' : 'Pool ' + (count + 1),
+    type: 'pool', level: 0
+  };
+}
+
+function addPool() {
+  var newPool = createPool();
+  var spot = findFreeSpot(newPool);
+  newPool.x = spot.x;
+  newPool.z = spot.z;
+  poolComponents.push(newPool);
+  currentFloor = 0;
+  selectedRoomId = newPool.id;
+  var selector = document.getElementById('levelSelect');
+  if (selector) selector.value = '0';
+  updateStatus('Pool added (' + poolComponents.length + ' total)');
+}
+
 function createRoof(x, z) {
   var count = roofComponents.length;
   
@@ -561,6 +598,12 @@ function findFreeSpot(newObject) {
     }
   }
   
+  for (var i = 0; i < poolComponents.length; i++) {
+    if (poolComponents[i].id !== newObject.id) {
+      existing.push(poolComponents[i]);
+    }
+  }
+  
   for (var i = 0; i < roofComponents.length; i++) {
     if (roofComponents[i].id !== newObject.id) {
       existing.push(roofComponents[i]);
@@ -628,6 +671,12 @@ function applySnap(object) {
   for (var i = 0; i < garageComponents.length; i++) {
     if (garageComponents[i].id !== object.id) {
       others.push(garageComponents[i]);
+    }
+  }
+  
+  for (var i = 0; i < poolComponents.length; i++) {
+    if (poolComponents[i].id !== object.id) {
+      others.push(poolComponents[i]);
     }
   }
   
@@ -802,6 +851,113 @@ function drawGrid() {
   // Blit cached grid using the current canvas transform (already scaled to CSS px)
   if (_gridCache.canvas) {
     ctx.drawImage(_gridCache.canvas, 0, 0, screenW, screenH);
+  }
+}
+
+// Draw a height scale pole anchored in world space near the camera target, so it sits on the grid
+function drawWorldHeightScale() {
+  try {
+    // Find closest room to camera target
+    var closestRoom = null;
+    var bestD2 = Infinity;
+    for (var i = 0; i < allRooms.length; i++) {
+      var rm = allRooms[i];
+      var dxr = rm.x - camera.targetX;
+      var dzr = rm.z - camera.targetZ;
+      var d2 = dxr*dxr + dzr*dzr;
+      if (d2 < bestD2) { bestD2 = d2; closestRoom = rm; }
+    }
+    if (!closestRoom) return;
+
+    // Choose the nearest corner of that room to the camera target (XZ plane)
+    var hw = closestRoom.width / 2;
+    var hd = closestRoom.depth / 2;
+    var corners = [
+      { x: closestRoom.x - hw, z: closestRoom.z - hd },
+      { x: closestRoom.x + hw, z: closestRoom.z - hd },
+      { x: closestRoom.x + hw, z: closestRoom.z + hd },
+      { x: closestRoom.x - hw, z: closestRoom.z + hd }
+    ];
+    var baseX = corners[0].x, baseZ = corners[0].z;
+    bestD2 = Infinity;
+    for (var c = 0; c < corners.length; c++) {
+      var cx = corners[c].x, cz = corners[c].z;
+      var ddx = cx - camera.targetX, ddz = cz - camera.targetZ;
+      var cd2 = ddx*ddx + ddz*ddz;
+      if (cd2 < bestD2) { bestD2 = cd2; baseX = cx; baseZ = cz; }
+    }
+    // Snap to grid
+    baseX = Math.round(baseX / GRID_SPACING) * GRID_SPACING;
+    baseZ = Math.round(baseZ / GRID_SPACING) * GRID_SPACING;
+
+    // Compute actual home max height from rooms and roof
+    var homeMax = 0;
+    for (var rj = 0; rj < allRooms.length; rj++) {
+      var rr = allRooms[rj];
+      var top = rr.level * 3.5 + rr.height;
+      if (top > homeMax) homeMax = top;
+    }
+    var roofMax = 0;
+    for (var rk = 0; rk < roofComponents.length; rk++) {
+      var rf2 = roofComponents[rk];
+      roofMax = Math.max(roofMax, rf2.baseHeight + rf2.height);
+    }
+    var maxH = Math.min(12, Math.max(3.0, Math.ceil(Math.max(homeMax, roofMax))));
+
+    // Project base and top
+    var pBase = project3D(baseX, 0, baseZ);
+    var pTop  = project3D(baseX, maxH, baseZ);
+    if (!pBase || !pTop || isOffscreenByCenter(pBase)) return; // if completely off, skip
+
+    // Fade based on camera inactivity
+    var nowT = (performance && performance.now) ? performance.now() : Date.now();
+    var inactive = (nowT - _camLastMoveTime) > HEIGHT_BAR_INACTIVITY_MS;
+    var targetAlpha = inactive ? 0 : 1;
+    _heightBarAlpha += (targetAlpha - _heightBarAlpha) * 0.15;
+    if (_heightBarAlpha <= 0.02) return; // fully hidden
+
+    // Main pole
+    ctx.save();
+    ctx.globalAlpha *= Math.max(0, Math.min(1, _heightBarAlpha));
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(pBase.x, pBase.y);
+    ctx.lineTo(pTop.x, pTop.y);
+    ctx.stroke();
+
+    // Ticks every 0.5m, labels every 1m (screen-space small horizontal ticks to the right)
+    ctx.strokeStyle = '#222';
+    ctx.fillStyle = '#222';
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    var minor = 0.5;
+    var major = 1.0;
+    for (var m = 0; m <= maxH + 1e-6; m += minor) {
+      var isMajor = Math.abs(m % major) < 1e-6;
+      var pt = project3D(baseX, m, baseZ);
+      if (!pt) continue;
+      var tickLen = isMajor ? 16 : 10;
+      ctx.lineWidth = isMajor ? 2 : 1;
+      ctx.beginPath();
+      ctx.moveTo(pt.x, pt.y);
+      ctx.lineTo(pt.x + tickLen, pt.y);
+      ctx.stroke();
+      if (isMajor) {
+        ctx.fillText(m.toFixed(0) + ' m', pt.x + tickLen + 4, pt.y);
+      }
+    }
+
+    // Base label and top height label
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 10px system-ui, sans-serif';
+    ctx.fillText('0 m', pBase.x + 20, pBase.y + 10);
+    ctx.fillText(maxH.toFixed(0) + ' m', pTop.x + 20, pTop.y - 10);
+
+    ctx.restore();
+  } catch (e) {
+    // never break frame
   }
 }
 
@@ -1625,6 +1781,9 @@ function calculatePricing() {
     totalCost: 0
   };
   
+  // Accumulators for slab and soil
+  var groundSlabArea = 0; // m²
+  
   for (var i = 0; i < allRooms.length; i++) {
     var room = allRooms[i];
     var area = room.width * room.depth;
@@ -1635,6 +1794,7 @@ function calculatePricing() {
       cost: cost
     });
     breakdown.totalCost += cost;
+    if (room.level === 0) groundSlabArea += area;
   }
   
   if (stairsComponent) {
@@ -1670,6 +1830,19 @@ function calculatePricing() {
       cost: garageCost
     });
     breakdown.totalCost += garageCost;
+    groundSlabArea += garageArea;
+  }
+  
+  for (var i = 0; i < poolComponents.length; i++) {
+    var pool = poolComponents[i];
+    var poolArea = pool.width * pool.depth;
+    var poolCost = poolArea * (PRICING.pool || PRICING.garage);
+    breakdown.components.push({
+      name: pool.name,
+      area: poolArea,
+      cost: poolCost
+    });
+    breakdown.totalCost += poolCost;
   }
   
   for (var i = 0; i < roofComponents.length; i++) {
@@ -1682,6 +1855,39 @@ function calculatePricing() {
       cost: roofCost
     });
     breakdown.totalCost += roofCost;
+  }
+  
+  // Add concrete slab cost for ground-level footprint (rooms+garages)
+  if (groundSlabArea > 0 && PRICING.concreteSlabPerSqm > 0) {
+    var slabCost = groundSlabArea * PRICING.concreteSlabPerSqm;
+    breakdown.components.push({
+      name: 'Concrete Slab (incl. reinforcement)',
+      area: groundSlabArea, // m²
+      cost: slabCost
+    });
+    breakdown.totalCost += slabCost;
+  }
+  // Add formwork & prep (soil) based on slab excavation
+  if (groundSlabArea > 0 && PRICING.slabThicknessM > 0) {
+    var soilVolumeM3 = groundSlabArea * PRICING.slabThicknessM; // m³
+    var soilCost = 0;
+    var unitsInfo = { volumeM3: soilVolumeM3 };
+    if (PRICING.soilPerM3 > 0) {
+      soilCost = soilVolumeM3 * PRICING.soilPerM3;
+    } else if (PRICING.soilDensityTPerM3 > 0 && PRICING.soilCostPerTonne > 0) {
+      var soilTonnes = soilVolumeM3 * PRICING.soilDensityTPerM3; // tonnes
+      unitsInfo.tonnes = soilTonnes;
+      soilCost = soilTonnes * PRICING.soilCostPerTonne;
+    }
+    if (soilCost > 0) {
+      breakdown.components.push({
+        name: 'Formwork and Prep (Soil)',
+        area: soilVolumeM3,
+        cost: soilCost,
+        _units: unitsInfo
+      });
+      breakdown.totalCost += soilCost;
+    }
   }
   
   return breakdown;
@@ -1701,8 +1907,33 @@ function showPricing() {
     existingDropdown.style.display = 'none';
   }
   
-  var breakdown = calculatePricing();
+  // Initialize pricing controls
+  var slabMmEl = document.getElementById('pricing-slab-mm');
+  var soilM3El = document.getElementById('pricing-soil-per-m3');
+  if (slabMmEl) slabMmEl.value = Math.round((PRICING.slabThicknessM || 0.1) * 1000);
+  if (soilM3El) soilM3El.value = Math.round(PRICING.soilPerM3 || (PRICING.soilCostPerTonne && PRICING.soilDensityTPerM3 ? PRICING.soilCostPerTonne * PRICING.soilDensityTPerM3 : 600));
+  var applyBtn = document.getElementById('pricing-apply');
+  if (applyBtn) applyBtn.onclick = function(){
+    var mm = parseFloat(slabMmEl && slabMmEl.value) || 100;
+    var perM3 = parseFloat(soilM3El && soilM3El.value) || 600;
+    // Update PRICING values
+    PRICING.slabThicknessM = Math.max(0.05, Math.min(0.3, mm / 1000));
+    // Switch model to per m³ pricing for soil
+    PRICING.soilPerM3 = Math.max(0, perM3);
+    // Clear tonne-based pricing so we prefer m³ path
+    PRICING.soilCostPerTonne = 0;
+    // Re-render pricing
+    renderPricingBreakdown();
+  };
   
+  renderPricingBreakdown();
+  
+  modal.style.display = 'block';
+}
+
+// Renders the pricing breakdown using current PRICING
+function renderPricingBreakdown(){
+  var breakdown = calculatePricing();
   var roomPricingDiv = document.getElementById('room-pricing');
   if (roomPricingDiv) {
     roomPricingDiv.innerHTML = '';
@@ -1722,21 +1953,65 @@ function showPricing() {
     }
   }
   
+  // Split components between general components and concrete/site works
+  var concreteNames = ['Concrete Slab (incl. reinforcement)', 'Formwork and Prep (Soil)'];
+  var concreteItems = [];
+  var otherComponents = [];
+  for (var ci = 0; ci < breakdown.components.length; ci++) {
+    var comp = breakdown.components[ci];
+    if (concreteNames.indexOf(comp.name) !== -1) {
+      concreteItems.push(comp);
+    } else {
+      otherComponents.push(comp);
+    }
+  }
+
   var componentPricingDiv = document.getElementById('component-pricing');
   if (componentPricingDiv) {
     componentPricingDiv.innerHTML = '';
-    
-    if (breakdown.components.length === 0) {
+    if (otherComponents.length === 0) {
       componentPricingDiv.innerHTML = '<div class="pricing-item"><span class="pricing-item-name">No additional components</span><span class="pricing-item-cost">$0</span></div>';
     } else {
-      for (var i = 0; i < breakdown.components.length; i++) {
-        var component = breakdown.components[i];
+      for (var i = 0; i < otherComponents.length; i++) {
+        var component = otherComponents[i];
         var itemDiv = document.createElement('div');
         itemDiv.className = 'pricing-item';
-        itemDiv.innerHTML = 
-          '<span class="pricing-item-name">' + component.name + ' (' + component.area.toFixed(1) + 'm²)</span>' +
+        var units = 'm²';
+        var qty = component.area;
+        if (component._units && typeof component._units.volumeM3 === 'number') {
+          qty = component._units.volumeM3;
+          units = 'm³' + (typeof component._units.tonnes === 'number' ? ' ~ ' + component._units.tonnes.toFixed(2) + ' t' : '');
+        }
+        itemDiv.innerHTML =
+          '<span class="pricing-item-name">' + component.name + ' (' + qty.toFixed(2) + units + ')</span>' +
           '<span class="pricing-item-cost">' + formatCurrency(component.cost) + '</span>';
         componentPricingDiv.appendChild(itemDiv);
+      }
+    }
+  }
+
+  var concretePricingDiv = document.getElementById('concrete-pricing');
+  if (concretePricingDiv) {
+    concretePricingDiv.innerHTML = '';
+    var concreteSectionEl = concretePricingDiv.parentElement;
+    if (concreteItems.length === 0) {
+      if (concreteSectionEl) concreteSectionEl.style.display = 'none';
+    } else {
+      if (concreteSectionEl) concreteSectionEl.style.display = '';
+      for (var j = 0; j < concreteItems.length; j++) {
+        var citem = concreteItems[j];
+        var cdiv = document.createElement('div');
+        cdiv.className = 'pricing-item';
+        var cunits = 'm²';
+        var cqty = citem.area;
+        if (citem._units && typeof citem._units.volumeM3 === 'number') {
+          cqty = citem._units.volumeM3;
+          cunits = 'm³' + (typeof citem._units.tonnes === 'number' ? ' ~ ' + citem._units.tonnes.toFixed(2) + ' t' : '');
+        }
+        cdiv.innerHTML =
+          '<span class="pricing-item-name">' + citem.name + ' (' + cqty.toFixed(2) + cunits + ')</span>' +
+          '<span class="pricing-item-cost">' + formatCurrency(citem.cost) + '</span>';
+        concretePricingDiv.appendChild(cdiv);
       }
     }
   }
@@ -1749,8 +2024,6 @@ function showPricing() {
         '<span class="pricing-item-cost">' + formatCurrency(breakdown.totalCost) + '</span>' +
       '</div>';
   }
-  
-  modal.style.display = 'block';
 }
 
 function hidePricing() {
@@ -1801,6 +2074,9 @@ function findObjectById(objectId) {
   
   for (var i = 0; i < garageComponents.length; i++) {
     if (garageComponents[i].id === objectId) return garageComponents[i];
+  }
+  for (var i = 0; i < poolComponents.length; i++) {
+    if (poolComponents[i].id === objectId) return poolComponents[i];
   }
   
   for (var i = 0; i < roofComponents.length; i++) {
@@ -1917,6 +2193,21 @@ function updateLabels() {
         screen: screen,
         object: garage,
         type: 'garage',
+        depth: screen.depth
+      });
+    }
+  }
+
+  for (var i = 0; i < poolComponents.length; i++) {
+    var pool = poolComponents[i];
+    var labelY = 0.5;
+    var screen = project3D(pool.x, labelY, pool.z);
+    
+    if (screen && screen.x > -100 && screen.x < screenW + 100) {
+      allLabels.push({
+        screen: screen,
+        object: pool,
+        type: 'pool',
         depth: screen.depth
       });
     }
@@ -2183,7 +2474,7 @@ function setupEvents() {
       var target = findObjectById(handle.roomId);
       if (target) {
         if (handle.type === 'rotate') {
-          var rotationAngle = target.type === 'garage' ? 90 : 22.5;
+          var rotationAngle = (target.type === 'garage' || target.type === 'pool') ? 90 : 22.5;
           target.rotation = ((target.rotation || 0) + rotationAngle) % 360;
           renderLoop();
           updateStatus(target.name + ' rotated ' + rotationAngle + '°');
@@ -2311,6 +2602,20 @@ function setupEvents() {
         currentSnapGuides = snap.guides;
         updateStatus('Moving ' + garage.name + '...');
       }
+    } else if (mouse.dragType === 'pool' && mouse.dragInfo) {
+      var pool = findObjectById(mouse.dragInfo.roomId);
+      if (pool) {
+        var dx = e.clientX - mouse.dragInfo.startX;
+        var dy = e.clientY - mouse.dragInfo.startY;
+        var movement = worldMovement(dx, dy);
+        var newX = mouse.dragInfo.originalX + movement.x;
+        var newZ = mouse.dragInfo.originalZ + movement.z;
+        var snap = applySnap({x: newX, z: newZ, width: pool.width, depth: pool.depth, level: pool.level, id: pool.id, type: 'pool'});
+        pool.x = snap.x;
+        pool.z = snap.z;
+        currentSnapGuides = snap.guides;
+        updateStatus('Moving ' + pool.name + '...');
+      }
     } else if (mouse.dragType === 'roof' && mouse.dragInfo) {
       var roof = findObjectById(mouse.dragInfo.roomId);
       if (roof) {
@@ -2417,7 +2722,8 @@ function setupEvents() {
           updateStatus('Resizing depth...');
         } else if (type === 'height') {
           var heightChange = -(dy * 0.005);
-          target.height = clamp(target.height + heightChange, 0.5, 10);
+          var maxH = (target.type === 'pool') ? 5 : 10;
+          target.height = clamp(target.height + heightChange, 0.5, maxH);
           updateStatus('Resizing height...');
         }
 
@@ -2537,6 +2843,21 @@ function setupEvents() {
         return;
       }
       
+      var poolIndex = -1;
+      for (var i = 0; i < poolComponents.length; i++) {
+        if (poolComponents[i].id === selectedRoomId) {
+          poolIndex = i;
+          break;
+        }
+      }
+      if (poolIndex > -1) {
+        var pool = poolComponents[poolIndex];
+        poolComponents.splice(poolIndex, 1);
+        selectedRoomId = null;
+        updateStatus(pool.name + ' deleted');
+        return;
+      }
+      
       var roofIndex = -1;
       for (var i = 0; i < roofComponents.length; i++) {
         if (roofComponents[i].id === selectedRoomId) {
@@ -2599,6 +2920,11 @@ function switchLevel() {
     selector.value = resetToFloor;
     renderLoop();
     return;
+  } else if (value === 'pool') {
+    addPool();
+    selector.value = resetToFloor;
+    renderLoop();
+    return;
   } else if (value === 'balcony') {
     dbg('Balcony option selected in switchLevel');
     addBalcony();
@@ -2641,6 +2967,7 @@ function fitView() {
   if (currentFloor === 0) {
     objects = objects.concat(pergolaComponents);
     objects = objects.concat(garageComponents);
+    objects = objects.concat(poolComponents);
     objects = objects.concat(roofComponents);
   }
   if (currentFloor === 1) {
@@ -2707,6 +3034,7 @@ function resetAll() {
   stairsComponent = null;
   pergolaComponents = [];
   garageComponents = [];
+  poolComponents = [];
   roofComponents = [];
   balconyComponents = [];
 
@@ -3242,6 +3570,116 @@ function drawBalcony(balcony) {
   }
 }
 
+function drawPool(pool) {
+  if (!pool) return;
+  try {
+    var selected = selectedRoomId === pool.id;
+    var strokeColor = selected ? '#007acc' : '#9ecae1';
+    var rimColor = selected ? 'rgba(0,122,204,0.25)' : 'rgba(100,150,200,0.18)';
+    var waterColor = selected ? 'rgba(40,150,220,0.35)' : 'rgba(60,160,220,0.28)';
+    var strokeWidth = selected ? 2 : 1.5;
+    var opacity = currentFloor === 0 ? 1.0 : 0.6;
+    var rotRad = ((pool.rotation || 0) * Math.PI) / 180;
+    ctx.globalAlpha = opacity;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeWidth;
+
+    var hw = pool.width / 2;
+    var hd = pool.depth / 2;
+    var depthY = -pool.height; // in-ground
+
+    function rot(x, z) {
+      var dx = x - pool.x, dz = z - pool.z;
+      return { x: pool.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad), z: pool.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad) };
+    }
+
+    // Rim at ground level (y=0)
+    var cornersRim = [ rot(pool.x-hw, pool.z-hd), rot(pool.x+hw, pool.z-hd), rot(pool.x+hw, pool.z+hd), rot(pool.x-hw, pool.z+hd) ];
+    var pR = cornersRim.map(function(c){ return project3D(c.x, 0, c.z); });
+    if (pR.some(function(p){ return !p; })) return;
+
+    // Inner bottom rectangle
+    var cornersBottom = [ rot(pool.x-hw, pool.z-hd), rot(pool.x+hw, pool.z-hd), rot(pool.x+hw, pool.z+hd), rot(pool.x-hw, pool.z+hd) ];
+    var pB = cornersBottom.map(function(c){ return project3D(c.x, depthY, c.z); });
+    if (pB.some(function(p){ return !p; })) return;
+
+    // Draw water surface as top face inside rim
+    ctx.fillStyle = waterColor;
+    ctx.beginPath();
+    ctx.moveTo(pR[0].x, pR[0].y);
+    ctx.lineTo(pR[1].x, pR[1].y);
+    ctx.lineTo(pR[2].x, pR[2].y);
+    ctx.lineTo(pR[3].x, pR[3].y);
+    ctx.closePath();
+    ctx.fill();
+
+    // Draw inner walls (sides) to suggest depth
+    ctx.fillStyle = 'rgba(50,120,180,0.25)';
+    var faces = [[0,1],[1,2],[2,3],[3,0]];
+    for (var i = 0; i < faces.length; i++) {
+      var a = faces[i][0], b = faces[i][1];
+      ctx.beginPath();
+      ctx.moveTo(pR[a].x, pR[a].y);
+      ctx.lineTo(pR[b].x, pR[b].y);
+      ctx.lineTo(pB[b].x, pB[b].y);
+      ctx.lineTo(pB[a].x, pB[a].y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Rim outline
+    ctx.strokeStyle = strokeColor; ctx.lineWidth = strokeWidth;
+    ctx.beginPath();
+    ctx.moveTo(pR[0].x, pR[0].y);
+    for (var i2=1;i2<4;i2++){ ctx.lineTo(pR[i2].x, pR[i2].y); }
+    ctx.closePath();
+    ctx.stroke();
+
+    // Coping/rim fill slightly lighter
+    ctx.fillStyle = rimColor;
+    ctx.beginPath();
+    ctx.moveTo(pR[0].x, pR[0].y);
+    ctx.lineTo(pR[1].x, pR[1].y);
+    ctx.lineTo(pR[2].x, pR[2].y);
+    ctx.lineTo(pR[3].x, pR[3].y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.globalAlpha = 1.0;
+    drawHandlesForPool(pool);
+  } catch (e) { console.error('Pool draw error:', e); }
+}
+
+function drawHandlesForPool(pool) {
+  try {
+    var isActive = selectedRoomId === pool.id;
+    var REGULAR_HANDLE_RADIUS = HANDLE_RADIUS;
+    var ROTATION_HANDLE_RADIUS = 14;
+    var BASE_HANDLE_Y = 0.3; // slightly above ground
+    var ROTATION_HANDLE_Y = 0.9;
+    var rotRad = ((pool.rotation || 0) * Math.PI) / 180;
+    function rotateHandle(dx, dz) {
+      return {
+        x: pool.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad),
+        z: pool.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad)
+      };
+    }
+    var hw = pool.width/2, hd = pool.depth/2;
+    var handles = [];
+    // rotation first
+    handles.push({ x: pool.x, y: ROTATION_HANDLE_Y, z: pool.z, type: 'rotate', label: '360', radius: ROTATION_HANDLE_RADIUS });
+    [
+      {dx: hw, dz: 0, type: 'width+', label: 'X+'},
+      {dx: -hw, dz: 0, type: 'width-', label: 'X-'},
+      {dx: 0, dz: hd, type: 'depth+', label: 'Z+'},
+      {dx: 0, dz: -hd, type: 'depth-', label: 'Z-'}
+    ].forEach(function(h){ var p=rotateHandle(h.dx,h.dz); handles.push({x:p.x, y: BASE_HANDLE_Y, z:p.z, type:h.type, label:h.label, radius: REGULAR_HANDLE_RADIUS}); });
+
+    handles.forEach(function(h){ var s=project3D(h.x,h.y,h.z); if(!s) return; drawHandle(s, h.type, h.label, isActive, h.radius); resizeHandles.push({screenX:s.x-h.radius,screenY:s.y-h.radius,width:h.radius*2,height:h.radius*2,type:h.type,roomId:pool.id}); });
+  } catch (e) { console.error('Pool handle error:', e); }
+}
+
 function drawFurniture(f) {
   try {
     var selected = selectedRoomId === f.id;
@@ -3693,6 +4131,7 @@ function renderLoop() {
     if (lc.yaw !== camera.yaw || lc.pitch !== camera.pitch || lc.targetX !== camera.targetX || lc.targetZ !== camera.targetZ || lc.distance !== camera.distance || lc.floor !== currentFloor || lc.sel !== selectedRoomId) {
       camChanged = true;
       lc.yaw = camera.yaw; lc.pitch = camera.pitch; lc.targetX = camera.targetX; lc.targetZ = camera.targetZ; lc.distance = camera.distance; lc.floor = currentFloor; lc.sel = selectedRoomId;
+      _camLastMoveTime = frameStart;
     }
     var dynamicActivity = camChanged || _needsFullRender;
     var nowTs = frameStart;
@@ -3725,17 +4164,21 @@ function renderLoop() {
     for (var iB=0;iB<balconyComponents.length;iB++){ var balcony=balconyComponents[iB]; var bCY=balcony.level*3.5+balcony.height/2; if(!withinCull(balcony.x,bCY,balcony.z)) continue; var bScreen=project3D(balcony.x,bCY,balcony.z); if(bScreen && !isOffscreenByCenter(bScreen)){ var dxb=balcony.x-camera.targetX, dzb=balcony.z-camera.targetZ; var db=Math.sqrt(dxb*dxb+dzb*dzb); allObjects.push({object:balcony,type:'balcony',distance:db,maxHeight:balcony.level*3.5+balcony.height}); } }
     for (var iP=0;iP<pergolaComponents.length;iP++){ var perg=pergolaComponents[iP]; var pCY=perg.totalHeight/2; if(!withinCull(perg.x,pCY,perg.z)) continue; var pScreen=project3D(perg.x,pCY,perg.z); if(pScreen && !isOffscreenByCenter(pScreen)){ var dxp=perg.x-camera.targetX, dzp=perg.z-camera.targetZ; var dp=Math.sqrt(dxp*dxp+dzp*dzp); allObjects.push({object:perg,type:'pergola',distance:dp,maxHeight:perg.totalHeight}); } }
     for (var iG=0;iG<garageComponents.length;iG++){ var gar=garageComponents[iG]; var gCY=gar.height/2; if(!withinCull(gar.x,gCY,gar.z)) continue; var gScreen=project3D(gar.x,gCY,gar.z); if(gScreen && !isOffscreenByCenter(gScreen)){ var dxg=gar.x-camera.targetX, dzg=gar.z-camera.targetZ; var dg=Math.sqrt(dxg*dxg+dzg*dzg); allObjects.push({object:gar,type:'garage',distance:dg,maxHeight:gar.height}); } }
+  for (var iPl=0;iPl<poolComponents.length;iPl++){ var pol=poolComponents[iPl]; var pCY2=0.2; if(!withinCull(pol.x,pCY2,pol.z)) continue; var plScreen=project3D(pol.x,pCY2,pol.z); if(plScreen && !isOffscreenByCenter(plScreen)){ var dxpl=pol.x-camera.targetX, dzpl=pol.z-camera.targetZ; var dpl=Math.sqrt(dxpl*dxpl+dzpl*dzpl); allObjects.push({object:pol,type:'pool',distance:dpl,maxHeight:0}); } }
     for (var iR=0;iR<roofComponents.length;iR++){ var roof=roofComponents[iR]; var rCY=roof.baseHeight+roof.height/2; if(!withinCull(roof.x,rCY,roof.z)) continue; var rScreen=project3D(roof.x,rCY,roof.z); if(rScreen && !isOffscreenByCenter(rScreen)){ var dxr=roof.x-camera.targetX, dzr=roof.z-camera.targetZ; var dr=Math.sqrt(dxr*dxr+dzr*dzr); allObjects.push({object:roof,type:'roof',distance:dr,maxHeight:roof.baseHeight+roof.height}); } }
     for (var iF=0;iF<furnitureItems.length;iF++){ var furn=furnitureItems[iF]; var fCY=(furn.level||0)*3.5+(furn.height||0.7)/2; if(!withinCull(furn.x,fCY,furn.z)) continue; var fScreen=project3D(furn.x,fCY,furn.z); if(fScreen && !isOffscreenByCenter(fScreen)){ var dxf=furn.x-camera.targetX, dzf=furn.z-camera.targetZ; var df=Math.sqrt(dxf*dxf+dzf*dzf); allObjects.push({object:furn,type:'furniture',distance:df,maxHeight:(furn.level||0)*3.5+(furn.elevation||0)+(furn.height||0.7)}); } }
 
     allObjects.sort(function(a,b){ var distDiff=b.distance-a.distance; if(Math.abs(distDiff)>1.0) return distDiff; return a.maxHeight-b.maxHeight; });
 
-    var selectedEntry=null; for (var iO=0;iO<allObjects.length;iO++){ var it=allObjects[iO]; if(selectedRoomId && it.object && it.object.id===selectedRoomId){ selectedEntry=it; continue;} switch(it.type){ case 'room': drawRoom(it.object); break; case 'stairs': drawStairs(it.object); break; case 'furniture': drawFurniture(it.object); break; case 'balcony': drawBalcony(it.object); break; case 'pergola': drawPergola(it.object); break; case 'garage': drawGarage(it.object); break; case 'roof': drawRoof(it.object); break; } }
-    if(selectedEntry){ switch(selectedEntry.type){ case 'room': drawRoom(selectedEntry.object); break; case 'stairs': drawStairs(selectedEntry.object); break; case 'furniture': drawFurniture(selectedEntry.object); break; case 'balcony': drawBalcony(selectedEntry.object); break; case 'pergola': drawPergola(selectedEntry.object); break; case 'garage': drawGarage(selectedEntry.object); break; case 'roof': drawRoof(selectedEntry.object); break; }}
+  var selectedEntry=null; for (var iO=0;iO<allObjects.length;iO++){ var it=allObjects[iO]; if(selectedRoomId && it.object && it.object.id===selectedRoomId){ selectedEntry=it; continue;} switch(it.type){ case 'room': drawRoom(it.object); break; case 'stairs': drawStairs(it.object); break; case 'furniture': drawFurniture(it.object); break; case 'balcony': drawBalcony(it.object); break; case 'pergola': drawPergola(it.object); break; case 'garage': drawGarage(it.object); break; case 'pool': drawPool(it.object); break; case 'roof': drawRoof(it.object); break; } }
+  if(selectedEntry){ switch(selectedEntry.type){ case 'room': drawRoom(selectedEntry.object); break; case 'stairs': drawStairs(selectedEntry.object); break; case 'furniture': drawFurniture(selectedEntry.object); break; case 'balcony': drawBalcony(selectedEntry.object); break; case 'pergola': drawPergola(selectedEntry.object); break; case 'garage': drawGarage(selectedEntry.object); break; case 'pool': drawPool(selectedEntry.object); break; case 'roof': drawRoof(selectedEntry.object); break; }}
+
+    // Draw world-anchored height scale after objects so it appears in front
+    drawWorldHeightScale();
 
     var now = (performance && performance.now)? performance.now(): Date.now();
     if (now - _lastLabelsUpdate > LABEL_UPDATE_INTERVAL_MS) { updateLabels(); _lastLabelsUpdate = now; }
-    drawCompass();
+  drawCompass();
     if (now - _lastMeasurementsUpdate > MEASURE_UPDATE_INTERVAL_MS) { updateMeasurements(); _lastMeasurementsUpdate = now; }
     _needsFullRender = false;
   } catch (error) {
@@ -3786,6 +4229,7 @@ function serializeProject() {
     stairs: stairsComponent,
     pergolas: pergolaComponents,
     garages: garageComponents,
+    pools: poolComponents,
     roofs: roofComponents,
     balconies: balconyComponents,
     furniture: furnitureItems,
@@ -3802,6 +4246,7 @@ function restoreProject(json) {
     stairsComponent = data.stairs || null;
     pergolaComponents = Array.isArray(data.pergolas) ? data.pergolas : [];
     garageComponents = Array.isArray(data.garages) ? data.garages : [];
+  poolComponents = Array.isArray(data.pools) ? data.pools : [];
     roofComponents = Array.isArray(data.roofs) ? data.roofs : [];
     balconyComponents = Array.isArray(data.balconies) ? data.balconies : [];
   furnitureItems = Array.isArray(data.furniture) ? data.furniture : [];
@@ -3875,6 +4320,7 @@ function exportOBJ() {
   if (stairsComponent) pushBox(stairsComponent, 0, stairsComponent.height, 'stairs');
   pergolaComponents.forEach(function(p){ pushBox(p,0,p.totalHeight,'pergola'); });
   garageComponents.forEach(function(g){ pushBox(g,0,g.height,'garage'); });
+  poolComponents.forEach(function(p){ pushBox({x:p.x,z:p.z,width:p.width,depth:p.depth,rotation:p.rotation||0}, -p.height, 0, 'pool'); });
   roofComponents.forEach(function(r){ pushBox({x:r.x,z:r.z,width:r.width,depth:r.depth,rotation:r.rotation||0}, r.baseHeight, r.baseHeight + r.height, 'roof'); });
   balconyComponents.forEach(function(b){ var y0=b.level*3.5, y1=y0+b.height; pushBox(b,y0,y1,'balcony'); });
   furnitureItems.forEach(function(f){ var y0=(f.level||0)*3.5, y1=y0+(f.height||0.7); pushBox(f,y0,y1,'furniture_'+(f.name||'')); });
@@ -3944,6 +4390,9 @@ function importOBJ(text) {
       } else if (tag.indexOf('pergola') !== -1) {
         var pergola = { id: 'pergola_'+Date.now()+Math.random().toString(36).slice(2), x: cx, z: cz, width: width, depth: depth, height: height, totalHeight: height, legWidth: 0.3, slatCount: 8, slatWidth: 0.15, name: 'Imported Pergola', type: 'pergola', rotation: 0 };
         pergolaComponents.push(pergola); created++;
+      } else if (tag.indexOf('pool') !== -1) {
+        var pool = { id: 'pool_'+Date.now()+Math.random().toString(36).slice(2), x: cx, z: cz, width: width, depth: depth, height: height, name: 'Imported Pool', type: 'pool', rotation: 0 };
+        poolComponents.push(pool); created++;
       } else if (tag.indexOf('stairs') !== -1) {
         stairsComponent = { id: 'stairs_'+Date.now(), x: cx, z: cz, width: width, depth: depth, height: height, steps: Math.max(3, Math.round(height/0.25)), name: 'Imported Stairs', type: 'stairs', rotation: 0 };
         created++;
@@ -4110,45 +4559,66 @@ function importSVGFloorplan(svgText, fileName){
   try {
     var parser = new DOMParser();
     var doc = parser.parseFromString(svgText, 'image/svg+xml');
+    // Parser error detection (browser inserts <parsererror>)
+    if (doc.getElementsByTagName('parsererror').length>0) { updateStatus('SVG parser error'); return; }
     var svg = doc.documentElement;
-    if(!svg || svg.tagName.toLowerCase()!=='svg'){ updateStatus('Invalid SVG'); return; }
-    var viewW = parseFloat(svg.getAttribute('width')) || null;
-    var viewH = parseFloat(svg.getAttribute('height')) || null;
-    // Collect rects
-    var rects = Array.from(svg.getElementsByTagName('rect'));
-    var paths = Array.from(svg.getElementsByTagName('path'));
-    var roomsCreated = 0;
+    if(!svg || svg.tagName.toLowerCase()!=='svg'){ updateStatus('Invalid SVG root'); return; }
+
+    // Clone entire SVG into hidden DOM so getBBox() honors transforms
+    var container = document.createElement('div'); container.style.cssText='position:absolute;left:-9999px;top:-9999px;visibility:hidden;';
+    var cloneRoot = svg.cloneNode(true);
+    container.appendChild(cloneRoot); document.body.appendChild(container);
+
+    // Extract viewBox & physical size for unit scaling
+    var vbAttr = cloneRoot.getAttribute('viewBox');
+    var vb = null; if(vbAttr){ var parts = vbAttr.trim().split(/[,\s]+/).map(parseFloat); if(parts.length===4 && parts.every(function(v){return !isNaN(v);})){ vb = {minX:parts[0],minY:parts[1],w:parts[2],h:parts[3]}; } }
+    function parseSize(attr){ if(!attr) return null; var m=String(attr).trim().match(/([0-9.]+)([a-z%]*)/i); if(!m) return null; var v=parseFloat(m[1]); var unit=(m[2]||'').toLowerCase(); if(isNaN(v)) return null; var mult=1; switch(unit){ case 'mm': mult=0.001; break; case 'cm': mult=0.01; break; case 'm': mult=1; break; case 'in': mult=0.0254; break; case 'ft': mult=0.3048; break; case 'px': default: mult=1; } return {meters:v*mult, raw:v, unit:unit||'px'}; }
+    var widthInfo = parseSize(cloneRoot.getAttribute('width'));
+    var heightInfo = parseSize(cloneRoot.getAttribute('height'));
+    var coordWidth = vb? vb.w : (widthInfo? widthInfo.raw : null);
+    var scaleGuess = 1; // default: 1 svg unit -> 1 meter
+    if (vb && widthInfo && widthInfo.unit!=='px'){ // derive scale from physical width vs viewBox width
+      if (coordWidth && coordWidth>0) scaleGuess = widthInfo.meters / coordWidth;
+    }
+    // Heuristic fallback if still huge
+    if (scaleGuess===1 && vb){ var maxSpan = Math.max(vb.w, vb.h); if(maxSpan>500){ scaleGuess=0.01; } else if (maxSpan>100){ scaleGuess=0.1; } }
+
+    // Collect geometry elements
+    var rects = Array.from(cloneRoot.querySelectorAll('rect'));
+    var paths = Array.from(cloneRoot.querySelectorAll('path'));
+    var polys = Array.from(cloneRoot.querySelectorAll('polygon,polyline'));
     var boxes = [];
-    rects.forEach(function(r){
-      var x=parseFloat(r.getAttribute('x')||0), y=parseFloat(r.getAttribute('y')||0);
-      var w=parseFloat(r.getAttribute('width')||0), h=parseFloat(r.getAttribute('height')||0);
-      if (w>0.2 && h>0.2) boxes.push({x:x,y:y,w:w,h:h});
-    });
-    // Rough path bbox (limited: uses native getBBox if available via offscreen SVG in DOM)
-    // We import only if path has a reasonable bbox
-    var temp = document.createElementNS('http://www.w3.org/2000/svg','svg'); temp.setAttribute('xmlns','http://www.w3.org/2000/svg'); temp.style.position='absolute'; temp.style.left='-9999px'; document.body.appendChild(temp);
-    paths.slice(0,200).forEach(function(p){ // limit to first 200 paths
-      try {
-        var clone = p.cloneNode(true); temp.appendChild(clone); var bb = clone.getBBox(); temp.removeChild(clone);
-        if(bb.width>0.2 && bb.height>0.2 && bb.width*bb.height<50000){ boxes.push({x:bb.x,y:bb.y,w:bb.width,h:bb.height}); }
-      } catch(e){}
-    });
-    document.body.removeChild(temp);
-    if(boxes.length===0){ updateStatus('No usable shapes in SVG'); return; }
-    // Determine scale heuristic
-    var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; boxes.forEach(function(b){ if(b.x<minX)minX=b.x; if(b.y<minY)minY=b.y; if(b.x+b.w>maxX)maxX=b.x+b.w; if(b.y+b.h>maxY)maxY=b.y+b.h; });
-    var spanX = maxX-minX, spanY=maxY-minY; var scaleGuess = 1; // svg units -> meters
-    var maxSpan = Math.max(spanX, spanY);
-    if(maxSpan>500){ scaleGuess = 0.01; } else if (maxSpan>100){ scaleGuess = 0.1; }
-    // Create rooms
+
+    function pushBox(bb){ if(!bb) return; if(!(bb.width>0 && bb.height>0)) return; if(bb.width<0.2 && bb.height<0.2) return; if(bb.width*bb.height>2e6) return; boxes.push({x:bb.x,y:bb.y,w:bb.width,h:bb.height}); }
+
+    rects.forEach(function(r){ try { pushBox(r.getBBox()); } catch(e){} });
+    polys.forEach(function(p){ try { pushBox(p.getBBox()); } catch(e){} });
+    // Limit path processing to avoid huge CPU for icon-heavy files
+    for (var i=0;i<paths.length && i<500;i++){ try { pushBox(paths[i].getBBox()); } catch(e){} }
+
+    if(boxes.length===0){ updateStatus('No shapes in SVG'); document.body.removeChild(container); return; }
+
+    // Compute combined extents
+    var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    boxes.forEach(function(b){ if(b.x<minX)minX=b.x; if(b.y<minY)minY=b.y; if(b.x+b.w>maxX)maxX=b.x+b.w; if(b.y+b.h>maxY)maxY=b.y+b.h; });
+    var spanX = maxX-minX, spanY=maxY-minY;
+    if(!isFinite(spanX) || !isFinite(spanY) || spanX<=0 || spanY<=0){ updateStatus('SVG bounds invalid'); document.body.removeChild(container); return; }
+
+    var roomsCreated=0;
+    var cxWorld = camera.targetX;
+    var czWorld = camera.targetZ;
     boxes.forEach(function(b){
-      var cx = (b.x + b.w/2 - minX - spanX/2) * scaleGuess + camera.targetX;
-      var cz = (b.y + b.h/2 - minY - spanY/2) * scaleGuess + camera.targetZ;
-      var rw = b.w * scaleGuess; var rd = b.h * scaleGuess;
-      if(rw<0.5 || rd<0.5) return;
-      var room = addRoom('SVG'); room.width = rw; room.depth = rd; room.x = cx; room.z = cz; roomsCreated++;
+      var rw = b.w * scaleGuess;
+      var rd = b.h * scaleGuess;
+      if(rw<0.5 || rd<0.5) return; // skip tiny
+      var cx = ((b.x + b.w/2) - (minX + spanX/2)) * scaleGuess + cxWorld;
+      var cz = ((b.y + b.h/2) - (minY + spanY/2)) * scaleGuess + czWorld;
+      var room = addRoom('SVG'); room.width=rw; room.depth=rd; room.x=cx; room.z=cz; roomsCreated++;
     });
-    if(roomsCreated>0){ saveProjectSilently(); renderLoop(); updateStatus('Imported '+roomsCreated+' room(s) from SVG'); }
+
+    document.body.removeChild(container);
+    if(roomsCreated>0){ saveProjectSilently(); renderLoop(); updateStatus('SVG imported '+roomsCreated+' room'+(roomsCreated!==1?'s':'')); }
+    else updateStatus('SVG import created 0 rooms');
   } catch(err){ console.error('SVG parse error', err); updateStatus('SVG parse failed'); }
 }
 
