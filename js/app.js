@@ -5742,11 +5742,12 @@ var __plan2d = {
   active:false,
   scale:50,          // px per meter
   wallThicknessM:0.3,
-  elements:[],       // { type:'wall'|'window', x0,y0,x1,y1, thickness }
-  tool:'wall',       // current tool
+  elements:[],       // { type:'wall'|'window'|'door', x0,y0,x1,y1, thickness, meta? }
+  tool:'wall',       // current tool: wall | window | door | erase | select
   start:null,        // world coords of drag start
   last:null,         // world coords of current mouse during drag
-  hoverIndex:-1
+  hoverIndex:-1,
+  selectedIndex:-1
 };
 
 function openPlan2DModal(){
@@ -5755,6 +5756,8 @@ function openPlan2DModal(){
   __plan2d.active=true;
   plan2dBind();
   plan2dResize();
+  // Auto-populate from current ground-floor design
+  try { populatePlan2DFromDesign(); } catch(e) { console.warn('populatePlan2DFromDesign failed', e); }
   plan2dDraw();
   updatePlan2DInfo();
 }
@@ -5776,12 +5779,15 @@ function plan2dBind(){
   // Tool buttons
   var bWall=document.getElementById('plan2d-tool-wall'); if(bWall) bWall.onclick=function(){ __plan2d.tool='wall'; plan2dCursor(); };
   var bWin=document.getElementById('plan2d-tool-window'); if(bWin) bWin.onclick=function(){ __plan2d.tool='window'; plan2dCursor(); };
+  var bDoor=document.getElementById('plan2d-tool-door'); if(bDoor) bDoor.onclick=function(){ __plan2d.tool='door'; plan2dCursor(); };
+  var bSel=document.getElementById('plan2d-tool-select'); if(bSel) bSel.onclick=function(){ __plan2d.tool='select'; plan2dCursor(); };
   var bErase=document.getElementById('plan2d-tool-erase'); if(bErase) bErase.onclick=function(){ __plan2d.tool='erase'; plan2dCursor(); };
-  var bClear=document.getElementById('plan2d-clear'); if(bClear) bClear.onclick=function(){ if(confirm('Clear all elements?')) { __plan2d.elements=[]; plan2dDraw(); updatePlan2DInfo(); } };
+  var bClear=document.getElementById('plan2d-clear'); if(bClear) bClear.onclick=function(){ if(confirm('Clear all elements?')) { __plan2d.elements=[]; __plan2d.selectedIndex=-1; plan2dDraw(); updatePlan2DInfo(); } };
   var bClose=document.getElementById('plan2d-close'); if(bClose) bClose.onclick=closePlan2DModal;
   var bExp=document.getElementById('plan2d-export'); if(bExp) bExp.onclick=plan2dExport;
   var bImp=document.getElementById('plan2d-import'); if(bImp) bImp.onclick=function(){ var f=document.getElementById('plan2d-import-file'); if(f) f.click(); };
-  var fi=document.getElementById('plan2d-import-file'); if(fi) fi.onchange=function(e){ var f=e.target.files&&e.target.files[0]; if(!f)return; var r=new FileReader(); r.onload=function(){ try{ var arr=JSON.parse(r.result); if(Array.isArray(arr)){ __plan2d.elements=arr; plan2dDraw(); updatePlan2DInfo(); updateStatus('2D plan imported'); } }catch(err){ updateStatus('Import failed'); } }; r.readAsText(f); fi.value=''; };
+  var fi=document.getElementById('plan2d-import-file'); if(fi) fi.onchange=function(e){ var f=e.target.files&&e.target.files[0]; if(!f)return; var r=new FileReader(); r.onload=function(){ try{ var arr=JSON.parse(r.result); if(Array.isArray(arr)){ __plan2d.elements=arr; __plan2d.selectedIndex=-1; plan2dDraw(); updatePlan2DInfo(); updateStatus('2D plan imported'); } }catch(err){ updateStatus('Import failed'); } }; r.readAsText(f); fi.value=''; };
+  var bApply3D=document.getElementById('plan2d-apply-3d'); if(bApply3D) bApply3D.onclick=applyPlan2DTo3D;
   if(!c.__plan2dBound){
     c.__plan2dBound=true;
     c.addEventListener('mousedown', function(e){
@@ -5789,6 +5795,7 @@ function plan2dBind(){
       var rect=c.getBoundingClientRect();
       var p=screenToWorld2D((e.clientX-rect.left)*(c.width/rect.width),(e.clientY-rect.top)*(c.height/rect.height));
       if(__plan2d.tool==='erase'){ plan2dEraseAt(p); return; }
+      if(__plan2d.tool==='select'){ plan2dSelectAt(p); return; }
       __plan2d.start=p; __plan2d.last=p; plan2dDraw();
     });
     c.addEventListener('mousemove', function(e){
@@ -5803,16 +5810,21 @@ function plan2dBind(){
       if(__plan2d.start && __plan2d.last){ var a=__plan2d.start, b=__plan2d.last; plan2dFinalize(a,b); updatePlan2DInfo(); }
       __plan2d.start=null; __plan2d.last=null; plan2dDraw();
     });
+    // Delete selected via keyboard
+    if(!window.__plan2dKeydown){
+      window.__plan2dKeydown = function(ev){ if(!__plan2d.active) return; if(ev.key==='Delete' || ev.key==='Backspace'){ if(__plan2d.selectedIndex>=0){ __plan2d.elements.splice(__plan2d.selectedIndex,1); __plan2d.selectedIndex=-1; plan2dDraw(); updatePlan2DInfo(); } ev.preventDefault(); } };
+      window.addEventListener('keydown', window.__plan2dKeydown);
+    }
   }
   plan2dCursor();
 }
-function plan2dUnbind(){ try{ if(window.__plan2dResize) window.removeEventListener('resize', window.__plan2dResize); }catch(e){} }
+function plan2dUnbind(){ try{ if(window.__plan2dResize) window.removeEventListener('resize', window.__plan2dResize); if(window.__plan2dKeydown) window.removeEventListener('keydown', window.__plan2dKeydown); }catch(e){} }
 
 function plan2dResize(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var rect=c.getBoundingClientRect(); var dpr=window.devicePixelRatio||1; var W=Math.floor(rect.width*dpr), H=Math.floor(rect.height*dpr); if(c.width!==W||c.height!==H){ c.width=W; c.height=H; ov.width=W; ov.height=H; } }
-function plan2dCursor(){ var c=document.getElementById('plan2d-canvas'); if(!c) return; c.style.cursor = (__plan2d.tool==='erase') ? 'not-allowed' : 'crosshair'; }
+function plan2dCursor(){ var c=document.getElementById('plan2d-canvas'); if(!c) return; c.style.cursor = (__plan2d.tool==='erase') ? 'not-allowed' : (__plan2d.tool==='select' ? 'pointer' : 'crosshair'); }
 
 function plan2dFinalize(a,b){ if(!a||!b) return; // snap to straight axis
-  var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:0.05}); } }
+  var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:0.05}); } else if(__plan2d.tool==='door'){ __plan2d.elements.push({type:'door', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:0.9, meta:{hinge:'left'}}); } }
 
 function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height);
   // Grid (1m)
@@ -5820,25 +5832,191 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
   for(var x=w/2 % step; x<w; x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
   for(var y=h/2 % step; y<h; y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
   // Elements
-  for(var i=0;i<__plan2d.elements.length;i++){
-    var el=__plan2d.elements[i]; var a=worldToScreen2D(el.x0,el.y0), b=worldToScreen2D(el.x1,el.y1);
+  // Precompute connections at endpoints to extend walls and make corners flush
+  var elems=__plan2d.elements;
+  var startConn=new Array(elems.length).fill(false), endConn=new Array(elems.length).fill(false);
+  (function(){
+    function key(x,y){ return (Math.round(x*1000))+','+(Math.round(y*1000)); }
+    var map={};
+    for(var i=0;i<elems.length;i++){
+      var e=elems[i]; if(e.type!=='wall') continue;
+      var ks=key(e.x0,e.y0), ke=key(e.x1,e.y1);
+      (map[ks]||(map[ks]=[])).push({i:i,end:'s'});
+      (map[ke]||(map[ke]=[])).push({i:i,end:'e'});
+    }
+    Object.keys(map).forEach(function(k){ var arr=map[k]; if(arr.length>1){ for(var j=0;j<arr.length;j++){ if(arr[j].end==='s') startConn[arr[j].i]=true; else endConn[arr[j].i]=true; } } });
+  })();
+  for(var i=0;i<elems.length;i++){
+    var el=elems[i];
+    var ax=el.x0, ay=el.y0, bx=el.x1, by=el.y1;
     if(el.type==='wall'){
-      var dx=b.x-a.x, dy=b.y-a.y; var L=Math.sqrt(dx*dx+dy*dy)||1; var nx=-dy/L, ny=dx/L; var half=(el.thickness*__plan2d.scale)/2;
+      var horizontal = Math.abs(ay-by) <= Math.abs(ax-bx);
+      var halfW = (el.thickness||__plan2d.wallThicknessM)/2;
+      if(horizontal){
+        if(ax<=bx){ if(startConn[i]) ax -= halfW; if(endConn[i]) bx += halfW; }
+        else { if(startConn[i]) ax += halfW; if(endConn[i]) bx -= halfW; }
+      } else { // vertical
+        if(ay<=by){ if(startConn[i]) ay -= halfW; if(endConn[i]) by += halfW; }
+        else { if(startConn[i]) ay += halfW; if(endConn[i]) by -= halfW; }
+      }
+    }
+    var a=worldToScreen2D(ax,ay), b=worldToScreen2D(bx,by);
+    if(el.type==='wall'){
+      var dx=b.x-a.x, dy=b.y-a.y; var L=Math.sqrt(dx*dx+dy*dy)||1; var nx=-dy/L, ny=dx/L; var half=( (el.thickness||__plan2d.wallThicknessM) * __plan2d.scale)/2;
       ctx.beginPath(); ctx.fillStyle='#e5e7eb'; ctx.strokeStyle='#334155'; ctx.lineWidth=1.2;
       ctx.moveTo(a.x+nx*half,a.y+ny*half); ctx.lineTo(b.x+nx*half,b.y+ny*half); ctx.lineTo(b.x-nx*half,b.y-ny*half); ctx.lineTo(a.x-nx*half,a.y-ny*half); ctx.closePath(); ctx.fill(); ctx.stroke();
     } else if(el.type==='window'){
       ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.lineWidth=2; ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    } else if(el.type==='door'){
+      // Draw door as a jamb line plus a 90-degree swing arc
+      ctx.save(); ctx.strokeStyle='#22c55e'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+      var ang=Math.atan2(b.y-a.y, b.x-a.x);
+      var r=Math.hypot(b.x-a.x,b.y-a.y);
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, r, ang, ang + Math.PI/2, false);
+      ctx.stroke();
+      ctx.restore();
     }
   }
   // Preview during drag
   if(__plan2d.start && __plan2d.last){ var a=worldToScreen2D(__plan2d.start.x,__plan2d.start.y); var b=worldToScreen2D(__plan2d.last.x,__plan2d.last.y); var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; if(__plan2d.tool==='wall'){ var L2=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2)||1; var nx2=-(b.y-a.y)/L2, ny2=(b.x-a.x)/L2; var half2=(__plan2d.wallThicknessM*__plan2d.scale)/2; ctx.beginPath(); ctx.fillStyle='rgba(226,232,240,0.55)'; ctx.strokeStyle='#64748b'; ctx.setLineDash([6,4]); ctx.moveTo(a.x+nx2*half2,a.y+ny2*half2); ctx.lineTo(b.x+nx2*half2,b.y+ny2*half2); ctx.lineTo(b.x-nx2*half2,b.y-ny2*half2); ctx.lineTo(a.x-nx2*half2,a.y-ny2*half2); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.setLineDash([]); } else if(__plan2d.tool==='window'){ ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.setLineDash([4,3]); ctx.lineWidth=2; ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.setLineDash([]); } }
   // Hover erase highlight
   if(__plan2d.tool==='erase' && __plan2d.hoverIndex>=0){ var e=__plan2d.elements[__plan2d.hoverIndex]; var a2=worldToScreen2D(e.x0,e.y0), b2=worldToScreen2D(e.x1,e.y1); ctx.beginPath(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.setLineDash([4,4]); ctx.moveTo(a2.x,a2.y); ctx.lineTo(b2.x,b2.y); ctx.stroke(); ctx.setLineDash([]); }
+  // Selection highlight
+  if(__plan2d.selectedIndex>=0){ var se=__plan2d.elements[__plan2d.selectedIndex]; var sa=worldToScreen2D(se.x0,se.y0), sb=worldToScreen2D(se.x1,se.y1); ctx.beginPath(); ctx.strokeStyle='#10b981'; ctx.lineWidth=3; ctx.setLineDash([6,4]); ctx.moveTo(sa.x,sa.y); ctx.lineTo(sb.x,sb.y); ctx.stroke(); ctx.setLineDash([]); }
   var ox=ov.getContext('2d'); ox.setTransform(1,0,0,1,0,0); ox.clearRect(0,0,ov.width,ov.height);
 }
 function plan2dHoverErase(p){ var best=-1, bestDist=0.25; for(var i=0;i<__plan2d.elements.length;i++){ var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; } } __plan2d.hoverIndex=best; plan2dDraw(); }
 function plan2dEraseAt(p){ plan2dHoverErase(p); if(__plan2d.hoverIndex>=0){ __plan2d.elements.splice(__plan2d.hoverIndex,1); __plan2d.hoverIndex=-1; plan2dDraw(); updatePlan2DInfo(); } }
+function plan2dSelectAt(p){ var best=-1, bestDist=0.2; for(var i=0;i<__plan2d.elements.length;i++){ var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; } } __plan2d.selectedIndex=best; plan2dDraw(); }
 function plan2dPointSegDist(px,py,e){ var x0=e.x0,y0=e.y0,x1=e.x1,y1=e.y1; var dx=x1-x0, dy=y1-y0; var t=((px-x0)*dx+(py-y0)*dy)/(dx*dx+dy*dy); t=Math.max(0,Math.min(1,t)); var cx=x0+t*dx, cy=y0+t*dy; var ddx=px-cx, ddy=py-cy; return Math.sqrt(ddx*ddx+ddy*ddy); }
 function updatePlan2DInfo(){ var cnt=document.getElementById('plan2d-count'); if(cnt) cnt.textContent=__plan2d.elements.length; }
 function plan2dExport(){ try{ var data=JSON.stringify(__plan2d.elements); var blob=new Blob([data],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='plan2d.json'; a.click(); URL.revokeObjectURL(a.href); updateStatus('2D plan exported'); }catch(e){ updateStatus('Export failed'); } }
 // ================= END 2D FLOOR PLAN EDITOR =================
+
+// Apply 2D plan edits back to 3D: rebuild ground floor rooms from closed rectangles
+function applyPlan2DTo3D(){
+  try {
+    var walls=__plan2d.elements.filter(function(e){return e.type==='wall';});
+    if(walls.length===0){ updateStatus('No walls to apply'); return; }
+    function approxEq(a,b){ return Math.abs(a-b) < 1e-3; }
+    // Normalize walls so x0<=x1 or y0<=y1 for easier matching
+    var normWalls = walls.map(function(w){
+      var h = approxEq(w.y0,w.y1);
+      if(h){ var x0=Math.min(w.x0,w.x1), x1=Math.max(w.x0,w.x1); return {type:'wall', x0:x0,y0:w.y0,x1:x1,y1:w.y0, thickness:w.thickness||__plan2d.wallThicknessM}; }
+      var v = approxEq(w.x0,w.x1);
+      if(v){ var y0=Math.min(w.y0,w.y1), y1=Math.max(w.y0,w.y1); return {type:'wall', x0:w.x0,y0:y0,x1:w.x0,y1:y1, thickness:w.thickness||__plan2d.wallThicknessM}; }
+      // If neither horizontal nor vertical, ignore for room inference
+      return null;
+    }).filter(Boolean);
+
+    var horiz=normWalls.filter(function(w){ return approxEq(w.y0,w.y1); });
+    var vert =normWalls.filter(function(w){ return approxEq(w.x0,w.x1); });
+
+    // Find rectangles by pairing two horizontal and two vertical walls that line up
+    var roomsFound=[];
+    for(var i=0;i<horiz.length;i++){
+      for(var j=i+1;j<horiz.length;j++){
+        var y0=Math.min(horiz[i].y0,horiz[j].y0), y1=Math.max(horiz[i].y0,horiz[j].y0);
+        // Find vertical pairs
+        for(var k=0;k<vert.length;k++){
+          for(var m=k+1;m<vert.length;m++){
+            var x0=Math.min(vert[k].x0,vert[m].x0), x1=Math.max(vert[k].x0,vert[m].x0);
+            // Check if we have the four edges with matching spans
+            var top = horiz[i]; var bot = horiz[j];
+            var topOK = approxEq(Math.min(top.x0, top.x1), x0) && approxEq(Math.max(top.x0, top.x1), x1) && approxEq(top.y0,y0);
+            var botOK = approxEq(Math.min(bot.x0, bot.x1), x0) && approxEq(Math.max(bot.x0, bot.x1), x1) && approxEq(bot.y0,y1);
+            var left = vert[k], right=vert[m];
+            var leftOK = approxEq(left.x0, x0) && (left.y0<=y0) && (left.y1>=y1);
+            var rightOK= approxEq(right.x0,x1) && (right.y0<=y0) && (right.y1>=y1);
+            if(topOK && botOK && leftOK && rightOK){ roomsFound.push({minX:x0, maxX:x1, minY:y0, maxY:y1}); }
+          }
+        }
+      }
+    }
+    // Deduplicate roomsFound (rectangles may be discovered multiple times)
+    var dedup=[]; roomsFound.forEach(function(R){
+      for(var n=0;n<dedup.length;n++){
+        var D=dedup[n]; if(approxEq(D.minX,R.minX)&&approxEq(D.maxX,R.maxX)&&approxEq(D.minY,R.minY)&&approxEq(D.maxY,R.maxY)) return; }
+      dedup.push(R);
+    });
+    roomsFound=dedup;
+
+    if(roomsFound.length===0){ updateStatus('No closed rooms found'); return; }
+
+    // Replace only ground floor rooms
+    allRooms = allRooms.filter(function(r){ return (r.level||0)!==0; });
+    // 2D y corresponds to world z; 2D x corresponds to world x; plan is centered at (0,0)
+    for(var r=0;r<roomsFound.length;r++){
+      var R=roomsFound[r];
+      var wx=(R.minX+R.maxX)/2, wz=(R.minY+R.maxY)/2; // map y->z
+      var w=R.maxX-R.minX, d=R.maxY-R.minY;
+      var room=createRoom(wx, wz, 0); room.width=Math.max(0.5, parseFloat(w.toFixed(2))); room.depth=Math.max(0.5, parseFloat(d.toFixed(2))); room.height=3; room.name='Room'; allRooms.push(room);
+    }
+
+    saveProjectSilently(); selectedRoomId=null; renderLoop(); updateStatus('Applied 2D plan to 3D');
+  } catch(e){ console.error('applyPlan2DTo3D failed', e); updateStatus('Apply to 3D failed'); }
+}
+
+// Populate the 2D Floor Plan from the current 3D model (ground floor + garages)
+function populatePlan2DFromDesign(){
+  // Collect rectangles for level 0 rooms and garages
+  var rects = [];
+  for (var i=0;i<allRooms.length;i++) {
+    var r = allRooms[i];
+    if ((r.level||0) !== 0) continue; // ground floor only
+    var hw = r.width/2, hd = r.depth/2;
+    rects.push({
+      name: r.name || 'Room',
+      minX: r.x - hw, maxX: r.x + hw,
+      minZ: r.z - hd, maxZ: r.z + hd,
+      type: 'room'
+    });
+  }
+  for (var g=0; g<garageComponents.length; g++) {
+    var gar = garageComponents[g];
+    var hwg = gar.width/2, hdg = gar.depth/2;
+    rects.push({
+      name: gar.name || 'Garage',
+      minX: gar.x - hwg, maxX: gar.x + hwg,
+      minZ: gar.z - hdg, maxZ: gar.z + hdg,
+      type: 'garage'
+    });
+  }
+  if (rects.length === 0) return false;
+
+  // Compute overall bounds and center
+  var minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;
+  for (var k=0;k<rects.length;k++){
+    var b=rects[k];
+    if (b.minX<minX) minX=b.minX; if (b.maxX>maxX) maxX=b.maxX;
+    if (b.minZ<minZ) minZ=b.minZ; if (b.maxZ>maxZ) maxZ=b.maxZ;
+  }
+  var cx = (minX+maxX)/2; var cz = (minZ+maxZ)/2;
+  var spanX = Math.max(0.5, maxX-minX); var spanZ = Math.max(0.5, maxZ-minZ);
+
+  // Fit scale to canvas with margins
+  var c=document.getElementById('plan2d-canvas');
+  if (!c) return false;
+  var pad = 0.15; // 15% margin
+  var fitWm = spanX*(1+pad), fitHm = spanZ*(1+pad);
+  var scaleX = (c.width>0) ? (c.width/(fitWm||1)) : __plan2d.scale;
+  var scaleY = (c.height>0) ? (c.height/(fitHm||1)) : __plan2d.scale;
+  var newScale = Math.max(10, Math.min(140, Math.floor(Math.min(scaleX, scaleY)))); // clamp sensible range
+  if (isFinite(newScale) && newScale>0) __plan2d.scale = newScale;
+
+  // Build wall segments around each rectangle, shifted so center is at (0,0)
+  __plan2d.elements = [];
+  function addRectWalls(minX,maxX,minZ,maxZ){
+    var x0=minX - cx, x1=maxX - cx, y0=minZ - cz, y1=maxZ - cz; // map z->y
+    __plan2d.elements.push({type:'wall', x0:x0,y0:y0, x1:x1,y1:y0, thickness:__plan2d.wallThicknessM});
+    __plan2d.elements.push({type:'wall', x0:x1,y0:y0, x1:x1,y1:y1, thickness:__plan2d.wallThicknessM});
+    __plan2d.elements.push({type:'wall', x0:x1,y0:y1, x1:x0,y1:y1, thickness:__plan2d.wallThicknessM});
+    __plan2d.elements.push({type:'wall', x0:x0,y0:y1, x1:x0,y1:y0, thickness:__plan2d.wallThicknessM});
+  }
+  for (var rci=0;rci<rects.length;rci++){
+    var rb=rects[rci]; addRectWalls(rb.minX, rb.maxX, rb.minZ, rb.maxZ);
+  }
+  return true;
+}
