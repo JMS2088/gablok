@@ -2,6 +2,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 import os
 import socket
 import argparse
+from urllib.parse import urlparse
 
 
 class NoCacheHandler(SimpleHTTPRequestHandler):
@@ -36,6 +37,17 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b'OK')
             return
+        # On first request, print the forwarded URL detected via Host header (if any)
+        try:
+            global _printed_forwarded_host
+            if not _printed_forwarded_host:
+                host = self.headers.get('Host') or ''
+                if host and not host.startswith('0.0.0.0') and not host.startswith('127.0.0.1') and 'localhost' not in host:
+                    scheme = 'https' if any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io')) else 'http'
+                    print(f"Detected Forwarded URL: {scheme}://{host}", flush=True)
+                    _printed_forwarded_host = True
+        except Exception:
+            pass
         return super().do_GET()
 
 
@@ -52,17 +64,44 @@ def run(host='0.0.0.0', port=8000, directory=None):
     except OSError as e:
         print(f"Failed to bind to {host}:{port} -> {e}")
         raise
-    print(f"Serving {directory} on http://{host}:{port} (no-cache)")
-    # If running inside GitHub Codespaces, print the forwarded URL for convenience
-    codespace = os.environ.get('CODESPACE_NAME') or os.environ.get('CODESPACES')
-    fwd_domain = os.environ.get('GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN')
-    if codespace and fwd_domain:
+    print(f"Serving {directory} on http://{host}:{port} (no-cache)", flush=True)
+    # Helpful locals
+    try:
+        print(f"Local URL: http://localhost:{port}", flush=True)
+    except Exception:
+        pass
+    # Print forwarded URL for Codespaces, Gitpod, or give user a hint
+    codespace = os.environ.get('CODESPACE_NAME')
+    fwd_domain = os.environ.get('GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN') or 'app.github.dev'
+    if codespace:
         forwarded_url = f"https://{port}-{codespace}.{fwd_domain}"
-        print(f"Forwarded URL (Codespaces): {forwarded_url}")
+        print(f"Forwarded URL (Codespaces): {forwarded_url}", flush=True)
+    elif os.environ.get('GITPOD_WORKSPACE_URL'):
+        # Transform base workspace URL into a port-forwarded URL
+        base = os.environ['GITPOD_WORKSPACE_URL']
+        try:
+            u = urlparse(base)
+            host_only = u.netloc
+            forwarded_url = f"https://{port}-{host_only}"
+            print(f"Forwarded URL (Gitpod): {forwarded_url}", flush=True)
+        except Exception:
+            print(f"Gitpod base: {base}", flush=True)
     elif os.environ.get('CODESPACES'):
-        # Fallback common domain used by Codespaces
-        forwarded_url = f"https://{port}-{os.environ.get('CODESPACES')}.githubpreview.dev"
-        print(f"Forwarded URL (Codespaces, default domain): {forwarded_url}")
+        # Codespaces detected but name not provided; will log detected Host on first request
+        print("Codespaces detected; forwarded URL will be printed on first request.", flush=True)
+    else:
+        # Try to guess forwarded URL for common Codespaces/GitHub/Gitpod patterns
+        try:
+            # Look for common VS Code remote forwarding envs
+            port_str = str(port)
+            # Check for github.dev or githubpreview.dev
+            for env_var in os.environ:
+                if 'GITHUB' in env_var and 'PORT' in env_var and port_str in os.environ[env_var]:
+                    print(f"Possible GitHub Codespaces forwarding: {os.environ[env_var]}", flush=True)
+            # Print a generic hint
+            print("If running in Codespaces or Gitpod, look for a forwarded URL in your IDE Ports panel.", flush=True)
+        except Exception:
+            pass
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -72,6 +111,7 @@ def run(host='0.0.0.0', port=8000, directory=None):
 
 
 if __name__ == '__main__':
+    _printed_forwarded_host = False
     # Defaults from env vars with sensible fallbacks
     default_host = os.environ.get('HOST', '0.0.0.0')
     # Support common platforms that inject PORT
