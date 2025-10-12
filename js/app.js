@@ -5751,14 +5751,20 @@ var __plan2d = {
   // Window editing state (for host-anchored windows)
   dragWindow:null,   // { index, end:'t0'|'t1' }
   // Standard sizes
-  doorWidthM:0.9,
-  doorHeightM:2.04
+  doorWidthM:0.87,
+  doorHeightM:2.04,
+  // Door editing state (for dragging endpoints)
+  dragDoor:null,      // { index, end:'t0'|'t1'|'a'|'b' }
+  // Whole-door drag state for sliding along wall
+  dragDoorWhole:null  // { index, startMouseT, startT0, startT1, host }
 };
 
 function openPlan2DModal(){
   var m=document.getElementById('plan2d-modal'); if(!m) return;
   m.style.display='block';
   __plan2d.active=true;
+  // Clear any 3D selection to avoid Delete key acting on 3D while in 2D editor
+  try { selectedRoomId = null; } catch(e) {}
   plan2dBind();
   plan2dResize();
   // Auto-populate from current ground-floor design
@@ -5804,6 +5810,26 @@ function plan2dBind(){
         // If a window is selected, allow grabbing endpoints to drag (supports host-anchored windows)
         var hit = plan2dHitWindowEndpoint(p, 0.15);
         if(hit){ __plan2d.dragWindow = hit; return; }
+        // If a door is near, allow grabbing door endpoints
+        var hitD = plan2dHitDoorEndpoint(p, 0.15);
+        if(hitD){ __plan2d.dragDoor = hitD; return; }
+        // Or grab the whole door segment to slide along the wall
+        var hitDSeg = plan2dHitDoorSegment(p, 0.12);
+        if(hitDSeg && typeof hitDSeg.index==='number'){
+          var de = __plan2d.elements[hitDSeg.index];
+          if(de && de.type==='door' && typeof de.host==='number'){
+            var host = __plan2d.elements[de.host]; if(host && host.type==='wall'){
+              __plan2d.dragDoorWhole = {
+                index: hitDSeg.index,
+                startMouseT: plan2dProjectParamOnWall(p, host),
+                startT0: de.t0 || 0,
+                startT1: de.t1 || 0,
+                host: de.host
+              };
+              return;
+            }
+          }
+        }
         plan2dSelectAt(p); return; }
       if(__plan2d.tool==='door'){
         // Place a standard door onto a selected wall or nearest wall under cursor
@@ -5857,6 +5883,28 @@ function plan2dBind(){
         }
         // Fallback: legacy free-draw if no wall nearby
       }
+      if(__plan2d.tool==='door'){
+        // Try to grab an existing door endpoint
+        var dHit = plan2dHitDoorEndpoint(p, 0.15);
+        if(dHit){ __plan2d.dragDoor = dHit; return; }
+        // Or slide an existing anchored door by grabbing its segment
+        var dSeg = plan2dHitDoorSegment(p, 0.12);
+        if(dSeg && typeof dSeg.index==='number'){
+          var de2 = __plan2d.elements[dSeg.index];
+          if(de2 && de2.type==='door' && typeof de2.host==='number'){
+            var host2 = __plan2d.elements[de2.host]; if(host2 && host2.type==='wall'){
+              __plan2d.dragDoorWhole = {
+                index: dSeg.index,
+                startMouseT: plan2dProjectParamOnWall(p, host2),
+                startT0: de2.t0 || 0,
+                startT1: de2.t1 || 0,
+                host: de2.host
+              };
+              return;
+            }
+          }
+        }
+      }
       __plan2d.start=p; __plan2d.last=p; plan2dDraw();
     });
     c.addEventListener('mousemove', function(e){
@@ -5873,24 +5921,85 @@ function plan2dBind(){
             plan2dDraw();
           }
         }
+      } else if(__plan2d.dragDoor){
+        var dd = __plan2d.dragDoor; var de = __plan2d.elements[dd.index];
+        if(de && de.type==='door'){
+          if(typeof de.host==='number'){
+            var dhost = __plan2d.elements[de.host];
+            if(dhost && dhost.type==='wall'){
+              var t = plan2dProjectParamOnWall(p, dhost);
+              if(dd.end==='t0') de.t0 = t; else if(dd.end==='t1') de.t1 = t;
+              plan2dDraw();
+            }
+          } else {
+            // Free door: move endpoint directly
+            if(dd.end==='a'){ de.x0 = p.x; de.y0 = p.y; }
+            if(dd.end==='b'){ de.x1 = p.x; de.y1 = p.y; }
+            plan2dDraw();
+          }
+        }
+      } else if(__plan2d.dragDoorWhole){
+        var dh = __plan2d.dragDoorWhole; var deh = __plan2d.elements[dh.index];
+        var hosth = __plan2d.elements[dh.host];
+        if(deh && hosth && hosth.type==='wall'){
+          var tNow = plan2dProjectParamOnWall(p, hosth);
+          var delta = (tNow - dh.startMouseT) || 0;
+          var t0new = (dh.startT0 || 0) + delta;
+          var t1new = (dh.startT1 || 0) + delta;
+          // Preserve span and clamp to [0,1]
+          var tmin = Math.min(t0new, t1new), tmax = Math.max(t0new, t1new);
+          var span = Math.max(0, tmax - tmin);
+          if(tmin < 0){ tmin = 0; tmax = span; }
+          if(tmax > 1){ tmax = 1; tmin = 1 - span; }
+          // Assign back preserving original ordering
+          if((dh.startT0||0) <= (dh.startT1||0)) { deh.t0 = tmin; deh.t1 = tmax; }
+          else { deh.t0 = tmax; deh.t1 = tmin; }
+          plan2dDraw();
+        }
       } else if(__plan2d.start){ __plan2d.last=p; plan2dDraw(); }
       else if(__plan2d.tool==='erase'){ plan2dHoverErase(p); }
     });
     window.addEventListener('mouseup', function(){
       if(!__plan2d.active) return;
       if(__plan2d.dragWindow){ __plan2d.dragWindow=null; updatePlan2DInfo(); }
+      if(__plan2d.dragDoor){ __plan2d.dragDoor=null; updatePlan2DInfo(); }
+      if(__plan2d.dragDoorWhole){ __plan2d.dragDoorWhole=null; updatePlan2DInfo(); }
       else if(__plan2d.start && __plan2d.last){ var a=__plan2d.start, b=__plan2d.last; plan2dFinalize(a,b); updatePlan2DInfo(); }
       __plan2d.start=null; __plan2d.last=null; plan2dDraw();
     });
-    // Delete selected via keyboard
+    // Delete selected via keyboard (capture-phase to prevent global handlers)
     if(!window.__plan2dKeydown){
-      window.__plan2dKeydown = function(ev){ if(!__plan2d.active) return; if(ev.key==='Delete' || ev.key==='Backspace'){ if(__plan2d.selectedIndex>=0){ __plan2d.elements.splice(__plan2d.selectedIndex,1); __plan2d.selectedIndex=-1; plan2dDraw(); updatePlan2DInfo(); } ev.preventDefault(); } };
-      window.addEventListener('keydown', window.__plan2dKeydown);
+      window.__plan2dKeydown = function(ev){
+        if(!__plan2d.active) return;
+        var key = ev.key;
+        if(key==='Delete' || key==='Backspace'){
+          if(__plan2d.selectedIndex>=0){ __plan2d.elements.splice(__plan2d.selectedIndex,1); __plan2d.selectedIndex=-1; plan2dDraw(); updatePlan2DInfo(); }
+          ev.preventDefault(); ev.stopPropagation();
+          return;
+        }
+        // Door hinge/swing toggles when a door is selected
+        if(__plan2d.selectedIndex>=0){
+          var selEl = __plan2d.elements[__plan2d.selectedIndex];
+          if(selEl && selEl.type==='door'){
+            selEl.meta = selEl.meta || { hinge:'t0', swing:'in' };
+            if(key==='h' || key==='H'){
+              selEl.meta.hinge = (selEl.meta.hinge==='t0' ? 't1' : 't0');
+              plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return;
+            }
+            if(key==='f' || key==='F'){
+              selEl.meta.swing = (selEl.meta.swing==='in' ? 'out' : 'in');
+              plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return;
+            }
+          }
+        }
+      };
+      // Use capture=true so this runs before document-level handlers
+      document.addEventListener('keydown', window.__plan2dKeydown, true);
     }
   }
   plan2dCursor();
 }
-function plan2dUnbind(){ try{ if(window.__plan2dResize) window.removeEventListener('resize', window.__plan2dResize); if(window.__plan2dKeydown) window.removeEventListener('keydown', window.__plan2dKeydown); }catch(e){} }
+function plan2dUnbind(){ try{ if(window.__plan2dResize) window.removeEventListener('resize', window.__plan2dResize); if(window.__plan2dKeydown) document.removeEventListener('keydown', window.__plan2dKeydown, true); }catch(e){} }
 
 function plan2dResize(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var rect=c.getBoundingClientRect(); var dpr=window.devicePixelRatio||1; var W=Math.floor(rect.width*dpr), H=Math.floor(rect.height*dpr); if(c.width!==W||c.height!==H){ c.width=W; c.height=H; ov.width=W; ov.height=H; } }
 function plan2dCursor(){ var c=document.getElementById('plan2d-canvas'); if(!c) return; c.style.cursor = (__plan2d.tool==='erase') ? 'not-allowed' : (__plan2d.tool==='select' ? 'pointer' : 'crosshair'); }
@@ -5939,23 +6048,23 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       var dirx = wdx0 / wLen0, diry = wdy0 / wLen0;
       var thick = (el.thickness||__plan2d.wallThicknessM);
       var halfW = thick/2;
-      // Build window void spans in t-space [0,1]
+      // Build void spans (windows and doors) in t-space [0,1]
       var spans = [];
       for(var wi=0; wi<elems.length; wi++){
-        var wEl = elems[wi]; if(wEl.type!=='window') continue;
-        if(typeof wEl.host==='number' && wEl.host===i){
-          var wt0 = Math.max(0, Math.min(1, wEl.t0||0));
-          var wt1 = Math.max(0, Math.min(1, wEl.t1||0));
-          if(wt1 < wt0){ var tmpw=wt0; wt0=wt1; wt1=tmpw; }
-          spans.push([wt0, wt1]);
+        var oEl = elems[wi]; if(oEl.type!=='window' && oEl.type!=='door') continue;
+        if(typeof oEl.host==='number' && oEl.host===i){
+          var ot0 = Math.max(0, Math.min(1, oEl.t0||0));
+          var ot1 = Math.max(0, Math.min(1, oEl.t1||0));
+          if(ot1 < ot0){ var tmpo=ot0; ot0=ot1; ot1=tmpo; }
+          spans.push([ot0, ot1]);
         } else {
-          // Free window: if it lies along this wall, treat as void
-          var tA = plan2dProjectParamOnWall({x:wEl.x0, y:wEl.y0}, el);
-          var tB = plan2dProjectParamOnWall({x:wEl.x1, y:wEl.y1}, el);
+          // Free opening: if it lies along this wall, treat as void
+          var tA = plan2dProjectParamOnWall({x:oEl.x0, y:oEl.y0}, el);
+          var tB = plan2dProjectParamOnWall({x:oEl.x1, y:oEl.y1}, el);
           // Check that both endpoints are near the wall centerline
           var nearTol = halfW + 0.05; // meters
           function pointWallDist(px,py){ var dx=origBx-origAx, dy=origBy-origAy; var denom=(dx*dx+dy*dy)||1; var t=((px-origAx)*dx+(py-origAy)*dy)/denom; t=Math.max(0,Math.min(1,t)); var cx=origAx+t*dx, cy=origAy+t*dy; return Math.hypot(px-cx, py-cy); }
-          var dA = pointWallDist(wEl.x0,wEl.y0), dB = pointWallDist(wEl.x1,wEl.y1);
+          var dA = pointWallDist(oEl.x0,oEl.y0), dB = pointWallDist(oEl.x1,oEl.y1);
           if(dA <= nearTol && dB <= nearTol){
             var s0 = Math.max(0, Math.min(1, Math.min(tA,tB)));
             var s1 = Math.max(0, Math.min(1, Math.max(tA,tB)));
@@ -6014,29 +6123,44 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         ctx.beginPath(); ctx.arc(b.x,b.y,handleR,0,Math.PI*2); ctx.fill();
       }
     } else if(el.type==='door'){
-      // Door rendering: if host-anchored, compute endpoints along wall
+      // Door rendering: compute endpoints (host-anchored or free)
       var isHostDoor = (typeof el.host==='number');
+      var worldA = null, worldB = null;
       if(isHostDoor){
         var hostD = elems[el.host];
         if(hostD && hostD.type==='wall'){
           var t0d = Math.max(0, Math.min(1, el.t0||0));
           var t1d = Math.max(0, Math.min(1, el.t1||0));
-          var axd = hostD.x0 + (hostD.x1-hostD.x0)*t0d, ayd = hostD.y0 + (hostD.y1-hostD.y0)*t0d;
-          var bxd = hostD.x0 + (hostD.x1-hostD.x0)*t1d, byd = hostD.y0 + (hostD.y1-hostD.y0)*t1d;
-          var As = worldToScreen2D(axd, ayd), Bs = worldToScreen2D(bxd, byd);
-          a = As; b = Bs;
+          worldA = { x: hostD.x0 + (hostD.x1-hostD.x0)*t0d, y: hostD.y0 + (hostD.y1-hostD.y0)*t0d };
+          worldB = { x: hostD.x0 + (hostD.x1-hostD.x0)*t1d, y: hostD.y0 + (hostD.y1-hostD.y0)*t1d };
+          a = worldToScreen2D(worldA.x, worldA.y); b = worldToScreen2D(worldB.x, worldB.y);
         }
+      } else {
+        worldA = { x: el.x0, y: el.y0 }; worldB = { x: el.x1, y: el.y1 };
       }
-      // Draw door as a jamb line plus a 90-degree swing arc
+      // Draw door as a jamb line plus a 90-degree swing arc based on hinge + swing
       ctx.save(); ctx.strokeStyle='#22c55e'; ctx.lineWidth=2;
       // Jamb line (opening)
       ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
-      // Swing arc from hinge (use a as hinge by default)
-      var ang=Math.atan2(b.y-a.y, b.x-a.x);
-      var r=Math.hypot(b.x-a.x,b.y-a.y);
+      // Determine hinge side and swing direction
+      var hinge = (el.meta && el.meta.hinge) || 't0';
+      var swing = (el.meta && el.meta.swing) || 'in'; // 'in' or 'out'
+      var hPt = (hinge==='t0') ? a : b;
+      var other = (hinge==='t0') ? b : a;
+      var ang=Math.atan2(other.y-hPt.y, other.x-hPt.x);
+      var r=Math.hypot(other.x-hPt.x, other.y-hPt.y);
+      // Swing orientation: default arc 90° CCW; flip direction for swing='out'
+      var startAng = ang;
+      var endAng = ang + (swing==='out' ? -Math.PI/2 : Math.PI/2);
       ctx.beginPath();
-      ctx.arc(a.x, a.y, r, ang, ang + Math.PI/2, false);
+      ctx.arc(hPt.x, hPt.y, r, startAng, endAng, (swing==='out'));
       ctx.stroke();
+      // Endpoint handles when editing
+      if((__plan2d.tool==='door' || (__plan2d.tool==='select' && i===__plan2d.selectedIndex))){
+        var handleR=5; ctx.fillStyle='#22c55e';
+        ctx.beginPath(); ctx.arc(a.x,a.y,handleR,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(b.x,b.y,handleR,0,Math.PI*2); ctx.fill();
+      }
       ctx.restore();
     }
   }
@@ -6045,7 +6169,20 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
   // Hover erase highlight
   if(__plan2d.tool==='erase' && __plan2d.hoverIndex>=0){ var e=__plan2d.elements[__plan2d.hoverIndex]; var a2=worldToScreen2D(e.x0,e.y0), b2=worldToScreen2D(e.x1,e.y1); ctx.beginPath(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.setLineDash([4,4]); ctx.moveTo(a2.x,a2.y); ctx.lineTo(b2.x,b2.y); ctx.stroke(); ctx.setLineDash([]); }
   // Selection highlight
-  if(__plan2d.selectedIndex>=0){ var se=__plan2d.elements[__plan2d.selectedIndex]; var sa=worldToScreen2D(se.x0,se.y0), sb=worldToScreen2D(se.x1,se.y1); ctx.beginPath(); ctx.strokeStyle='#10b981'; ctx.lineWidth=3; ctx.setLineDash([6,4]); ctx.moveTo(sa.x,sa.y); ctx.lineTo(sb.x,sb.y); ctx.stroke(); ctx.setLineDash([]); }
+  if(__plan2d.selectedIndex>=0){
+    var se=__plan2d.elements[__plan2d.selectedIndex];
+    var sx0=se.x0, sy0=se.y0, sx1=se.x1, sy1=se.y1;
+    if(se && (se.type==='window' || se.type==='door') && typeof se.host==='number'){
+      var hostSel = __plan2d.elements[se.host];
+      if(hostSel && hostSel.type==='wall'){
+        var tt0=Math.max(0,Math.min(1,se.t0||0)), tt1=Math.max(0,Math.min(1,se.t1||0));
+        sx0 = hostSel.x0 + (hostSel.x1-hostSel.x0)*tt0; sy0 = hostSel.y0 + (hostSel.y1-hostSel.y0)*tt0;
+        sx1 = hostSel.x0 + (hostSel.x1-hostSel.x0)*tt1; sy1 = hostSel.y0 + (hostSel.y1-hostSel.y0)*tt1;
+      }
+    }
+    var sa=worldToScreen2D(sx0,sy0), sb=worldToScreen2D(sx1,sy1);
+    ctx.beginPath(); ctx.strokeStyle='#10b981'; ctx.lineWidth=3; ctx.setLineDash([6,4]); ctx.moveTo(sa.x,sa.y); ctx.lineTo(sb.x,sb.y); ctx.stroke(); ctx.setLineDash([]);
+  }
   var ox=ov.getContext('2d'); ox.setTransform(1,0,0,1,0,0); ox.clearRect(0,0,ov.width,ov.height);
 }
 function plan2dHoverErase(p){ var best=-1, bestDist=0.25; for(var i=0;i<__plan2d.elements.length;i++){ var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; } } __plan2d.hoverIndex=best; plan2dDraw(); }
@@ -6090,6 +6227,45 @@ function plan2dHitWindowEndpoint(p, tol){
   return best;
 }
 
+// Hit-test near door endpoints for dragging
+function plan2dHitDoorEndpoint(p, tol){
+  var best=null; var bestD=tol||0.15;
+  for(var i=0;i<__plan2d.elements.length;i++){
+    var e=__plan2d.elements[i]; if(e.type!=='door') continue;
+    var ax, ay, bx, by;
+    if(typeof e.host==='number'){
+      var host = __plan2d.elements[e.host]; if(!host || host.type!=='wall') continue;
+      var t0=Math.max(0,Math.min(1,e.t0||0)), t1=Math.max(0,Math.min(1,e.t1||0));
+      ax = host.x0+(host.x1-host.x0)*t0; ay = host.y0+(host.y1-host.y0)*t0;
+      bx = host.x0+(host.x1-host.x0)*t1; by = host.y0+(host.y1-host.y0)*t1;
+      var d0=Math.hypot(p.x-ax, p.y-ay), d1=Math.hypot(p.x-bx, p.y-by);
+      if(d0<bestD){ bestD=d0; best={index:i, end:'t0'}; }
+      if(d1<bestD){ bestD=d1; best={index:i, end:'t1'}; }
+    } else {
+      ax=e.x0; ay=e.y0; bx=e.x1; by=e.y1;
+      var d0f=Math.hypot(p.x-ax, p.y-ay), d1f=Math.hypot(p.x-bx, p.y-by);
+      if(d0f<bestD){ bestD=d0f; best={index:i, end:'a'}; }
+      if(d1f<bestD){ bestD=d1f; best={index:i, end:'b'}; }
+    }
+  }
+  return best;
+}
+
+// Hit-test near a door segment (for sliding along host wall)
+function plan2dHitDoorSegment(p, tol){
+  var best = null; var bestD = (typeof tol==='number'? tol : 0.12);
+  for(var i=0;i<__plan2d.elements.length;i++){
+    var e = __plan2d.elements[i]; if(e.type!=='door' || typeof e.host!=='number') continue;
+    var host = __plan2d.elements[e.host]; if(!host || host.type!=='wall') continue;
+    var t0=Math.max(0,Math.min(1,e.t0||0)), t1=Math.max(0,Math.min(1,e.t1||0));
+    var ax=host.x0+(host.x1-host.x0)*t0, ay=host.y0+(host.y1-host.y0)*t0;
+    var bx=host.x0+(host.x1-host.x0)*t1, by=host.y0+(host.y1-host.y0)*t1;
+    // Distance from point to segment
+    var dx=bx-ax, dy=by-ay; var denom=(dx*dx+dy*dy)||1; var tt=((p.x-ax)*dx+(p.y-ay)*dy)/denom; tt=Math.max(0,Math.min(1,tt)); var cx=ax+tt*dx, cy=ay+tt*dy; var d=Math.hypot(p.x-cx, p.y-cy);
+    if(d < bestD){ bestD = d; best = { index:i, t:tt }; }
+  }
+  return best;
+}
 // Find nearest wall element to point p within tolerance (meters)
 function plan2dFindNearestWall(p, tol){
   var bestIdx = -1; var bestD = (typeof tol==='number' ? tol : 0.25);
