@@ -42,6 +42,13 @@
 <div id="labels"></div>
 <div id="status">Ready</div>
 
+<!-- Forwarded URL indicator (helpful when preview hides address bar) -->
+<div id="forward-info" style="display:none; margin:8px auto 0; max-width:1200px; font-size:12px; color:#334155; background:#eef2ff; border:1px solid #c7d2fe; padding:6px 10px; border-radius:6px;">
+	Forwarded URL: <a id="forward-link" href="#" target="_blank" rel="noopener" style="color:#1d4ed8; text-decoration:underline;">—</a>
+	<button id="copy-forward" class="secondary" style="margin-left:8px; padding:2px 8px; font-size:12px;">Copy</button>
+	<span style="color:#64748b; margin-left:8px;">(Use this link to open the app in your browser)</span>
+	</div>
+
 <div id="measurements">
 	<h3>Object Measurements</h3>
 	<div class="measurement-item">
@@ -238,6 +245,25 @@
 	// If this fails, the app will lazy-load from CDN as a secondary fallback when importing
 </script>
 <script src="js/app.js?v=20251006-1"></script>
+<script>
+	// Show and copy the forwarded URL (works in Codespaces/Gitpod or any host)
+	(function(){
+		function updateForwardInfo(){
+			try{
+				var link = document.getElementById('forward-link');
+				var bar = document.getElementById('forward-info');
+				var btn = document.getElementById('copy-forward');
+				if(!link || !bar) return;
+				var proto = (location.protocol && location.protocol.indexOf('http')===0) ? location.protocol : 'https:';
+				var url = proto + '//' + location.host + '/';
+				link.href = url; link.textContent = url; bar.style.display = 'block';
+				if(btn && navigator.clipboard){ btn.onclick = function(){ navigator.clipboard.writeText(url).then(function(){ try{ updateStatus('Forwarded URL copied'); }catch(e){} }); }; }
+			}catch(e){ /* no-op */ }
+		}
+		if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', updateForwardInfo); }
+		else { updateForwardInfo(); }
+	})();
+	</script>
 
 <!-- 2D Floor Plan Editor Modal -->
 <div id="plan2d-modal" style="display:none; position:fixed; inset:0; z-index:12000;">

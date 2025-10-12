@@ -1133,16 +1133,44 @@ function drawRoom(room) {
     }
     
     var edges = [
-      [0,1],[1,2],[2,3],[3,0],
-      [4,5],[5,6],[6,7],[7,4],
-      [0,4],[1,5],[2,6],[3,7]
+      [0,1,'minZ'],[1,2,'maxX'],[2,3,'maxZ'],[3,0,'minX'],
+      [4,5], [5,6], [6,7], [7,4],
+      [0,4], [1,5], [2,6], [3,7]
     ];
     
+    // Draw edges, skipping segments where openings exist on the corresponding base edges
+    function drawEdgeSegment(pA, pB){ ctx.moveTo(pA.x, pA.y); ctx.lineTo(pB.x, pB.y); }
     ctx.beginPath();
     for (var i = 0; i < edges.length; i++) {
       var edge = edges[i];
-      ctx.moveTo(projected[edge[0]].x, projected[edge[0]].y);
-      ctx.lineTo(projected[edge[1]].x, projected[edge[1]].y);
+      var aIdx = edge[0], bIdx = edge[1];
+      var edgeKey = edge[2];
+      if (!edgeKey || !room.openings || !Array.isArray(room.openings) || room.openings.length===0) {
+        drawEdgeSegment(projected[aIdx], projected[bIdx]);
+        continue;
+      }
+      // Only apply openings on base perimeter edges (minZ,maxX,maxZ,minX) for the lower rectangle (y at floor)
+      var pA = projected[aIdx], pB = projected[bIdx];
+      // Map edge segment param t in [0,1] to meters along the respective rectangle side
+      var rectLen = 0; var startM = 0; var endM = 0;
+      if(edgeKey==='minZ' || edgeKey==='maxZ'){ rectLen = room.width; }
+      else if(edgeKey==='minX' || edgeKey==='maxX'){ rectLen = room.depth; }
+      if(rectLen <= 1e-6){ drawEdgeSegment(pA,pB); continue; }
+      // Sort openings by startM and clip to [0,rectLen]
+      var spans = room.openings.filter(function(op){ return op.edge===edgeKey; })
+                               .map(function(op){ return [Math.max(0, Math.min(rectLen, op.startM)), Math.max(0, Math.min(rectLen, op.endM))]; })
+                               .filter(function(s){ return s[1] > s[0] + 1e-4; })
+                               .sort(function(A,B){ return A[0]-B[0]; });
+      // Merge spans
+      var merged=[]; for(var si=0; si<spans.length; si++){ var s=spans[si]; if(merged.length===0) merged.push(s); else { var last=merged[merged.length-1]; if(s[0] <= last[1] + 1e-4){ last[1] = Math.max(last[1], s[1]); } else { merged.push([s[0], s[1]]);} } }
+      // Complement to draw solid segments
+      var cursor=0; function Lerp(a,b,t){ return { x:a.x + (b.x-a.x)*t, y:a.y + (b.y-a.y)*t }; }
+      for(var mi=0; mi<merged.length; mi++){
+        var voidS = merged[mi][0]/rectLen, voidE = merged[mi][1]/rectLen;
+        if(voidS > cursor + 1e-4){ var sPt=Lerp(pA,pB,cursor); var ePt=Lerp(pA,pB,voidS); drawEdgeSegment(sPt,ePt); }
+        cursor = Math.max(cursor, voidE);
+      }
+      if(cursor < 1 - 1e-4){ var sPt2=Lerp(pA,pB,cursor); var ePt2=Lerp(pA,pB,1); drawEdgeSegment(sPt2,ePt2); }
     }
     ctx.stroke();
     
@@ -1170,6 +1198,70 @@ function drawRoom(room) {
     
     // Always draw handles so all handles are draggable, not only when selected
     drawHandlesForRoom(room);
+
+    // Draw prominent opening markers on walls so applied windows/doors are obvious in 3D
+    if (room.openings && room.openings.length) {
+      var floorY = room.level * 3.5;
+      var fullTopY = floorY + room.height;
+      function edgeToWorld(edgeKey, t) {
+        // t in [0,1] along the specific edge
+        if (edgeKey === 'minZ') { // along +X at z = minZ
+          var z = room.z - hd; var x = (room.x - hw) + t * (room.width);
+          return { x:x, z:z };
+        } else if (edgeKey === 'maxZ') { // along +X at z = maxZ
+          var z2 = room.z + hd; var x2 = (room.x - hw) + t * (room.width);
+          return { x:x2, z:z2 };
+        } else if (edgeKey === 'minX') { // along +Z at x = minX
+          var x3 = room.x - hw; var z3 = (room.z - hd) + t * (room.depth);
+          return { x:x3, z:z3 };
+        } else if (edgeKey === 'maxX') { // along +Z at x = maxX
+          var x4 = room.x + hw; var z4 = (room.z - hd) + t * (room.depth);
+          return { x:x4, z:z4 };
+        }
+        return null;
+      }
+      for (var oi=0; oi<room.openings.length; oi++) {
+        var op = room.openings[oi]; if (!op || !op.edge) continue;
+        var rectLen = (op.edge==='minZ'||op.edge==='maxZ') ? room.width : room.depth;
+        if (!(rectLen > 1e-6)) continue;
+        var t0 = Math.max(0, Math.min(1, (op.startM||0) / rectLen));
+        var t1 = Math.max(0, Math.min(1, (op.endM||0)   / rectLen));
+        var W0 = edgeToWorld(op.edge, t0);
+        var W1 = edgeToWorld(op.edge, t1);
+        if (!W0 || !W1) continue;
+        // Choose color/style by type
+        var color = (op.type === 'door') ? '#22c55e' : '#38bdf8';
+        var midYTop = floorY + Math.min(room.height, 1.0) + 0.9; // rough mid band
+        var aBottom = project3D(W0.x, floorY, W0.z);
+        var bBottom = project3D(W1.x, floorY, W1.z);
+        var aTop = project3D(W0.x, fullTopY, W0.z);
+        var bTop = project3D(W1.x, fullTopY, W1.z);
+        if (!aBottom || !bBottom || !aTop || !bTop) continue;
+        ctx.save();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = color;
+        // Vertical jamb lines
+        ctx.beginPath();
+        ctx.moveTo(aBottom.x, aBottom.y); ctx.lineTo(aTop.x, aTop.y);
+        ctx.moveTo(bBottom.x, bBottom.y); ctx.lineTo(bTop.x, bTop.y);
+        ctx.stroke();
+        // Lintel line at the top of opening segment
+        ctx.setLineDash([6,4]);
+        ctx.beginPath();
+        ctx.moveTo(aTop.x, aTop.y); ctx.lineTo(bTop.x, bTop.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // For windows, add a center bar at mid height
+        if (op.type !== 'door') {
+          var aMid = project3D(W0.x, floorY + room.height*0.5, W0.z);
+          var bMid = project3D(W1.x, floorY + room.height*0.5, W1.z);
+          if (aMid && bMid) {
+            ctx.beginPath(); ctx.moveTo(aMid.x, aMid.y); ctx.lineTo(bMid.x, bMid.y); ctx.stroke();
+          }
+        }
+        ctx.restore();
+      }
+    }
     
   } catch (error) {
     console.error('Room draw error:', error);
@@ -6288,14 +6380,15 @@ function applyPlan2DTo3D(){
     if(walls.length===0){ updateStatus('No walls to apply'); return; }
     function approxEq(a,b){ return Math.abs(a-b) < 1e-3; }
     // Normalize walls so x0<=x1 or y0<=y1 for easier matching
-    var normWalls = walls.map(function(w){
+    var normWalls = [];
+    for(var wi=0; wi<__plan2d.elements.length; wi++){
+      var w = __plan2d.elements[wi]; if(!w || w.type!=='wall') continue;
       var h = approxEq(w.y0,w.y1);
-      if(h){ var x0=Math.min(w.x0,w.x1), x1=Math.max(w.x0,w.x1); return {type:'wall', x0:x0,y0:w.y0,x1:x1,y1:w.y0, thickness:w.thickness||__plan2d.wallThicknessM}; }
+      if(h){ var x0=Math.min(w.x0,w.x1), x1=Math.max(w.x0,w.x1); normWalls.push({type:'wall', x0:x0,y0:w.y0,x1:x1,y1:w.y0, thickness:w.thickness||__plan2d.wallThicknessM, origIndex: wi}); continue; }
       var v = approxEq(w.x0,w.x1);
-      if(v){ var y0=Math.min(w.y0,w.y1), y1=Math.max(w.y0,w.y1); return {type:'wall', x0:w.x0,y0:y0,x1:w.x0,y1:y1, thickness:w.thickness||__plan2d.wallThicknessM}; }
+      if(v){ var y0=Math.min(w.y0,w.y1), y1=Math.max(w.y0,w.y1); normWalls.push({type:'wall', x0:w.x0,y0:y0,x1:w.x0,y1:y1, thickness:w.thickness||__plan2d.wallThicknessM, origIndex: wi}); continue; }
       // If neither horizontal nor vertical, ignore for room inference
-      return null;
-    }).filter(Boolean);
+    }
 
     var horiz=normWalls.filter(function(w){ return approxEq(w.y0,w.y1); });
     var vert =normWalls.filter(function(w){ return approxEq(w.x0,w.x1); });
@@ -6316,7 +6409,9 @@ function applyPlan2DTo3D(){
             var left = vert[k], right=vert[m];
             var leftOK = approxEq(left.x0, x0) && (left.y0<=y0) && (left.y1>=y1);
             var rightOK= approxEq(right.x0,x1) && (right.y0<=y0) && (right.y1>=y1);
-            if(topOK && botOK && leftOK && rightOK){ roomsFound.push({minX:x0, maxX:x1, minY:y0, maxY:y1}); }
+            if(topOK && botOK && leftOK && rightOK){
+              roomsFound.push({minX:x0, maxX:x1, minY:y0, maxY:y1, _edges:{ top:top, bottom:bot, left:left, right:right }});
+            }
           }
         }
       }
@@ -6338,10 +6433,49 @@ function applyPlan2DTo3D(){
       var R=roomsFound[r];
       var wx=(R.minX+R.maxX)/2, wz=(R.minY+R.maxY)/2; // map y->z
       var w=R.maxX-R.minX, d=R.maxY-R.minY;
-      var room=createRoom(wx, wz, 0); room.width=Math.max(0.5, parseFloat(w.toFixed(2))); room.depth=Math.max(0.5, parseFloat(d.toFixed(2))); room.height=3; room.name='Room'; allRooms.push(room);
+      var room=createRoom(wx, wz, 0);
+      room.width=Math.max(0.5, parseFloat(w.toFixed(2)));
+      room.depth=Math.max(0.5, parseFloat(d.toFixed(2)));
+      room.height=3;
+      room.name='Room';
+      // Collect openings (windows/doors) along the four edges of this rectangle
+      try {
+        var openings = [];
+        function collectEdgeOpenings(edgeNorm, edgeKey){
+          if(!edgeNorm || typeof edgeNorm.origIndex!== 'number') return;
+          // Gather host-anchored windows/doors on this wall
+          for(var ei=0; ei<__plan2d.elements.length; ei++){
+            var el = __plan2d.elements[ei];
+            if(!el || (el.type!=='window' && el.type!=='door')) continue;
+            if(typeof el.host!=='number' || el.host!==edgeNorm.origIndex) continue;
+            var host = __plan2d.elements[el.host]; if(!host) continue;
+            var t0=Math.max(0,Math.min(1,el.t0||0)), t1=Math.max(0,Math.min(1,el.t1||0));
+            var ax = host.x0 + (host.x1-host.x0)*t0;
+            var ay = host.y0 + (host.y1-host.y0)*t0; // plan y = world z
+            var bx = host.x0 + (host.x1-host.x0)*t1;
+            var by = host.y0 + (host.y1-host.y0)*t1;
+            var startM=0, endM=0, lenM = (edgeKey==='minZ'||edgeKey==='maxZ') ? (R.maxX - R.minX) : (R.maxY - R.minY);
+            if(lenM<=1e-6) continue;
+            if(edgeKey==='minZ' || edgeKey==='maxZ'){
+              var s = Math.min(ax,bx) - R.minX; var e = Math.max(ax,bx) - R.minX;
+              startM = Math.max(0, Math.min(lenM, s)); endM = Math.max(0, Math.min(lenM, e));
+            } else {
+              var sV = Math.min(ay,by) - R.minY; var eV = Math.max(ay,by) - R.minY;
+              startM = Math.max(0, Math.min(lenM, sV)); endM = Math.max(0, Math.min(lenM, eV));
+            }
+            if(endM > startM + 1e-4){ openings.push({ type: el.type, edge: edgeKey, startM: startM, endM: endM, meta: (el.meta||null) }); }
+          }
+        }
+        collectEdgeOpenings(R._edges.top, 'minZ');
+        collectEdgeOpenings(R._edges.right, 'maxX');
+        collectEdgeOpenings(R._edges.bottom, 'maxZ');
+        collectEdgeOpenings(R._edges.left, 'minX');
+        room.openings = openings;
+      } catch(e){ room.openings = []; }
+      allRooms.push(room);
     }
 
-    saveProjectSilently(); selectedRoomId=null; renderLoop(); updateStatus('Applied 2D plan to 3D');
+    saveProjectSilently(); selectedRoomId=null; renderLoop(); updateStatus('Applied 2D plan to 3D (rooms + openings)');
   } catch(e){ console.error('applyPlan2DTo3D failed', e); updateStatus('Apply to 3D failed'); }
 }
 
