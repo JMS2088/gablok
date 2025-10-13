@@ -24,6 +24,7 @@
 	<button class="secondary" onclick="resetAll()">Reset</button>
 	<button class="secondary" onclick="showPricing()" title="Show pricing">💰 Price</button>
 	<button class="secondary" onclick="showInfo()" title="Show information">ℹ</button>
+	<button class="secondary" onclick="showShare()" title="Share or copy the current URL">🔗 Share</button>
 	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor">📐 Floor Plan</button>
 	<select id="actionsMenu" title="Actions Menu">
 		<option value="" selected disabled>☰ Menu</option>
@@ -119,6 +120,27 @@
 			<li>Delete - Remove selected object</li>
 		</ul>
 	</div>
+</div>
+
+<!-- Share URL Modal -->
+<div id="share-modal" style="display:none; position:fixed; inset:0; z-index:11000; align-items:center; justify-content:center;">
+	<div id="share-backdrop" style="position:absolute; inset:0; background:rgba(0,0,0,0.45);" onclick="hideShare()"></div>
+	<div id="share-content" style="position:relative; width:min(720px, 95vw); background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden;">
+		<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid #e5e7eb; background:#f8fafc;">
+			<strong style="flex:1">Share Link</strong>
+			<button class="secondary" onclick="hideShare()" title="Close">✕</button>
+		</div>
+		<div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
+			<div style="font-size:13px; color:#334155;">Copy this address to share your current session. In Codespaces, this will be the forwarded URL.</div>
+			<div style="display:flex; gap:8px; align-items:center;">
+				<input id="share-url" type="text" readonly style="flex:1; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;" />
+				<button id="share-copy" class="secondary" title="Copy URL" onclick="copyShareUrl()">Copy</button>
+				<a id="share-open" class="secondary" style="text-decoration:none; display:inline-flex; align-items:center; padding:6px 10px; border-radius:8px; border:1px solid #cbd5e1;" target="_blank" rel="noopener">Open</a>
+			</div>
+			<div id="share-hint" style="font-size:12px; color:#64748b;"></div>
+		</div>
+	</div>
+  
 </div>
 
 <input type="file" id="upload-file" accept="application/json" style="display:none" />
@@ -259,8 +281,8 @@
 		</div>
 		<div style="display:flex; flex:1; min-height:0;">
 			<div style="flex:1; position:relative; background:#0b1020;">
-				<canvas id="plan2d-canvas" style="position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair; background:repeating-linear-gradient(0deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px), repeating-linear-gradient(90deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px);"></canvas>
-				<canvas id="plan2d-overlay" style="position:absolute; inset:0; pointer-events:none;"></canvas>
+				<canvas id="plan2d-canvas" style="position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair; z-index:1; background:repeating-linear-gradient(0deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px), repeating-linear-gradient(90deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px);"></canvas>
+				<canvas id="plan2d-overlay" style="position:absolute; inset:0; pointer-events:none; z-index:2;"></canvas>
 			</div>
 			<div style="width:300px; border-left:1px solid #e2e8f0; background:#ffffff; display:flex; flex-direction:column; padding:12px; gap:12px;">
 						<div style="font-size:12px; color:#334155; line-height:1.4;">

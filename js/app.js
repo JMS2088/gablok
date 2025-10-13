@@ -2166,6 +2166,31 @@ function hideInfo() {
   if (existingDropdown) existingDropdown.style.display = 'block';
 }
 
+// Share modal controls (for 🔗 Share button)
+function showShare(){
+  try{
+    var modal = document.getElementById('share-modal'); if(!modal) return;
+    var input = document.getElementById('share-url');
+    var openA = document.getElementById('share-open');
+    var hint = document.getElementById('share-hint');
+    var url = window.location.href;
+    if(input) { input.value = url; input.focus(); input.select(); }
+    if(openA) { openA.href = url; }
+    var isForwarded = /app\.github\.dev|githubpreview\.dev|gitpod\.io|codespaces/.test(url);
+    if(hint){
+      hint.textContent = isForwarded ? 'Forwarded URL detected.' : 'If using Codespaces, share the forwarded URL shown in your browser address bar.';
+    }
+    modal.style.display = 'flex';
+  }catch(e){ console.warn('showShare failed', e); }
+}
+function hideShare(){ var modal = document.getElementById('share-modal'); if(modal) modal.style.display='none'; }
+function copyShareUrl(){
+  var input = document.getElementById('share-url'); if(!input) return;
+  input.select(); input.setSelectionRange(0, 99999);
+  try { document.execCommand('copy'); updateStatus('URL copied'); }
+  catch(e){ if(navigator.clipboard){ navigator.clipboard.writeText(input.value).then(function(){ updateStatus('URL copied'); }).catch(function(){ updateStatus('Copy failed'); }); } }
+}
+
 function findObjectById(objectId) {
   for (var i = 0; i < allRooms.length; i++) {
     if (allRooms[i].id === objectId) return allRooms[i];
@@ -5857,6 +5882,7 @@ var __plan2d = {
   tool:'wall',       // current tool: wall | window | door | erase | select
   start:null,        // world coords of drag start
   last:null,         // world coords of current mouse during drag
+  mouse:null,        // {x,y} current mouse position in canvas pixels for overlay anchoring
   hoverIndex:-1,
   selectedIndex:-1,
   // Window editing state (for host-anchored windows)
@@ -5878,8 +5904,8 @@ function openPlan2DModal(){
   try { selectedRoomId = null; } catch(e) {}
   plan2dBind();
   plan2dResize();
-  // Auto-populate from current ground-floor design
-  try { populatePlan2DFromDesign(); } catch(e) { console.warn('populatePlan2DFromDesign failed', e); }
+  // Auto-populate from current ground-floor design only if 2D is empty, to preserve existing 2D edits
+  try { if(!Array.isArray(__plan2d.elements) || __plan2d.elements.length===0) { populatePlan2DFromDesign(); } } catch(e) { console.warn('populatePlan2DFromDesign failed', e); }
   plan2dDraw();
   updatePlan2DInfo();
 }
@@ -5889,8 +5915,9 @@ function closePlan2DModal(){
   plan2dUnbind();
 }
 
-function worldToScreen2D(wx,wy){ var c=document.getElementById('plan2d-canvas'); if(!c)return {x:0,y:0}; return { x:c.width/2 + wx*__plan2d.scale, y:c.height/2 + wy*__plan2d.scale }; }
-function screenToWorld2D(px,py){ var c=document.getElementById('plan2d-canvas'); if(!c)return {x:0,y:0}; return { x:(px - c.width/2)/__plan2d.scale, y:(py - c.height/2)/__plan2d.scale }; }
+// Screen mapping: X right = +X, Y up = +Y (so top of screen is North). 3D Z maps to -Y.
+function worldToScreen2D(wx,wy){ var c=document.getElementById('plan2d-canvas'); if(!c)return {x:0,y:0}; return { x:c.width/2 + wx*__plan2d.scale, y:c.height/2 - wy*__plan2d.scale }; }
+function screenToWorld2D(px,py){ var c=document.getElementById('plan2d-canvas'); if(!c)return {x:0,y:0}; return { x:(px - c.width/2)/__plan2d.scale, y:(c.height/2 - py)/__plan2d.scale }; }
 
 function plan2dBind(){
   var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return;
@@ -6021,7 +6048,10 @@ function plan2dBind(){
     c.addEventListener('mousemove', function(e){
       if(!__plan2d.active) return;
       var rect=c.getBoundingClientRect();
-      var p=screenToWorld2D((e.clientX-rect.left)*(c.width/rect.width),(e.clientY-rect.top)*(c.height/rect.height));
+      var cx = (e.clientX-rect.left)*(c.width/rect.width);
+      var cy = (e.clientY-rect.top)*(c.height/rect.height);
+      __plan2d.mouse = { x: cx, y: cy };
+      var p=screenToWorld2D(cx, cy);
       if(__plan2d.dragWindow){
         var dw = __plan2d.dragWindow; var we = __plan2d.elements[dw.index];
         if(we && we.type==='window' && typeof we.host==='number'){
@@ -6295,6 +6325,164 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
     ctx.beginPath(); ctx.strokeStyle='#10b981'; ctx.lineWidth=3; ctx.setLineDash([6,4]); ctx.moveTo(sa.x,sa.y); ctx.lineTo(sb.x,sb.y); ctx.stroke(); ctx.setLineDash([]);
   }
   var ox=ov.getContext('2d'); ox.setTransform(1,0,0,1,0,0); ox.clearRect(0,0,ov.width,ov.height);
+  // Overlay: Compass rose (screen-space orientation consistent with 3D: +X = East (right), -Z = North (up))
+  (function(){
+    var pad = 16; var cx = pad + 22, cy = pad + 22; var r = 18;
+    ox.save();
+    // Outer circle
+    ox.beginPath(); ox.arc(cx, cy, r, 0, Math.PI*2); ox.fillStyle='rgba(15,23,42,0.55)'; ox.fill();
+    ox.strokeStyle='rgba(148,163,184,0.8)'; ox.lineWidth=1; ox.stroke();
+    // Axes lines
+    ox.strokeStyle='rgba(203,213,225,0.9)';
+    ox.beginPath(); ox.moveTo(cx, cy-r+4); ox.lineTo(cx, cy+r-4); ox.stroke(); // N-S
+    ox.beginPath(); ox.moveTo(cx-r+4, cy); ox.lineTo(cx+r-4, cy); ox.stroke(); // W-E
+    // Arrowhead for North (up)
+    ox.beginPath(); ox.moveTo(cx, cy-r+4); ox.lineTo(cx-4, cy-r+10); ox.lineTo(cx+4, cy-r+10); ox.closePath(); ox.fillStyle='rgba(59,130,246,0.95)'; ox.fill();
+    // Labels N/E/S/W
+    ox.fillStyle='rgba(226,232,240,0.95)'; ox.font='11px sans-serif'; ox.textAlign='center'; ox.textBaseline='middle';
+    ox.fillText('N', cx, cy - r - 8);
+    ox.fillText('S', cx, cy + r + 8);
+    ox.fillText('E', cx + r + 10, cy);
+    ox.fillText('W', cx - r - 10, cy);
+    ox.restore();
+  })();
+
+  // Overlay: Wall orientation hint during wall drawing (N–S or E–W)
+  (function(){
+    if(!__plan2d.start || !__plan2d.last || __plan2d.tool!=='wall') return;
+    var c=document.getElementById('plan2d-canvas'); if(!c) return; var rect=c.getBoundingClientRect();
+    var a=worldToScreen2D(__plan2d.start.x,__plan2d.start.y); var b=worldToScreen2D(__plan2d.last.x,__plan2d.last.y);
+    var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; // snap
+    var midx=(a.x+b.x)/2, midy=(a.y+b.y)/2; var label = (Math.abs(dx)>=Math.abs(dy)) ? 'E–W' : 'N–S';
+    ox.save(); ox.font='12px sans-serif'; ox.textAlign='center'; ox.textBaseline='bottom';
+    ox.fillStyle='rgba(226,232,240,0.96)';
+    // background pill
+    var tw=ox.measureText(label).width; var bw=tw+12, bh=18; var rx=midx-bw/2, ry=midy-10-bh, r=8;
+    ox.beginPath();
+    ox.moveTo(rx+r, ry); ox.lineTo(rx+bw-r, ry); ox.quadraticCurveTo(rx+bw, ry, rx+bw, ry+r);
+    ox.lineTo(rx+bw, ry+bh-r); ox.quadraticCurveTo(rx+bw, ry+bh, rx+bw-r, ry+bh);
+    ox.lineTo(rx+r, ry+bh); ox.quadraticCurveTo(rx, ry+bh, rx, ry+bh-r);
+    ox.lineTo(rx, ry+r); ox.quadraticCurveTo(rx, ry, rx+r, ry);
+    ox.closePath(); ox.fillStyle='rgba(2,6,23,0.85)'; ox.fill(); ox.strokeStyle='rgba(148,163,184,0.8)'; ox.lineWidth=1; ox.stroke();
+    ox.fillStyle='#e5e7eb'; ox.fillText(label, midx, ry+bh/2+1);
+    ox.restore();
+  })();
+  // Overlay: live window width dimension label during drag or when selected
+  (function(){
+    var targetIndex = -1;
+    if(__plan2d.dragWindow && typeof __plan2d.dragWindow.index==='number'){
+      targetIndex = __plan2d.dragWindow.index;
+    } else if(__plan2d.selectedIndex>=0) {
+      var sel = __plan2d.elements[__plan2d.selectedIndex];
+      if(sel && sel.type==='window') targetIndex = __plan2d.selectedIndex;
+    }
+    if(targetIndex<0) return;
+    var we = __plan2d.elements[targetIndex]; if(!we || we.type!=='window') return;
+    var ax, ay, bx, by; // world coords
+    var widthM = 0;
+    if(typeof we.host==='number'){
+      var host = __plan2d.elements[we.host]; if(!host || host.type!=='wall') return;
+      var t0 = Math.max(0, Math.min(1, we.t0||0));
+      var t1 = Math.max(0, Math.min(1, we.t1||0));
+      ax = host.x0 + (host.x1-host.x0)*t0; ay = host.y0 + (host.y1-host.y0)*t0;
+      bx = host.x0 + (host.x1-host.x0)*t1; by = host.y0 + (host.y1-host.y0)*t1;
+      var wdx = host.x1 - host.x0, wdy = host.y1 - host.y0; var wLen = Math.hypot(wdx, wdy) || 1;
+      widthM = Math.abs(t1 - t0) * wLen;
+    } else {
+      ax = we.x0; ay = we.y0; bx = we.x1; by = we.y1;
+      widthM = Math.hypot(bx-ax, by-ay);
+    }
+    var a = worldToScreen2D(ax, ay), b = worldToScreen2D(bx, by);
+    var midx = (a.x + b.x) * 0.5, midy = (a.y + b.y) * 0.5;
+    var dx = b.x - a.x, dy = b.y - a.y; var L = Math.hypot(dx, dy) || 1; var nx = -dy / L, ny = dx / L; var tx = dx / L, ty = dy / L;
+    var lx, ly, guideToX, guideToY;
+    // Compute projection of cursor to segment (centerline)
+    var projX = midx, projY = midy; // default
+    if(__plan2d.mouse){
+      var cursor = __plan2d.mouse; var vxc = cursor.x - a.x, vyc = cursor.y - a.y; var tprojc = ((vxc*dx + vyc*dy) / (L*L)); tprojc = Math.max(0, Math.min(1, tprojc));
+      projX = a.x + dx * tprojc; projY = a.y + dy * tprojc;
+    }
+    // Vector normal to the window centerline (screen coords)
+    var nxs = -dy / L, nys = dx / L; if(!isFinite(nxs) || !isFinite(nys)){ nxs=0; nys=-1; }
+    // Move from centerline to the visible window edge (half thickness)
+    var thickM = (typeof we.host==='number') ? ((__plan2d.elements[we.host].thickness||__plan2d.wallThicknessM)) : (we.thickness||__plan2d.wallThicknessM);
+    var halfEdgePx = (thickM * __plan2d.scale) / 2; // canvas px
+    // Choose the upward-facing normal (negative Y) for consistent placement
+    var signUp = (nys < 0) ? 1 : -1;
+    var edgeX = projX + nxs * halfEdgePx * signUp;
+    var edgeY = projY + nys * halfEdgePx * signUp;
+    var dpr = (window.devicePixelRatio || 1);
+    var offPx = 25 * dpr;
+    // Preferred: anchor from top-left corner of the host wall rectangle
+    var placedFromWall = false;
+    if(typeof we.host==='number'){
+      var wall = __plan2d.elements[we.host];
+      if(wall && wall.type==='wall'){
+        var WA = worldToScreen2D(wall.x0, wall.y0);
+        var WB = worldToScreen2D(wall.x1, wall.y1);
+        var wdxs = WB.x - WA.x, wdys = WB.y - WA.y; var wLs = Math.hypot(wdxs, wdys) || 1;
+        var nwx = -wdys / wLs, nwy = wdxs / wLs; // wall normal (left)
+        var halfWallPx = ((wall.thickness||__plan2d.wallThicknessM) * __plan2d.scale) / 2;
+        var c1 = { x: WA.x + nwx*halfWallPx, y: WA.y + nwy*halfWallPx };
+        var c2 = { x: WB.x + nwx*halfWallPx, y: WB.y + nwy*halfWallPx };
+        var c3 = { x: WB.x - nwx*halfWallPx, y: WB.y - nwy*halfWallPx };
+        var c4 = { x: WA.x - nwx*halfWallPx, y: WA.y - nwy*halfWallPx };
+        var corners = [c1,c2,c3,c4];
+        var minY = Math.min(c1.y,c2.y,c3.y,c4.y);
+        var topCandidates = corners.filter(function(p){ return Math.abs(p.y - minY) <= 0.5; });
+        var topLeft = topCandidates.reduce(function(best,p){ return (!best || p.x < best.x) ? p : best; }, null) || c1;
+        // Place label 25 CSS px to the right and 25 CSS px down from the top-left corner
+        lx = topLeft.x + offPx;
+        ly = topLeft.y + offPx;
+        placedFromWall = true;
+      }
+    }
+    if(!placedFromWall){
+      // Fallback: place relative to the window edge along the normal
+      lx = edgeX + nxs * offPx * signUp;
+      ly = edgeY + nys * offPx * signUp;
+    }
+    // Leader line to the edge of the window (still points to the window edge for clarity)
+    guideToX = edgeX; guideToY = edgeY;
+    var txt = (widthM >= 0.995 ? widthM.toFixed(2) : widthM.toFixed(3)) + ' m';
+    // Label style
+    ox.save();
+    ox.font = '12px sans-serif';
+    ox.textBaseline = 'middle';
+    ox.textAlign = 'center';
+    var padX = 6;
+    var tw = ox.measureText(txt).width;
+    var bw = Math.ceil(tw + padX*2), bh = 18;
+    // Rounded rect background
+    var rx = lx - bw/2, ry = ly - bh/2, r = 4;
+    ox.beginPath();
+    ox.moveTo(rx+r, ry);
+    ox.lineTo(rx+bw-r, ry);
+    ox.quadraticCurveTo(rx+bw, ry, rx+bw, ry+r);
+    ox.lineTo(rx+bw, ry+bh-r);
+    ox.quadraticCurveTo(rx+bw, ry+bh, rx+bw-r, ry+bh);
+    ox.lineTo(rx+r, ry+bh);
+    ox.quadraticCurveTo(rx, ry+bh, rx, ry+bh-r);
+    ox.lineTo(rx, ry+r);
+    ox.quadraticCurveTo(rx, ry, rx+r, ry);
+    ox.closePath();
+    ox.fillStyle = 'rgba(2, 6, 23, 0.85)';
+    ox.fill();
+    ox.strokeStyle = '#38bdf8';
+    ox.lineWidth = 1;
+    ox.stroke();
+    // Text
+    ox.fillStyle = '#e5e7eb';
+    ox.fillText(txt, lx, ly+0.5);
+    // Small guide line towards the segment
+    ox.strokeStyle = '#38bdf8';
+    ox.lineWidth = 1;
+    ox.beginPath();
+  ox.moveTo(lx, ly);
+  ox.lineTo(guideToX, guideToY);
+    ox.stroke();
+    ox.restore();
+  })();
 }
 function plan2dHoverErase(p){ var best=-1, bestDist=0.25; for(var i=0;i<__plan2d.elements.length;i++){ var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; } } __plan2d.hoverIndex=best; plan2dDraw(); }
 function plan2dEraseAt(p){ plan2dHoverErase(p); if(__plan2d.hoverIndex>=0){ __plan2d.elements.splice(__plan2d.hoverIndex,1); __plan2d.hoverIndex=-1; plan2dDraw(); updatePlan2DInfo(); } }
@@ -6517,7 +6705,8 @@ function populatePlan2DFromDesign(){
       name: r.name || 'Room',
       minX: r.x - hw, maxX: r.x + hw,
       minZ: r.z - hd, maxZ: r.z + hd,
-      type: 'room'
+      type: 'room',
+      openings: (Array.isArray(r.openings) ? r.openings.slice() : [])
     });
   }
   for (var g=0; g<garageComponents.length; g++) {
@@ -6556,13 +6745,52 @@ function populatePlan2DFromDesign(){
   __plan2d.elements = [];
   function addRectWalls(minX,maxX,minZ,maxZ){
     var x0=minX - cx, x1=maxX - cx, y0=minZ - cz, y1=maxZ - cz; // map z->y
-    __plan2d.elements.push({type:'wall', x0:x0,y0:y0, x1:x1,y1:y0, thickness:__plan2d.wallThicknessM});
-    __plan2d.elements.push({type:'wall', x0:x1,y0:y0, x1:x1,y1:y1, thickness:__plan2d.wallThicknessM});
-    __plan2d.elements.push({type:'wall', x0:x1,y0:y1, x1:x0,y1:y1, thickness:__plan2d.wallThicknessM});
-    __plan2d.elements.push({type:'wall', x0:x0,y0:y1, x1:x0,y1:y0, thickness:__plan2d.wallThicknessM});
+    var idxTop = __plan2d.elements.length;     __plan2d.elements.push({type:'wall', x0:x0,y0:y0, x1:x1,y1:y0, thickness:__plan2d.wallThicknessM});
+    var idxRight = __plan2d.elements.length;   __plan2d.elements.push({type:'wall', x0:x1,y0:y0, x1:x1,y1:y1, thickness:__plan2d.wallThicknessM});
+    var idxBottom = __plan2d.elements.length;  __plan2d.elements.push({type:'wall', x0:x1,y0:y1, x1:x0,y1:y1, thickness:__plan2d.wallThicknessM});
+    var idxLeft = __plan2d.elements.length;    __plan2d.elements.push({type:'wall', x0:x0,y0:y1, x1:x0,y1:y0, thickness:__plan2d.wallThicknessM});
+    return { top: idxTop, right: idxRight, bottom: idxBottom, left: idxLeft, coords: {x0:x0,x1:x1,y0:y0,y1:y1} };
   }
   for (var rci=0;rci<rects.length;rci++){
-    var rb=rects[rci]; addRectWalls(rb.minX, rb.maxX, rb.minZ, rb.maxZ);
+    var rb=rects[rci];
+    var wallIdx = addRectWalls(rb.minX, rb.maxX, rb.minZ, rb.maxZ);
+    // Re-create openings (windows/doors) anchored to walls for rooms
+    if(rb.type==='room' && Array.isArray(rb.openings) && rb.openings.length){
+      var minX = rb.minX - cx, maxX = rb.maxX - cx, minY = rb.minZ - cz, maxY = rb.maxZ - cz; // shifted
+      for(var oi=0; oi<rb.openings.length; oi++){
+        var op = rb.openings[oi]; if(!op || (op.type!=='window' && op.type!=='door')) continue;
+        var hostIdx = -1; var p0={x:0,y:0}, p1={x:0,y:0};
+        if(op.edge==='minZ'){ // top
+          hostIdx = wallIdx.top;
+          p0.x = minX + (op.startM||0); p1.x = minX + (op.endM||0);
+          p0.y = p1.y = minY;
+        } else if(op.edge==='maxZ'){ // bottom
+          hostIdx = wallIdx.bottom;
+          p0.x = minX + (op.startM||0); p1.x = minX + (op.endM||0);
+          p0.y = p1.y = maxY;
+        } else if(op.edge==='minX'){ // left
+          hostIdx = wallIdx.left;
+          p0.y = minY + (op.startM||0); p1.y = minY + (op.endM||0);
+          p0.x = p1.x = minX;
+        } else if(op.edge==='maxX'){ // right
+          hostIdx = wallIdx.right;
+          p0.y = minY + (op.startM||0); p1.y = minY + (op.endM||0);
+          p0.x = p1.x = maxX;
+        }
+        if(hostIdx>=0){
+          var wallEl = __plan2d.elements[hostIdx];
+          // Compute param t via projection to ensure correct orientation
+          var t0 = plan2dProjectParamOnWall(p0, wallEl);
+          var t1 = plan2dProjectParamOnWall(p1, wallEl);
+          if(op.type==='window'){
+            __plan2d.elements.push({ type:'window', host:hostIdx, t0:t0, t1:t1, thickness: (wallEl.thickness||__plan2d.wallThicknessM) });
+          } else if(op.type==='door'){
+            var widthM = Math.hypot(p1.x-p0.x, p1.y-p0.y);
+            __plan2d.elements.push({ type:'door', host:hostIdx, t0:t0, t1:t1, widthM: widthM, heightM: (typeof op.heightM==='number'? op.heightM : (__plan2d.doorHeightM||2.04)), thickness: (wallEl.thickness||__plan2d.wallThicknessM), meta: (op.meta||{ hinge:'t0', swing:'in' }) });
+          }
+        }
+      }
+    }
   }
   return true;
 }
