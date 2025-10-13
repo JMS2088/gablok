@@ -1,34 +1,3 @@
-function drawHandlesForPergola(pergola) {
-  try {
-    var isActive = selectedRoomId === pergola.id;
-    var handleY = pergola.height + 0.2;
-    var handleData = [
-      {x: pergola.x + pergola.width/2, y: handleY, z: pergola.z, type: 'width+', label: 'X+'},
-      {x: pergola.x - pergola.width/2, y: handleY, z: pergola.z, type: 'width-', label: 'X-'},
-      {x: pergola.x, y: handleY, z: pergola.z + pergola.depth/2, type: 'depth+', label: 'Z+'},
-      {x: pergola.x, y: handleY, z: pergola.z - pergola.depth/2, type: 'depth-', label: 'Z-'}
-    ];
-
-    for (var i = 0; i < handleData.length; i++) {
-      var handle = handleData[i];
-      var screen = project3D(handle.x, handle.y, handle.z);
-      if (!screen) continue;
-
-      drawHandle(screen, handle.type, handle.label, isActive);
-
-      resizeHandles.push({
-        screenX: screen.x - HANDLE_RADIUS,
-        screenY: screen.y - HANDLE_RADIUS,
-        width: HANDLE_RADIUS * 2,
-        height: HANDLE_RADIUS * 2,
-        type: handle.type,
-        roomId: pergola.id
-      });
-    }
-  } catch (error) {
-    console.error('Pergola handle error:', error);
-  }
-}
 'use strict';
 
 var canvas = null;
@@ -3486,6 +3455,38 @@ function drawPergola(pergola) {
     
   } catch (error) {
     console.error('Pergola draw error:', error);
+  }
+}
+
+function drawHandlesForPergola(pergola) {
+  try {
+    var isActive = selectedRoomId === pergola.id;
+    var handleY = pergola.height + 0.2;
+    var handleData = [
+      {x: pergola.x + pergola.width/2, y: handleY, z: pergola.z, type: 'width+', label: 'X+'},
+      {x: pergola.x - pergola.width/2, y: handleY, z: pergola.z, type: 'width-', label: 'X-'},
+      {x: pergola.x, y: handleY, z: pergola.z + pergola.depth/2, type: 'depth+', label: 'Z+'},
+      {x: pergola.x, y: handleY, z: pergola.z - pergola.depth/2, type: 'depth-', label: 'Z-'}
+    ];
+
+    for (var i = 0; i < handleData.length; i++) {
+      var handle = handleData[i];
+      var screen = project3D(handle.x, handle.y, handle.z);
+      if (!screen) continue;
+
+      drawHandle(screen, handle.type, handle.label, isActive);
+
+      resizeHandles.push({
+        screenX: screen.x - HANDLE_RADIUS,
+        screenY: screen.y - HANDLE_RADIUS,
+        width: HANDLE_RADIUS * 2,
+        height: HANDLE_RADIUS * 2,
+        type: handle.type,
+        roomId: pergola.id
+      });
+    }
+  } catch (error) {
+    console.error('Pergola handle error:', error);
   }
 }
 
