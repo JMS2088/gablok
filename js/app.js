@@ -4315,7 +4315,7 @@ var __perf = {
   lastCamera:{yaw:null,pitch:null,targetX:null,targetZ:null,distance:null,floor:null, sel:null},
   skipStreak:0
 };
-var ENABLE_PERF_OVERLAY = true; // toggle overlay
+var ENABLE_PERF_OVERLAY = false; // toggle overlay (disabled by default)
 var DISABLE_DEBUG_LOGS = true;  // silences dbg() heavy logging loops
 var TARGET_FPS = 60;            // base target
 var MIN_DYNAMIC_FPS = 10;       // when idle we allow dropping to 10fps equivalent checks
