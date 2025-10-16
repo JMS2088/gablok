@@ -5899,6 +5899,13 @@ var __plan2d = {
   active:false,
   scale:50,          // px per meter
   wallThicknessM:0.3,
+  // Stroke width (in canvas px) used when outlining walls. Keep dimension overlay in sync.
+  wallStrokePx:1.2,
+  // Dimension styling (in CSS px). Converted to canvas px using device ratio at render time.
+  dimOffsetCssPx:1,   // gap from wall outer edge to dimension line (very close to wall)
+  dimTickCssPx:6,     // length of the end ticks across the dimension line
+  // Debug/testing: when true, draw the dimension line directly on the wall's outer edge (no offset)
+  dimDebugAnchorOnWall:false,
   elements:[],       // { type:'wall'|'window'|'door', ... }
   tool:'wall',       // current tool: wall | window | door | erase | select
   start:null,        // world coords of drag start
@@ -6252,7 +6259,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         if(touchesEnd){   sx1 += dirx * halfW; sy1 += diry * halfW; }
         var aSeg = worldToScreen2D(sx0, sy0); var bSeg = worldToScreen2D(sx1, sy1);
         var dxs=bSeg.x-aSeg.x, dys=bSeg.y-aSeg.y; var Ls=Math.sqrt(dxs*dxs+dys*dys)||1; var nx=-dys/Ls, ny=dxs/Ls; var halfPx=(thick*__plan2d.scale)/2;
-        ctx.beginPath(); ctx.fillStyle='#e5e7eb'; ctx.strokeStyle='#334155'; ctx.lineWidth=1.2;
+        ctx.beginPath(); ctx.fillStyle='#e5e7eb'; ctx.strokeStyle='#334155'; ctx.lineWidth=__plan2d.wallStrokePx;
         ctx.moveTo(aSeg.x+nx*halfPx,aSeg.y+ny*halfPx); ctx.lineTo(bSeg.x+nx*halfPx,bSeg.y+ny*halfPx); ctx.lineTo(bSeg.x-nx*halfPx,bSeg.y-ny*halfPx); ctx.lineTo(aSeg.x-nx*halfPx,aSeg.y-ny*halfPx); ctx.closePath(); ctx.fill(); ctx.stroke();
       }
       // Skip default solid wall draw since we've drawn segments
@@ -6465,8 +6472,23 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       var rw = Math.max(1, rct.width);
       cssToCanvas = ovEl.width / rw;
     }
-    var offPx = 20 * cssToCanvas; // gap from wall outer edge to dimension line
-    var tickLen = 6 * cssToCanvas; // length of end ticks across the dim line
+  var offPx = (__plan2d.dimOffsetCssPx || 2) * cssToCanvas; // gap from wall outer edge to dimension line (2px = very close to wall)
+    var tickLen = (__plan2d.dimTickCssPx || 6) * cssToCanvas; // length of end ticks across the dim line
+  // Match the main wall stroke width so extension lines start at the true visual edge
+  var wallStrokePx = (__plan2d.wallStrokePx || 1.2); // keep in sync with wall draw (ctx.lineWidth)
+  var wallStrokeHalf = wallStrokePx * 0.5;
+    // Helper: for 1px lines, snap nearly-horizontal or nearly-vertical segments to half-pixels
+    function snapSegmentHV(x1,y1,x2,y2){
+      if(ox.lineWidth !== 1) return {x1:x1,y1:y1,x2:x2,y2:y2};
+      var dx = x2-x1, dy = y2-y1; var adx=Math.abs(dx), ady=Math.abs(dy);
+      if(ady <= adx*0.1){ // almost horizontal
+        var sy = Math.round(y1) + 0.5; return {x1:x1,y1:sy,x2:x2,y2:sy};
+      }
+      if(adx <= ady*0.1){ // almost vertical
+        var sx = Math.round(x1) + 0.5; return {x1:sx,y1:y1,x2:sx,y2:y2};
+      }
+      return {x1:x1,y1:y1,x2:x2,y2:y2};
+    }
     // Compute plan centroid (world) to decide outward direction consistently
     var cxSum=0, cySum=0, cCount=0;
     for (var i=0;i<elems.length;i++){
@@ -6546,24 +6568,52 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       
       // Convert to screen space and calculate edge points
       var aSeg = worldToScreen2D(sx0, sy0); var bSeg = worldToScreen2D(sx1, sy1);
-      var aEdgeX = aSeg.x + nxs * halfPx * signOut, aEdgeY = aSeg.y + nys * halfPx * signOut;
-      var bEdgeX = bSeg.x + nxs * halfPx * signOut, bEdgeY = bSeg.y + nys * halfPx * signOut;
-      // Dimension line endpoints (offset further out)
-      var aDimX = aEdgeX + nxs * offPx * signOut, aDimY = aEdgeY + nys * offPx * signOut;
-      var bDimX = bEdgeX + nxs * offPx * signOut, bDimY = bEdgeY + nys * offPx * signOut;
-      // Extension lines
-      ox.beginPath();
-      ox.moveTo(aEdgeX, aEdgeY); ox.lineTo(aDimX, aDimY);
-      ox.moveTo(bEdgeX, bEdgeY); ox.lineTo(bDimX, bDimY);
-      ox.stroke();
-      // Dimension line
-      ox.beginPath(); ox.moveTo(aDimX, aDimY); ox.lineTo(bDimX, bDimY); ox.stroke();
+  var aEdgeX = aSeg.x + nxs * halfPx * signOut, aEdgeY = aSeg.y + nys * halfPx * signOut;
+  var bEdgeX = bSeg.x + nxs * halfPx * signOut, bEdgeY = bSeg.y + nys * halfPx * signOut;
+  // Nudge outward by half the wall stroke width so we align with the outer visible edge
+  aEdgeX += nxs * wallStrokeHalf * signOut; aEdgeY += nys * wallStrokeHalf * signOut;
+  bEdgeX += nxs * wallStrokeHalf * signOut; bEdgeY += nys * wallStrokeHalf * signOut;
+      // Dimension line endpoints
+      var aDimX, aDimY, bDimX, bDimY;
+      if(__plan2d.dimDebugAnchorOnWall===true){
+        // Test mode: place dimension line on the wall's outer edge
+        aDimX = aEdgeX; aDimY = aEdgeY;
+        bDimX = bEdgeX; bDimY = bEdgeY;
+      } else {
+        // Normal: offset outward from wall edge
+        aDimX = aEdgeX + nxs * offPx * signOut; aDimY = aEdgeY + nys * offPx * signOut;
+        bDimX = bEdgeX + nxs * offPx * signOut; bDimY = bEdgeY + nys * offPx * signOut;
+      }
+  // Extension lines (snap for crispness when axis-aligned)
+  var sA = snapSegmentHV(aEdgeX, aEdgeY, aDimX, aDimY);
+  var sB = snapSegmentHV(bEdgeX, bEdgeY, bDimX, bDimY);
+  ox.beginPath();
+  ox.moveTo(sA.x1, sA.y1); ox.lineTo(sA.x2, sA.y2);
+  ox.moveTo(sB.x1, sB.y1); ox.lineTo(sB.x2, sB.y2);
+  ox.stroke();
+  // Dimension line (snap if nearly horizontal or vertical)
+  var sDim = snapSegmentHV(aDimX, aDimY, bDimX, bDimY);
+  ox.beginPath(); ox.moveTo(sDim.x1, sDim.y1); ox.lineTo(sDim.x2, sDim.y2); ox.stroke();
       // End ticks (perpendicular to dimension line)
-      var dimDx = bDimX - aDimX, dimDy = bDimY - aDimY; var dimLen = Math.hypot(dimDx, dimDy) || 1;
+  var dimDx = bDimX - aDimX, dimDy = bDimY - aDimY; var dimLen = Math.hypot(dimDx, dimDy) || 1;
       var tnx = -dimDy / dimLen, tny = dimDx / dimLen; var ht = tickLen/2;
+      // End ticks (snap to crisp HV if the dim line is HV, else draw as-is)
+      var isHoriz = Math.abs(dimDy) <= Math.abs(dimDx)*0.1;
+      var isVert  = Math.abs(dimDx) <= Math.abs(dimDy)*0.1;
+      var aTx1 = aDimX - tnx*ht, aTy1 = aDimY - tny*ht, aTx2 = aDimX + tnx*ht, aTy2 = aDimY + tny*ht;
+      var bTx1 = bDimX - tnx*ht, bTy1 = bDimY - tny*ht, bTx2 = bDimX + tnx*ht, bTy2 = bDimY + tny*ht;
+      if(ox.lineWidth === 1){
+        if(isHoriz){ // ticks vertical: snap X
+          aTx1 = Math.round(aTx1) + 0.5; aTx2 = Math.round(aTx2) + 0.5;
+          bTx1 = Math.round(bTx1) + 0.5; bTx2 = Math.round(bTx2) + 0.5;
+        } else if(isVert){ // ticks horizontal: snap Y
+          aTy1 = Math.round(aTy1) + 0.5; aTy2 = Math.round(aTy2) + 0.5;
+          bTy1 = Math.round(bTy1) + 0.5; bTy2 = Math.round(bTy2) + 0.5;
+        }
+      }
       ox.beginPath();
-      ox.moveTo(aDimX - tnx*ht, aDimY - tny*ht); ox.lineTo(aDimX + tnx*ht, aDimY + tny*ht);
-      ox.moveTo(bDimX - tnx*ht, bDimY - tny*ht); ox.lineTo(bDimX + tnx*ht, bDimY + tny*ht);
+      ox.moveTo(aTx1, aTy1); ox.lineTo(aTx2, aTy2);
+      ox.moveTo(bTx1, bTy1); ox.lineTo(bTx2, bTy2);
       ox.stroke();
       // Label (actual rendered wall length in meters)
       var lenM = Math.hypot(sx1 - sx0, sy1 - sy0);

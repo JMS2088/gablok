@@ -2,6 +2,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 import os
 import socket
 import argparse
+import json
 from urllib.parse import urlparse
 
 
@@ -44,7 +45,8 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 scheme = 'https' if any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io')) else 'http'
                 url = f"{scheme}://{host}" if host else ''
                 local = f"http://localhost:{getattr(self.server, 'server_port', 8000)}"
-                body = ('{"host":"%s","url":"%s","local":"%s"}' % (host, url, local)).encode('utf-8')
+                resp = {'host': host, 'url': url, 'local': local}
+                body = json.dumps(resp).encode('utf-8')
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')
                 self.send_header('Cache-Control', 'no-store')
