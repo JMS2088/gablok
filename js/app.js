@@ -6394,65 +6394,19 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
     }
     var a = worldToScreen2D(ax, ay), b = worldToScreen2D(bx, by);
     var midx = (a.x + b.x) * 0.5, midy = (a.y + b.y) * 0.5;
-    var dx = b.x - a.x, dy = b.y - a.y; var L = Math.hypot(dx, dy) || 1; var nx = -dy / L, ny = dx / L; var tx = dx / L, ty = dy / L;
-    var lx, ly, guideToX, guideToY;
-    // Compute projection of cursor to segment (centerline)
-    var projX = midx, projY = midy; // default
-    if(__plan2d.mouse){
-      var cursor = __plan2d.mouse; var vxc = cursor.x - a.x, vyc = cursor.y - a.y; var tprojc = ((vxc*dx + vyc*dy) / (L*L)); tprojc = Math.max(0, Math.min(1, tprojc));
-      projX = a.x + dx * tprojc; projY = a.y + dy * tprojc;
-    }
-    // Vector normal to the window centerline (screen coords)
-    var nxs = -dy / L, nys = dx / L; if(!isFinite(nxs) || !isFinite(nys)){ nxs=0; nys=-1; }
-    // Move from centerline to the visible window edge (half thickness)
-    var thickM = (typeof we.host==='number') ? ((__plan2d.elements[we.host].thickness||__plan2d.wallThicknessM)) : (we.thickness||__plan2d.wallThicknessM);
-    var halfEdgePx = (thickM * __plan2d.scale) / 2; // canvas px
-    // Choose the upward-facing normal (negative Y) for consistent placement
-    var signUp = (nys < 0) ? 1 : -1;
-    var edgeX = projX + nxs * halfEdgePx * signUp;
-    var edgeY = projY + nys * halfEdgePx * signUp;
-    var dpr = (window.devicePixelRatio || 1);
-    var offPx = 25 * dpr;
-    // Preferred: anchor from top-left corner of the host wall rectangle
-    var placedFromWall = false;
-    if(typeof we.host==='number'){
-      var wall = __plan2d.elements[we.host];
-      if(wall && wall.type==='wall'){
-        var WA = worldToScreen2D(wall.x0, wall.y0);
-        var WB = worldToScreen2D(wall.x1, wall.y1);
-        var wdxs = WB.x - WA.x, wdys = WB.y - WA.y; var wLs = Math.hypot(wdxs, wdys) || 1;
-        var nwx = -wdys / wLs, nwy = wdxs / wLs; // wall normal (left)
-        var halfWallPx = ((wall.thickness||__plan2d.wallThicknessM) * __plan2d.scale) / 2;
-        var c1 = { x: WA.x + nwx*halfWallPx, y: WA.y + nwy*halfWallPx };
-        var c2 = { x: WB.x + nwx*halfWallPx, y: WB.y + nwy*halfWallPx };
-        var c3 = { x: WB.x - nwx*halfWallPx, y: WB.y - nwy*halfWallPx };
-        var c4 = { x: WA.x - nwx*halfWallPx, y: WA.y - nwy*halfWallPx };
-        var corners = [c1,c2,c3,c4];
-        var minY = Math.min(c1.y,c2.y,c3.y,c4.y);
-        var topCandidates = corners.filter(function(p){ return Math.abs(p.y - minY) <= 0.5; });
-        var topLeft = topCandidates.reduce(function(best,p){ return (!best || p.x < best.x) ? p : best; }, null) || c1;
-        // Place label 25 CSS px to the right and 25 CSS px down from the top-left corner
-        lx = topLeft.x + offPx;
-        ly = topLeft.y + offPx;
-        placedFromWall = true;
-      }
-    }
-    if(!placedFromWall){
-      // Fallback: place relative to the window edge along the normal
-      lx = edgeX + nxs * offPx * signUp;
-      ly = edgeY + nys * offPx * signUp;
-    }
-    // Leader line to the edge of the window (still points to the window edge for clarity)
-    guideToX = edgeX; guideToY = edgeY;
+the     var dx = b.x - a.x, dy = b.y - a.y; var L = Math.hypot(dx, dy) || 1;
     var txt = (widthM >= 0.995 ? widthM.toFixed(2) : widthM.toFixed(3)) + ' m';
     // Label style
     ox.save();
     ox.font = '12px sans-serif';
     ox.textBaseline = 'middle';
     ox.textAlign = 'center';
-    var padX = 6;
-    var tw = ox.measureText(txt).width;
-    var bw = Math.ceil(tw + padX*2), bh = 18;
+  var padX = 6;
+  var tw = ox.measureText(txt).width;
+  var bw = Math.ceil(tw + padX*2), bh = 18;
+  // Place label centered inside the window (no offset)
+  var lx = midx;
+  var ly = midy;
     // Rounded rect background
     var rx = lx - bw/2, ry = ly - bh/2, r = 4;
     ox.beginPath();
@@ -6474,13 +6428,144 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
     // Text
     ox.fillStyle = '#e5e7eb';
     ox.fillText(txt, lx, ly+0.5);
-    // Small guide line towards the segment
-    ox.strokeStyle = '#38bdf8';
+    // No leader line; label sits next to the window graphic
+    ox.restore();
+  })();
+
+  // Overlay: dimension lines for every wall (outside of wall)
+  (function(){
+    var elems = __plan2d.elements || [];
+    if(!elems.length) return;
+    // Convert CSS px to canvas px for consistent offsets
+    var ovEl = document.getElementById('plan2d-overlay');
+    var cssToCanvas = 1;
+    if (ovEl && ovEl.width && ovEl.getBoundingClientRect) {
+      var rct = ovEl.getBoundingClientRect();
+      var rw = Math.max(1, rct.width);
+      cssToCanvas = ovEl.width / rw;
+    }
+    var offPx = 20 * cssToCanvas; // gap from wall outer edge to dimension line
+    var tickLen = 6 * cssToCanvas; // length of end ticks across the dim line
+    // Compute plan centroid (world) to decide outward direction consistently
+    var cxSum=0, cySum=0, cCount=0;
+    for (var i=0;i<elems.length;i++){
+      var w=elems[i]; if(!w || w.type!=='wall') continue; cxSum += w.x0 + w.x1; cySum += w.y0 + w.y1; cCount+=2; }
+    var cWorld = { x: (cCount? cxSum/cCount : 0), y: (cCount? cySum/cCount : 0) };
+    var cScr = worldToScreen2D(cWorld.x, cWorld.y);
+
+    // Determine which wall endpoints are connected to other walls (to extend to outer corners)
+    var startConn = new Array(elems.length).fill(false), endConn = new Array(elems.length).fill(false);
+    (function(){
+      function key(x,y){ return (Math.round(x*1000))+','+(Math.round(y*1000)); }
+      var map = {};
+      for (var wi=0; wi<elems.length; wi++){
+        var e = elems[wi]; if(!e || e.type!=='wall') continue;
+        var ks = key(e.x0, e.y0), ke = key(e.x1, e.y1);
+        (map[ks]||(map[ks]=[])).push({i:wi,end:'s'});
+        (map[ke]||(map[ke]=[])).push({i:wi,end:'e'});
+      }
+      Object.keys(map).forEach(function(k){ var arr = map[k]; if(arr.length>1){ for(var j=0;j<arr.length;j++){ if(arr[j].end==='s') startConn[arr[j].i]=true; else endConn[arr[j].i]=true; } } });
+    })();
+    ox.save();
+    ox.strokeStyle = 'rgba(100,116,139,0.95)'; // slate-500-ish
+    ox.fillStyle = 'rgba(226,232,240,0.96)';    // slate-200 for text
     ox.lineWidth = 1;
-    ox.beginPath();
-  ox.moveTo(lx, ly);
-  ox.lineTo(guideToX, guideToY);
-    ox.stroke();
+    ox.font = '12px sans-serif';
+    ox.textAlign = 'center';
+    ox.textBaseline = 'middle';
+    for (var i2=0;i2<elems.length;i2++){
+      var el = elems[i2]; if(!el || el.type!=='wall') continue;
+      var aW = worldToScreen2D(el.x0, el.y0); var bW = worldToScreen2D(el.x1, el.y1);
+      var dxs = bW.x - aW.x, dys = bW.y - aW.y; var Ls = Math.hypot(dxs, dys) || 1;
+      if (Ls < 10) continue; // very small in screen px; skip clutter
+      var nxs = -dys / Ls, nys = dxs / Ls; var txs = dxs / Ls, tys = dys / Ls;
+      var midx = (aW.x + bW.x) * 0.5, midy = (aW.y + bW.y) * 0.5;
+      var vxc = cScr.x - midx, vyc = cScr.y - midy;
+      var signOut = (nxs*vxc + nys*vyc > 0) ? -1 : 1;
+      var thick = (el.thickness || __plan2d.wallThicknessM);
+      var halfPx = (thick * __plan2d.scale) / 2;
+      // Outer edge points at endpoints - calculate exactly like the wall segments for pixel-perfect alignment
+      // Use the same logic as the wall drawing code to find the actual rendered wall endpoints
+      var origAx = el.x0, origAy = el.y0, origBx = el.x1, origBy = el.y1;
+      var wdx0 = origBx - origAx, wdy0 = origBy - origAy; var wLen0 = Math.hypot(wdx0, wdy0) || 1;
+      var dirx = wdx0 / wLen0, diry = wdy0 / wLen0;
+      
+      // Find the actual wall segments being drawn (same logic as wall rendering)
+      var spans = [];
+      for(var wi=0; wi<elems.length; wi++){
+        var oEl = elems[wi]; if(oEl.type!=='window' && oEl.type!=='door') continue;
+        if(typeof oEl.host==='number' && oEl.host===i2){
+          var ot0 = Math.max(0, Math.min(1, oEl.t0||0));
+          var ot1 = Math.max(0, Math.min(1, oEl.t1||0));
+          if(ot1 < ot0){ var tmpo=ot0; ot0=ot1; ot1=tmpo; }
+          spans.push([ot0, ot1]);
+        }
+      }
+      spans.sort(function(A,B){ return A[0]-B[0]; });
+      var merged=[]; for(var si=0; si<spans.length; si++){ var s=spans[si]; if(merged.length===0) merged.push(s); else { var last=merged[merged.length-1]; if(s[0] <= last[1] + 1e-4){ last[1] = Math.max(last[1], s[1]); } else { merged.push([s[0], s[1]]);} } }
+      var solids=[]; var cursorT=0; for(var mi=0; mi<merged.length; mi++){ var vs=merged[mi]; if(vs[0] > cursorT + 1e-4) solids.push([cursorT, vs[0]]); cursorT = Math.max(cursorT, vs[1]); }
+      if(cursorT < 1 - 1e-4) solids.push([cursorT, 1]);
+      
+      // Find the overall extent of solid segments (what's actually drawn)
+      var minT = 1, maxT = 0;
+      for(var sj=0; sj<solids.length; sj++){
+        var s0 = solids[sj][0], s1 = solids[sj][1];
+        minT = Math.min(minT, s0);
+        maxT = Math.max(maxT, s1);
+      }
+      if(solids.length === 0) { minT = 0; maxT = 1; } // No openings, full wall
+      
+      // Calculate wall endpoints with exact same extension logic as wall drawing
+      var sx0 = origAx + dirx * (minT * wLen0), sy0 = origAy + diry * (minT * wLen0);
+      var sx1 = origAx + dirx * (maxT * wLen0), sy1 = origAy + diry * (maxT * wLen0);
+      var touchesStart = (minT <= 1e-4) && startConn[i2];
+      var touchesEnd   = (maxT >= 1 - 1e-4) && endConn[i2];
+      if(touchesStart){ sx0 -= dirx * (thick/2); sy0 -= diry * (thick/2); }
+      if(touchesEnd){   sx1 += dirx * (thick/2); sy1 += diry * (thick/2); }
+      
+      // Convert to screen space and calculate edge points
+      var aSeg = worldToScreen2D(sx0, sy0); var bSeg = worldToScreen2D(sx1, sy1);
+      var aEdgeX = aSeg.x + nxs * halfPx * signOut, aEdgeY = aSeg.y + nys * halfPx * signOut;
+      var bEdgeX = bSeg.x + nxs * halfPx * signOut, bEdgeY = bSeg.y + nys * halfPx * signOut;
+      // Dimension line endpoints (offset further out)
+      var aDimX = aEdgeX + nxs * offPx * signOut, aDimY = aEdgeY + nys * offPx * signOut;
+      var bDimX = bEdgeX + nxs * offPx * signOut, bDimY = bEdgeY + nys * offPx * signOut;
+      // Extension lines
+      ox.beginPath();
+      ox.moveTo(aEdgeX, aEdgeY); ox.lineTo(aDimX, aDimY);
+      ox.moveTo(bEdgeX, bEdgeY); ox.lineTo(bDimX, bDimY);
+      ox.stroke();
+      // Dimension line
+      ox.beginPath(); ox.moveTo(aDimX, aDimY); ox.lineTo(bDimX, bDimY); ox.stroke();
+      // End ticks (perpendicular to dimension line)
+      var dimDx = bDimX - aDimX, dimDy = bDimY - aDimY; var dimLen = Math.hypot(dimDx, dimDy) || 1;
+      var tnx = -dimDy / dimLen, tny = dimDx / dimLen; var ht = tickLen/2;
+      ox.beginPath();
+      ox.moveTo(aDimX - tnx*ht, aDimY - tny*ht); ox.lineTo(aDimX + tnx*ht, aDimY + tny*ht);
+      ox.moveTo(bDimX - tnx*ht, bDimY - tny*ht); ox.lineTo(bDimX + tnx*ht, bDimY + tny*ht);
+      ox.stroke();
+      // Label (actual rendered wall length in meters)
+      var lenM = Math.hypot(sx1 - sx0, sy1 - sy0);
+      var txt = (lenM >= 0.995 ? lenM.toFixed(2) : lenM.toFixed(3)) + ' m';
+      var tw = ox.measureText(txt).width; var bw = Math.ceil(tw + 12), bh = 18;
+      var cx = (aDimX + bDimX) * 0.5, cy = (aDimY + bDimY) * 0.5;
+      // Background pill for readability
+      var rx = cx - bw/2, ry = cy - bh/2, r = 4;
+      ox.beginPath();
+      ox.moveTo(rx+r, ry);
+      ox.lineTo(rx+bw-r, ry);
+      ox.quadraticCurveTo(rx+bw, ry, rx+bw, ry+r);
+      ox.lineTo(rx+bw, ry+bh-r);
+      ox.quadraticCurveTo(rx+bw, ry+bh, rx+bw-r, ry+bh);
+      ox.lineTo(rx+r, ry+bh);
+      ox.quadraticCurveTo(rx, ry+bh, rx, ry+bh-r);
+      ox.lineTo(rx, ry+r);
+      ox.quadraticCurveTo(rx, ry, rx+r, ry);
+      ox.closePath();
+      ox.fillStyle = 'rgba(2,6,23,0.85)'; ox.fill();
+      ox.strokeStyle = 'rgba(148,163,184,0.8)'; ox.lineWidth = 1; ox.stroke();
+      ox.fillStyle = '#e5e7eb'; ox.fillText(txt, cx, cy+0.5);
+    }
     ox.restore();
   })();
 }
