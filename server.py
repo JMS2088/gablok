@@ -37,6 +37,25 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b'OK')
             return
+        # Forwarded URL helper endpoint: returns JSON with the URL inferred from Host header
+        if self.path == '/__forwarded':
+            try:
+                host = self.headers.get('Host', '')
+                scheme = 'https' if any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io')) else 'http'
+                url = f"{scheme}://{host}" if host else ''
+                local = f"http://localhost:{getattr(self.server, 'server_port', 8000)}"
+                body = ('{"host":"%s","url":"%s","local":"%s"}' % (host, url, local)).encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(b'{"error":"failed"}')
+            return
         # On first request, print the forwarded URL detected via Host header (if any)
         try:
             global _printed_forwarded_host

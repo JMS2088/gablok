@@ -366,6 +366,12 @@ function createInitialRoom() {
   var room = createRoom(0, 0, 0);
   allRooms.push(room);
   selectedRoomId = room.id;
+  // Make sure camera can see the room
+  camera.targetX = 0;
+  camera.targetZ = 0;
+  camera.distance = 15;
+  camera.pitch = -0.6;
+  camera.yaw = 0.2;
 }
 
 function addNewRoom() {
@@ -1099,6 +1105,7 @@ function drawCompass() {
 }
 
 function drawRoom(room) {
+  console.log('drawRoom called for room:', room);
   try {
     var selected = selectedRoomId === room.id;
     var currentLevel = room.level === currentFloor;
@@ -2173,14 +2180,25 @@ function showShare(){
     var input = document.getElementById('share-url');
     var openA = document.getElementById('share-open');
     var hint = document.getElementById('share-hint');
-    var url = window.location.href;
-    if(input) { input.value = url; input.focus(); input.select(); }
-    if(openA) { openA.href = url; }
-    var isForwarded = /app\.github\.dev|githubpreview\.dev|gitpod\.io|codespaces/.test(url);
-    if(hint){
-      hint.textContent = isForwarded ? 'Forwarded URL detected.' : 'If using Codespaces, share the forwarded URL shown in your browser address bar.';
-    }
-    modal.style.display = 'flex';
+    var fallUrl = window.location.href;
+    // Try to fetch forwarded URL from server helper
+    fetch('/__forwarded', { cache: 'no-store' }).then(function(r){ return r.ok ? r.json() : null; }).then(function(info){
+      var best = fallUrl;
+      if (info && info.url) best = info.url;
+      if (input) { input.value = best; input.focus(); input.select(); }
+      if (openA) { openA.href = best; }
+      var isForwarded = /app\.github\.dev|githubpreview\.dev|gitpod\.io|codespaces|gitpod/.test(best);
+      if (hint) {
+        hint.textContent = isForwarded ? 'Forwarded URL detected.' : 'If using Codespaces/Gitpod, share the forwarded URL from your browser address bar.';
+      }
+      modal.style.display = 'flex';
+    }).catch(function(){
+      // Fallback to current href
+      if(input) { input.value = fallUrl; input.focus(); input.select(); }
+      if(openA) { openA.href = fallUrl; }
+      if(hint) hint.textContent = 'If using Codespaces/Gitpod, share the forwarded URL from your browser address bar.';
+      modal.style.display = 'flex';
+    });
   }catch(e){ console.warn('showShare failed', e); }
 }
 function hideShare(){ var modal = document.getElementById('share-modal'); if(modal) modal.style.display='none'; }
@@ -4331,7 +4349,10 @@ function startRender() {
   renderLoop();
 }
 
-document.addEventListener('DOMContentLoaded', startApp);
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('DOM loaded, starting app...');
+  startApp();
+});
 
 // ================= PERFORMANCE & RENDER OPTIMIZATIONS =================
 // Lightweight instrumentation & adaptive rendering to reduce CPU/GPU usage when scene is static.
@@ -6394,7 +6415,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
     }
     var a = worldToScreen2D(ax, ay), b = worldToScreen2D(bx, by);
     var midx = (a.x + b.x) * 0.5, midy = (a.y + b.y) * 0.5;
-the     var dx = b.x - a.x, dy = b.y - a.y; var L = Math.hypot(dx, dy) || 1;
+    var dx = b.x - a.x, dy = b.y - a.y; var L = Math.hypot(dx, dy) || 1;
     var txt = (widthM >= 0.995 ? widthM.toFixed(2) : widthM.toFixed(3)) + ' m';
     // Label style
     ox.save();
