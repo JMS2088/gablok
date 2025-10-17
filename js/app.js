@@ -39,6 +39,8 @@ var centerX = 0;
 var centerY = 0;
 var deviceRatio = 1;
 var allRooms = [];
+// Standalone wall strips extruded from 2D plan when no closed rooms are present
+var wallStrips = [];
 var selectedRoomId = null;
 var editingLabelId = null; // which object's label is currently being edited
 var paletteOpenForId = null; // which room/component is open in palette
@@ -109,6 +111,8 @@ var LABEL_UPDATE_INTERVAL_MS = 120;
 var MEASURE_UPDATE_INTERVAL_MS = 250;
 var _lastLabelsUpdate = 0;
 var _lastMeasurementsUpdate = 0;
+// Prevent label/button flashing: when hovering an edit button, freeze label DOM updates
+window.__labelsFrozen = false;
 
 // Offscreen grid cache
 var _gridCache = {
@@ -1345,6 +1349,38 @@ function drawRoof(roof) {
   }
 }
 
+// Draw a single standalone wall strip between (x0,z0)-(x1,z1), extruded from y=0 to y=height
+function drawWallStrip(strip){
+  try{
+    var dx = strip.x1 - strip.x0, dz = strip.z1 - strip.z0; var L = Math.hypot(dx,dz)||0; if(L<=1e-6) return;
+    var t = (strip.thickness||0.3);
+    var h0 = 0, h1 = (strip.height||3.0);
+    // Build 4 bottom/top corners by offsetting the segment by +/- normal * (t/2)
+    var nx = -(dz / (L||1)); var nz = (dx / (L||1)); var half = t/2;
+    var p0 = {x: strip.x0 + nx*half, z: strip.z0 + nz*half};
+    var p1 = {x: strip.x1 + nx*half, z: strip.z1 + nz*half};
+    var p2 = {x: strip.x1 - nx*half, z: strip.z1 - nz*half};
+    var p3 = {x: strip.x0 - nx*half, z: strip.z0 - nz*half};
+    var ptsBottom = [p0,p1,p2,p3].map(function(w){ return project3D(w.x, h0, w.z); });
+    var ptsTop    = [p0,p1,p2,p3].map(function(w){ return project3D(w.x, h1, w.z); });
+    if(ptsBottom.some(function(p){return !p;}) || ptsTop.some(function(p){return !p;})) return;
+    // style
+    ctx.save();
+    ctx.strokeStyle = '#a8a29e';
+    ctx.fillStyle = 'rgba(168,162,158,0.28)';
+    ctx.lineWidth = 2;
+    // vertical faces (quads 0-1-1'-0', 1-2-2'-1', ...)
+    for(var i=0;i<4;i++){
+      var j=(i+1)%4;
+      var a0=ptsBottom[i], b0=ptsBottom[j], a1=ptsTop[i], b1=ptsTop[j];
+      ctx.beginPath(); ctx.moveTo(a0.x,a0.y); ctx.lineTo(b0.x,b0.y); ctx.lineTo(b1.x,b1.y); ctx.lineTo(a1.x,a1.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    // top face
+    ctx.beginPath(); ctx.moveTo(ptsTop[0].x,ptsTop[0].y); for(var k=1;k<4;k++){ ctx.lineTo(ptsTop[k].x, ptsTop[k].y); } ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }catch(e){ /* ignore strip draw errors */ }
+}
+
 function drawGableRoof(roof, selected, strokeColor, fillColor, strokeWidth) {
   var hw = roof.width / 2;
   var hd = roof.depth / 2;
@@ -2280,6 +2316,20 @@ function worldMovement(screenDX, screenDY) {
 function updateLabels() {
   var container = document.getElementById('labels');
   if (!container) return;
+  // Bind hover-freeze listeners once (delegated to container)
+  if (!container._hoverFreezeBound) {
+    container.addEventListener('pointerover', function(e){
+      var btn = e.target && e.target.closest && e.target.closest('.room-edit-btn');
+      if (btn) { window.__labelsFrozen = true; }
+    }, true);
+    container.addEventListener('pointerout', function(e){
+      var btn = e.target && e.target.closest && e.target.closest('.room-edit-btn');
+      if (btn) { window.__labelsFrozen = false; }
+    }, true);
+    container._hoverFreezeBound = true;
+  }
+  // If frozen (hovering the edit button), skip rebuilding to avoid flicker
+  if (window.__labelsFrozen) return;
   
   container.innerHTML = '';
   
@@ -3128,7 +3178,7 @@ function fitView() {
     objects = objects.concat(balconyComponents);
   }
   
-  if (objects.length === 0) return;
+  if (objects.length === 0 && currentFloor === 0 && wallStrips.length === 0) return;
   
   var minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   
@@ -3140,6 +3190,16 @@ function fitView() {
     maxX = Math.max(maxX, obj.x + hw);
     minZ = Math.min(minZ, obj.z - hd);
     maxZ = Math.max(maxZ, obj.z + hd);
+  }
+  // Include wallStrips on ground floor in fit
+  if (currentFloor === 0) {
+    for (var wsI=0; wsI<wallStrips.length; wsI++){
+      var ws = wallStrips[wsI]; var t = (ws.thickness||0.3)/2;
+      var xMin = Math.min(ws.x0, ws.x1) - t, xMax = Math.max(ws.x0, ws.x1) + t;
+      var zMin = Math.min(ws.z0, ws.z1) - t, zMax = Math.max(ws.z0, ws.z1) + t;
+      minX = Math.min(minX, xMin); maxX = Math.max(maxX, xMax);
+      minZ = Math.min(minZ, zMin); maxZ = Math.max(maxZ, zMax);
+    }
   }
   
   camera.targetX = (minX + maxX) / 2;
@@ -3185,6 +3245,7 @@ function resetAll() {
 
   // Clear all objects
   allRooms = [];
+  wallStrips = [];
   stairsComponent = null;
   pergolaComponents = [];
   garageComponents = [];
@@ -4324,6 +4385,12 @@ function renderLoop() {
 
     allObjects.sort(function(a,b){ var distDiff=b.distance-a.distance; if(Math.abs(distDiff)>1.0) return distDiff; return a.maxHeight-b.maxHeight; });
 
+  // Draw standalone wall strips first (ground-level); not part of allObjects
+  for (var iWS=0;iWS<wallStrips.length;iWS++){
+    var ws = wallStrips[iWS];
+    // simple cull by mid point and half height
+    var cx=(ws.x0+ws.x1)/2, cz=(ws.z0+ws.z1)/2, cy=(ws.height||3.0)/2; if(!withinCull(cx,cy,cz)) continue; drawWallStrip(ws);
+  }
   var selectedEntry=null; for (var iO=0;iO<allObjects.length;iO++){ var it=allObjects[iO]; if(selectedRoomId && it.object && it.object.id===selectedRoomId){ selectedEntry=it; continue;} switch(it.type){ case 'room': drawRoom(it.object); break; case 'stairs': drawStairs(it.object); break; case 'furniture': drawFurniture(it.object); break; case 'balcony': drawBalcony(it.object); break; case 'pergola': drawPergola(it.object); break; case 'garage': drawGarage(it.object); break; case 'pool': drawPool(it.object); break; case 'roof': drawRoof(it.object); break; } }
   if(selectedEntry){ switch(selectedEntry.type){ case 'room': drawRoom(selectedEntry.object); break; case 'stairs': drawStairs(selectedEntry.object); break; case 'furniture': drawFurniture(selectedEntry.object); break; case 'balcony': drawBalcony(selectedEntry.object); break; case 'pergola': drawPergola(selectedEntry.object); break; case 'garage': drawGarage(selectedEntry.object); break; case 'pool': drawPool(selectedEntry.object); break; case 'roof': drawRoof(selectedEntry.object); break; }}
 
@@ -4331,7 +4398,9 @@ function renderLoop() {
     drawWorldHeightScale();
 
     var now = (performance && performance.now)? performance.now(): Date.now();
-    if (now - _lastLabelsUpdate > LABEL_UPDATE_INTERVAL_MS) { updateLabels(); _lastLabelsUpdate = now; }
+    if (now - _lastLabelsUpdate > LABEL_UPDATE_INTERVAL_MS) {
+      if (!window.__labelsFrozen) { updateLabels(); _lastLabelsUpdate = now; }
+    }
   drawCompass();
     if (now - _lastMeasurementsUpdate > MEASURE_UPDATE_INTERVAL_MS) { updateMeasurements(); _lastMeasurementsUpdate = now; }
     _needsFullRender = false;
@@ -4383,6 +4452,7 @@ function serializeProject() {
     version: 1,
     camera: camera,
     rooms: allRooms,
+    wallStrips: wallStrips,
     stairs: stairsComponent,
     pergolas: pergolaComponents,
     garages: garageComponents,
@@ -4400,6 +4470,7 @@ function restoreProject(json) {
     if (!data) return;
     camera = Object.assign(camera, data.camera || {});
     allRooms = Array.isArray(data.rooms) ? data.rooms : [];
+    wallStrips = Array.isArray(data.wallStrips) ? data.wallStrips : [];
     stairsComponent = data.stairs || null;
     pergolaComponents = Array.isArray(data.pergolas) ? data.pergolas : [];
     garageComponents = Array.isArray(data.garages) ? data.garages : [];
@@ -4474,6 +4545,13 @@ function exportOBJ() {
   }
   // Rooms
   allRooms.forEach(function(r){ var y0=r.level*3.5, y1=y0+r.height; pushBox(r,y0,y1,'room_'+(r.name||'')); });
+  // Standalone wall strips exported as thin boxes with given height and thickness
+  wallStrips.forEach(function(w){
+    // Build a centered thin box along the strip centerline
+    var dx = w.x1 - w.x0, dz = w.z1 - w.z0; var L = Math.hypot(dx,dz) || 0;
+    var cx = (w.x0 + w.x1)/2, cz = (w.z0 + w.z1)/2; var rot = (Math.atan2(dz, dx) * 180/Math.PI) || 0;
+    pushBox({x:cx, z:cz, width:L, depth:(w.thickness||0.3), rotation:rot}, 0, (w.height||3.0), 'wallstrip');
+  });
   if (stairsComponent) pushBox(stairsComponent, 0, stairsComponent.height, 'stairs');
   pergolaComponents.forEach(function(p){ pushBox(p,0,p.totalHeight,'pergola'); });
   garageComponents.forEach(function(g){ pushBox(g,0,g.height,'garage'); });
@@ -5901,6 +5979,7 @@ var __plan2d = {
   wallThicknessM:0.3,
   // Stroke width (in canvas px) used when outlining walls. Keep dimension overlay in sync.
   wallStrokePx:1.2,
+  wallHeightM:3.0,
   // Controls orientation: 2D Y = sign * world Z (1 => North up matches world +Z; -1 flips)
   yFromWorldZSign: 1,
   // Grid snapping step (meters)
@@ -6036,7 +6115,7 @@ function plan2dBind(){
   var bExp=document.getElementById('plan2d-export'); if(bExp) bExp.onclick=plan2dExport;
   var bImp=document.getElementById('plan2d-import'); if(bImp) bImp.onclick=function(){ var f=document.getElementById('plan2d-import-file'); if(f) f.click(); };
   var fi=document.getElementById('plan2d-import-file'); if(fi) fi.onchange=function(e){ var f=e.target.files&&e.target.files[0]; if(!f)return; var r=new FileReader(); r.onload=function(){ try{ var arr=JSON.parse(r.result); if(Array.isArray(arr)){ __plan2d.elements=arr; __plan2d.selectedIndex=-1; plan2dDraw(); updatePlan2DInfo(); updateStatus('2D plan imported'); plan2dEdited(); } }catch(err){ updateStatus('Import failed'); } }; r.readAsText(f); fi.value=''; };
-  var bApply3D=document.getElementById('plan2d-apply-3d'); if(bApply3D) bApply3D.onclick=applyPlan2DTo3D;
+  var bApply3D=document.getElementById('plan2d-apply-3d'); if(bApply3D) bApply3D.onclick=function(){ try{ applyPlan2DTo3D(); }catch(e){} };
   if(!c.__plan2dBound){
     c.__plan2dBound=true;
     c.addEventListener('mousedown', function(e){
@@ -7120,7 +7199,15 @@ function applyPlan2DTo3D(elemsSnapshot){
   try {
     var elemsSrc = Array.isArray(elemsSnapshot) ? elemsSnapshot : __plan2d.elements;
     var walls=elemsSrc.filter(function(e){return e.type==='wall';});
-    if(walls.length===0){ updateStatus('No walls to apply'); return; }
+    if(walls.length===0){
+      // No walls -> clear ground-floor rooms in 3D so it reflects 2D state
+      allRooms = allRooms.filter(function(r){ return (r.level||0)!==0; });
+      // Also clear any standalone strips
+      wallStrips = [];
+      saveProjectSilently(); selectedRoomId=null; renderLoop();
+      updateStatus('Cleared ground-floor 3D rooms (no walls in 2D)');
+      return;
+    }
     function approxEq(a,b,eps){ return Math.abs(a-b) < (eps||1e-2); } // ~1 cm tolerance
     var TOL=0.02; // 2 cm forgiving tolerance for detection
     function keyCoord(v){ return Math.round(v / TOL) * TOL; }
@@ -7166,10 +7253,37 @@ function applyPlan2DTo3D(elemsSnapshot){
     });
     roomsFound=dedup;
 
-    if(roomsFound.length===0){ updateStatus('No closed rooms found'); return; }
+    if(roomsFound.length===0){
+      // Walls present but no closed rectangles: extrude standalone wall strips from 2D
+      // Clear ground-floor rooms and rebuild strips
+      allRooms = allRooms.filter(function(r){ return (r.level||0)!==0; });
+      var sgn = (__plan2d.yFromWorldZSign||1);
+      var strips = [];
+      // Build subsegments excluding openings/intersections using existing helper
+      for(var wi=0; wi<elemsSrc.length; wi++){
+        var e = elemsSrc[wi]; if(!e || e.type!=='wall') continue;
+        var subs = plan2dBuildWallSubsegments(elemsSrc, wi) || [];
+        for(var si=0; si<subs.length; si++){
+          var sg = subs[si];
+          strips.push({
+            x0: sg.ax,
+            z0: sgn*sg.ay,
+            x1: sg.bx,
+            z1: sgn*sg.by,
+            thickness: (e.thickness||__plan2d.wallThicknessM||0.3),
+            height: (__plan2d.wallHeightM||3.0)
+          });
+        }
+      }
+      wallStrips = strips;
+      saveProjectSilently(); selectedRoomId=null; renderLoop();
+      updateStatus('Applied 2D plan to 3D (standalone walls)');
+      return;
+    }
 
-    // Replace only ground floor rooms
+  // Replace only ground floor rooms; also clear standalone strips
     allRooms = allRooms.filter(function(r){ return (r.level||0)!==0; });
+  wallStrips = [];
     // 2D y corresponds to world z; 2D x corresponds to world x; plan is centered at (0,0)
     for(var r=0;r<roomsFound.length;r++){
       var R=roomsFound[r];
