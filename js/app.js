@@ -6133,7 +6133,16 @@ function plan2dBind(){
       if(__plan2d.dragWindow){ __plan2d.dragWindow=null; updatePlan2DInfo(); }
       if(__plan2d.dragDoor){ __plan2d.dragDoor=null; updatePlan2DInfo(); }
       if(__plan2d.dragDoorWhole){ __plan2d.dragDoorWhole=null; updatePlan2DInfo(); }
-      else if(__plan2d.start && __plan2d.last){ var a=__plan2d.start, b=__plan2d.last; plan2dFinalize(a,b); updatePlan2DInfo(); }
+      else if(__plan2d.start && __plan2d.last){
+        // If it was a short click (no real drag), treat as selection even if not in 'select' tool
+        var dx = __plan2d.last.x - __plan2d.start.x, dy = __plan2d.last.y - __plan2d.start.y;
+        var moved = Math.hypot(dx, dy);
+        if(moved < 0.02){ // ~2cm in plan units
+          plan2dSelectAt(__plan2d.last);
+        } else {
+          var a=__plan2d.start, b=__plan2d.last; plan2dFinalize(a,b); updatePlan2DInfo();
+        }
+      }
       __plan2d.start=null; __plan2d.last=null; plan2dDraw();
     });
     // Delete selected via keyboard (capture-phase to prevent global handlers)
@@ -6276,7 +6285,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
           ctx.save();
           ctx.translate(midx, midy);
           ctx.rotate(angle);
-          var baseFontSize = 12; ctx.font = baseFontSize + 'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+          var baseFontSize = 19; ctx.font = baseFontSize + 'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
           var textW = ctx.measureText(txt).width;
           var bw = Math.ceil(textW + 12), bh = 18; // pill dimensions before scaling
           var scaleW = maxW / bw, scaleH = maxH / bh; var scale = Math.min(1, scaleW, scaleH);
@@ -6369,7 +6378,81 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
     }
   }
   // Preview during drag
-  if(__plan2d.start && __plan2d.last){ var a=worldToScreen2D(__plan2d.start.x,__plan2d.start.y); var b=worldToScreen2D(__plan2d.last.x,__plan2d.last.y); var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; if(__plan2d.tool==='wall'){ var L2=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2)||1; var nx2=-(b.y-a.y)/L2, ny2=(b.x-a.x)/L2; var half2=(__plan2d.wallThicknessM*__plan2d.scale)/2; ctx.beginPath(); ctx.fillStyle='rgba(226,232,240,0.55)'; ctx.strokeStyle='#64748b'; ctx.setLineDash([6,4]); ctx.moveTo(a.x+nx2*half2,a.y+ny2*half2); ctx.lineTo(b.x+nx2*half2,b.y+ny2*half2); ctx.lineTo(b.x-nx2*half2,b.y-ny2*half2); ctx.lineTo(a.x-nx2*half2,a.y-ny2*half2); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.setLineDash([]); } else if(__plan2d.tool==='window'){ ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.setLineDash([4,3]); ctx.lineWidth=2; ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.setLineDash([]); } }
+  if(__plan2d.start && __plan2d.last){
+    var a=worldToScreen2D(__plan2d.start.x,__plan2d.start.y);
+    var b=worldToScreen2D(__plan2d.last.x,__plan2d.last.y);
+    var dx=b.x-a.x, dy=b.y-a.y;
+    if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x;
+    if(__plan2d.tool==='wall'){
+      var L2=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2)||1;
+      var nx2=-(b.y-a.y)/L2, ny2=(b.x-a.x)/L2; var half2=(__plan2d.wallThicknessM*__plan2d.scale)/2;
+      ctx.beginPath(); ctx.fillStyle='rgba(226,232,240,0.55)'; ctx.strokeStyle='#64748b'; ctx.setLineDash([6,4]);
+      ctx.moveTo(a.x+nx2*half2,a.y+ny2*half2); ctx.lineTo(b.x+nx2*half2,b.y+ny2*half2); ctx.lineTo(b.x-nx2*half2,b.y-ny2*half2); ctx.lineTo(a.x-nx2*half2,a.y-ny2*half2); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+      // Live measurement label centered inside the preview wall
+      (function(){
+        var Ls = Math.hypot(b.x-a.x, b.y-a.y);
+        if(Ls < 30) return;
+        var segLenM = Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y);
+        var txt = (segLenM >= 0.995 ? segLenM.toFixed(2) : segLenM.toFixed(3)) + ' m';
+        var midx=(a.x+b.x)/2, midy=(a.y+b.y)/2; var angle=Math.atan2(b.y-a.y, b.x-a.x); if(angle>Math.PI/2||angle<-Math.PI/2) angle+=Math.PI;
+        var pad=6, maxW=Math.max(10, Ls - pad*2), wallPx=(__plan2d.wallThicknessM*__plan2d.scale)||1, marginY=2, maxH=Math.max(6, wallPx - marginY*2);
+        ctx.save(); ctx.translate(midx, midy); ctx.rotate(angle);
+        var baseFontSize = 19; ctx.font=baseFontSize+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        var textW=ctx.measureText(txt).width; var bw=Math.ceil(textW+12), bh=18; var scale=Math.min(1, maxW/bw, maxH/bh); if(scale<0.55){ ctx.restore(); return; }
+        ctx.scale(scale,scale);
+        var rx=-bw/2, ry=-bh/2, rr=4; ctx.beginPath(); ctx.moveTo(rx+rr,ry); ctx.lineTo(rx+bw-rr,ry); ctx.quadraticCurveTo(rx+bw,ry,rx+bw,ry+rr);
+        ctx.lineTo(rx+bw,ry+bh-rr); ctx.quadraticCurveTo(rx+bw,ry+bh,rx+bw-rr,ry+bh); ctx.lineTo(rx+rr,ry+bh); ctx.quadraticCurveTo(rx,ry+bh,rx,ry+bh-rr);
+        ctx.lineTo(rx,ry+rr); ctx.quadraticCurveTo(rx,ry,rx+rr,ry); ctx.closePath(); ctx.fillStyle='rgba(2,6,23,0.82)'; ctx.fill(); ctx.strokeStyle='rgba(148,163,184,0.7)'; ctx.lineWidth=1; ctx.stroke();
+        ctx.fillStyle='#e5e7eb'; ctx.fillText(txt,0,0.5); ctx.restore();
+      })();
+    } else if(__plan2d.tool==='window'){
+      ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.setLineDash([4,3]); ctx.lineWidth=2; ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.setLineDash([]);
+      // Live window measurement label along the preview line
+      (function(){
+        var Ls = Math.hypot(b.x-a.x, b.y-a.y); if(Ls < 20) return;
+        var segLenM = Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y);
+        var txt = (segLenM >= 0.995 ? segLenM.toFixed(2) : segLenM.toFixed(3)) + ' m';
+        var midx=(a.x+b.x)/2, midy=(a.y+b.y)/2; var angle=Math.atan2(b.y-a.y, b.x-a.x); if(angle>Math.PI/2||angle<-Math.PI/2) angle+=Math.PI;
+        var pad=6, maxW=Math.max(10, Ls - pad*2), maxH=16; // thin label for window preview
+        ctx.save(); ctx.translate(midx, midy); ctx.rotate(angle);
+        var baseFontSize = 16; ctx.font=baseFontSize+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        var textW=ctx.measureText(txt).width; var bw=Math.ceil(textW+10), bh=16; var scale=Math.min(1, maxW/bw, maxH/bh); if(scale<0.5){ ctx.restore(); return; }
+        ctx.scale(scale,scale);
+        var rx=-bw/2, ry=-bh/2, rr=4; ctx.beginPath(); ctx.moveTo(rx+rr,ry); ctx.lineTo(rx+bw-rr,ry); ctx.quadraticCurveTo(rx+bw,ry,rx+bw,ry+rr);
+        ctx.lineTo(rx+bw,ry+bh-rr); ctx.quadraticCurveTo(rx+bw,ry+bh,rx+bw-rr,ry+bh); ctx.lineTo(rx+rr,ry+bh); ctx.quadraticCurveTo(rx,ry+bh,rx,ry+bh-rr);
+        ctx.lineTo(rx,ry+rr); ctx.quadraticCurveTo(rx,ry,rx+rr,ry); ctx.closePath(); ctx.fillStyle='rgba(30,58,138,0.85)'; ctx.fill(); ctx.strokeStyle='rgba(147,197,253,0.8)'; ctx.lineWidth=1; ctx.stroke();
+        ctx.fillStyle='#e5e7eb'; ctx.fillText(txt,0,0.5); ctx.restore();
+      })();
+    }
+  }
+
+  // Live label while dragging a window endpoint (host-anchored)
+  if(__plan2d.dragWindow){
+    var dw = __plan2d.dragWindow; var we = __plan2d.elements[dw.index];
+    var host = we && __plan2d.elements[we.host];
+    if(we && host && host.type==='wall'){
+      var t0=Math.max(0,Math.min(1,we.t0||0)), t1=Math.max(0,Math.min(1,we.t1||0));
+      var ax=host.x0+(host.x1-host.x0)*t0, ay=host.y0+(host.y1-host.y0)*t0;
+      var bx=host.x0+(host.x1-host.x0)*t1, by=host.y0+(host.y1-host.y0)*t1;
+      var aS=worldToScreen2D(ax,ay), bS=worldToScreen2D(bx,by);
+      var Ls=Math.hypot(bS.x-aS.x,bS.y-aS.y); if(Ls>15){
+        var segLenM=Math.hypot(bx-ax,by-ay); var txt=(segLenM>=0.995?segLenM.toFixed(2):segLenM.toFixed(3))+' m';
+        var midx=(aS.x+bS.x)/2, midy=(aS.y+bS.y)/2; var angle=Math.atan2(bS.y-aS.y,bS.x-aS.x); if(angle>Math.PI/2||angle<-Math.PI/2) angle+=Math.PI;
+        var thickM = host.thickness||__plan2d.wallThicknessM; var wallPx = thickM*__plan2d.scale; var maxH=Math.max(6, wallPx-4), pad=6, maxW=Math.max(10, Ls - pad*2);
+        ctx.save(); ctx.translate(midx, midy); ctx.rotate(angle);
+        var baseFontSize=16; ctx.font=baseFontSize+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        var textW=ctx.measureText(txt).width; var bw=Math.ceil(textW+10), bh=16; var scale=Math.min(1, maxW/bw, maxH/bh); if(scale<0.45){ ctx.restore(); } else {
+          ctx.scale(scale,scale);
+          var rx=-bw/2, ry=-bh/2, rr=4; ctx.beginPath(); ctx.moveTo(rx+rr,ry); ctx.lineTo(rx+bw-rr,ry); ctx.quadraticCurveTo(rx+bw,ry,rx+bw,ry+rr);
+          ctx.lineTo(rx+bw,ry+bh-rr); ctx.quadraticCurveTo(rx+bw,ry+bh,rx+bw-rr,ry+bh); ctx.lineTo(rx+rr,ry+bh); ctx.quadraticCurveTo(rx,ry+bh,rx,ry+bh-rr);
+          ctx.lineTo(rx,ry+rr); ctx.quadraticCurveTo(rx,ry,rx+rr,ry); ctx.closePath();
+          ctx.fillStyle='rgba(2,6,23,0.82)'; ctx.fill(); ctx.strokeStyle='rgba(148,163,184,0.7)'; ctx.lineWidth=1; ctx.stroke();
+          ctx.fillStyle='#e5e7eb'; ctx.fillText(txt,0,0.5);
+          ctx.restore();
+        }
+      }
+    }
+  }
   // Hover erase highlight
   if(__plan2d.tool==='erase' && __plan2d.hoverIndex>=0){ var e=__plan2d.elements[__plan2d.hoverIndex]; var a2=worldToScreen2D(e.x0,e.y0), b2=worldToScreen2D(e.x1,e.y1); ctx.beginPath(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.setLineDash([4,4]); ctx.moveTo(a2.x,a2.y); ctx.lineTo(b2.x,b2.y); ctx.stroke(); ctx.setLineDash([]); }
   // Selection highlight
