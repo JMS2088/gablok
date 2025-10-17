@@ -5901,6 +5901,8 @@ var __plan2d = {
   wallThicknessM:0.3,
   // Stroke width (in canvas px) used when outlining walls. Keep dimension overlay in sync.
   wallStrokePx:1.2,
+  // Controls orientation: 2D Y = sign * world Z (1 => North up matches world +Z; -1 flips)
+  yFromWorldZSign: 1,
   elements:[],       // { type:'wall'|'window'|'door', ... }
   tool:'wall',       // current tool: wall | window | door | erase | select
   start:null,        // world coords of drag start
@@ -5938,7 +5940,7 @@ function closePlan2DModal(){
   plan2dUnbind();
 }
 
-// Screen mapping: X right = +X, Y up = +Y (so top of screen is North). 3D Z maps to -Y.
+// Screen mapping: X right = +X (world), Y up = +Y in plan space. World Z maps to plan Y with a configurable sign.
 function worldToScreen2D(wx,wy){ var c=document.getElementById('plan2d-canvas'); if(!c)return {x:0,y:0}; return { x:c.width/2 + wx*__plan2d.scale, y:c.height/2 - wy*__plan2d.scale }; }
 function screenToWorld2D(px,py){ var c=document.getElementById('plan2d-canvas'); if(!c)return {x:0,y:0}; return { x:(px - c.width/2)/__plan2d.scale, y:(c.height/2 - py)/__plan2d.scale }; }
 
@@ -6259,6 +6261,41 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         var dxs=bSeg.x-aSeg.x, dys=bSeg.y-aSeg.y; var Ls=Math.sqrt(dxs*dxs+dys*dys)||1; var nx=-dys/Ls, ny=dxs/Ls; var halfPx=(thick*__plan2d.scale)/2;
         ctx.beginPath(); ctx.fillStyle='#e5e7eb'; ctx.strokeStyle='#334155'; ctx.lineWidth=__plan2d.wallStrokePx;
         ctx.moveTo(aSeg.x+nx*halfPx,aSeg.y+ny*halfPx); ctx.lineTo(bSeg.x+nx*halfPx,bSeg.y+ny*halfPx); ctx.lineTo(bSeg.x-nx*halfPx,bSeg.y-ny*halfPx); ctx.lineTo(aSeg.x-nx*halfPx,aSeg.y-ny*halfPx); ctx.closePath(); ctx.fill(); ctx.stroke();
+
+        // Inline segment length label: draw centered inside the wall polygon using this exact geometry
+        (function(){
+          var minLabelPx = 40; // skip tiny segments
+          if(Ls < minLabelPx) return;
+          var segLenM = Math.hypot(sx1 - sx0, sy1 - sy0);
+          var txt = (segLenM >= 0.995 ? segLenM.toFixed(2) : segLenM.toFixed(3)) + ' m';
+          var midx = (aSeg.x + bSeg.x) * 0.5, midy = (aSeg.y + bSeg.y) * 0.5;
+          var angle = Math.atan2(dys, dxs);
+          if (angle > Math.PI/2 || angle < -Math.PI/2) angle += Math.PI; // keep upright
+          var pad = 6; var maxW = Math.max(10, Ls - pad*2);
+          var wallPx = (thick * __plan2d.scale) || 1; var marginY = 2; var maxH = Math.max(6, (2*halfPx) - marginY*2);
+          ctx.save();
+          ctx.translate(midx, midy);
+          ctx.rotate(angle);
+          var baseFontSize = 12; ctx.font = baseFontSize + 'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+          var textW = ctx.measureText(txt).width;
+          var bw = Math.ceil(textW + 12), bh = 18; // pill dimensions before scaling
+          var scaleW = maxW / bw, scaleH = maxH / bh; var scale = Math.min(1, scaleW, scaleH);
+          if (scale < 0.55) { ctx.restore(); return; }
+          ctx.scale(scale, scale);
+          // draw pill background centered at (0,0)
+          var rx = -bw/2, ry = -bh/2, rr = 4;
+          ctx.beginPath();
+          ctx.moveTo(rx+rr, ry); ctx.lineTo(rx+bw-rr, ry); ctx.quadraticCurveTo(rx+bw, ry, rx+bw, ry+rr);
+          ctx.lineTo(rx+bw, ry+bh-rr); ctx.quadraticCurveTo(rx+bw, ry+bh, rx+bw-rr, ry+bh);
+          ctx.lineTo(rx+rr, ry+bh); ctx.quadraticCurveTo(rx, ry+bh, rx, ry+bh-rr);
+          ctx.lineTo(rx, ry+rr); ctx.quadraticCurveTo(rx, ry, rx+rr, ry);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(2,6,23,0.82)'; ctx.fill();
+          ctx.strokeStyle = 'rgba(148,163,184,0.7)'; ctx.lineWidth = 1; ctx.stroke();
+          ctx.fillStyle = '#e5e7eb';
+          ctx.fillText(txt, 0, 0.5);
+          ctx.restore();
+        })();
       }
       // Skip default solid wall draw since we've drawn segments
       continue;
@@ -6352,92 +6389,6 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
   }
   var ox=ov.getContext('2d'); ox.setTransform(1,0,0,1,0,0); ox.clearRect(0,0,ov.width,ov.height);
 
-  // Overlay: wall length labels (inside walls)
-  (function(){
-    var elems = __plan2d.elements || [];
-    if(!elems.length) return;
-    ox.save();
-    ox.textAlign = 'center';
-    ox.textBaseline = 'middle';
-    var baseFontSize = 12;
-    for (var wi = 0; wi < elems.length; wi++){
-      var el = elems[wi]; if(!el || el.type !== 'wall') continue;
-      // Build solids exactly like the wall rendering
-      var origAx = el.x0, origAy = el.y0, origBx = el.x1, origBy = el.y1;
-      var wdx0 = origBx - origAx, wdy0 = origBy - origAy; var wLen0 = Math.hypot(wdx0, wdy0) || 1;
-      var dirx = wdx0 / wLen0, diry = wdy0 / wLen0;
-      var thick = (el.thickness || __plan2d.wallThicknessM);
-      var halfW = thick/2;
-      var spans = [];
-      for (var j=0; j<elems.length; j++){
-        var oEl = elems[j]; if(!oEl || (oEl.type!=='window' && oEl.type!=='door')) continue;
-        if (typeof oEl.host === 'number' && oEl.host === wi){
-          var ot0 = Math.max(0, Math.min(1, oEl.t0||0));
-          var ot1 = Math.max(0, Math.min(1, oEl.t1||0));
-          if (ot1 < ot0){ var tmp=ot0; ot0=ot1; ot1=tmp; }
-          spans.push([ot0, ot1]);
-        } else {
-          // free opening near wall centerline
-          var tA = plan2dProjectParamOnWall({x:oEl.x0, y:oEl.y0}, el);
-          var tB = plan2dProjectParamOnWall({x:oEl.x1, y:oEl.y1}, el);
-          var nearTol = halfW + 0.05;
-          function pointWallDist(px,py){ var dx=origBx-origAx, dy=origBy-origAy; var denom=(dx*dx+dy*dy)||1; var t=((px-origAx)*dx+(py-origAy)*dy)/denom; t=Math.max(0,Math.min(1,t)); var cx=origAx+t*dx, cy=origAy+t*dy; return Math.hypot(px-cx, py-cy); }
-          var dA = pointWallDist(oEl.x0,oEl.y0), dB = pointWallDist(oEl.x1,oEl.y1);
-          if(dA <= nearTol && dB <= nearTol){ var s0=Math.max(0,Math.min(1,Math.min(tA,tB))); var s1=Math.max(0,Math.min(1,Math.max(tA,tB))); if(s1 > s0 + 1e-4) spans.push([s0,s1]); }
-        }
-      }
-      spans.sort(function(A,B){ return A[0]-B[0]; });
-      var merged=[]; for(var si=0; si<spans.length; si++){ var s=spans[si]; if(!merged.length) merged.push(s); else { var last=merged[merged.length-1]; if(s[0] <= last[1] + 1e-4){ last[1] = Math.max(last[1], s[1]); } else merged.push([s[0], s[1]]); } }
-      var solids=[]; var cursorT=0; for(var mi=0; mi<merged.length; mi++){ var vs=merged[mi]; if(vs[0] > cursorT + 1e-4) solids.push([cursorT, vs[0]]); cursorT = Math.max(cursorT, vs[1]); }
-      if(cursorT < 1 - 1e-4) solids.push([cursorT, 1]);
-      // Choose the longest solid segment for label placement
-      var best = null, bestPix = 0;
-      for (var k=0; k<solids.length; k++){
-        var s0 = solids[k][0], s1 = solids[k][1];
-        // endpoints with corner flush when connected
-        var sx0 = origAx + dirx * (s0 * wLen0), sy0 = origAy + diry * (s0 * wLen0);
-        var sx1 = origAx + dirx * (s1 * wLen0), sy1 = origAy + diry * (s1 * wLen0);
-        var touchesStart = (s0 <= 1e-4) && startConn[wi];
-        var touchesEnd   = (s1 >= 1 - 1e-4) && endConn[wi];
-        if(touchesStart){ sx0 -= dirx * halfW; sy0 -= diry * halfW; }
-        if(touchesEnd){   sx1 += dirx * halfW; sy1 += diry * halfW; }
-        var aS = worldToScreen2D(sx0, sy0); var bS = worldToScreen2D(sx1, sy1);
-        var dxs = bS.x - aS.x, dys = bS.y - aS.y; var Ls = Math.hypot(dxs, dys);
-        if (Ls > bestPix){ bestPix = Ls; best = { a:aS, b:bS, lenPix: Ls }; }
-      }
-      if(!best || bestPix < 40) continue; // too small to place label
-      // Display the total wall length (end-to-end) in meters
-      var lenM = Math.hypot(origBx - origAx, origBy - origAy);
-      var txt = (lenM >= 0.995 ? lenM.toFixed(2) : lenM.toFixed(3)) + ' m';
-      var midx = (best.a.x + best.b.x) * 0.5, midy = (best.a.y + best.b.y) * 0.5;
-  var angle = Math.atan2(best.b.y - best.a.y, best.b.x - best.a.x);
-  if (angle > Math.PI/2 || angle < -Math.PI/2) angle += Math.PI; // keep text upright
-      // Fit text: shrink if needed to fit within segment minus padding
-      var pad = 6; var maxW = Math.max(10, bestPix - pad*2);
-      ox.save();
-      ox.translate(midx, midy);
-      ox.rotate(angle);
-      var fontSize = baseFontSize; ox.font = fontSize + 'px sans-serif';
-      var tw = ox.measureText(txt).width; if (tw > maxW){ var scale = maxW / tw; ox.scale(scale, scale); tw = maxW; }
-      var bw = Math.ceil(tw + 12), bh = 18;
-      // background pill centered at (0,0)
-      var rx = -bw/2, ry = -bh/2, r = 4;
-      ox.beginPath();
-      ox.moveTo(rx+r, ry); ox.lineTo(rx+bw-r, ry); ox.quadraticCurveTo(rx+bw, ry, rx+bw, ry+r);
-      ox.lineTo(rx+bw, ry+bh-r); ox.quadraticCurveTo(rx+bw, ry+bh, rx+bw-r, ry+bh);
-      ox.lineTo(rx+r, ry+bh); ox.quadraticCurveTo(rx, ry+bh, rx, ry+bh-r);
-      ox.lineTo(rx, ry+r); ox.quadraticCurveTo(rx, ry, rx+r, ry);
-      ox.closePath();
-      ox.fillStyle = 'rgba(2,6,23,0.82)';
-      ox.fill();
-      ox.strokeStyle = 'rgba(148,163,184,0.7)';
-      ox.lineWidth = 1; ox.stroke();
-      ox.fillStyle = '#e5e7eb';
-      ox.fillText(txt, 0, 0.5);
-      ox.restore();
-    }
-    ox.restore();
-  })();
   // Debug overlay header
   if(__plan2d.debug){
     try {
@@ -6457,7 +6408,8 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       if (console && console.debug) console.debug('[2D] c', c.width, c.height, 'ov', ov.width, ov.height, 'scale', __plan2d.scale, 'dpr', dpr);
     } catch(e){}
   }
-  // Overlay: Compass rose (screen-space orientation consistent with 3D: +X = East (right), -Z = North (up))
+  // Overlay: Compass rose (screen-space orientation consistent with 3D). +X = East (right). North (world +Z)
+  // is up if __plan2d.yFromWorldZSign === 1, and down if it's -1.
   (function(){
     var pad = 16; var cx = pad + 22, cy = pad + 22; var r = 18;
     ox.save();
@@ -6468,12 +6420,22 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
     ox.strokeStyle='rgba(203,213,225,0.9)';
     ox.beginPath(); ox.moveTo(cx, cy-r+4); ox.lineTo(cx, cy+r-4); ox.stroke(); // N-S
     ox.beginPath(); ox.moveTo(cx-r+4, cy); ox.lineTo(cx+r-4, cy); ox.stroke(); // W-E
-    // Arrowhead for North (up)
-    ox.beginPath(); ox.moveTo(cx, cy-r+4); ox.lineTo(cx-4, cy-r+10); ox.lineTo(cx+4, cy-r+10); ox.closePath(); ox.fillStyle='rgba(59,130,246,0.95)'; ox.fill();
-    // Labels N/E/S/W
+    // Arrowhead and labels respect orientation sign
+    var sgn = (__plan2d.yFromWorldZSign||1);
+    var northUp = (sgn===1);
+    // Arrowhead for North
+    if(northUp){
+      ox.beginPath(); ox.moveTo(cx, cy-r+4); ox.lineTo(cx-4, cy-r+10); ox.lineTo(cx+4, cy-r+10); ox.closePath(); ox.fillStyle='rgba(59,130,246,0.95)'; ox.fill();
+    } else {
+      // North points down
+      ox.beginPath(); ox.moveTo(cx, cy+r-4); ox.lineTo(cx-4, cy+r-10); ox.lineTo(cx+4, cy+r-10); ox.closePath(); ox.fillStyle='rgba(59,130,246,0.95)'; ox.fill();
+    }
+    // Labels N/E/S/W (flip N/S positions when sign=-1)
     ox.fillStyle='rgba(226,232,240,0.95)'; ox.font='11px sans-serif'; ox.textAlign='center'; ox.textBaseline='middle';
-    ox.fillText('N', cx, cy - r - 8);
-    ox.fillText('S', cx, cy + r + 8);
+    var nY = northUp ? (cy - r - 8) : (cy + r + 8);
+    var sY = northUp ? (cy + r + 8) : (cy - r - 8);
+    ox.fillText('N', cx, nY);
+    ox.fillText('S', cx, sY);
     ox.fillText('E', cx + r + 10, cy);
     ox.fillText('W', cx - r - 10, cy);
     ox.restore();
@@ -6725,7 +6687,8 @@ function applyPlan2DTo3D(){
     // 2D y corresponds to world z; 2D x corresponds to world x; plan is centered at (0,0)
     for(var r=0;r<roomsFound.length;r++){
       var R=roomsFound[r];
-      var wx=(R.minX+R.maxX)/2, wz=(R.minY+R.maxY)/2; // map y->z
+      var s = (__plan2d.yFromWorldZSign||1);
+      var wx=(R.minX+R.maxX)/2, wz=s*((R.minY+R.maxY)/2); // map plan y back to world z using sign
       var w=R.maxX-R.minX, d=R.maxY-R.minY;
       var room=createRoom(wx, wz, 0);
       room.width=Math.max(0.5, parseFloat(w.toFixed(2)));
@@ -6747,14 +6710,17 @@ function applyPlan2DTo3D(){
           var by = host.y0 + (host.y1-host.y0)*t1;
           // Classify against each side with tolerance
           var added=false;
-          // Top side (minZ at y=R.minY), horizontal span along X
-          if(Math.abs(ay - R.minY) <= TOL && Math.abs(by - R.minY) <= TOL){
-            var s = Math.max(R.minX, Math.min(R.maxX, Math.min(ax,bx)));
-            var e = Math.max(R.minX, Math.min(R.maxX, Math.max(ax,bx)));
-            if(e > s + 1e-4){ var hM=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'minZ', startM:s-R.minX, endM:e-R.minX, heightM:hM, meta:(el.meta||null)}); added=true; }
+          // Top side (world minZ). In plan, it's y=R.minY when s=1, else y=R.maxY when s=-1.
+          var topY = (s===1 ? R.minY : R.maxY);
+          var botY = (s===1 ? R.maxY : R.minY);
+          // Horizontal spans along X
+          if(Math.abs(ay - topY) <= TOL && Math.abs(by - topY) <= TOL){
+            var sx = Math.max(R.minX, Math.min(R.maxX, Math.min(ax,bx)));
+            var ex = Math.max(R.minX, Math.min(R.maxX, Math.max(ax,bx)));
+            if(ex > sx + 1e-4){ var hM=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'minZ', startM:sx-R.minX, endM:ex-R.minX, heightM:hM, meta:(el.meta||null)}); added=true; }
           }
-          // Bottom side (maxZ at y=R.maxY)
-          if(!added && Math.abs(ay - R.maxY) <= TOL && Math.abs(by - R.maxY) <= TOL){
+          // Bottom side (world maxZ) => plan y=botY
+          if(!added && Math.abs(ay - botY) <= TOL && Math.abs(by - botY) <= TOL){
             var s2 = Math.max(R.minX, Math.min(R.maxX, Math.min(ax,bx)));
             var e2 = Math.max(R.minX, Math.min(R.maxX, Math.max(ax,bx)));
             if(e2 > s2 + 1e-4){ var hM2=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'maxZ', startM:s2-R.minX, endM:e2-R.minX, heightM:hM2, meta:(el.meta||null)}); added=true; }
@@ -6832,7 +6798,8 @@ function populatePlan2DFromDesign(){
   // Build wall segments around each rectangle, shifted so center is at (0,0)
   __plan2d.elements = [];
   function addRectWalls(minX,maxX,minZ,maxZ){
-    var x0=minX - cx, x1=maxX - cx, y0=minZ - cz, y1=maxZ - cz; // map z->y
+    var s = (__plan2d.yFromWorldZSign||1);
+    var x0=minX - cx, x1=maxX - cx, y0=s*(minZ - cz), y1=s*(maxZ - cz); // map z->y with sign
     var idxTop = __plan2d.elements.length;     __plan2d.elements.push({type:'wall', x0:x0,y0:y0, x1:x1,y1:y0, thickness:__plan2d.wallThicknessM});
     var idxRight = __plan2d.elements.length;   __plan2d.elements.push({type:'wall', x0:x1,y0:y0, x1:x1,y1:y1, thickness:__plan2d.wallThicknessM});
     var idxBottom = __plan2d.elements.length;  __plan2d.elements.push({type:'wall', x0:x1,y0:y1, x1:x0,y1:y1, thickness:__plan2d.wallThicknessM});
@@ -6844,18 +6811,19 @@ function populatePlan2DFromDesign(){
     var wallIdx = addRectWalls(rb.minX, rb.maxX, rb.minZ, rb.maxZ);
     // Re-create openings (windows/doors) anchored to walls for rooms
     if(rb.type==='room' && Array.isArray(rb.openings) && rb.openings.length){
-      var minX = rb.minX - cx, maxX = rb.maxX - cx, minY = rb.minZ - cz, maxY = rb.maxZ - cz; // shifted
+      var s = (__plan2d.yFromWorldZSign||1);
+      var minX = rb.minX - cx, maxX = rb.maxX - cx, minY = s*(rb.minZ - cz), maxY = s*(rb.maxZ - cz); // shifted with sign
       for(var oi=0; oi<rb.openings.length; oi++){
         var op = rb.openings[oi]; if(!op || (op.type!=='window' && op.type!=='door')) continue;
         var hostIdx = -1; var p0={x:0,y:0}, p1={x:0,y:0};
-        if(op.edge==='minZ'){ // top
-          hostIdx = wallIdx.top;
+        if(op.edge==='minZ'){ // world top (North)
+          hostIdx = (s===1 ? wallIdx.top : wallIdx.bottom);
           p0.x = minX + (op.startM||0); p1.x = minX + (op.endM||0);
-          p0.y = p1.y = minY;
-        } else if(op.edge==='maxZ'){ // bottom
-          hostIdx = wallIdx.bottom;
+          p0.y = p1.y = (s===1 ? minY : maxY);
+        } else if(op.edge==='maxZ'){ // world bottom (South)
+          hostIdx = (s===1 ? wallIdx.bottom : wallIdx.top);
           p0.x = minX + (op.startM||0); p1.x = minX + (op.endM||0);
-          p0.y = p1.y = maxY;
+          p0.y = p1.y = (s===1 ? maxY : minY);
         } else if(op.edge==='minX'){ // left
           hostIdx = wallIdx.left;
           p0.y = minY + (op.startM||0); p1.y = minY + (op.endM||0);
