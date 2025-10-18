@@ -21,7 +21,8 @@
       padding: 10px 30px 10px 10px; /* extra right padding for arrow */
       border: 1px solid #ccc;
       border-radius: 6px;
-      background: white;
+      background-color: #ffffff;
+      color: #000000;
       font-size: 14px;
       appearance: none;
       -webkit-appearance: none;
@@ -31,6 +32,12 @@
       background-position: right 12px center;
     background-size: 12px 8px;
     }
+
+  /* Ensure dropdown options also appear with white background and black text */
+  select option {
+    background-color: #ffffff;
+    color: #000000;
+  }
   
   #measurements {
     position: fixed; top: 20px; right: 20px; z-index: 100;

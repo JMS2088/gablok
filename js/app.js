@@ -109,6 +109,19 @@ var _heightBarAlpha = 1;
 // Throttles for expensive DOM updates
 var LABEL_UPDATE_INTERVAL_MS = 120;
 var MEASURE_UPDATE_INTERVAL_MS = 250;
+// Consistent meter formatting across 2D/3D UIs
+function formatMeters(value){
+  var n = Number(value);
+  if (!isFinite(n)) return '0.00';
+  return n.toFixed(2);
+}
+// Numeric quantizer (returns Number) for meter values
+function quantizeMeters(value, decimals){
+  var n = Number(value);
+  if (!isFinite(n)) return 0;
+  var d = (typeof decimals==='number' && decimals>=0) ? decimals : 2;
+  return +n.toFixed(d);
+}
 var _lastLabelsUpdate = 0;
 var _lastMeasurementsUpdate = 0;
 // Prevent label/button flashing: when hovering an edit button, freeze label DOM updates
@@ -759,9 +772,12 @@ function drawGrid() {
     // Draw in device pixels; match main canvas scale
     octx.scale(deviceRatio, deviceRatio);
 
-    // Draw grid onto offscreen
-    octx.strokeStyle = '#e0e0e0';
-    octx.lineWidth = 1;
+    // Draw grid onto offscreen (minor lines at 0.5m, major at 1.0m)
+    function isMajor(v){
+      // Treat values close to an integer meter as major
+      var m = Math.round(v);
+      return Math.abs(v - m) < 1e-6;
+    }
 
     var minX = camera.targetX - gridRange;
     var maxX = camera.targetX + gridRange;
@@ -778,6 +794,9 @@ function drawGrid() {
       var h1 = project3D(minX, 0, z);
       var h2 = project3D(maxX, 0, z);
       if (h1 && h2) {
+        // Style per-line so 1m lines stand out
+        if (isMajor(z)) { octx.strokeStyle = '#cbd5e1'; octx.lineWidth = 1.5; }
+        else { octx.strokeStyle = '#e5e7eb'; octx.lineWidth = 1; }
         octx.beginPath();
         octx.moveTo(h1.x, h1.y);
         octx.lineTo(h2.x, h2.y);
@@ -789,6 +808,8 @@ function drawGrid() {
       var v1 = project3D(x, 0, minZ);
       var v2 = project3D(x, 0, maxZ);
       if (v1 && v2) {
+        if (isMajor(x)) { octx.strokeStyle = '#cbd5e1'; octx.lineWidth = 1.5; }
+        else { octx.strokeStyle = '#e5e7eb'; octx.lineWidth = 1; }
         octx.beginPath();
         octx.moveTo(v1.x, v1.y);
         octx.lineTo(v2.x, v2.y);
@@ -958,15 +979,15 @@ function drawWorldHeightScale() {
       ctx.lineTo(pt.x + tickLen, pt.y);
       ctx.stroke();
       if (isMajor) {
-        ctx.fillText(m.toFixed(0) + ' m', pt.x + tickLen + 4, pt.y);
+        ctx.fillText(formatMeters(m) + ' m', pt.x + tickLen + 4, pt.y);
       }
     }
 
     // Base label and top height label
     ctx.fillStyle = '#333';
     ctx.font = 'bold 10px system-ui, sans-serif';
-    ctx.fillText('0 m', pBase.x + 20, pBase.y + 10);
-    ctx.fillText(maxH.toFixed(0) + ' m', pTop.x + 20, pTop.y - 10);
+  ctx.fillText(formatMeters(0) + ' m', pBase.x + 20, pBase.y + 10);
+  ctx.fillText(formatMeters(maxH) + ' m', pTop.x + 20, pTop.y - 10);
 
     ctx.restore();
   } catch (e) {
@@ -1354,7 +1375,7 @@ function drawWallStrip(strip){
   try{
     var dx = strip.x1 - strip.x0, dz = strip.z1 - strip.z0; var L = Math.hypot(dx,dz)||0; if(L<=1e-6) return;
     var t = (strip.thickness||0.3);
-    var h0 = 0, h1 = (strip.height||3.0);
+    var h0 = (typeof strip.baseY === 'number' ? strip.baseY : 0), h1 = h0 + (strip.height||3.0);
     // Build 4 bottom/top corners by offsetting the segment by +/- normal * (t/2)
     var nx = -(dz / (L||1)); var nz = (dx / (L||1)); var half = t/2;
     var p0 = {x: strip.x0 + nx*half, z: strip.z0 + nz*half};
@@ -1865,11 +1886,11 @@ function updateMeasurements() {
     nameInput.disabled = false;
     nameInput.oninput = function() { selectedObject.name = this.value; saveProjectSilently(); };
   }
-  widthInput.value = selectedObject.width.toFixed(1);
-  depthInput.value = selectedObject.depth.toFixed(1);
-  heightInput.value = selectedObject.height.toFixed(1);
-  posXInput.value = selectedObject.x.toFixed(1);
-  posZInput.value = selectedObject.z.toFixed(1);
+  widthInput.value = selectedObject.width.toFixed(2);
+  depthInput.value = selectedObject.depth.toFixed(2);
+  heightInput.value = selectedObject.height.toFixed(2);
+  posXInput.value = selectedObject.x.toFixed(2);
+  posZInput.value = selectedObject.z.toFixed(2);
   widthInput.disabled = false;
   depthInput.disabled = false;
   heightInput.disabled = false;
@@ -4152,7 +4173,27 @@ function drawGarage(garage) {
       var rotated = rotatePoint(c.x, c.z);
       return {x: rotated.x, y: c.y, z: rotated.z};
     });
-    
+    // Draw 300mm wall thickness as four strips around the room footprint
+    (function(){
+      var t = 0.3; // 300mm
+      var y0 = roomFloorY;
+      var y1 = room.height;
+      // Edges in world XZ
+      var minX = room.x - hw, maxX = room.x + hw;
+      var minZ = room.z - hd, maxZ = room.z + hd;
+      var strips = [
+        // Top edge (minZ): from (minX,minZ) -> (maxX,minZ)
+        { x0:minX, z0:minZ, x1:maxX, z1:minZ, thickness:t, height:y1, baseY:y0 },
+        // Bottom edge (maxZ)
+        { x0:maxX, z0:maxZ, x1:minX, z1:maxZ, thickness:t, height:y1, baseY:y0 },
+        // Left edge  (minX)
+        { x0:minX, z0:maxZ, x1:minX, z1:minZ, thickness:t, height:y1, baseY:y0 },
+        // Right edge (maxX)
+        { x0:maxX, z0:minZ, x1:maxX, z1:maxZ, thickness:t, height:y1, baseY:y0 }
+      ];
+      for(var si=0; si<strips.length; si++){ drawWallStrip(strips[si]); }
+    })();
+
     var projected = [];
     for (var i = 0; i < corners.length; i++) {
       var p = project3D(corners[i].x, corners[i].y, corners[i].z);
@@ -4707,6 +4748,12 @@ document.addEventListener('DOMContentLoaded', function(){
   var actionsMenu = document.getElementById('actionsMenu');
   if (actionsMenu) actionsMenu.onchange = function() {
     switch (this.value) {
+      case 'info':
+        showInfo();
+        break;
+      case 'share':
+        showShare();
+        break;
       case 'obj':
         exportOBJ();
         break;
@@ -5439,7 +5486,7 @@ function setupPalette() {
   var infoDiv = document.createElement('div');
   var nameDiv = document.createElement('div'); nameDiv.className = 'palette-name'; nameDiv.textContent = it.name;
   var dimsDiv = document.createElement('div'); dimsDiv.className = 'palette-dims';
-  dimsDiv.textContent = 'Width: ' + it.width.toFixed(1) + 'm · Depth: ' + it.depth.toFixed(1) + 'm · Height: ' + it.height.toFixed(1) + 'm';
+  dimsDiv.textContent = 'Width: ' + it.width.toFixed(2) + 'm · Depth: ' + it.depth.toFixed(2) + 'm · Height: ' + it.height.toFixed(2) + 'm';
   var descDiv = document.createElement('div'); descDiv.className = 'palette-desc'; descDiv.textContent = it.desc || '';
     infoDiv.appendChild(nameDiv);
     infoDiv.appendChild(dimsDiv);
@@ -5639,7 +5686,7 @@ function renderRoomPreview(room) {
   cx.beginPath(); for (var i=0;i<edges.length;i++){ var e=edges[i]; cx.moveTo(pts[e[0]].x, pts[e[0]].y); cx.lineTo(pts[e[1]].x, pts[e[1]].y);} cx.stroke();
   // Dimensions label
   cx.fillStyle = '#2d6cdf'; cx.font = '12px system-ui'; cx.textAlign = 'left'; cx.textBaseline = 'top';
-  cx.fillText(room.width.toFixed(1)+' x '+room.depth.toFixed(1)+' x '+room.height.toFixed(1)+' m', 10, 10);
+  cx.fillText(room.width.toFixed(2)+' x '+room.depth.toFixed(2)+' x '+room.height.toFixed(2)+' m', 10, 10);
 
   // Draw preview items
   for (var ii=0; ii<__paletteState.items.length; ii++) {
@@ -6020,6 +6067,8 @@ var __plan2d = {
   // Standard sizes
   doorWidthM:0.87,
   doorHeightM:2.04,
+  // Default preview width for windows before sizing
+  windowDefaultWidthM:1.2,
   // Door editing state (for dragging endpoints)
   dragDoor:null,      // { index, end:'t0'|'t1'|'a'|'b' }
   // Whole-door drag state for sliding along wall
@@ -6595,6 +6644,23 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
           }
         }
       }
+      // Live preview: carve a temporary gap where a door/window would be placed before element creation
+      if(__plan2d.mouse && !__plan2d.dragWindow && !__plan2d.dragDoor && !__plan2d.dragDoorWhole && !__plan2d.start){
+        var cPt = __plan2d.mouse; // screen-space
+        var pWorld = screenToWorld2D(cPt.x, cPt.y);
+        var near = plan2dFindNearestWall(pWorld, 0.3);
+        if(near && typeof near.index==='number' && near.index===i){
+          var tHover = plan2dProjectParamOnWall(pWorld, el);
+          if(__plan2d.tool==='door'){
+            var halfT = ((__plan2d.doorWidthM||0.87) / 2) / wLen0; var t0p=tHover-halfT, t1p=tHover+halfT;
+            if(t1p>t0p){ t0p=Math.max(0,t0p); t1p=Math.min(1,t1p); if(t1p>t0p+1e-6) spans.push([t0p,t1p]); }
+          } else if(__plan2d.tool==='window'){
+            var wPreview = (__plan2d.windowDefaultWidthM||1.2);
+            var halfTw = (wPreview/2)/wLen0; var t0w=tHover-halfTw, t1w=tHover+halfTw;
+            if(t1w>t0w){ t0w=Math.max(0,t0w); t1w=Math.min(1,t1w); if(t1w>t0w+1e-6) spans.push([t0w,t1w]); }
+          }
+        }
+      }
       // Merge spans
       spans.sort(function(A,B){ return A[0]-B[0]; });
       var merged=[]; for(var si=0; si<spans.length; si++){ var s=spans[si]; if(merged.length===0) merged.push(s); else { var last=merged[merged.length-1]; if(s[0] <= last[1] + 1e-4){ last[1] = Math.max(last[1], s[1]); } else { merged.push([s[0], s[1]]);} } }
@@ -6621,7 +6687,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
           var minLabelPx = 40; // skip tiny segments
           if(Ls < minLabelPx) return;
           var segLenM = Math.hypot(sx1 - sx0, sy1 - sy0);
-          var txt = (segLenM >= 0.995 ? segLenM.toFixed(2) : segLenM.toFixed(3)) + ' m';
+          var txt = formatMeters(segLenM) + ' m';
           var midx = (aSeg.x + bSeg.x) * 0.5, midy = (aSeg.y + bSeg.y) * 0.5;
           var angle = Math.atan2(dys, dxs);
           if (angle > Math.PI/2 || angle < -Math.PI/2) angle += Math.PI; // keep upright
@@ -6738,7 +6804,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         var Ls = Math.hypot(b.x-a.x, b.y-a.y);
         if(Ls < 30) return;
         var segLenM = Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y);
-        var txt = (segLenM >= 0.995 ? segLenM.toFixed(2) : segLenM.toFixed(3)) + ' m';
+  var txt = formatMeters(segLenM) + ' m';
         var midx=(a.x+b.x)/2, midy=(a.y+b.y)/2; var angle=Math.atan2(b.y-a.y, b.x-a.x); if(angle>Math.PI/2||angle<-Math.PI/2) angle+=Math.PI;
         var pad=6, maxW=Math.max(10, Ls - pad*2), wallPx=(__plan2d.wallThicknessM*__plan2d.scale)||1, marginY=2, maxH=Math.max(6, wallPx - marginY*2);
         ctx.save(); ctx.translate(midx, midy); ctx.rotate(angle);
@@ -6756,7 +6822,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       (function(){
         var Ls = Math.hypot(b.x-a.x, b.y-a.y); if(Ls < 20) return;
         var segLenM = Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y);
-        var txt = (segLenM >= 0.995 ? segLenM.toFixed(2) : segLenM.toFixed(3)) + ' m';
+  var txt = formatMeters(segLenM) + ' m';
         var midx=(a.x+b.x)/2, midy=(a.y+b.y)/2; var angle=Math.atan2(b.y-a.y, b.x-a.x); if(angle>Math.PI/2||angle<-Math.PI/2) angle+=Math.PI;
         var pad=6, maxW=Math.max(10, Ls - pad*2), maxH=16; // thin label for window preview
         ctx.save(); ctx.translate(midx, midy); ctx.rotate(angle);
@@ -6781,7 +6847,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       var bx=host.x0+(host.x1-host.x0)*t1, by=host.y0+(host.y1-host.y0)*t1;
       var aS=worldToScreen2D(ax,ay), bS=worldToScreen2D(bx,by);
       var Ls=Math.hypot(bS.x-aS.x,bS.y-aS.y); if(Ls>15){
-        var segLenM=Math.hypot(bx-ax,by-ay); var txt=(segLenM>=0.995?segLenM.toFixed(2):segLenM.toFixed(3))+' m';
+  var segLenM=Math.hypot(bx-ax,by-ay); var txt=formatMeters(segLenM)+' m';
         var midx=(aS.x+bS.x)/2, midy=(aS.y+bS.y)/2; var angle=Math.atan2(bS.y-aS.y,bS.x-aS.x); if(angle>Math.PI/2||angle<-Math.PI/2) angle+=Math.PI;
         var thickM = host.thickness||__plan2d.wallThicknessM; var wallPx = thickM*__plan2d.scale; var maxH=Math.max(6, wallPx-4), pad=6, maxW=Math.max(10, Ls - pad*2);
         ctx.save(); ctx.translate(midx, midy); ctx.rotate(angle);
@@ -7454,10 +7520,10 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       var R=roomsFound[r];
       var s = (__plan2d.yFromWorldZSign||1);
       var wx=(R.minX+R.maxX)/2, wz=s*((R.minY+R.maxY)/2); // map plan y back to world z using sign
-      var w=R.maxX-R.minX, d=R.maxY-R.minY;
+  var w=R.maxX-R.minX, d=R.maxY-R.minY;
       var room=createRoom(wx, wz, 0);
-      room.width=Math.max(0.5, parseFloat(w.toFixed(2)));
-      room.depth=Math.max(0.5, parseFloat(d.toFixed(2)));
+  room.width=Math.max(0.5, quantizeMeters(w, 2));
+  room.depth=Math.max(0.5, quantizeMeters(d, 2));
       room.height=3;
       room.name='Room';
       // Collect openings (windows/doors) along rectangle sides using geometry (no strict host mapping)
@@ -7482,25 +7548,33 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           if(Math.abs(ay - topY) <= TOL && Math.abs(by - topY) <= TOL){
             var sx = Math.max(R.minX, Math.min(R.maxX, Math.min(ax,bx)));
             var ex = Math.max(R.minX, Math.min(R.maxX, Math.max(ax,bx)));
-            if(ex > sx + 1e-4){ var hM=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'minZ', startM:sx-R.minX, endM:ex-R.minX, heightM:hM, meta:(el.meta||null)}); added=true; }
+            var q0 = quantizeMeters(sx - R.minX, 2);
+            var q1 = quantizeMeters(ex - R.minX, 2);
+            if(q1 > q0 + 1e-4){ var hM=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'minZ', startM:q0, endM:q1, heightM:hM, meta:(el.meta||null)}); added=true; }
           }
           // Bottom side (world maxZ) => plan y=botY
           if(!added && Math.abs(ay - botY) <= TOL && Math.abs(by - botY) <= TOL){
             var s2 = Math.max(R.minX, Math.min(R.maxX, Math.min(ax,bx)));
             var e2 = Math.max(R.minX, Math.min(R.maxX, Math.max(ax,bx)));
-            if(e2 > s2 + 1e-4){ var hM2=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'maxZ', startM:s2-R.minX, endM:e2-R.minX, heightM:hM2, meta:(el.meta||null)}); added=true; }
+            var q02 = quantizeMeters(s2 - R.minX, 2);
+            var q12 = quantizeMeters(e2 - R.minX, 2);
+            if(q12 > q02 + 1e-4){ var hM2=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'maxZ', startM:q02, endM:q12, heightM:hM2, meta:(el.meta||null)}); added=true; }
           }
           // Left side (minX at x=R.minX), vertical span along Y
           if(!added && Math.abs(ax - R.minX) <= TOL && Math.abs(bx - R.minX) <= TOL){
             var sv = Math.max(R.minY, Math.min(R.maxY, Math.min(ay,by)));
             var ev = Math.max(R.minY, Math.min(R.maxY, Math.max(ay,by)));
-            if(ev > sv + 1e-4){ var hM3=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'minX', startM:sv-R.minY, endM:ev-R.minY, heightM:hM3, meta:(el.meta||null)}); added=true; }
+            var q03 = quantizeMeters(sv - R.minY, 2);
+            var q13 = quantizeMeters(ev - R.minY, 2);
+            if(q13 > q03 + 1e-4){ var hM3=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'minX', startM:q03, endM:q13, heightM:hM3, meta:(el.meta||null)}); added=true; }
           }
           // Right side (maxX at x=R.maxX)
           if(!added && Math.abs(ax - R.maxX) <= TOL && Math.abs(bx - R.maxX) <= TOL){
             var sv2 = Math.max(R.minY, Math.min(R.maxY, Math.min(ay,by)));
             var ev2 = Math.max(R.minY, Math.min(R.maxY, Math.max(ay,by)));
-            if(ev2 > sv2 + 1e-4){ var hM4=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'maxX', startM:sv2-R.minY, endM:ev2-R.minY, heightM:hM4, meta:(el.meta||null)}); added=true; }
+            var q04 = quantizeMeters(sv2 - R.minY, 2);
+            var q14 = quantizeMeters(ev2 - R.minY, 2);
+            if(q14 > q04 + 1e-4){ var hM4=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'maxX', startM:q04, endM:q14, heightM:hM4, meta:(el.meta||null)}); added=true; }
           }
         }
         room.openings = openings;
