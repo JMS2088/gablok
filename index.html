@@ -11,32 +11,70 @@
 <div id="controls">
 		<button onclick="addNewRoom()">+ Add Room</button>
         <!-- Render button removed -->
-	<select id="levelSelect" onchange="switchLevel()" style="background-color:#ffffff;color:#000000;border:1px solid #ccc;">
+	<!-- Custom Level Dropdown (replaces native select) -->
+	<div id="levelDropdown" class="dropdown" aria-label="Level Menu">
+		<button id="levelButton" class="dropdown-button" type="button">
+			<span id="levelButtonText">Ground Floor</span>
+			<span class="caret">
+				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+		</button>
+		<div id="levelList" class="dropdown-list" role="menu">
+			<div class="dropdown-item" data-value="0">Ground Floor</div>
+			<div class="dropdown-item" data-value="1">First Floor</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-item" data-value="stairs">+ Stairs</div>
+			<div class="dropdown-item" data-value="pergola">+ Pergola</div>
+			<div class="dropdown-item" data-value="garage">+ Garage</div>
+			<div class="dropdown-item" data-value="roof">+ Roof</div>
+			<div class="dropdown-item" data-value="pool">+ Pool</div>
+			<div class="dropdown-item" data-value="balcony">+ Balcony</div>
+		</div>
+	</div>
+	<!-- Hidden native select kept for fallback and API compatibility -->
+	<select id="levelSelect" onchange="switchLevel()" style="display:none">
 		<option value="0">Ground Floor</option>
 		<option value="1">First Floor</option>
-		<option value="stairs">Add Stairs</option>
-		<option value="pergola">Add Pergola</option>
-		<option value="garage">Add Garage</option>
-		<option value="roof">Add Roof</option>
-		<option value="pool">Add Pool</option>
-		<option value="balcony">Add Balcony</option>
+		<option value="stairs">+ Stairs</option>
+		<option value="pergola">+ Pergola</option>
+		<option value="garage">+ Garage</option>
+		<option value="roof">+ Roof</option>
+		<option value="pool">+ Pool</option>
+		<option value="balcony">+ Balcony</option>
 	</select>
 	<button class="secondary" onclick="resetAll()">Reset</button>
 	<button class="secondary" onclick="showPricing()" title="Show pricing">💰 Price</button>
 	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor">📐 Floor Plan</button>
-	<select id="actionsMenu" title="Actions Menu" style="background-color:#ffffff;color:#000000;border:1px solid #ccc;">
-		<option value="" selected disabled>Menu</option>
-		<option value="info">ℹ Info</option>
-		<option value="share">🔗 Share</option>
-		<option value="obj">⬇ 3D - OBJ</option>
-		<option value="obj-upload">⬆ 3D - OBJ</option>
-		<option value="pdf">📄 PDF (Export Views)</option>
-		<option value="pdf-floorplan-upload">⬆ Floorplan (PDF)</option>
-		<option value="svg-floorplan-upload">⬆ Floorplan (SVG)</option>
-		<option value="json-download">⬇ JSON</option>
-		<option value="json-upload">⬆ JSON</option>
-		<option disabled>──────────</option>
-	</select>
+	<div id="actionsDropdown" class="dropdown" aria-label="Main Menu">
+		<button id="actionsButton" class="dropdown-button" type="button">
+			<span>Main Menu</span>
+			<span class="caret">
+				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+		</button>
+		<div id="actionsList" class="dropdown-list" role="menu">
+			<div class="dropdown-item" data-action="info">
+				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" style="flex-shrink:0;">
+					<circle cx="12" cy="12" r="10" stroke="#0f172a" stroke-width="2" fill="#ffffff"/>
+					<path d="M12 17v-6" stroke="#0f172a" stroke-width="2" stroke-linecap="round"/>
+					<circle cx="12" cy="7" r="1.5" fill="#0f172a"/>
+				</svg>
+				<span>Information</span>
+			</div>
+			<div class="dropdown-item" data-action="share">🔗 Share</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-title">Export</div>
+			<div class="dropdown-item" data-action="obj">⬇ 3D - OBJ</div>
+			<div class="dropdown-item" data-action="pdf">📄 PDF (Export Views)</div>
+			<div class="dropdown-item" data-action="json-download">⬇ JSON</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-title">Import</div>
+			<div class="dropdown-item" data-action="obj-upload">⬆ 3D - OBJ</div>
+			<div class="dropdown-item" data-action="pdf-floorplan-upload">⬆ Floorplan (PDF)</div>
+			<div class="dropdown-item" data-action="svg-floorplan-upload">⬆ Floorplan (SVG)</div>
+			<div class="dropdown-item" data-action="json-upload">⬆ JSON</div>
+		</div>
+	</div>
 </div>
 
 <canvas id="canvas" width="1200" height="800" style="border:1px solid #ccc; background:#f8fbff; display:block; margin:20px auto;"></canvas>

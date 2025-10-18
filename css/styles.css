@@ -7,6 +7,85 @@
     padding: 15px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);
     display: flex; gap: 12px; align-items: center;
   }
+
+  /* Custom dropdown (forces white/black regardless of native UI) */
+  .dropdown { position: relative; display: inline-block; }
+  .dropdown-button {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #ffffff; color: #000000; border: 1px solid #ccc; border-radius: 6px;
+    padding: 10px 34px 10px 12px; font-size: 14px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, color 160ms ease;
+  }
+  .dropdown-button:hover { border-color: #b5b5b5; box-shadow: 0 3px 10px rgba(0,0,0,0.08); }
+  .dropdown-button:focus { outline: none; border-color: #007acc; box-shadow: 0 0 0 3px rgba(0,122,204,0.18); }
+  .dropdown-button .caret { position: absolute; right: 12px; width: 12px; height: 8px; pointer-events: none; }
+  .dropdown-button .caret svg path { stroke: #333; }
+  .dropdown.open .dropdown-button { border-color: #007acc; box-shadow: 0 0 0 3px rgba(0,122,204,0.12); }
+
+  /* Main menu (actions) specific hover/open styles: white text on brand blue */
+  #actionsDropdown .dropdown-button:hover {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 3px 12px rgba(0,122,204,0.35) !important;
+  }
+  #actionsDropdown .dropdown-button:hover .caret svg path { stroke: #ffffff !important; }
+  #actionsDropdown.open .dropdown-button {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 0 0 3px rgba(0,122,204,0.18) !important;
+  }
+  #actionsDropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
+
+  /* Level dropdown: same white-on-blue rollover/open behavior */
+  #levelDropdown .dropdown-button:hover {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 3px 12px rgba(0,122,204,0.35) !important;
+  }
+  #levelDropdown .dropdown-button:hover .caret svg path { stroke: #ffffff !important; }
+  #levelDropdown.open .dropdown-button {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 0 0 3px rgba(0,122,204,0.18) !important;
+  }
+  #levelDropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
+
+  /* Main menu: make all secondary buttons white with black text (except primary Add Room) */
+  #controls button.secondary {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #ccc !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  #controls button.secondary:hover {
+    background: #f7f7f7 !important;
+    border-color: #b5b5b5 !important;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+  }
+
+  .dropdown-list {
+    position: absolute; top: calc(100% + 6px); left: 0; min-width: 180px; max-height: 300px; overflow: auto;
+    background: #ffffff; color: #000000; border: 1px solid #d1d5db; border-radius: 8px; box-shadow: 0 10px 24px rgba(0,0,0,0.14);
+    padding: 6px 0; z-index: 200; display: none;
+  }
+  .dropdown.open .dropdown-list { display: block; }
+  /* Actions menu: show full submenu without scrolling */
+  #actionsDropdown .dropdown-list {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .dropdown-item {
+    padding: 8px 12px; font-size: 14px; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 8px;
+  }
+  .dropdown-item:hover { background: #f2f4f7; }
+  .dropdown-item.disabled { color: #9aa0a6; cursor: default; }
+  .dropdown-item.separator { padding: 4px 0; margin: 4px 0; border-top: 1px solid #e5e7eb; cursor: default; }
+  .dropdown-title { font-size: 12px; font-weight: 700; color: #6b7280; padding: 6px 12px 4px 12px; text-transform: uppercase; letter-spacing: 0.04em; cursor: default; }
   
   button {
     padding: 10px 16px; border: none; border-radius: 6px; 

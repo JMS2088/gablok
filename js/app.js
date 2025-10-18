@@ -4770,48 +4770,43 @@ document.addEventListener('DOMContentLoaded', function(){
     reader.readAsText(f);
   };
 
-  var actionsMenu = document.getElementById('actionsMenu');
-  if (actionsMenu) actionsMenu.onchange = function() {
-    switch (this.value) {
-      case 'info':
-        showInfo();
-        break;
-      case 'share':
-        showShare();
-        break;
-      case 'obj':
-        exportOBJ();
-        break;
-      case 'pdf':
-        exportPDF();
-        break;
-      case 'pdf-floorplan-upload': {
-         // Ensure PDF.js is available; lazy load if needed, then open file picker
-        ensurePdfJsReady().then(function(ok){
-          if (!ok) return; var fpf = document.getElementById('upload-pdf-floorplan'); if (fpf) fpf.click();
-        });
-        break;
-      }
-      case 'svg-floorplan-upload': {
-        var svgIn = document.getElementById('upload-svg-floorplan'); if (svgIn) svgIn.click();
-        break;
-      }
-      case 'obj-upload': {
-        var foi = document.getElementById('upload-obj-file'); if (foi) foi.click();
-        break;
-      }
-      case 'json-download': {
-        var blob = new Blob([serializeProject()], {type:'application/json'});
-        var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gablok-project.json'; a.click(); URL.revokeObjectURL(a.href);
-        break;
-      }
-      case 'json-upload': {
-        var fi = document.getElementById('upload-file'); if (fi) fi.click();
-        break;
+  // Custom Actions Dropdown wiring
+  (function(){
+    var dd = document.getElementById('actionsDropdown');
+    var btn = document.getElementById('actionsButton');
+    var list = document.getElementById('actionsList');
+    function toggle(open){ if(!dd) return; dd.classList[open? 'add':'remove']('open'); }
+    function closeAll(){ toggle(false); }
+    function doAction(name){
+      switch(name){
+        case 'info': showInfo(); break;
+        case 'share': showShare(); break;
+        case 'obj': exportOBJ(); break;
+        case 'pdf': exportPDF(); break;
+        case 'pdf-floorplan-upload':
+          ensurePdfJsReady().then(function(ok){ if(!ok) return; var fpf=document.getElementById('upload-pdf-floorplan'); if(fpf) fpf.click(); });
+          break;
+        case 'svg-floorplan-upload': { var svgIn=document.getElementById('upload-svg-floorplan'); if(svgIn) svgIn.click(); } break;
+        case 'obj-upload': { var foi=document.getElementById('upload-obj-file'); if(foi) foi.click(); } break;
+        case 'json-download': {
+          var blob = new Blob([serializeProject()], {type:'application/json'});
+          var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'gablok-project.json'; a.click(); URL.revokeObjectURL(a.href);
+          break;
+        }
+        case 'json-upload': { var fi=document.getElementById('upload-file'); if(fi) fi.click(); } break;
       }
     }
-    this.value = '';
-  };
+    if(btn){ btn.addEventListener('click', function(e){ e.stopPropagation(); toggle(!dd.classList.contains('open')); }); }
+    if(list){ list.addEventListener('click', function(e){
+      var t = e.target.closest('.dropdown-item');
+      if(!t || t.classList.contains('disabled') || t.classList.contains('separator')) return;
+      var action = t.getAttribute('data-action');
+      if(action) doAction(action);
+      closeAll();
+    }); }
+    document.addEventListener('click', function(){ closeAll(); });
+    document.addEventListener('keydown', function(ev){ if(ev.key==='Escape') closeAll(); });
+  })();
 
   // Wire OBJ upload file input
   var uploadObjInput = document.getElementById('upload-obj-file');
@@ -4861,6 +4856,27 @@ document.addEventListener('DOMContentLoaded', function(){
 
   // Floor Plan 2D button
   var fp2dBtn = document.getElementById('btn-floorplan'); if (fp2dBtn) fp2dBtn.onclick = openPlan2DModal;
+
+  // Custom Level Dropdown wiring
+  (function(){
+    var dd = document.getElementById('levelDropdown');
+    var btn = document.getElementById('levelButton');
+    var btnText = document.getElementById('levelButtonText');
+    var list = document.getElementById('levelList');
+    var nativeSel = document.getElementById('levelSelect');
+    function close(){ if(dd) dd.classList.remove('open'); }
+    function open(){ if(dd) dd.classList.add('open'); }
+    function setLabelFromValue(v){
+      var map = { '0':'Ground Floor', '1':'First Floor', 'stairs':'+ Stairs', 'pergola':'+ Pergola', 'garage':'+ Garage', 'roof':'+ Roof', 'pool':'+ Pool', 'balcony':'+ Balcony' };
+      if(btnText) btnText.textContent = map[String(v)] || 'Level';
+    }
+    if(btn){ btn.addEventListener('click', function(e){ e.stopPropagation(); if(dd.classList.contains('open')) close(); else open(); }); }
+    if(list){ list.addEventListener('click', function(e){ var item=e.target.closest('.dropdown-item'); if(!item || item.classList.contains('separator')) return; var val=item.getAttribute('data-value'); if(nativeSel){ nativeSel.value = val; } setLabelFromValue(val); if(typeof switchLevel==='function') switchLevel(); close(); }); }
+    document.addEventListener('click', close);
+    document.addEventListener('keydown', function(ev){ if(ev.key==='Escape') close(); });
+    // Initialize label from current state
+    if(nativeSel){ setLabelFromValue(nativeSel.value || '0'); }
+  })();
 });
 
 // ---------------- Floorplan Import (SVG) ----------------
