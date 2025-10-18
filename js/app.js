@@ -4729,6 +4729,31 @@ async function exportPDF() {
 
 // Wire buttons
 document.addEventListener('DOMContentLoaded', function(){
+  // Force dropdown styles at runtime (fallback for environments that ignore CSS)
+  try {
+    function forceSelectStyle(sel){
+      if(!sel) return;
+      sel.style.backgroundColor = '#ffffff';
+      sel.style.color = '#000000';
+      sel.style.border = '1px solid #ccc';
+      sel.style.borderRadius = '6px';
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('select'), forceSelectStyle);
+    var mo = new MutationObserver(function(muts){
+      muts.forEach(function(m){
+        if(m.type === 'childList'){
+          Array.prototype.forEach.call(m.addedNodes || [], function(n){
+            if(n && n.nodeType===1){
+              if(n.tagName === 'SELECT') forceSelectStyle(n);
+              Array.prototype.forEach.call(n.querySelectorAll ? n.querySelectorAll('select') : [], forceSelectStyle);
+            }
+          });
+        }
+      });
+    });
+    mo.observe(document.documentElement, { childList:true, subtree:true });
+  } catch(e) { /* non-fatal */ }
+
   var bSave = document.getElementById('save-project'); if (bSave) bSave.onclick = saveProject;
   var bLoad = document.getElementById('load-project'); if (bLoad) bLoad.onclick = loadProject;
   var bObj = document.getElementById('export-obj'); if (bObj) bObj.onclick = exportOBJ;

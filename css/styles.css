@@ -19,24 +19,52 @@
   
   select {
       padding: 10px 30px 10px 10px; /* extra right padding for arrow */
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      background-color: #ffffff;
-      color: #000000;
-      font-size: 14px;
-      appearance: none;
-      -webkit-appearance: none;
-      -moz-appearance: none;
+    border: 1px solid #ccc !important;
+    border-radius: 6px !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 14px !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
       background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 12px center;
     background-size: 12px 8px;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, color 160ms ease !important;
     }
+
+  /* Elegant rollover for dropdowns */
+  select:hover {
+    border-color: #b5b5b5 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+  }
+  select:focus {
+    outline: none !important;
+    border-color: #007acc !important;
+    box-shadow: 0 0 0 3px rgba(0,122,204,0.18) !important;
+  }
 
   /* Ensure dropdown options also appear with white background and black text */
   select option {
-    background-color: #ffffff;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+  /* Optional: subtle hover and selected states for options (browser support varies) */
+  select option:hover {
+    background-color: #f2f4f7;
     color: #000000;
+  }
+  select option:checked {
+    background-color: #e9f3fb;
+    color: #000000;
+  }
+
+  /* Make sure the main actions menu is consistent */
+  #actionsMenu, #levelSelect {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    min-width: 150px;
   }
   
   #measurements {
