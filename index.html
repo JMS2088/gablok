@@ -250,23 +250,13 @@
 	</div>
 </div>
 
-<!-- jsPDF for multi-page PDF export -->
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-<!-- PDF.js for PDF floorplan import (vendored for offline use) -->
-<script src="vendor/pdfjs/pdf.min.js"></script>
-<script>
-	if (window['pdfjsLib'] && (!pdfjsLib.GlobalWorkerOptions.workerSrc || pdfjsLib.GlobalWorkerOptions.workerSrc.indexOf('http') === 0)) {
-		pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js';
-	}
-	// If this fails, the app will lazy-load from CDN as a secondary fallback when importing
-</script>
 <script src="js/app.js?v=20251016-1"></script>
 
 
 <!-- 2D Floor Plan Editor Modal -->
 <div id="plan2d-modal" style="display:none; position:fixed; inset:0; z-index:12000;">
 	<div id="plan2d-backdrop" style="position:absolute; inset:0; background:rgba(0,0,0,0.55);"></div>
-		<div id="plan2d-content" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width: min(1800px,98vw); height:min(98vh,1080px); background:#ffffff; border-radius:18px; display:flex; flex-direction:column; box-shadow:0 22px 70px -8px rgba(0,0,0,0.55); overflow:hidden;">
+		<div id="plan2d-content" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width: min(2200px,99vw); height:min(99vh,1200px); background:#ffffff; border-radius:18px; display:flex; flex-direction:column; box-shadow:0 22px 70px -8px rgba(0,0,0,0.55); overflow:hidden;">
 		<div style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:#f1f5f9; border-bottom:1px solid #e2e8f0;">
 			<strong style="flex:1; font-size:15px; letter-spacing:0.5px;">2D Floor Plan Editor</strong>
 			<div style="display:flex; gap:6px;">
