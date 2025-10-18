@@ -6036,6 +6036,7 @@ __plan2d._applyTimer = null;          // debounce timer id
 __plan2d._syncTimer = null;           // polling timer for 3D->2D
 __plan2d._last3Dsig = null;           // last ground-floor signature
 __plan2d._last2Dsig = null;           // last 2D signature applied
+__plan2d._lastWallsSig = null;        // last walls-only signature to detect opening-only edits
 
 function plan2dSig3D(){
   try{
@@ -6062,6 +6063,16 @@ function plan2dSig2D(){
     return JSON.stringify(parts);
   }catch(e){ return ''; }
 }
+function plan2dSigWallsOnly(){
+  try{
+    var elems=__plan2d.elements||[]; var parts=[];
+    for(var i=0;i<elems.length;i++){
+      var e=elems[i]; if(!e || e.type!=='wall') continue;
+      parts.push([ +e.x0.toFixed(3), +e.y0.toFixed(3), +e.x1.toFixed(3), +e.y1.toFixed(3), +(e.thickness||__plan2d.wallThicknessM||0.3).toFixed(3) ]);
+    }
+    return JSON.stringify(parts);
+  }catch(e){ return ''; }
+}
 function plan2dGetElementsSnapshot(){
   var snap = (__plan2d.elements||[]).slice();
   // Include a synthetic preview wall while dragging so 3D updates live
@@ -6075,13 +6086,27 @@ function plan2dGetElementsSnapshot(){
 function plan2dScheduleApply(now){
   if(__plan2d._applyTimer){ clearTimeout(__plan2d._applyTimer); __plan2d._applyTimer=null; }
   // Live updates: apply as wall strips only (no rooms) to avoid creating extra rooms while drawing
-  var run=function(){ try{ __plan2d.syncInProgress=true; applyPlan2DTo3D(plan2dGetElementsSnapshot(), { stripsOnly:true, quiet:true }); __plan2d._last3Dsig = plan2dSig3D(); __plan2d._last2Dsig = plan2dSig2D(); } finally { setTimeout(function(){ __plan2d.syncInProgress=false; }, 30); } };
+  var run=function(){
+    try{
+      __plan2d.syncInProgress=true;
+      // If walls are unchanged, we can safely rebuild rooms+openings to reflect door/window edits in 3D
+      var wallsSigNow = plan2dSigWallsOnly();
+      if(wallsSigNow && __plan2d._lastWallsSig && wallsSigNow === __plan2d._lastWallsSig){
+        applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true });
+      } else {
+        applyPlan2DTo3D(plan2dGetElementsSnapshot(), { stripsOnly:true, quiet:true });
+      }
+      __plan2d._lastWallsSig = wallsSigNow;
+      __plan2d._last3Dsig = plan2dSig3D(); __plan2d._last2Dsig = plan2dSig2D();
+    } finally { setTimeout(function(){ __plan2d.syncInProgress=false; }, 30); }
+  };
   if(now){ run(); } else { __plan2d._applyTimer = setTimeout(run, 150); }
 }
 function plan2dStartSyncLoop(){
   if(__plan2d._syncTimer) return;
   __plan2d._last3Dsig = plan2dSig3D();
   __plan2d._last2Dsig = plan2dSig2D();
+  __plan2d._lastWallsSig = plan2dSigWallsOnly();
   __plan2d._syncTimer = setInterval(function(){
     if(!__plan2d.active) return;
     if(__plan2d.syncInProgress) return;
@@ -6146,22 +6171,21 @@ function plan2dBind(){
   // Central deletion used by both keyboard and button; supports subsegment, selection, or hovered element
   function plan2dDeleteSelection(){
     if(!__plan2d.active) return false;
-    // Prefer wall subsegment if selected
+    // 1) Prefer wall subsegment if selected
     if(__plan2d.selectedSubsegment){
       if(plan2dDeleteSelectedSubsegment()){
-        __plan2d.selectedSubsegment=null; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
+        __plan2d.selectedSubsegment=null; __plan2d.selectedIndex=-1;
+        plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
       }
     }
-    // Next: delete current selection
+    // 2) Next: delete current explicit selection (door/window/wall)
     if(__plan2d.selectedIndex>=0){
       __plan2d.elements.splice(__plan2d.selectedIndex,1);
-      __plan2d.selectedIndex=-1; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
+      __plan2d.selectedIndex=-1; __plan2d.selectedSubsegment=null;
+      plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
     }
-    // Finally: if nothing selected, allow deleting hovered element (erase-like convenience)
-    if(typeof __plan2d.hoverIndex==='number' && __plan2d.hoverIndex>=0){
-      __plan2d.elements.splice(__plan2d.hoverIndex,1);
-      __plan2d.hoverIndex=-1; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
-    }
+    // Else: nothing selected; do nothing
+    updateStatus && updateStatus('Select a door, window, or wall segment first');
     return false;
   }
   // Hook Delete Selected button to shared deletion
@@ -6433,19 +6457,16 @@ function plan2dBind(){
         if(!__plan2d.active) return;
         var key = ev.key;
         if(key==='Delete' || key==='Backspace'){
-          // Prioritize explicit selection: element > subsegment > hovered
-          if(__plan2d.selectedIndex>=0){
-            __plan2d.elements.splice(__plan2d.selectedIndex,1);
-            __plan2d.selectedIndex=-1; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return;
-          }
+          // Only delete when an explicit selection exists
           if(__plan2d.selectedSubsegment){
             var ok = plan2dDeleteSelectedSubsegment();
             if(ok){ __plan2d.selectedSubsegment=null; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return; }
           }
-          if(typeof __plan2d.hoverIndex==='number' && __plan2d.hoverIndex>=0){
-            __plan2d.elements.splice(__plan2d.hoverIndex,1);
-            __plan2d.hoverIndex=-1; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return;
+          if(__plan2d.selectedIndex>=0){
+            __plan2d.elements.splice(__plan2d.selectedIndex,1);
+            __plan2d.selectedIndex=-1; __plan2d.selectedSubsegment=null; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return;
           }
+          updateStatus && updateStatus('Select a door, window, or wall segment first');
           ev.preventDefault(); ev.stopPropagation(); return;
         }
         // Door hinge/swing toggles when a door is selected
