@@ -64,6 +64,32 @@ function dbg() {
   }
 }
 
+// ================= PERFORMANCE & RENDER OPTIMIZATIONS (moved earlier) =================
+// Initialize performance state and constants BEFORE the render loop starts so first frame is safe.
+var __perf = {
+  frames: 0,
+  fps: 0,
+  lastFpsSample: 0,
+  lastFrameTime: 0,
+  frameMs: 0,
+  lastCamera: { yaw: null, pitch: null, targetX: null, targetZ: null, distance: null, floor: null, sel: null },
+  skipStreak: 0
+};
+var ENABLE_PERF_OVERLAY = false; // toggle overlay (disabled by default)
+var DISABLE_DEBUG_LOGS = true;   // silences dbg() heavy logging loops
+var TARGET_FPS = 60;             // base target
+var MIN_DYNAMIC_FPS = 10;        // when idle we allow dropping to 10fps equivalent checks
+var _minFrameInterval = 1000 / TARGET_FPS;
+function ensurePerfOverlay(){ if(!ENABLE_PERF_OVERLAY) return; var el=document.getElementById('perf-stats'); if(!el){ el=document.createElement('div'); el.id='perf-stats'; el.style.cssText='position:fixed;left:4px;top:4px;font:11px/1.2 monospace;z-index:9999;background:rgba(0,0,0,0.45);color:#9fef00;padding:4px 6px;border-radius:4px;pointer-events:none;'; document.body.appendChild(el);} return el; }
+function updatePerfStatsOverlay(){ var el=ensurePerfOverlay(); if(!el) return; el.textContent = 'fps '+__perf.fps.toFixed(0)+'  frame '+__perf.frameMs.toFixed(2)+'ms'+(__perf.skipStreak>0?'  idle-skip:'+__perf.skipStreak:''); }
+// Wrap dbg so we can globally silence frequent logs
+if(typeof dbg === 'function'){
+  var _dbgRef = dbg;
+  dbg = function(){ if(DISABLE_DEBUG_LOGS) return; _dbgRef.apply(this, arguments); };
+}
+// Flag-based invalidation: call invalidateScene() when something structural changes
+var _needsFullRender = true; function invalidateScene(){ _needsFullRender = true; }
+
 // Projection cache to avoid repeated trig in hot path
 var _projCache = {
   yaw: null,
@@ -2335,7 +2361,7 @@ function worldMovement(screenDX, screenDY) {
 }
 
 function updateLabels() {
-  var container = document.getElementById('labels');
+  var container = document.getElementById('labels-3d');
   if (!container) return;
   // Bind hover-freeze listeners once (delegated to container)
   if (!container._hoverFreezeBound) {
@@ -4445,27 +4471,7 @@ document.addEventListener('DOMContentLoaded', function() {
   startApp();
 });
 
-// ================= PERFORMANCE & RENDER OPTIMIZATIONS =================
-// Lightweight instrumentation & adaptive rendering to reduce CPU/GPU usage when scene is static.
-var __perf = {
-  frames:0, fps:0, lastFpsSample:0, lastFrameTime:0, frameMs:0,
-  lastCamera:{yaw:null,pitch:null,targetX:null,targetZ:null,distance:null,floor:null, sel:null},
-  skipStreak:0
-};
-var ENABLE_PERF_OVERLAY = false; // toggle overlay (disabled by default)
-var DISABLE_DEBUG_LOGS = true;  // silences dbg() heavy logging loops
-var TARGET_FPS = 60;            // base target
-var MIN_DYNAMIC_FPS = 10;       // when idle we allow dropping to 10fps equivalent checks
-var _minFrameInterval = 1000 / TARGET_FPS;
-function ensurePerfOverlay(){ if(!ENABLE_PERF_OVERLAY) return; var el=document.getElementById('perf-stats'); if(!el){ el=document.createElement('div'); el.id='perf-stats'; el.style.cssText='position:fixed;left:4px;top:4px;font:11px/1.2 monospace;z-index:9999;background:rgba(0,0,0,0.45);color:#9fef00;padding:4px 6px;border-radius:4px;pointer-events:none;'; document.body.appendChild(el);} return el; }
-function updatePerfStatsOverlay(){ var el=ensurePerfOverlay(); if(!el) return; el.textContent = 'fps '+__perf.fps.toFixed(0)+'  frame '+__perf.frameMs.toFixed(2)+'ms'+(__perf.skipStreak>0?'  idle-skip:'+__perf.skipStreak:''); }
-// Wrap dbg so we can globally silence frequent logs
-if(typeof dbg === 'function'){
-  var _dbgRef = dbg;
-  dbg = function(){ if(DISABLE_DEBUG_LOGS) return; _dbgRef.apply(this, arguments); };
-}
-// Flag-based invalidation: call invalidateScene() when something structural changes
-var _needsFullRender = true; function invalidateScene(){ _needsFullRender = true; }
+// (perf block moved earlier)
 
 
 // ---------- Save/Load and Export ----------
@@ -4852,7 +4858,24 @@ document.addEventListener('DOMContentLoaded', function(){
       if(btnText) btnText.textContent = map[String(v)] || 'Level';
     }
     if(btn){ btn.addEventListener('click', function(e){ e.stopPropagation(); if(dd.classList.contains('open')) close(); else open(); }); }
-    if(list){ list.addEventListener('click', function(e){ var item=e.target.closest('.dropdown-item'); if(!item || item.classList.contains('separator')) return; var val=item.getAttribute('data-value'); if(nativeSel){ nativeSel.value = val; } setLabelFromValue(val); if(typeof switchLevel==='function') switchLevel(); close(); }); }
+    if(list){ list.addEventListener('click', function(e){
+      var item=e.target.closest('.dropdown-item'); if(!item || item.classList.contains('separator')) return;
+      var val=item.getAttribute('data-value');
+      // If 2D editor is open and switching between numeric floors, first apply current floor plan to 3D
+      try {
+        var isNumericFloor = (val==='0' || val==='1');
+        if (isNumericFloor && window.__plan2d && __plan2d.active) {
+          var prevLvl = (typeof window.currentFloor==='number' ? window.currentFloor : 0);
+          applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: prevLvl });
+        }
+      } catch(err) { /* non-fatal */ }
+      if(nativeSel){ nativeSel.value = val; }
+      setLabelFromValue(val);
+      if(typeof switchLevel==='function') switchLevel();
+      // If 2D editor is open and new level is selected, repopulate plan from 3D to reflect the new floor
+      try { if(window.__plan2d && __plan2d.active && (val==='0' || val==='1')) { populatePlan2DFromDesign(); plan2dDraw(); updatePlan2DInfo(); } } catch(e){}
+      close();
+    }); }
     document.addEventListener('click', close);
     document.addEventListener('keydown', function(ev){ if(ev.key==='Escape') close(); });
     // Initialize label from current state
@@ -4871,6 +4894,13 @@ document.addEventListener('DOMContentLoaded', function(){
     }
     function doSwitch(toFloor){
       try {
+        // If switching while editor is open, first apply current floor edits to 3D so openings persist
+        try {
+          if(window.__plan2d && __plan2d.active) {
+            var prevLvl = (typeof window.currentFloor==='number' ? window.currentFloor : 0);
+            applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: prevLvl });
+          }
+        } catch(err) { /* ignore */ }
         var nativeSel = document.getElementById('levelSelect');
         if(nativeSel){ nativeSel.value = String(toFloor); }
         if(typeof switchLevel==='function') switchLevel();
@@ -6168,8 +6198,14 @@ function plan2dSigWallsOnly(){
     var elems=__plan2d.elements||[]; var parts=[];
     for(var i=0;i<elems.length;i++){
       var e=elems[i]; if(!e || e.type!=='wall') continue;
-      parts.push([ +e.x0.toFixed(3), +e.y0.toFixed(3), +e.x1.toFixed(3), +e.y1.toFixed(3), +(e.thickness||__plan2d.wallThicknessM||0.3).toFixed(3) ]);
+      // normalize orientation so signature is order-invariant
+      var x0=e.x0, y0=e.y0, x1=e.x1, y1=e.y1;
+      var aMinX=Math.min(x0,x1), aMaxX=Math.max(x0,x1);
+      var aMinY=Math.min(y0,y1), aMaxY=Math.max(y0,y1);
+      parts.push([ +aMinX.toFixed(3), +aMinY.toFixed(3), +aMaxX.toFixed(3), +aMaxY.toFixed(3), +(e.thickness||__plan2d.wallThicknessM||0.3).toFixed(3) ]);
     }
+    // sort for stable signature regardless of element array order
+    parts.sort(function(A,B){ for(var k=0;k<A.length;k++){ if(A[k]!==B[k]) return A[k]-B[k]; } return 0; });
     return JSON.stringify(parts);
   }catch(e){ return ''; }
 }
@@ -6194,11 +6230,17 @@ function plan2dScheduleApply(now){
       // If walls are unchanged, we can safely rebuild rooms+openings to reflect door/window edits in 3D
       var wallsSigNow = plan2dSigWallsOnly();
       if(wallsSigNow && __plan2d._lastWallsSig && wallsSigNow === __plan2d._lastWallsSig){
+        // Walls unchanged -> safe to rebuild rooms/openings only
         applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl });
       } else {
-        // Build strips only on ground floor; for first floor skip strips and just update signatures
-        if (lvl === 0){
+        // Walls changed
+        var isActivelyDrawingWall = (__plan2d.tool === 'wall' && !!__plan2d.start);
+        if (isActivelyDrawingWall && lvl === 0) {
+          // Live preview as standalone strips only while drawing walls on ground floor
           applyPlan2DTo3D(plan2dGetElementsSnapshot(), { stripsOnly:true, quiet:true, level: 0 });
+        } else {
+          // For edits like windows/doors or non-drawing states, rebuild rooms+openings
+          applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl });
         }
       }
       __plan2d._lastWallsSig = wallsSigNow;
@@ -6428,7 +6470,10 @@ function plan2dBind(){
           __plan2d.elements.push(win);
           __plan2d.selectedIndex = __plan2d.elements.length - 1;
           __plan2d.dragWindow = { index: __plan2d.selectedIndex, end:'t1' };
-          plan2dDraw(); plan2dEdited();
+          plan2dDraw();
+          // No preview gap until user moves the mouse again
+          __plan2d.mouse = null;
+          plan2dEdited();
           return;
         }
         // Fallback: legacy free-draw if no wall nearby
@@ -6544,6 +6589,8 @@ function plan2dBind(){
     });
     window.addEventListener('mouseup', function(){
       if(!__plan2d.active) return;
+      // Clear mouse to avoid lingering preview gaps for window/door after finishing interaction
+      __plan2d.mouse = null;
   // marker drag removed
   if(__plan2d.dragWindow){ __plan2d.dragWindow=null; updatePlan2DInfo(); plan2dEdited(); }
     if(__plan2d.dragDoor){ __plan2d.dragDoor=null; updatePlan2DInfo(); plan2dEdited(); }
@@ -6641,7 +6688,7 @@ function plan2dBind(){
 }
 function plan2dUnbind(){ try{ if(window.__plan2dResize) window.removeEventListener('resize', window.__plan2dResize); if(window.__plan2dKeydown) document.removeEventListener('keydown', window.__plan2dKeydown, true); }catch(e){} }
 
-function plan2dResize(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var rect=c.getBoundingClientRect(); var dpr=window.devicePixelRatio||1; var W=Math.floor(rect.width*dpr), H=Math.floor(rect.height*dpr); if(c.width!==W||c.height!==H){ c.width=W; c.height=H; ov.width=W; ov.height=H; } }
+function plan2dResize(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var l2=document.getElementById('labels-2d'); if(!c||!ov) return; var rect=c.getBoundingClientRect(); var dpr=window.devicePixelRatio||1; var W=Math.floor(rect.width*dpr), H=Math.floor(rect.height*dpr); if(c.width!==W||c.height!==H){ c.width=W; c.height=H; ov.width=W; ov.height=H; if(l2){ l2.width=W; l2.height=H; } } }
 function plan2dCursor(){ var c=document.getElementById('plan2d-canvas'); if(!c) return; c.style.cursor = (__plan2d.tool==='erase') ? 'not-allowed' : (__plan2d.tool==='select' ? 'pointer' : 'crosshair'); }
 
 function plan2dFinalize(a,b){ if(!a||!b) return; // snap to straight axis
@@ -6752,7 +6799,31 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         ctx.beginPath(); ctx.fillStyle='#e5e7eb'; ctx.strokeStyle='#334155'; ctx.lineWidth=__plan2d.wallStrokePx;
         ctx.moveTo(aSeg.x+nx*halfPx,aSeg.y+ny*halfPx); ctx.lineTo(bSeg.x+nx*halfPx,bSeg.y+ny*halfPx); ctx.lineTo(bSeg.x-nx*halfPx,bSeg.y-ny*halfPx); ctx.lineTo(aSeg.x-nx*halfPx,aSeg.y-ny*halfPx); ctx.closePath(); ctx.fill(); ctx.stroke();
 
-        // (Removed) Inline segment length label/pill inside wall polygon
+        // Inline segment length measurement centered inside the wall polygon (no pill)
+        (function(){
+          var minLabelPx = 30; // skip very tiny segments
+          if(Ls < minLabelPx) return;
+          var segLenM = Math.hypot(sx1 - sx0, sy1 - sy0);
+          var txt = formatMeters(segLenM) + ' m';
+          var midx = (aSeg.x + bSeg.x) * 0.5, midy = (aSeg.y + bSeg.y) * 0.5;
+          var angle = Math.atan2(dys, dxs);
+          if (angle > Math.PI/2 || angle < -Math.PI/2) angle += Math.PI; // keep upright
+          var pad = 6; var maxW = Math.max(10, Ls - pad*2);
+          var marginY = 2; var maxH = Math.max(6, (2*halfPx) - marginY*2);
+          ctx.save();
+          ctx.translate(midx, midy);
+          ctx.rotate(angle);
+          var baseFontSize = 18; ctx.font = baseFontSize + 'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+          var textW = ctx.measureText(txt).width;
+          var scale = Math.min(1, maxW / Math.max(1, textW), maxH / baseFontSize);
+          if (scale < 0.5) { ctx.restore(); return; }
+          ctx.scale(scale, scale);
+          // subtle outline for contrast on light wall fill
+          ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(51,65,85,0.7)'; ctx.strokeText(txt, 0, 0.5);
+          ctx.fillStyle = '#0b1220';
+          ctx.fillText(txt, 0, 0.5);
+          ctx.restore();
+        })();
   // Live preview: carve a temporary gap where a door/window would be placed before element creation
       }
       // Skip default solid wall draw since we've drawn segments
@@ -6831,6 +6902,8 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
   // Color-coded overlays for pergola, garage, and balcony using world coords -> plan mapping
   try {
     if (__plan2d && __plan2d.active) {
+      // Collect label boxes (screen-space) to draw text later on the labels-2d canvas
+      var labelBoxes = [];
       // Draw stairs footprint on the base canvas (authoritative rendering)
       try {
         if (stairsComponent) {
@@ -6857,6 +6930,23 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
           // Increase stairs keyline stroke by +5px over previous values
           ctx.lineWidth = (stairsLvl === lvlNow) ? 11 : 10;
           ctx.beginPath(); ctx.moveTo(sp1.x, sp1.y); ctx.lineTo(sp2.x, sp2.y); ctx.lineTo(sp3.x, sp3.y); ctx.lineTo(sp4.x, sp4.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+          // Label background for stairs at top-left of its screen-space AABB
+          try {
+            var minXS = Math.min(sp1.x, sp2.x, sp3.x, sp4.x);
+            var minYS = Math.min(sp1.y, sp2.y, sp3.y, sp4.y);
+            var padX = 6, padY = 4, fontSize = 12, lineH = 16;
+            ctx.save(); ctx.font = fontSize + 'px sans-serif';
+            var sText = (stairsComponent.name || 'Stairs');
+            var tW = ctx.measureText(sText).width;
+            var bx = Math.round(minXS + 6), by = Math.round(minYS + 6), bw = Math.round(tW + padX*2), bh = lineH;
+            // store for labels-2d text draw later
+            labelBoxes.push({ x: bx, y: by, w: bw, h: bh, text: sText });
+            // draw white background behind where text will be
+            ctx.globalAlpha = (stairsLvl === lvlNow) ? 0.98 : 0.55;
+            ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(15,23,42,0.2)'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.fill(); ctx.stroke();
+            ctx.restore();
+          } catch(e) { /* ignore label bg */ }
           // Draw a few treads for orientation
           try {
             var stepsSt = Math.max(1, Math.floor(stairsComponent.steps || 12));
@@ -6875,7 +6965,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       var lvlNowC = (typeof currentFloor==='number' ? currentFloor : 0);
       var sgnC = (__plan2d.yFromWorldZSign || 1);
       function mapPlanXY(wx, wz){ return worldToScreen2D((wx - __plan2d.centerX), sgnC * (wz - __plan2d.centerZ)); }
-      function drawBox(x, z, w, d, rotDeg, stroke, fill, alpha) {
+      function drawBox(x, z, w, d, rotDeg, stroke, fill, alpha, labelText) {
         var rot = ((rotDeg||0) * Math.PI) / 180; var hw=w/2, hd=d/2;
         function r(px,pz){ var dx=px-x, dz=pz-z; return { x: x + dx*Math.cos(rot) - dz*Math.sin(rot), z: z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
         var c1=r(x-hw,z-hd), c2=r(x+hw,z-hd), c3=r(x+hw,z+hd), c4=r(x-hw,z+hd);
@@ -6883,6 +6973,18 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = fill;
         ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.lineTo(p4.x,p4.y); ctx.closePath(); ctx.fill();
         if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
+        // Draw a white label background at top-left of the overlay's AABB and remember its box for later text drawing
+        if (labelText) {
+          try {
+            var minX = Math.min(p1.x,p2.x,p3.x,p4.x), minY = Math.min(p1.y,p2.y,p3.y,p4.y);
+            var padX = 6, padY = 4, fontSize = 12, lineH = 16;
+            ctx.font = fontSize + 'px sans-serif'; var tW = ctx.measureText(labelText).width;
+            var bx = Math.round(minX + 6), by = Math.round(minY + 6), bw = Math.round(tW + padX*2), bh = lineH;
+            labelBoxes.push({ x: bx, y: by, w: bw, h: bh, text: labelText });
+            ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(15,23,42,0.2)'; ctx.lineWidth = 1; ctx.globalAlpha = alpha;
+            ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.fill(); ctx.stroke();
+          } catch(e) { /* ignore */ }
+        }
         ctx.restore();
       }
       // Ground floor: pergola + garage
@@ -6890,20 +6992,22 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         for (var iPg=0;iPg<pergolaComponents.length;iPg++){
           var per=pergolaComponents[iPg];
           // Avoid duplicate outline: pergola walls already provide edges. Use fill only (no stroke).
-          drawBox(per.x, per.z, per.width, per.depth, per.rotation||0, null, 'rgba(16,185,129,0.15)', 0.95);
+          drawBox(per.x, per.z, per.width, per.depth, per.rotation||0, null, 'rgba(16,185,129,0.15)', 0.95, (per.name||'Pergola'));
         }
         for (var iGg=0;iGg<garageComponents.length;iGg++){
           var gar=garageComponents[iGg];
-          drawBox(gar.x, gar.z, gar.width, gar.depth, gar.rotation||0, '#f59e0b', 'rgba(245,158,11,0.15)', 0.95);
+          drawBox(gar.x, gar.z, gar.width, gar.depth, gar.rotation||0, '#f59e0b', 'rgba(245,158,11,0.15)', 0.95, (gar.name||'Garage'));
         }
       }
       // First floor: balcony
       if (lvlNowC === 1) {
         for (var iBl=0;iBl<balconyComponents.length;iBl++){
           var bal=balconyComponents[iBl]; if((bal.level||1)!==1) continue;
-          drawBox(bal.x, bal.z, bal.width, bal.depth, bal.rotation||0, '#6366f1', 'rgba(99,102,241,0.18)', 0.95);
+          drawBox(bal.x, bal.z, bal.width, bal.depth, bal.rotation||0, '#6366f1', 'rgba(99,102,241,0.18)', 0.95, (bal.name||'Balcony'));
         }
       }
+      // After drawing backgrounds, draw the label texts on the labels-2d canvas (handled later)
+      __plan2d.__labelBoxes2D = labelBoxes;
     }
   } catch(e) { /* overlay draw for components is non-fatal */ }
 
@@ -6921,7 +7025,22 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
   // (Removed) Live measurement label centered inside the preview wall
     } else if(__plan2d.tool==='window'){
       ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.setLineDash([4,3]); ctx.lineWidth=2; ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.setLineDash([]);
-  // (Removed) Live window measurement label along the preview line
+      // Live window measurement label centered along the preview line (no pill)
+      (function(){
+        var Ls = Math.hypot(b.x-a.x, b.y-a.y); if(Ls < 20) return;
+        var segLenM = Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y);
+        var txt = formatMeters(segLenM) + ' m';
+        var midx=(a.x+b.x)/2, midy=(a.y+b.y)/2; var angle=Math.atan2(b.y-a.y, b.x-a.x); if(angle>Math.PI/2||angle<-Math.PI/2) angle+=Math.PI;
+        var pad=6, maxW=Math.max(10, Ls - pad*2), maxH=18; // thin text-only label
+        ctx.save(); ctx.translate(midx, midy); ctx.rotate(angle);
+        var baseFontSize = 16; ctx.font=baseFontSize+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        var textW=ctx.measureText(txt).width; var scale=Math.min(1, maxW/Math.max(1,textW), maxH/baseFontSize); if(scale<0.55){ ctx.restore(); return; }
+        ctx.scale(scale,scale);
+        // subtle outline for readability over lines
+        ctx.lineWidth = 3; ctx.strokeStyle='rgba(15,23,42,0.7)'; ctx.strokeText(txt,0,0.5);
+        ctx.fillStyle='#e5e7eb'; ctx.fillText(txt,0,0.5);
+        ctx.restore();
+      })();
     }
   }
 
@@ -6972,6 +7091,10 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
     ctx.restore();
   }
   var ox=ov.getContext('2d'); ox.setTransform(1,0,0,1,0,0); ox.clearRect(0,0,ov.width,ov.height);
+  // Dedicated 2D labels canvas (draw text here, keep shapes/effects on overlay)
+  var l2c = document.getElementById('labels-2d');
+  var lx = l2c ? l2c.getContext('2d') : ox; // fallback to overlay if missing
+  if (l2c) { lx.setTransform(1,0,0,1,0,0); lx.clearRect(0,0,l2c.width,l2c.height); }
 
   // Overlays: Stairs indicator (both floors) + small labels
   (function(){
@@ -6980,12 +7103,42 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       var cxW = (typeof __plan2d.centerX==='number'? __plan2d.centerX : 0);
       var czW = (typeof __plan2d.centerZ==='number'? __plan2d.centerZ : 0);
       var sgn = (__plan2d.yFromWorldZSign||1);
-      ox.save();
-      ox.restore();
-    }catch(e){}
-  })();
-
-  // Debug overlay header
+      function toScreen(wx, wz){ return worldToScreen2D((wx - cxW), sgn * (wz - czW)); }
+      // Compute the exact visual center of a rotated box in screen space
+      function screenCenterOfBox(x, z, w, d, rotDeg){
+        var rot = ((rotDeg||0) * Math.PI) / 180; var hw=(w||0)/2, hd=(d||0)/2;
+        function r(px,pz){ var dx=px-x, dz=pz-z; return { x: x + dx*Math.cos(rot) - dz*Math.sin(rot), z: z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+        var c1=r(x-hw,z-hd), c2=r(x+hw,z-hd), c3=r(x+hw,z+hd), c4=r(x-hw,z+hd);
+        var p1=toScreen(c1.x,c1.z), p3=toScreen(c3.x,c3.z);
+        // For rectangles, the midpoint of opposite corners is the exact center
+        return { x:(p1.x+p3.x)/2, y:(p1.y+p3.y)/2 };
+      }
+      // Debug helpers for label vs overlay center
+      function getBoxScreenPoints(x, z, w, d, rotDeg){
+        var rot = ((rotDeg||0) * Math.PI) / 180; var hw=(w||0)/2, hd=(d||0)/2;
+        function r(px,pz){ var dx=px-x, dz=pz-z; return { x: x + dx*Math.cos(rot) - dz*Math.sin(rot), z: z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+        var c1=r(x-hw,z-hd), c2=r(x+hw,z-hd), c3=r(x+hw,z+hd), c4=r(x-hw,z+hd);
+        return [ toScreen(c1.x,c1.z), toScreen(c2.x,c2.z), toScreen(c3.x,c3.z), toScreen(c4.x,c4.z) ];
+      }
+      function getAABB(pts){ var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; for(var i=0;i<pts.length;i++){ var p=pts[i]; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; } return {minX:minX,minY:minY,maxX:maxX,maxY:maxY}; }
+      var SHOW_2D_LABEL_COORDS = true;
+  lx.save();
+  lx.font = '12px sans-serif';
+  lx.textAlign = 'center';
+  // Use middle baseline so y = center places glyphs visually in the middle reliably across browsers
+  lx.textBaseline = 'middle';
+      // Stairs label: center on the footprint, dim when on other floor
+      lx.save();
+      lx.font = '12px sans-serif';
+      lx.textAlign = 'left';
+      lx.textBaseline = 'middle';
+      // Draw text inside the white boxes recorded earlier
+      var boxes = (__plan2d.__labelBoxes2D || []);
+      for (var li=0; li<boxes.length; li++){
+        var lb = boxes[li];
+        lx.fillStyle = '#111827'; // dark text
+        lx.fillText(lb.text, lb.x + 6, lb.y + lb.h/2);
+      }
   if(__plan2d.debug){
     try {
       var dpr = window.devicePixelRatio || 1;
@@ -7123,6 +7276,11 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
     }
     ox.restore();
   })();
+  } catch(e) {
+    // Non-fatal: overlay/labels rendering issues shouldn't break the main render loop
+    try { console.warn('2D overlay draw error', e); } catch(_) {}
+  }
+})();
 
   // (Removed) Overlay: Wall orientation hint during wall drawing
   // (Removed) Overlay: live window width dimension label during drag or when selected
