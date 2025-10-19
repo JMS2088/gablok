@@ -4173,26 +4173,7 @@ function drawGarage(garage) {
       var rotated = rotatePoint(c.x, c.z);
       return {x: rotated.x, y: c.y, z: rotated.z};
     });
-    // Draw 300mm wall thickness as four strips around the room footprint
-    (function(){
-      var t = 0.3; // 300mm
-      var y0 = roomFloorY;
-      var y1 = room.height;
-      // Edges in world XZ
-      var minX = room.x - hw, maxX = room.x + hw;
-      var minZ = room.z - hd, maxZ = room.z + hd;
-      var strips = [
-        // Top edge (minZ): from (minX,minZ) -> (maxX,minZ)
-        { x0:minX, z0:minZ, x1:maxX, z1:minZ, thickness:t, height:y1, baseY:y0 },
-        // Bottom edge (maxZ)
-        { x0:maxX, z0:maxZ, x1:minX, z1:maxZ, thickness:t, height:y1, baseY:y0 },
-        // Left edge  (minX)
-        { x0:minX, z0:maxZ, x1:minX, z1:minZ, thickness:t, height:y1, baseY:y0 },
-        // Right edge (maxX)
-        { x0:maxX, z0:minZ, x1:maxX, z1:maxZ, thickness:t, height:y1, baseY:y0 }
-      ];
-      for(var si=0; si<strips.length; si++){ drawWallStrip(strips[si]); }
-    })();
+    // Note: removed erroneous wall strip block referencing undefined variables that hid the garage
 
     var projected = [];
     for (var i = 0; i < corners.length; i++) {
@@ -6906,8 +6887,8 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
   ctx.globalAlpha = (stairsLvl === lvlNow) ? 0.95 : 0.35;
   ctx.fillStyle = (stairsLvl === lvlNow) ? 'rgba(15,23,42,0.10)' : 'rgba(15,23,42,0.06)';
   ctx.strokeStyle = (stairsLvl === lvlNow) ? '#334155' : '#94a3b8';
-  // Make outline 1px thicker
-  ctx.lineWidth = (stairsLvl === lvlNow) ? 3 : 2;
+  // Increase stairs keyline stroke by +2px (active and other floor)
+  ctx.lineWidth = (stairsLvl === lvlNow) ? 6 : 5;
       ctx.beginPath();
       ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);
       ctx.closePath();
@@ -6925,34 +6906,49 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
           ctx.beginPath(); ctx.strokeStyle = 'rgba(100,116,139,0.9)'; ctx.lineWidth = 1; ctx.moveTo(aS.x, aS.y); ctx.lineTo(bS.x, bS.y); ctx.stroke();
         }
       } catch(e) { /* ignore treads errors */ }
-      // Label at center with dimensions
-      try {
-        var cPx = worldToScreen2D((stairsComponent.x - __plan2d.centerX), sgn * (stairsComponent.z - __plan2d.centerZ));
-        var dimTxt = formatMeters(stairsComponent.width) + ' × ' + formatMeters(stairsComponent.depth) + ' m';
-        var labelTxt = 'Stairs';
-        // Draw dimension pill above label
-        ctx.font = '18px sans-serif';
-        var txtW = ctx.measureText(dimTxt).width;
-        var bw = Math.ceil(txtW + 16), bh = 20, rr = 6;
-        var rx = cPx.x - bw/2, ry = cPx.y - 26 - bh; // place above
-        ctx.beginPath();
-        ctx.moveTo(rx+rr,ry); ctx.lineTo(rx+bw-rr,ry); ctx.quadraticCurveTo(rx+bw,ry,rx+bw,ry+rr);
-        ctx.lineTo(rx+bw,ry+bh-rr); ctx.quadraticCurveTo(rx+bw,ry+bh,rx+bw-rr,ry+bh);
-        ctx.lineTo(rx+rr,ry+bh); ctx.quadraticCurveTo(rx,ry+bh,rx,ry+bh-rr);
-        ctx.lineTo(rx,ry+rr); ctx.quadraticCurveTo(rx,ry,rx+rr,ry);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(2,6,23,0.82)'; ctx.fill();
-        ctx.strokeStyle = 'rgba(148,163,184,0.7)'; ctx.lineWidth = 1; ctx.stroke();
-        ctx.fillStyle = '#e5e7eb'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(dimTxt, cPx.x, ry + bh/2);
-  // Stairs label at the exact stairs center
-  ctx.font = 'bold 16px sans-serif';
-  ctx.fillStyle = (stairsLvl === lvlNow) ? '#0f172a' : '#475569';
-  ctx.fillText(labelTxt, cPx.x, cPx.y);
-      } catch(e) { /* ignore label errors */ }
+  // Labels are rendered on the overlay canvas using the same world→plan mapping as the stairs
+  // (removed duplicate base-canvas label/dimension rendering to avoid misalignment)
       ctx.restore();
     }
   } catch(e) { /* stairs overlay failure should not break plan draw */ }
+
+  // Color-coded overlays for pergola, garage, and balcony using world coords -> plan mapping
+  try {
+    if (__plan2d && __plan2d.active) {
+      var lvlNowC = (typeof currentFloor==='number' ? currentFloor : 0);
+      var sgnC = (__plan2d.yFromWorldZSign || 1);
+      function mapPlanXY(wx, wz){ return worldToScreen2D((wx - __plan2d.centerX), sgnC * (wz - __plan2d.centerZ)); }
+      function drawBox(x, z, w, d, rotDeg, stroke, fill, alpha) {
+        var rot = ((rotDeg||0) * Math.PI) / 180; var hw=w/2, hd=d/2;
+        function r(px,pz){ var dx=px-x, dz=pz-z; return { x: x + dx*Math.cos(rot) - dz*Math.sin(rot), z: z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+        var c1=r(x-hw,z-hd), c2=r(x+hw,z-hd), c3=r(x+hw,z+hd), c4=r(x-hw,z+hd);
+        var p1=mapPlanXY(c1.x,c1.z), p2=mapPlanXY(c2.x,c2.z), p3=mapPlanXY(c3.x,c3.z), p4=mapPlanXY(c4.x,c4.z);
+        ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = fill;
+        ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.lineTo(p4.x,p4.y); ctx.closePath(); ctx.fill();
+        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
+        ctx.restore();
+      }
+      // Ground floor: pergola + garage
+      if (lvlNowC === 0) {
+        for (var iPg=0;iPg<pergolaComponents.length;iPg++){
+          var per=pergolaComponents[iPg];
+          // Avoid duplicate outline: pergola walls already provide edges. Use fill only (no stroke).
+          drawBox(per.x, per.z, per.width, per.depth, per.rotation||0, null, 'rgba(16,185,129,0.15)', 0.95);
+        }
+        for (var iGg=0;iGg<garageComponents.length;iGg++){
+          var gar=garageComponents[iGg];
+          drawBox(gar.x, gar.z, gar.width, gar.depth, gar.rotation||0, '#f59e0b', 'rgba(245,158,11,0.15)', 0.95);
+        }
+      }
+      // First floor: balcony
+      if (lvlNowC === 1) {
+        for (var iBl=0;iBl<balconyComponents.length;iBl++){
+          var bal=balconyComponents[iBl]; if((bal.level||1)!==1) continue;
+          drawBox(bal.x, bal.z, bal.width, bal.depth, bal.rotation||0, '#6366f1', 'rgba(99,102,241,0.18)', 0.95);
+        }
+      }
+    }
+  } catch(e) { /* overlay draw for components is non-fatal */ }
 
   // Preview during drag
   if(__plan2d.start && __plan2d.last){
@@ -7081,14 +7077,35 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       var cxW = (typeof __plan2d.centerX==='number'? __plan2d.centerX : 0);
       var czW = (typeof __plan2d.centerZ==='number'? __plan2d.centerZ : 0);
       var sgn = (__plan2d.yFromWorldZSign||1);
-      function toScreenFromWorld(wx, wz){ return worldToScreen2D(wx - cxW, sgn*(wz - czW)); }
-      function drawLabel(text, wx, wz){
-        var p = toScreenFromWorld(wx, wz);
-        var padX=6, padY=3; ox.save(); ox.font='12px sans-serif'; ox.textAlign='center'; ox.textBaseline='middle';
-        var w = ox.measureText(text).width; var bw = Math.ceil(w + padX*2), bh = 18;
-        ox.fillStyle='rgba(2,6,23,0.82)'; ox.strokeStyle='rgba(148,163,184,0.7)'; ox.lineWidth=1;
-        var rx=p.x-bw/2, ry=p.y-bh/2, r=6; ox.beginPath(); ox.moveTo(rx+r,ry); ox.lineTo(rx+bw-r,ry); ox.quadraticCurveTo(rx+bw,ry,rx+bw,ry+r); ox.lineTo(rx+bw,ry+bh-r); ox.quadraticCurveTo(rx+bw,ry+bh,rx+bw-r,ry+bh); ox.lineTo(rx+r,ry+bh); ox.quadraticCurveTo(rx,ry+bh,rx,ry+bh-r); ox.lineTo(rx,ry+r); ox.quadraticCurveTo(rx,ry,rx+r,ry); ox.closePath(); ox.fill(); ox.stroke();
-        ox.fillStyle='#e5e7eb'; ox.fillText(text, p.x, p.y+0.5); ox.restore();
+      // Use EXACT same mapping as color-coordinated boxes on base canvas
+      function mapToScreen(wx, wz){ return worldToScreen2D((wx - cxW), sgn * (wz - czW)); }
+      function drawLabel(text, wx, wz, color){
+        var p = mapToScreen(wx, wz);
+        ox.save();
+        ox.font='12px sans-serif';
+        ox.textAlign='center';
+        ox.textBaseline='middle';
+        ox.fillStyle = (color || '#e5e7eb');
+        ox.fillText(text, p.x, p.y);
+        ox.restore();
+      }
+      // Small dimension pill using the same mapping (placed slightly below the name label by dy px)
+      function drawDimPill(text, wx, wz, dy){
+        var p = mapToScreen(wx, wz);
+        var padX=7, padY=4; ox.save(); ox.font='12px sans-serif'; ox.textAlign='center'; ox.textBaseline='middle';
+        var w = ox.measureText(text).width; var bw = Math.ceil(w + padX*2), bh = 20, rr = 6;
+        var cx = p.x, cy = p.y + (typeof dy==='number'? dy : 0);
+        var rx=cx - bw/2, ry=cy - bh/2;
+        ox.beginPath();
+        ox.moveTo(rx+rr,ry); ox.lineTo(rx+bw-rr,ry); ox.quadraticCurveTo(rx+bw,ry,rx+bw,ry+rr);
+        ox.lineTo(rx+bw,ry+bh-rr); ox.quadraticCurveTo(rx+bw,ry+bh,rx+bw-rr,ry+bh);
+        ox.lineTo(rx+rr,ry+bh); ox.quadraticCurveTo(rx,ry+bh,rx,ry+bh-rr);
+        ox.lineTo(rx,ry+rr); ox.quadraticCurveTo(rx,ry,rx+rr,ry);
+        ox.closePath();
+        ox.fillStyle='rgba(2,6,23,0.82)'; ox.fill();
+        ox.strokeStyle='rgba(148,163,184,0.7)'; ox.lineWidth=1; ox.stroke();
+        ox.fillStyle='#e5e7eb'; ox.fillText(text, cx, cy+0.5);
+        ox.restore();
       }
       ox.save();
       // Stairs indicator: show on both floors at same XY to help locate
@@ -7131,13 +7148,13 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
           // Width line (left to right midpoints)
           ox.beginPath(); ox.moveTo(mLeft.x, mLeft.y); ox.lineTo(mRight.x, mRight.y); ox.stroke();
           ox.restore();
-          // Dimension label at center
+          // Dimension label above center (consistent with stairs position in base plan)
           var centerP = toScreenFromWorld(s.x, s.z);
           var label = formatMeters(s.width) + ' × ' + formatMeters(s.depth) + ' m';
           ox.save();
           ox.font='12px sans-serif'; ox.textAlign='center'; ox.textBaseline='middle';
           var tw = ox.measureText(label).width; var bw=Math.ceil(tw+14), bh=20;
-          var rx=centerP.x-bw/2, ry=centerP.y-bh/2, rr=6;
+          var rx=centerP.x-bw/2, ry=centerP.y-26-bh, rr=6;
           ox.beginPath();
           ox.moveTo(rx+rr,ry); ox.lineTo(rx+bw-rr,ry); ox.quadraticCurveTo(rx+bw,ry,rx+bw,ry+rr);
           ox.lineTo(rx+bw,ry+bh-rr); ox.quadraticCurveTo(rx+bw,ry+bh,rx+bw-rr,ry+bh);
@@ -7146,7 +7163,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
           ox.closePath();
           ox.fillStyle='rgba(2,6,23,0.82)'; ox.fill();
           ox.strokeStyle='rgba(148,163,184,0.7)'; ox.lineWidth=1; ox.stroke();
-          ox.fillStyle='#e5e7eb'; ox.fillText(label, centerP.x, centerP.y+0.5);
+          ox.fillStyle='#e5e7eb'; ox.fillText(label, centerP.x, ry + bh/2 + 0.5);
           ox.restore();
         } catch(e){}
         // Label
@@ -7154,9 +7171,30 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       }
       // Labels for rooms, garages, pergolas, balconies
       try{
-        for(var i=0;i<allRooms.length;i++){ var r=allRooms[i]; if((r.level||0)!==lvl) continue; drawLabel(r.name||'Room', r.x, r.z); }
-        if(lvl===0){ for(var g=0; g<garageComponents.length; g++){ var gar=garageComponents[g]; drawLabel(gar.name||'Garage', gar.x, gar.z); } for(var pg=0; pg<pergolaComponents.length; pg++){ var per=pergolaComponents[pg]; drawLabel(per.name||'Pergola', per.x, per.z); } }
-        if(lvl===1){ for(var b=0; b<balconyComponents.length; b++){ var bal=balconyComponents[b]; if((bal.level||1)!==1) continue; drawLabel(bal.name||'Balcony', bal.x, bal.z); } }
+  // Rooms: name only, color-coded
+  var roomLabelColor = '#93c5fd'; // blue-300
+  for(var i=0;i<allRooms.length;i++){ var r=allRooms[i]; if((r.level||0)!==lvl) continue; drawLabel(r.name||'Room', r.x, r.z, roomLabelColor); }
+        // Ground: Garage and Pergola with dimensions (draw pill first, then label on top)
+        if(lvl===0){
+          for(var g=0; g<garageComponents.length; g++){
+            var gar=garageComponents[g];
+            try{ var gDim = formatMeters(gar.width)+' × '+formatMeters(gar.depth)+' m'; drawDimPill(gDim, gar.x, gar.z, -26); }catch(e){}
+            drawLabel(gar.name||'Garage', gar.x, gar.z);
+          }
+          for(var pg=0; pg<pergolaComponents.length; pg++){
+            var per=pergolaComponents[pg];
+            try{ var pDim = formatMeters(per.width)+' × '+formatMeters(per.depth)+' m'; drawDimPill(pDim, per.x, per.z, -26); }catch(e){}
+            drawLabel(per.name||'Pergola', per.x, per.z);
+          }
+        }
+        // First: Balcony with dimensions (pill first, then label)
+        if(lvl===1){
+          for(var b=0; b<balconyComponents.length; b++){
+            var bal=balconyComponents[b]; if((bal.level||1)!==1) continue;
+            try{ var bDim = formatMeters(bal.width)+' × '+formatMeters(bal.depth)+' m'; drawDimPill(bDim, bal.x, bal.z, -26); }catch(e){}
+            drawLabel(bal.name||'Balcony', bal.x, bal.z);
+          }
+        }
       } catch(e){}
       ox.restore();
     }catch(e){}
@@ -7865,7 +7903,8 @@ function populatePlan2DFromDesign(){
         name: gar.name || 'Garage',
         minX: gar.x - hwg, maxX: gar.x + hwg,
         minZ: gar.z - hdg, maxZ: gar.z + hdg,
-        type: 'garage'
+        type: 'garage',
+        cx: gar.x, cz: gar.z, w: gar.width, d: gar.depth, rotation: (gar.rotation||0)
       });
     }
     // Include pergolas as wall rectangles on ground floor
@@ -7876,7 +7915,8 @@ function populatePlan2DFromDesign(){
         name: per.name || 'Pergola',
         minX: per.x - hwp, maxX: per.x + hwp,
         minZ: per.z - hdp, maxZ: per.z + hdp,
-        type: 'pergola'
+        type: 'pergola',
+        cx: per.x, cz: per.z, w: per.width, d: per.depth, rotation: (per.rotation||0)
       });
     }
   }
@@ -7888,7 +7928,8 @@ function populatePlan2DFromDesign(){
         name: bal.name || 'Balcony',
         minX: bal.x - hwb, maxX: bal.x + hwb,
         minZ: bal.z - hdb, maxZ: bal.z + hdb,
-        type: 'balcony'
+        type: 'balcony',
+        cx: bal.x, cz: bal.z, w: bal.width, d: bal.depth, rotation: (bal.rotation||0)
       });
     }
   }
@@ -7903,7 +7944,7 @@ function populatePlan2DFromDesign(){
   }
   if (rects.length === 0) return false;
 
-  // Compute overall bounds and center
+  // Compute overall bounds and center (use rotation-aware bounds where available)
   var minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;
   // Track rooms-only bounds for scale so non-room elements don't change zoom level
   var rMinX=Infinity, rMaxX=-Infinity, rMinZ=Infinity, rMaxZ=-Infinity; var roomCount=0;
@@ -7911,9 +7952,20 @@ function populatePlan2DFromDesign(){
   var rAllMinX=Infinity, rAllMaxX=-Infinity, rAllMinZ=Infinity, rAllMaxZ=-Infinity; var roomCountAll=0;
   for (var k=0;k<rects.length;k++){
     var b=rects[k];
-    if (b.minX<minX) minX=b.minX; if (b.maxX>maxX) maxX=b.maxX;
-    if (b.minZ<minZ) minZ=b.minZ; if (b.maxZ>maxZ) maxZ=b.maxZ;
-    if (b.type === 'room') { rMinX=Math.min(rMinX,b.minX); rMaxX=Math.max(rMaxX,b.maxX); rMinZ=Math.min(rMinZ,b.minZ); rMaxZ=Math.max(rMaxZ,b.maxZ); roomCount++; }
+    // Prefer rotation-aware bounds if this rect has center/size/rotation
+    if (typeof b.cx==='number' && typeof b.cz==='number' && typeof b.w==='number' && typeof b.d==='number' && typeof b.rotation==='number'){
+      var hwB=b.w/2, hdB=b.d/2, rotB=(b.rotation*Math.PI)/180;
+      function rotPt(px,pz){ var dx=px-b.cx, dz=pz-b.cz; return { x: b.cx + dx*Math.cos(rotB) - dz*Math.sin(rotB), z: b.cz + dx*Math.sin(rotB) + dz*Math.cos(rotB) }; }
+      var q1=rotPt(b.cx-hwB,b.cz-hdB), q2=rotPt(b.cx+hwB,b.cz-hdB), q3=rotPt(b.cx+hwB,b.cz+hdB), q4=rotPt(b.cx-hwB,b.cz+hdB);
+      var bminX=Math.min(q1.x,q2.x,q3.x,q4.x), bmaxX=Math.max(q1.x,q2.x,q3.x,q4.x), bminZ=Math.min(q1.z,q2.z,q3.z,q4.z), bmaxZ=Math.max(q1.z,q2.z,q3.z,q4.z);
+      if (bminX<minX) minX=bminX; if (bmaxX>maxX) maxX=bmaxX;
+      if (bminZ<minZ) minZ=bminZ; if (bmaxZ>maxZ) maxZ=bmaxZ;
+      if (b.type === 'room') { rMinX=Math.min(rMinX,bminX); rMaxX=Math.max(rMaxX,bmaxX); rMinZ=Math.min(rMinZ,bminZ); rMaxZ=Math.max(rMaxZ,bmaxZ); roomCount++; }
+    } else {
+      if (b.minX<minX) minX=b.minX; if (b.maxX>maxX) maxX=b.maxX;
+      if (b.minZ<minZ) minZ=b.minZ; if (b.maxZ>maxZ) maxZ=b.maxZ;
+      if (b.type === 'room') { rMinX=Math.min(rMinX,b.minX); rMaxX=Math.max(rMaxX,b.maxX); rMinZ=Math.min(rMinZ,b.minZ); rMaxZ=Math.max(rMaxZ,b.maxZ); roomCount++; }
+    }
   }
   // Rooms across all levels (fallback if current floor has no rooms)
   for (var riAll=0; riAll<allRooms.length; riAll++){
@@ -7930,11 +7982,29 @@ function populatePlan2DFromDesign(){
     gMinX=Math.min(gMinX, rr.x-hw); gMaxX=Math.max(gMaxX, rr.x+hw);
     gMinZ=Math.min(gMinZ, rr.z-hd); gMaxZ=Math.max(gMaxZ, rr.z+hd);
   }
-  // Garages & pergolas (ground)
-  for (var gi=0; gi<garageComponents.length; gi++){ var gar=garageComponents[gi]; var hwg=gar.width/2, hdg=gar.depth/2; gMinX=Math.min(gMinX, gar.x-hwg); gMaxX=Math.max(gMaxX, gar.x+hwg); gMinZ=Math.min(gMinZ, gar.z-hdg); gMaxZ=Math.max(gMaxZ, gar.z+hdg); }
-  for (var pi=0; pi<pergolaComponents.length; pi++){ var per=pergolaComponents[pi]; var hwp=per.width/2, hdp=per.depth/2; gMinX=Math.min(gMinX, per.x-hwp); gMaxX=Math.max(gMaxX, per.x+hwp); gMinZ=Math.min(gMinZ, per.z-hdp); gMaxZ=Math.max(gMaxZ, per.z+hdp); }
-  // Balconies (first)
-  for (var bi=0; bi<balconyComponents.length; bi++){ var bal=balconyComponents[bi]; var hwb=bal.width/2, hdb=bal.depth/2; gMinX=Math.min(gMinX, bal.x-hwb); gMaxX=Math.max(gMaxX, bal.x+hwb); gMinZ=Math.min(gMinZ, bal.z-hdb); gMaxZ=Math.max(gMaxZ, bal.z+hdb); }
+  // Garages & pergolas (ground) - rotation-aware global bounds
+  for (var gi=0; gi<garageComponents.length; gi++){
+    var gar=garageComponents[gi]; var hwg=gar.width/2, hdg=gar.depth/2; var rotG=((gar.rotation||0)*Math.PI)/180;
+    function rG(px,pz){ var dx=px-gar.x, dz=pz-gar.z; return {x:gar.x+dx*Math.cos(rotG)-dz*Math.sin(rotG), z:gar.z+dx*Math.sin(rotG)+dz*Math.cos(rotG)}; }
+    var g1=rG(gar.x-hwg, gar.z-hdg), g2=rG(gar.x+hwg, gar.z-hdg), g3=rG(gar.x+hwg, gar.z+hdg), g4=rG(gar.x-hwg, gar.z+hdg);
+    gMinX=Math.min(gMinX, g1.x,g2.x,g3.x,g4.x); gMaxX=Math.max(gMaxX, g1.x,g2.x,g3.x,g4.x);
+    gMinZ=Math.min(gMinZ, g1.z,g2.z,g3.z,g4.z); gMaxZ=Math.max(gMaxZ, g1.z,g2.z,g3.z,g4.z);
+  }
+  for (var pi=0; pi<pergolaComponents.length; pi++){
+    var per=pergolaComponents[pi]; var hwp=per.width/2, hdp=per.depth/2; var rotP=((per.rotation||0)*Math.PI)/180;
+    function rP(px,pz){ var dx=px-per.x, dz=pz-per.z; return {x:per.x+dx*Math.cos(rotP)-dz*Math.sin(rotP), z:per.z+dx*Math.sin(rotP)+dz*Math.cos(rotP)}; }
+    var p1=rP(per.x-hwp, per.z-hdp), p2=rP(per.x+hwp, per.z-hdp), p3=rP(per.x+hwp, per.z+hdp), p4=rP(per.x-hwp, per.z+hdp);
+    gMinX=Math.min(gMinX, p1.x,p2.x,p3.x,p4.x); gMaxX=Math.max(gMaxX, p1.x,p2.x,p3.x,p4.x);
+    gMinZ=Math.min(gMinZ, p1.z,p2.z,p3.z,p4.z); gMaxZ=Math.max(gMaxZ, p1.z,p2.z,p3.z,p4.z);
+  }
+  // Balconies (first) - rotation-aware global bounds
+  for (var bi=0; bi<balconyComponents.length; bi++){
+    var bal=balconyComponents[bi]; var hwb=bal.width/2, hdb=bal.depth/2; var rotB=((bal.rotation||0)*Math.PI)/180;
+    function rB(px,pz){ var dx=px-bal.x, dz=pz-bal.z; return {x:bal.x+dx*Math.cos(rotB)-dz*Math.sin(rotB), z:bal.z+dx*Math.sin(rotB)+dz*Math.cos(rotB)}; }
+    var b1=rB(bal.x-hwb, bal.z-hdb), b2=rB(bal.x+hwb, bal.z-hdb), b3=rB(bal.x+hwb, bal.z+hdb), b4=rB(bal.x-hwb, bal.z+hdb);
+    gMinX=Math.min(gMinX, b1.x,b2.x,b3.x,b4.x); gMaxX=Math.max(gMaxX, b1.x,b2.x,b3.x,b4.x);
+    gMinZ=Math.min(gMinZ, b1.z,b2.z,b3.z,b4.z); gMaxZ=Math.max(gMaxZ, b1.z,b2.z,b3.z,b4.z);
+  }
   // Stairs (single location)
   if (stairsComponent){ var s=stairsComponent; var hwS=s.width/2, hdS=s.depth/2; var rot=((s.rotation||0)*Math.PI)/180; function r(px,pz){ var dx=px-s.x, dz=pz-s.z; return {x:s.x+dx*Math.cos(rot)-dz*Math.sin(rot), z:s.z+dx*Math.sin(rot)+dz*Math.cos(rot)}; } var gp1=r(s.x-hwS, s.z-hdS), gp2=r(s.x+hwS, s.z-hdS), gp3=r(s.x+hwS, s.z+hdS), gp4=r(s.x-hwS, s.z+hdS); gMinX=Math.min(gMinX, gp1.x,gp2.x,gp3.x,gp4.x); gMaxX=Math.max(gMaxX, gp1.x,gp2.x,gp3.x,gp4.x); gMinZ=Math.min(gMinZ, gp1.z,gp2.z,gp3.z,gp4.z); gMaxZ=Math.max(gMaxZ, gp1.z,gp2.z,gp3.z,gp4.z); }
   var gcx = (isFinite(gMinX)&&isFinite(gMaxX)) ? (gMinX+gMaxX)/2 : (minX+maxX)/2;
@@ -7978,11 +8048,30 @@ function populatePlan2DFromDesign(){
     var idxLeft = __plan2d.elements.length;    __plan2d.elements.push({type:'wall', x0:x0,y0:y1, x1:x0,y1:y0, thickness:__plan2d.wallThicknessM});
     return { top: idxTop, right: idxRight, bottom: idxBottom, left: idxLeft, coords: {x0:x0,x1:x1,y0:y0,y1:y1} };
   }
+  function addRotatedRectWalls(cxW, czW, w, d, rotationDeg){
+    var s = (__plan2d.yFromWorldZSign||1);
+    var hw=w/2, hd=d/2, rot=((rotationDeg||0)*Math.PI)/180;
+    function rotW(px,pz){ var dx=px-cxW, dz=pz-czW; return { x: cxW + dx*Math.cos(rot) - dz*Math.sin(rot), z: czW + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+    var c1=rotW(cxW-hw, czW-hd), c2=rotW(cxW+hw, czW-hd), c3=rotW(cxW+hw, czW+hd), c4=rotW(cxW-hw, czW+hd);
+    function toPlan(p){ return { x: (p.x - cx), y: s * (p.z - cz) }; }
+    var p1=toPlan(c1), p2=toPlan(c2), p3=toPlan(c3), p4=toPlan(c4);
+    var i1 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p1.x,y0:p1.y, x1:p2.x,y1:p2.y, thickness:__plan2d.wallThicknessM});
+    var i2 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p2.x,y0:p2.y, x1:p3.x,y1:p3.y, thickness:__plan2d.wallThicknessM});
+    var i3 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p3.x,y0:p3.y, x1:p4.x,y1:p4.y, thickness:__plan2d.wallThicknessM});
+    var i4 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p4.x,y0:p4.y, x1:p1.x,y1:p1.y, thickness:__plan2d.wallThicknessM});
+    return { top: i1, right: i2, bottom: i3, left: i4, coords: {p1:p1,p2:p2,p3:p3,p4:p4} };
+  }
   for (var rci=0;rci<rects.length;rci++){
     var rb=rects[rci];
-    // Build walls for rooms, garages, pergolas, and balconies
-    if(rb.type!=='room' && rb.type!=='garage' && rb.type!=='pergola' && rb.type!=='balcony') continue;
-    var wallIdx = addRectWalls(rb.minX, rb.maxX, rb.minZ, rb.maxZ);
+  // Build walls for rooms, garages, pergolas, and balconies
+  if(rb.type!=='room' && rb.type!=='garage' && rb.type!=='pergola' && rb.type!=='balcony') continue;
+    var wallIdx;
+    var hasRotation = (typeof rb.rotation==='number' && Math.abs(rb.rotation)%360>1e-6);
+    if (hasRotation) {
+      wallIdx = addRotatedRectWalls(rb.cx, rb.cz, rb.w, rb.d, rb.rotation);
+    } else {
+      wallIdx = addRectWalls(rb.minX, rb.maxX, rb.minZ, rb.maxZ);
+    }
     // Re-create openings (windows/doors) anchored to walls for rooms
     if(rb.type==='room' && Array.isArray(rb.openings) && rb.openings.length){
       var s = (__plan2d.yFromWorldZSign||1);
