@@ -7399,9 +7399,60 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
   // (Removed) Overlay: live wall dimension during drag
   // (Removed) Overlay: dimension lines for every wall
 }
-function plan2dHoverErase(p){ var best=-1, bestDist=0.25; for(var i=0;i<__plan2d.elements.length;i++){ var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; } } __plan2d.hoverIndex=best; plan2dDraw(); }
+function plan2dHoverErase(p){
+  var best=-1, bestDist=0.25;
+  for(var i=0;i<__plan2d.elements.length;i++){
+    var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; }
+  }
+  __plan2d.hoverIndex=best; plan2dDraw();
+}
+
+// Find nearest element of specific types to point p within maxDist (meters in plan space)
+function plan2dFindNearestOfTypes(p, types, maxDist){
+  var elems = __plan2d.elements||[]; var bestIdx=-1; var bestDist=(typeof maxDist==='number'? maxDist : 0.2);
+  for(var i=0;i<elems.length;i++){
+    var e=elems[i]; if(!e || types.indexOf(e.type)===-1) continue;
+    var d = plan2dPointSegDist(p.x,p.y,e);
+    if(d < bestDist){ bestDist = d; bestIdx = i; }
+  }
+  return { index: bestIdx, dist: bestDist };
+}
+
+// Robust element eraser that keeps window/door host indices consistent
+function plan2dEraseElementAt(idx){
+  var arr = __plan2d.elements; if(!arr || idx<0 || idx>=arr.length) return false;
+  var removed = arr[idx];
+  // Remove the element
+  arr.splice(idx, 1);
+  if(removed && removed.type==='wall'){
+    // Remove all openings hosted on this wall and fix host indices for remaining
+    for(var i=arr.length-1; i>=0; i--){
+      var el = arr[i]; if(!el) continue;
+      if((el.type==='window' || el.type==='door') && typeof el.host==='number'){
+        if(el.host === idx){ arr.splice(i,1); continue; }
+        if(el.host > idx){ el.host -= 1; }
+      }
+    }
+  } else {
+    // Non-wall removed: shift host indices for openings that point to walls after idx
+    for(var j=0; j<arr.length; j++){
+      var e = arr[j]; if(!e) continue;
+      if((e.type==='window' || e.type==='door') && typeof e.host==='number'){
+        if(e.host > idx){ e.host -= 1; }
+      }
+    }
+  }
+  return true;
+}
+
 function plan2dEraseAt(p){
-  // Prefer subsegment deletion if a wall subsegment is under cursor
+  // 1) Prefer deleting a window under cursor
+  var win = plan2dFindNearestOfTypes(p, ['window'], 0.2);
+  if(win.index>=0){ if(plan2dEraseElementAt(win.index)){ __plan2d.hoverIndex=-1; plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); } return; }
+  // 2) Prefer deleting a door under cursor
+  var dor = plan2dFindNearestOfTypes(p, ['door'], 0.2);
+  if(dor.index>=0){ if(plan2dEraseElementAt(dor.index)){ __plan2d.hoverIndex=-1; plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); } return; }
+  // 3) Try deleting a wall subsegment (replaces just that span with solid wall)
   var segHit = plan2dHitWallSubsegment(p, 0.15);
   if(segHit){
     __plan2d.selectedSubsegment = segHit;
@@ -7410,9 +7461,9 @@ function plan2dEraseAt(p){
       return;
     }
   }
-  // Fallback to whole element erase
+  // 4) Fallback to erase nearest element (with host index fixups)
   plan2dHoverErase(p);
-  if(__plan2d.hoverIndex>=0){ __plan2d.elements.splice(__plan2d.hoverIndex,1); __plan2d.hoverIndex=-1; plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); }
+  if(__plan2d.hoverIndex>=0){ var delIdx = __plan2d.hoverIndex; plan2dEraseElementAt(delIdx); __plan2d.hoverIndex=-1; plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); }
 }
 // Selection prefers windows if window tool is active; else any nearest element
 function plan2dSelectAt(p){ var best=-1, bestDist=0.2; for(var i=0;i<__plan2d.elements.length;i++){ var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; } } __plan2d.selectedIndex=best; plan2dDraw(); }
