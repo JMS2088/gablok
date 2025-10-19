@@ -296,7 +296,13 @@
 	<div id="plan2d-backdrop" style="position:absolute; inset:0; background:rgba(0,0,0,0.55);"></div>
 		<div id="plan2d-content" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width: min(2200px,99vw); height:min(99vh,1200px); background:#ffffff; border-radius:18px; display:flex; flex-direction:column; box-shadow:0 22px 70px -8px rgba(0,0,0,0.55); overflow:hidden;">
 		<div style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:#f1f5f9; border-bottom:1px solid #e2e8f0;">
-			<strong style="flex:1; font-size:15px; letter-spacing:0.5px;">2D Floor Plan Editor</strong>
+			<strong style="font-size:15px; letter-spacing:0.5px;">2D Floor Plan Editor</strong>
+			<div style="flex:1; display:flex; justify-content:center;">
+				<div class="plan2d-floor-toggle" role="group" aria-label="Switch Floor">
+					<button id="plan2d-floor-ground" type="button" title="Switch to Ground Floor">Ground</button>
+					<button id="plan2d-floor-first" type="button" title="Switch to First Floor">First</button>
+				</div>
+			</div>
 			<div style="display:flex; gap:6px;">
 				<button id="plan2d-tool-wall" class="secondary" title="Draw Walls (300mm thick)">Wall</button>
 				<button id="plan2d-tool-window" class="secondary" title="Draw Windows (thin line)">Window</button>
