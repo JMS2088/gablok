@@ -6155,7 +6155,9 @@ var __plan2d = {
   // Wall endpoint drag state
   dragWall:null,       // { index, end:'a'|'b', orient:'h'|'v', other:{x,y} }
   // Selected wall subsegment between junctions (for targeted deletion)
-  selectedSubsegment:null // { wallIndex, t0, t1, ax, ay, bx, by }
+  selectedSubsegment:null, // { wallIndex, t0, t1, ax, ay, bx, by }
+  // Rendering preference: when false, draw white boxes + text on base canvas at original positions
+  drawLabelBoxesOnLabelsLayer:false
 };
 
 // ===== 2D/3D LIVE SYNC HELPERS =====
@@ -6688,7 +6690,19 @@ function plan2dBind(){
 }
 function plan2dUnbind(){ try{ if(window.__plan2dResize) window.removeEventListener('resize', window.__plan2dResize); if(window.__plan2dKeydown) document.removeEventListener('keydown', window.__plan2dKeydown, true); }catch(e){} }
 
-function plan2dResize(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var l2=document.getElementById('labels-2d'); if(!c||!ov) return; var rect=c.getBoundingClientRect(); var dpr=window.devicePixelRatio||1; var W=Math.floor(rect.width*dpr), H=Math.floor(rect.height*dpr); if(c.width!==W||c.height!==H){ c.width=W; c.height=H; ov.width=W; ov.height=H; if(l2){ l2.width=W; l2.height=H; } } }
+function plan2dResize(){
+  var c=document.getElementById('plan2d-canvas');
+  var ov=document.getElementById('plan2d-overlay');
+  var l2=document.getElementById('labels-2d');
+  if(!c||!ov) return;
+  var rect=c.getBoundingClientRect();
+  var dpr=window.devicePixelRatio||1;
+  var W=Math.floor(rect.width*dpr), H=Math.floor(rect.height*dpr);
+  // Always ensure each canvas matches the device pixel size to avoid clipping text
+  if(c.width!==W||c.height!==H){ c.width=W; c.height=H; }
+  if(ov.width!==W||ov.height!==H){ ov.width=W; ov.height=H; }
+  if(l2 && (l2.width!==W||l2.height!==H)){ l2.width=W; l2.height=H; }
+}
 function plan2dCursor(){ var c=document.getElementById('plan2d-canvas'); if(!c) return; c.style.cursor = (__plan2d.tool==='erase') ? 'not-allowed' : (__plan2d.tool==='select' ? 'pointer' : 'crosshair'); }
 
 function plan2dFinalize(a,b){ if(!a||!b) return; // snap to straight axis
@@ -6934,17 +6948,53 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
           try {
             var minXS = Math.min(sp1.x, sp2.x, sp3.x, sp4.x);
             var minYS = Math.min(sp1.y, sp2.y, sp3.y, sp4.y);
-            var padX = 10, padY = 6, fontSize = 22, lineH = 28;
-            ctx.save(); ctx.font = fontSize + 'px sans-serif';
+            var __dpr = window.devicePixelRatio || 1;
+            // Match DOM .room-label style: pill with shadow, semi-bold, centered
+            var padXCss = 11, padYCss = 6, baseFontPxCss = 12, radiusCss = 19;
+            var padX = padXCss * __dpr, padY = padYCss * __dpr, fontSize = baseFontPxCss * __dpr, radius = radiusCss * __dpr;
+            ctx.save(); ctx.font = '600 ' + fontSize + 'px system-ui, sans-serif';
             var sText = (stairsComponent.name || 'Stairs');
             var tW = ctx.measureText(sText).width;
-            var bx = Math.round(minXS + 6), by = Math.round(minYS + 6), bw = Math.round(tW + padX*2), bh = lineH;
-            // store for labels-2d text draw later
-            labelBoxes.push({ x: bx, y: by, w: bw, h: bh, text: sText });
-            // draw white background behind where text will be
-            ctx.globalAlpha = (stairsLvl === lvlNow) ? 0.98 : 0.55;
-            ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(15,23,42,0.2)'; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.fill(); ctx.stroke();
+            var bx = Math.round(minXS + 6 * __dpr), by = Math.round(minYS + 6 * __dpr), bw = Math.round(tW + padX*2), bh = Math.round(fontSize + padY*2);
+            radius = Math.min(radius, bh/2);
+            // Clamp box fully inside canvas to avoid being cut off
+            try {
+              var cEl = document.getElementById('plan2d-canvas');
+              if (cEl) { var cw=cEl.width||0, ch=cEl.height||0; bx = Math.max(6, Math.min(bx, Math.max(6, cw - bw - 6))); by = Math.max(6, Math.min(by, Math.max(6, ch - bh - 6))); }
+            } catch(e){}
+            // store (not used for drawing now) and draw on base canvas at original location
+            var aVal = ((stairsLvl === lvlNow) ? 0.98 : 0.55);
+            labelBoxes.push({ x: bx, y: by, w: bw, h: bh, text: sText, a: aVal });
+            // Draw rounded pill background without shadow
+            ctx.globalAlpha = aVal;
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            // rounded rect path
+            ctx.moveTo(bx + radius, by);
+            ctx.lineTo(bx + bw - radius, by);
+            ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + radius);
+            ctx.lineTo(bx + bw, by + bh - radius);
+            ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - radius, by + bh);
+            ctx.lineTo(bx + radius, by + bh);
+            ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - radius);
+            ctx.lineTo(bx, by + radius);
+            ctx.quadraticCurveTo(bx, by, bx + radius, by);
+            ctx.closePath();
+            ctx.fill();
+            // Draw centered text, auto-fit within padding
+            try {
+              var available = Math.max(0, bw - padX*2);
+              var fontPxCss = baseFontPxCss; ctx.font = '600 ' + (fontPxCss * __dpr) + 'px system-ui, sans-serif';
+              var tw = ctx.measureText(sText).width;
+              if (available > 0 && tw > available) {
+                var scale = available / Math.max(1, tw);
+                fontPxCss = Math.max(9, Math.floor(baseFontPxCss * scale));
+                ctx.font = '600 ' + (fontPxCss * __dpr) + 'px system-ui, sans-serif';
+              }
+              var tx = bx + bw/2, ty = by + bh/2;
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.fillStyle = '#333333'; ctx.fillText(sText, tx, ty);
+            } catch(e){}
             ctx.restore();
           } catch(e) { /* ignore label bg */ }
           // Draw a few treads for orientation
@@ -6977,12 +7027,46 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         if (labelText) {
           try {
             var minX = Math.min(p1.x,p2.x,p3.x,p4.x), minY = Math.min(p1.y,p2.y,p3.y,p4.y);
-            var padX = 10, padY = 6, fontSize = 22, lineH = 28;
-            ctx.font = fontSize + 'px sans-serif'; var tW = ctx.measureText(labelText).width;
-            var bx = Math.round(minX + 6), by = Math.round(minY + 6), bw = Math.round(tW + padX*2), bh = lineH;
-            labelBoxes.push({ x: bx, y: by, w: bw, h: bh, text: labelText });
-            ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(15,23,42,0.2)'; ctx.lineWidth = 1; ctx.globalAlpha = alpha;
-            ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.fill(); ctx.stroke();
+            var __dpr2 = window.devicePixelRatio || 1;
+            // Match DOM .room-label style for overlay labels
+            var padXCss2 = 11, padYCss2 = 6, baseFontPxCss2 = 12, radiusCss2 = 19;
+            var padX2 = padXCss2 * __dpr2, padY2 = padYCss2 * __dpr2, fontSize2 = baseFontPxCss2 * __dpr2, radius2 = radiusCss2 * __dpr2;
+            ctx.font = '600 ' + fontSize2 + 'px system-ui, sans-serif'; var tW = ctx.measureText(labelText).width;
+            var bx = Math.round(minX + 6 * __dpr2), by = Math.round(minY + 6 * __dpr2), bw = Math.round(tW + padX2*2), bh = Math.round(fontSize2 + padY2*2);
+            radius2 = Math.min(radius2, bh/2);
+            // Clamp inside canvas bounds
+            try { var cEl=document.getElementById('plan2d-canvas'); if(cEl){ var cw=cEl.width||0, ch=cEl.height||0; bx = Math.max(6, Math.min(bx, Math.max(6, cw - bw - 6))); by = Math.max(6, Math.min(by, Math.max(6, ch - bh - 6))); } } catch(e){}
+            // Store info (not used for draw now) and draw on base canvas at original location
+            labelBoxes.push({ x: bx, y: by, w: bw, h: bh, text: labelText, a: alpha });
+            // Background pill without shadow
+            ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.moveTo(bx + radius2, by);
+            ctx.lineTo(bx + bw - radius2, by);
+            ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + radius2);
+            ctx.lineTo(bx + bw, by + bh - radius2);
+            ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - radius2, by + bh);
+            ctx.lineTo(bx + radius2, by + bh);
+            ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - radius2);
+            ctx.lineTo(bx, by + radius2);
+            ctx.quadraticCurveTo(bx, by, bx + radius2, by);
+            ctx.closePath();
+            ctx.fill();
+            // Centered text with auto-fit inside padding
+            try {
+              var available2 = Math.max(0, bw - padX2*2);
+              var fontPxCss2 = baseFontPxCss2; ctx.font = '600 ' + (fontPxCss2 * __dpr2) + 'px system-ui, sans-serif';
+              var tw2 = ctx.measureText(labelText).width;
+              if (available2 > 0 && tw2 > available2) {
+                var scale2 = available2 / Math.max(1, tw2);
+                fontPxCss2 = Math.max(9, Math.floor(baseFontPxCss2 * scale2));
+                ctx.font = '600 ' + (fontPxCss2 * __dpr2) + 'px system-ui, sans-serif';
+              }
+              var tx2 = bx + bw/2, ty2 = by + bh/2;
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.fillStyle = '#333333'; ctx.fillText(labelText, tx2, ty2);
+            } catch(e){}
+            ctx.restore();
           } catch(e) { /* ignore */ }
         }
         ctx.restore();
@@ -7117,22 +7201,55 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       }
       function getAABB(pts){ var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; for(var i=0;i<pts.length;i++){ var p=pts[i]; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; } return {minX:minX,minY:minY,maxX:maxX,maxY:maxY}; }
       var SHOW_2D_LABEL_COORDS = true;
-  lx.save();
-  lx.font = '12px sans-serif';
-  lx.textAlign = 'center';
-  // Use middle baseline so y = center places glyphs visually in the middle reliably across browsers
-  lx.textBaseline = 'middle';
-      // Draw each item's name inside its white square at top-left
-      lx.save();
-      lx.font = '22px sans-serif';
-      lx.textAlign = 'left';
-      lx.textBaseline = 'middle';
-      var boxes = (__plan2d.__labelBoxes2D || []);
-      for (var li=0; li<boxes.length; li++){
-        var lb = boxes[li];
-        lx.fillStyle = '#000000';
-        lx.fillText(lb.text, lb.x + 10, lb.y + lb.h/2);
+  if (__plan2d.drawLabelBoxesOnLabelsLayer && l2c) {
+    lx.save();
+    lx.font = '12px sans-serif';
+    lx.textAlign = 'center';
+    lx.textBaseline = 'middle';
+    // Draw white box + centered text on labels layer if explicitly enabled
+    lx.save();
+    var __dprT = window.devicePixelRatio || 1;
+    // Match DOM room-label appearance
+    var baseFontPx = 12, minFontPx = 9;
+    lx.textBaseline = 'middle';
+    var boxes = (__plan2d.__labelBoxes2D || []);
+    for (var li=0; li<boxes.length; li++){
+      var lb = boxes[li] || {};
+      var bx = +lb.x || 0, by = +lb.y || 0, bw = +lb.w || 0, bh = +lb.h || 0;
+      var labelText = (lb.text == null ? '' : String(lb.text));
+      var alpha = (typeof lb.a === 'number' ? lb.a : 0.95);
+  // background pill without shadow
+  lx.save(); lx.globalAlpha = alpha; lx.fillStyle = '#ffffff';
+  var radius = 19 * __dprT;
+      lx.beginPath();
+      lx.moveTo(bx + radius, by);
+      lx.lineTo(bx + bw - radius, by);
+      lx.quadraticCurveTo(bx + bw, by, bx + bw, by + radius);
+      lx.lineTo(bx + bw, by + bh - radius);
+      lx.quadraticCurveTo(bx + bw, by + bh, bx + bw - radius, by + bh);
+      lx.lineTo(bx + radius, by + bh);
+      lx.quadraticCurveTo(bx, by + bh, bx, by + bh - radius);
+      lx.lineTo(bx, by + radius);
+      lx.quadraticCurveTo(bx, by, bx + radius, by);
+      lx.closePath();
+      lx.fill();
+      lx.restore();
+      // text centered with padding fit
+      var padX = 11 * __dprT;
+      var available = Math.max(0, bw - padX * 2);
+      var fontPx = baseFontPx; lx.font = '600 ' + (fontPx * __dprT) + 'px system-ui, sans-serif';
+      var tw = lx.measureText(labelText).width;
+      if (available > 0 && tw > available) {
+        var scale = available / Math.max(1, tw);
+        fontPx = Math.max(minFontPx, Math.floor(baseFontPx * scale));
+        lx.font = '600 ' + (fontPx * __dprT) + 'px system-ui, sans-serif';
       }
+      lx.textAlign = 'center'; lx.fillStyle = '#333333';
+      var tx = bx + bw / 2, ty = by + bh / 2;
+      lx.fillText(labelText, tx, ty);
+    }
+    lx.restore();
+  }
   if(__plan2d.debug){
     try {
       var dpr = window.devicePixelRatio || 1;
