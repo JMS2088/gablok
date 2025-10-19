@@ -6189,21 +6189,17 @@ function plan2dScheduleApply(now){
   var run=function(){
     try{
       __plan2d.syncInProgress=true;
-      // Only apply live edits to the ground floor for now to avoid unintended cross-floor edits
+      // Apply live edits level-aware
       var lvl = (typeof currentFloor==='number' ? currentFloor : 0);
-      if(lvl !== 0){
-        // Update signatures to keep sync working, but skip applying to 3D
-        __plan2d._lastWallsSig = plan2dSigWallsOnly();
-        __plan2d._last3Dsig = plan2dSig3D();
-        __plan2d._last2Dsig = plan2dSig2D();
-        return;
-      }
       // If walls are unchanged, we can safely rebuild rooms+openings to reflect door/window edits in 3D
       var wallsSigNow = plan2dSigWallsOnly();
       if(wallsSigNow && __plan2d._lastWallsSig && wallsSigNow === __plan2d._lastWallsSig){
-        applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true });
+        applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl });
       } else {
-        applyPlan2DTo3D(plan2dGetElementsSnapshot(), { stripsOnly:true, quiet:true });
+        // Build strips only on ground floor; for first floor skip strips and just update signatures
+        if (lvl === 0){
+          applyPlan2DTo3D(plan2dGetElementsSnapshot(), { stripsOnly:true, quiet:true, level: 0 });
+        }
       }
       __plan2d._lastWallsSig = wallsSigNow;
       __plan2d._last3Dsig = plan2dSig3D(); __plan2d._last2Dsig = plan2dSig2D();
@@ -6289,8 +6285,7 @@ function plan2dBind(){
   var fi=document.getElementById('plan2d-import-file'); if(fi) fi.onchange=function(e){ var f=e.target.files&&e.target.files[0]; if(!f)return; var r=new FileReader(); r.onload=function(){ try{ var arr=JSON.parse(r.result); if(Array.isArray(arr)){ __plan2d.elements=arr; __plan2d.selectedIndex=-1; plan2dDraw(); updatePlan2DInfo(); updateStatus('2D plan imported'); plan2dEdited(); } }catch(err){ updateStatus('Import failed'); } }; r.readAsText(f); fi.value=''; };
   var bApply3D=document.getElementById('plan2d-apply-3d'); if(bApply3D) bApply3D.onclick=function(){ try{
     var lvl = (typeof currentFloor==='number' ? currentFloor : 0);
-    if(lvl!==0){ updateStatus('Apply to 3D is only supported for Ground Floor at the moment'); return; }
-    applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false });
+    applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false, level: lvl });
   }catch(e){} };
   // Central deletion used by both keyboard and button; supports subsegment, selection, or hovered element
   function plan2dDeleteSelection(){
@@ -6757,40 +6752,8 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         ctx.beginPath(); ctx.fillStyle='#e5e7eb'; ctx.strokeStyle='#334155'; ctx.lineWidth=__plan2d.wallStrokePx;
         ctx.moveTo(aSeg.x+nx*halfPx,aSeg.y+ny*halfPx); ctx.lineTo(bSeg.x+nx*halfPx,bSeg.y+ny*halfPx); ctx.lineTo(bSeg.x-nx*halfPx,bSeg.y-ny*halfPx); ctx.lineTo(aSeg.x-nx*halfPx,aSeg.y-ny*halfPx); ctx.closePath(); ctx.fill(); ctx.stroke();
 
-        // Inline segment length label: draw centered inside the wall polygon using this exact geometry
-        (function(){
-          var minLabelPx = 40; // skip tiny segments
-          if(Ls < minLabelPx) return;
-          var segLenM = Math.hypot(sx1 - sx0, sy1 - sy0);
-          var txt = formatMeters(segLenM) + ' m';
-          var midx = (aSeg.x + bSeg.x) * 0.5, midy = (aSeg.y + bSeg.y) * 0.5;
-          var angle = Math.atan2(dys, dxs);
-          if (angle > Math.PI/2 || angle < -Math.PI/2) angle += Math.PI; // keep upright
-          var pad = 6; var maxW = Math.max(10, Ls - pad*2);
-          var wallPx = (thick * __plan2d.scale) || 1; var marginY = 2; var maxH = Math.max(6, (2*halfPx) - marginY*2);
-          ctx.save();
-          ctx.translate(midx, midy);
-          ctx.rotate(angle);
-          var baseFontSize = 19; ctx.font = baseFontSize + 'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-          var textW = ctx.measureText(txt).width;
-          var bw = Math.ceil(textW + 12), bh = 18; // pill dimensions before scaling
-          var scaleW = maxW / bw, scaleH = maxH / bh; var scale = Math.min(1, scaleW, scaleH);
-          if (scale < 0.55) { ctx.restore(); return; }
-          ctx.scale(scale, scale);
-          // draw pill background centered at (0,0)
-          var rx = -bw/2, ry = -bh/2, rr = 4;
-          ctx.beginPath();
-          ctx.moveTo(rx+rr, ry); ctx.lineTo(rx+bw-rr, ry); ctx.quadraticCurveTo(rx+bw, ry, rx+bw, ry+rr);
-          ctx.lineTo(rx+bw, ry+bh-rr); ctx.quadraticCurveTo(rx+bw, ry+bh, rx+bw-rr, ry+bh);
-          ctx.lineTo(rx+rr, ry+bh); ctx.quadraticCurveTo(rx, ry+bh, rx, ry+bh-rr);
-          ctx.lineTo(rx, ry+rr); ctx.quadraticCurveTo(rx, ry, rx+rr, ry);
-          ctx.closePath();
-          ctx.fillStyle = 'rgba(2,6,23,0.82)'; ctx.fill();
-          ctx.strokeStyle = 'rgba(148,163,184,0.7)'; ctx.lineWidth = 1; ctx.stroke();
-          ctx.fillStyle = '#e5e7eb';
-          ctx.fillText(txt, 0, 0.5);
-          ctx.restore();
-        })();
+        // (Removed) Inline segment length label/pill inside wall polygon
+  // Live preview: carve a temporary gap where a door/window would be placed before element creation
       }
       // Skip default solid wall draw since we've drawn segments
       continue;
@@ -6863,58 +6826,52 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       ctx.restore();
     }
   }
-  // Draw stairs overlay aligned to world position using plan mapping
-  try {
-    if (stairsComponent && __plan2d && __plan2d.active) {
-      var lvlNow = (typeof currentFloor==='number' ? currentFloor : 0);
-      var stairsLvl = (typeof stairsComponent.level==='number' ? stairsComponent.level : 0);
-      var sgn = (__plan2d.yFromWorldZSign || 1);
-      var rot = ((stairsComponent.rotation || 0) * Math.PI) / 180;
-      var hwS = (stairsComponent.width || 0)/2;
-      var hdS = (stairsComponent.depth || 0)/2;
-      function rotW(px, pz){ var dx=px - stairsComponent.x, dz=pz - stairsComponent.z; return { x: stairsComponent.x + dx*Math.cos(rot) - dz*Math.sin(rot), z: stairsComponent.z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
-      var c1 = rotW(stairsComponent.x - hwS, stairsComponent.z - hdS);
-      var c2 = rotW(stairsComponent.x + hwS, stairsComponent.z - hdS);
-      var c3 = rotW(stairsComponent.x + hwS, stairsComponent.z + hdS);
-      var c4 = rotW(stairsComponent.x - hwS, stairsComponent.z + hdS);
-      function mapPlan(p){ return { x: (p.x - __plan2d.centerX), y: sgn * (p.z - __plan2d.centerZ) }; }
-      var p1 = worldToScreen2D(mapPlan(c1).x, mapPlan(c1).y);
-      var p2 = worldToScreen2D(mapPlan(c2).x, mapPlan(c2).y);
-      var p3 = worldToScreen2D(mapPlan(c3).x, mapPlan(c3).y);
-      var p4 = worldToScreen2D(mapPlan(c4).x, mapPlan(c4).y);
-      // Style: solid on its own floor, faint on the other
-      ctx.save();
-  ctx.globalAlpha = (stairsLvl === lvlNow) ? 0.95 : 0.35;
-  ctx.fillStyle = (stairsLvl === lvlNow) ? 'rgba(15,23,42,0.10)' : 'rgba(15,23,42,0.06)';
-  ctx.strokeStyle = (stairsLvl === lvlNow) ? '#334155' : '#94a3b8';
-  // Increase stairs keyline stroke by +2px (active and other floor)
-  ctx.lineWidth = (stairsLvl === lvlNow) ? 6 : 5;
-      ctx.beginPath();
-      ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);
-      ctx.closePath();
-      ctx.fill(); ctx.stroke();
-      // Optional: draw a few treads for visual orientation
-      try {
-        var steps = Math.max(1, Math.floor(stairsComponent.steps || 12));
-        for (var si = 1; si < steps; si++) {
-          var t = si / steps; // along depth from -hdS to +hdS
-          var zW = stairsComponent.z - hdS + t * (stairsComponent.depth || 0);
-          var aW = rotW(stairsComponent.x - hwS, zW);
-          var bW = rotW(stairsComponent.x + hwS, zW);
-          var aS = worldToScreen2D(mapPlan(aW).x, mapPlan(aW).y);
-          var bS = worldToScreen2D(mapPlan(bW).x, mapPlan(bW).y);
-          ctx.beginPath(); ctx.strokeStyle = 'rgba(100,116,139,0.9)'; ctx.lineWidth = 1; ctx.moveTo(aS.x, aS.y); ctx.lineTo(bS.x, bS.y); ctx.stroke();
-        }
-      } catch(e) { /* ignore treads errors */ }
-  // Labels are rendered on the overlay canvas using the same world→plan mapping as the stairs
-  // (removed duplicate base-canvas label/dimension rendering to avoid misalignment)
-      ctx.restore();
-    }
-  } catch(e) { /* stairs overlay failure should not break plan draw */ }
+  // Stairs are rendered on the overlay canvas only. Removed base-canvas stairs to avoid duplicates.
 
   // Color-coded overlays for pergola, garage, and balcony using world coords -> plan mapping
   try {
     if (__plan2d && __plan2d.active) {
+      // Draw stairs footprint on the base canvas (authoritative rendering)
+      try {
+        if (stairsComponent) {
+          var lvlNow = (typeof currentFloor==='number' ? currentFloor : 0);
+          var stairsLvl = (typeof stairsComponent.level==='number' ? stairsComponent.level : 0);
+          var sgnSt = (__plan2d.yFromWorldZSign || 1);
+          var rotSt = ((stairsComponent.rotation || 0) * Math.PI) / 180;
+          var hwSt = (stairsComponent.width || 0)/2;
+          var hdSt = (stairsComponent.depth || 0)/2;
+          function rotStW(px, pz){ var dx=px - stairsComponent.x, dz=pz - stairsComponent.z; return { x: stairsComponent.x + dx*Math.cos(rotSt) - dz*Math.sin(rotSt), z: stairsComponent.z + dx*Math.sin(rotSt) + dz*Math.cos(rotSt) }; }
+          var s1 = rotStW(stairsComponent.x - hwSt, stairsComponent.z - hdSt);
+          var s2 = rotStW(stairsComponent.x + hwSt, stairsComponent.z - hdSt);
+          var s3 = rotStW(stairsComponent.x + hwSt, stairsComponent.z + hdSt);
+          var s4 = rotStW(stairsComponent.x - hwSt, stairsComponent.z + hdSt);
+          function mapPlanSt(p){ return { x: (p.x - __plan2d.centerX), y: sgnSt * (p.z - __plan2d.centerZ) }; }
+          var sp1 = worldToScreen2D(mapPlanSt(s1).x, mapPlanSt(s1).y);
+          var sp2 = worldToScreen2D(mapPlanSt(s2).x, mapPlanSt(s2).y);
+          var sp3 = worldToScreen2D(mapPlanSt(s3).x, mapPlanSt(s3).y);
+          var sp4 = worldToScreen2D(mapPlanSt(s4).x, mapPlanSt(s4).y);
+          ctx.save();
+          ctx.globalAlpha = (stairsLvl === lvlNow) ? 0.95 : 0.35;
+          ctx.fillStyle = (stairsLvl === lvlNow) ? 'rgba(15,23,42,0.10)' : 'rgba(15,23,42,0.06)';
+          ctx.strokeStyle = (stairsLvl === lvlNow) ? '#334155' : '#94a3b8';
+          // Increase stairs keyline stroke by +5px over previous values
+          ctx.lineWidth = (stairsLvl === lvlNow) ? 11 : 10;
+          ctx.beginPath(); ctx.moveTo(sp1.x, sp1.y); ctx.lineTo(sp2.x, sp2.y); ctx.lineTo(sp3.x, sp3.y); ctx.lineTo(sp4.x, sp4.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+          // Draw a few treads for orientation
+          try {
+            var stepsSt = Math.max(1, Math.floor(stairsComponent.steps || 12));
+            for (var siSt = 1; siSt < stepsSt; siSt++) {
+              var tt = siSt / stepsSt; var zW = stairsComponent.z - hdSt + tt * (stairsComponent.depth || 0);
+              var aW = rotStW(stairsComponent.x - hwSt, zW); var bW = rotStW(stairsComponent.x + hwSt, zW);
+              var aS = worldToScreen2D(mapPlanSt(aW).x, mapPlanSt(aW).y);
+              var bS = worldToScreen2D(mapPlanSt(bW).x, mapPlanSt(bW).y);
+              ctx.beginPath(); ctx.strokeStyle = 'rgba(100,116,139,0.9)'; ctx.lineWidth = 1; ctx.moveTo(aS.x, aS.y); ctx.lineTo(bS.x, bS.y); ctx.stroke();
+            }
+          } catch(e) { /* ignore */ }
+          ctx.restore();
+        }
+      } catch(e) { /* base stairs draw non-fatal */ }
+
       var lvlNowC = (typeof currentFloor==='number' ? currentFloor : 0);
       var sgnC = (__plan2d.yFromWorldZSign || 1);
       function mapPlanXY(wx, wz){ return worldToScreen2D((wx - __plan2d.centerX), sgnC * (wz - __plan2d.centerZ)); }
@@ -6961,70 +6918,16 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       var nx2=-(b.y-a.y)/L2, ny2=(b.x-a.x)/L2; var half2=(__plan2d.wallThicknessM*__plan2d.scale)/2;
       ctx.beginPath(); ctx.fillStyle='rgba(226,232,240,0.55)'; ctx.strokeStyle='#64748b'; ctx.setLineDash([6,4]);
       ctx.moveTo(a.x+nx2*half2,a.y+ny2*half2); ctx.lineTo(b.x+nx2*half2,b.y+ny2*half2); ctx.lineTo(b.x-nx2*half2,b.y-ny2*half2); ctx.lineTo(a.x-nx2*half2,a.y-ny2*half2); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
-      // Live measurement label centered inside the preview wall
-      (function(){
-        var Ls = Math.hypot(b.x-a.x, b.y-a.y);
-        if(Ls < 30) return;
-        var segLenM = Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y);
-  var txt = formatMeters(segLenM) + ' m';
-        var midx=(a.x+b.x)/2, midy=(a.y+b.y)/2; var angle=Math.atan2(b.y-a.y, b.x-a.x); if(angle>Math.PI/2||angle<-Math.PI/2) angle+=Math.PI;
-        var pad=6, maxW=Math.max(10, Ls - pad*2), wallPx=(__plan2d.wallThicknessM*__plan2d.scale)||1, marginY=2, maxH=Math.max(6, wallPx - marginY*2);
-        ctx.save(); ctx.translate(midx, midy); ctx.rotate(angle);
-        var baseFontSize = 19; ctx.font=baseFontSize+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-        var textW=ctx.measureText(txt).width; var bw=Math.ceil(textW+12), bh=18; var scale=Math.min(1, maxW/bw, maxH/bh); if(scale<0.55){ ctx.restore(); return; }
-        ctx.scale(scale,scale);
-        var rx=-bw/2, ry=-bh/2, rr=4; ctx.beginPath(); ctx.moveTo(rx+rr,ry); ctx.lineTo(rx+bw-rr,ry); ctx.quadraticCurveTo(rx+bw,ry,rx+bw,ry+rr);
-        ctx.lineTo(rx+bw,ry+bh-rr); ctx.quadraticCurveTo(rx+bw,ry+bh,rx+bw-rr,ry+bh); ctx.lineTo(rx+rr,ry+bh); ctx.quadraticCurveTo(rx,ry+bh,rx,ry+bh-rr);
-        ctx.lineTo(rx,ry+rr); ctx.quadraticCurveTo(rx,ry,rx+rr,ry); ctx.closePath(); ctx.fillStyle='rgba(2,6,23,0.82)'; ctx.fill(); ctx.strokeStyle='rgba(148,163,184,0.7)'; ctx.lineWidth=1; ctx.stroke();
-        ctx.fillStyle='#e5e7eb'; ctx.fillText(txt,0,0.5); ctx.restore();
-      })();
+  // (Removed) Live measurement label centered inside the preview wall
     } else if(__plan2d.tool==='window'){
       ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.setLineDash([4,3]); ctx.lineWidth=2; ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.setLineDash([]);
-      // Live window measurement label along the preview line
-      (function(){
-        var Ls = Math.hypot(b.x-a.x, b.y-a.y); if(Ls < 20) return;
-        var segLenM = Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y);
-  var txt = formatMeters(segLenM) + ' m';
-        var midx=(a.x+b.x)/2, midy=(a.y+b.y)/2; var angle=Math.atan2(b.y-a.y, b.x-a.x); if(angle>Math.PI/2||angle<-Math.PI/2) angle+=Math.PI;
-        var pad=6, maxW=Math.max(10, Ls - pad*2), maxH=16; // thin label for window preview
-        ctx.save(); ctx.translate(midx, midy); ctx.rotate(angle);
-        var baseFontSize = 16; ctx.font=baseFontSize+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-        var textW=ctx.measureText(txt).width; var bw=Math.ceil(textW+10), bh=16; var scale=Math.min(1, maxW/bw, maxH/bh); if(scale<0.5){ ctx.restore(); return; }
-        ctx.scale(scale,scale);
-        var rx=-bw/2, ry=-bh/2, rr=4; ctx.beginPath(); ctx.moveTo(rx+rr,ry); ctx.lineTo(rx+bw-rr,ry); ctx.quadraticCurveTo(rx+bw,ry,rx+bw,ry+rr);
-        ctx.lineTo(rx+bw,ry+bh-rr); ctx.quadraticCurveTo(rx+bw,ry+bh,rx+bw-rr,ry+bh); ctx.lineTo(rx+rr,ry+bh); ctx.quadraticCurveTo(rx,ry+bh,rx,ry+bh-rr);
-        ctx.lineTo(rx,ry+rr); ctx.quadraticCurveTo(rx,ry,rx+rr,ry); ctx.closePath(); ctx.fillStyle='rgba(30,58,138,0.85)'; ctx.fill(); ctx.strokeStyle='rgba(147,197,253,0.8)'; ctx.lineWidth=1; ctx.stroke();
-        ctx.fillStyle='#e5e7eb'; ctx.fillText(txt,0,0.5); ctx.restore();
-      })();
+  // (Removed) Live window measurement label along the preview line
     }
   }
 
   // Live label while dragging a window endpoint (host-anchored)
   if(__plan2d.dragWindow){
-    var dw = __plan2d.dragWindow; var we = __plan2d.elements[dw.index];
-    var host = we && __plan2d.elements[we.host];
-    if(we && host && host.type==='wall'){
-      var t0=Math.max(0,Math.min(1,we.t0||0)), t1=Math.max(0,Math.min(1,we.t1||0));
-      var ax=host.x0+(host.x1-host.x0)*t0, ay=host.y0+(host.y1-host.y0)*t0;
-      var bx=host.x0+(host.x1-host.x0)*t1, by=host.y0+(host.y1-host.y0)*t1;
-      var aS=worldToScreen2D(ax,ay), bS=worldToScreen2D(bx,by);
-      var Ls=Math.hypot(bS.x-aS.x,bS.y-aS.y); if(Ls>15){
-  var segLenM=Math.hypot(bx-ax,by-ay); var txt=formatMeters(segLenM)+' m';
-        var midx=(aS.x+bS.x)/2, midy=(aS.y+bS.y)/2; var angle=Math.atan2(bS.y-aS.y,bS.x-aS.x); if(angle>Math.PI/2||angle<-Math.PI/2) angle+=Math.PI;
-        var thickM = host.thickness||__plan2d.wallThicknessM; var wallPx = thickM*__plan2d.scale; var maxH=Math.max(6, wallPx-4), pad=6, maxW=Math.max(10, Ls - pad*2);
-        ctx.save(); ctx.translate(midx, midy); ctx.rotate(angle);
-        var baseFontSize=16; ctx.font=baseFontSize+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-        var textW=ctx.measureText(txt).width; var bw=Math.ceil(textW+10), bh=16; var scale=Math.min(1, maxW/bw, maxH/bh); if(scale<0.45){ ctx.restore(); } else {
-          ctx.scale(scale,scale);
-          var rx=-bw/2, ry=-bh/2, rr=4; ctx.beginPath(); ctx.moveTo(rx+rr,ry); ctx.lineTo(rx+bw-rr,ry); ctx.quadraticCurveTo(rx+bw,ry,rx+bw,ry+rr);
-          ctx.lineTo(rx+bw,ry+bh-rr); ctx.quadraticCurveTo(rx+bw,ry+bh,rx+bw-rr,ry+bh); ctx.lineTo(rx+rr,ry+bh); ctx.quadraticCurveTo(rx,ry+bh,rx,ry+bh-rr);
-          ctx.lineTo(rx,ry+rr); ctx.quadraticCurveTo(rx,ry,rx+rr,ry); ctx.closePath();
-          ctx.fillStyle='rgba(2,6,23,0.82)'; ctx.fill(); ctx.strokeStyle='rgba(148,163,184,0.7)'; ctx.lineWidth=1; ctx.stroke();
-          ctx.fillStyle='#e5e7eb'; ctx.fillText(txt,0,0.5);
-          ctx.restore();
-        }
-      }
-    }
+  // (Removed) Live label while dragging a window endpoint (host-anchored)
   }
   // Hover erase highlight
   if(__plan2d.tool==='erase' && __plan2d.hoverIndex>=0){ var e=__plan2d.elements[__plan2d.hoverIndex]; var a2=worldToScreen2D(e.x0,e.y0), b2=worldToScreen2D(e.x1,e.y1); ctx.beginPath(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.setLineDash([4,4]); ctx.moveTo(a2.x,a2.y); ctx.lineTo(b2.x,b2.y); ctx.stroke(); ctx.setLineDash([]); }
@@ -7077,125 +6980,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       var cxW = (typeof __plan2d.centerX==='number'? __plan2d.centerX : 0);
       var czW = (typeof __plan2d.centerZ==='number'? __plan2d.centerZ : 0);
       var sgn = (__plan2d.yFromWorldZSign||1);
-      // Use EXACT same mapping as color-coordinated boxes on base canvas
-      function mapToScreen(wx, wz){ return worldToScreen2D((wx - cxW), sgn * (wz - czW)); }
-      function drawLabel(text, wx, wz, color){
-        var p = mapToScreen(wx, wz);
-        ox.save();
-        ox.font='12px sans-serif';
-        ox.textAlign='center';
-        ox.textBaseline='middle';
-        ox.fillStyle = (color || '#e5e7eb');
-        ox.fillText(text, p.x, p.y);
-        ox.restore();
-      }
-      // Small dimension pill using the same mapping (placed slightly below the name label by dy px)
-      function drawDimPill(text, wx, wz, dy){
-        var p = mapToScreen(wx, wz);
-        var padX=7, padY=4; ox.save(); ox.font='12px sans-serif'; ox.textAlign='center'; ox.textBaseline='middle';
-        var w = ox.measureText(text).width; var bw = Math.ceil(w + padX*2), bh = 20, rr = 6;
-        var cx = p.x, cy = p.y + (typeof dy==='number'? dy : 0);
-        var rx=cx - bw/2, ry=cy - bh/2;
-        ox.beginPath();
-        ox.moveTo(rx+rr,ry); ox.lineTo(rx+bw-rr,ry); ox.quadraticCurveTo(rx+bw,ry,rx+bw,ry+rr);
-        ox.lineTo(rx+bw,ry+bh-rr); ox.quadraticCurveTo(rx+bw,ry+bh,rx+bw-rr,ry+bh);
-        ox.lineTo(rx+rr,ry+bh); ox.quadraticCurveTo(rx,ry+bh,rx,ry+bh-rr);
-        ox.lineTo(rx,ry+rr); ox.quadraticCurveTo(rx,ry,rx+rr,ry);
-        ox.closePath();
-        ox.fillStyle='rgba(2,6,23,0.82)'; ox.fill();
-        ox.strokeStyle='rgba(148,163,184,0.7)'; ox.lineWidth=1; ox.stroke();
-        ox.fillStyle='#e5e7eb'; ox.fillText(text, cx, cy+0.5);
-        ox.restore();
-      }
       ox.save();
-      // Stairs indicator: show on both floors at same XY to help locate
-      if(stairsComponent){
-        var s=stairsComponent; var hwS=s.width/2, hdS=s.depth/2;
-        // Apply rotation when mapping to screen
-        var rot = ((s.rotation||0) * Math.PI) / 180;
-        function rotW(px, pz){ var dx=px-s.x, dz=pz-s.z; return { x: s.x + dx*Math.cos(rot) - dz*Math.sin(rot), z: s.z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
-        var p1=rotW(s.x-hwS, s.z-hdS), p2=rotW(s.x+hwS, s.z-hdS), p3=rotW(s.x+hwS, s.z+hdS), p4=rotW(s.x-hwS, s.z+hdS);
-        var aS=toScreenFromWorld(p1.x, p1.z), bS=toScreenFromWorld(p2.x, p2.z), cS=toScreenFromWorld(p3.x, p3.z), dS=toScreenFromWorld(p4.x, p4.z);
-        // Outline
-        ox.strokeStyle='rgba(16,185,129,0.95)'; ox.lineWidth=2; ox.setLineDash([4,3]); ox.fillStyle='rgba(16,185,129,0.08)';
-        ox.beginPath(); ox.moveTo(aS.x,aS.y); ox.lineTo(bS.x,bS.y); ox.lineTo(cS.x,cS.y); ox.lineTo(dS.x,dS.y); ox.closePath(); ox.fill(); ox.stroke();
-        // Treads: draw parallel lines across depth direction
-        ox.setLineDash([]); ox.strokeStyle='rgba(16,185,129,0.85)'; ox.lineWidth=1.5;
-        var steps = Math.max(8, s.steps||14);
-        // Treads are perpendicular to depth axis; compute along rotated rectangle
-        for(var t=1; t<steps; t++){
-          var tt = t/steps; // 0..1 along depth
-          // Point along the two side edges from back to front (min depth to max depth) in rotated space
-          var qL = rotW(s.x - hwS, s.z - hdS + (2*hdS)*tt);
-          var qR = rotW(s.x + hwS, s.z - hdS + (2*hdS)*tt);
-          var pL = toScreenFromWorld(qL.x, qL.z);
-          var pR = toScreenFromWorld(qR.x, qR.z);
-          ox.beginPath(); ox.moveTo(pL.x, pL.y); ox.lineTo(pR.x, pR.y); ox.stroke();
-        }
-        // Dimension guides (centerlines) and size label
-        try {
-          // Compute midpoints of each edge in world coords
-          var midTop = rotW(s.x, s.z - hdS), midBottom = rotW(s.x, s.z + hdS);
-          var midLeft = rotW(s.x - hwS, s.z), midRight = rotW(s.x + hwS, s.z);
-          // Screen points
-          var mTop = toScreenFromWorld(midTop.x, midTop.z); var mBottom = toScreenFromWorld(midBottom.x, midBottom.z);
-          var mLeft = toScreenFromWorld(midLeft.x, midLeft.z); var mRight = toScreenFromWorld(midRight.x, midRight.z);
-          // Draw centerlines for width and depth
-          ox.save();
-          ox.strokeStyle='rgba(5,150,105,0.9)'; ox.setLineDash([6,4]); ox.lineWidth=2;
-          // Depth line (top to bottom midpoints)
-          ox.beginPath(); ox.moveTo(mTop.x, mTop.y); ox.lineTo(mBottom.x, mBottom.y); ox.stroke();
-          // Width line (left to right midpoints)
-          ox.beginPath(); ox.moveTo(mLeft.x, mLeft.y); ox.lineTo(mRight.x, mRight.y); ox.stroke();
-          ox.restore();
-          // Dimension label above center (consistent with stairs position in base plan)
-          var centerP = toScreenFromWorld(s.x, s.z);
-          var label = formatMeters(s.width) + ' × ' + formatMeters(s.depth) + ' m';
-          ox.save();
-          ox.font='12px sans-serif'; ox.textAlign='center'; ox.textBaseline='middle';
-          var tw = ox.measureText(label).width; var bw=Math.ceil(tw+14), bh=20;
-          var rx=centerP.x-bw/2, ry=centerP.y-26-bh, rr=6;
-          ox.beginPath();
-          ox.moveTo(rx+rr,ry); ox.lineTo(rx+bw-rr,ry); ox.quadraticCurveTo(rx+bw,ry,rx+bw,ry+rr);
-          ox.lineTo(rx+bw,ry+bh-rr); ox.quadraticCurveTo(rx+bw,ry+bh,rx+bw-rr,ry+bh);
-          ox.lineTo(rx+rr,ry+bh); ox.quadraticCurveTo(rx,ry+bh,rx,ry+bh-rr);
-          ox.lineTo(rx,ry+rr); ox.quadraticCurveTo(rx,ry,rx+rr,ry);
-          ox.closePath();
-          ox.fillStyle='rgba(2,6,23,0.82)'; ox.fill();
-          ox.strokeStyle='rgba(148,163,184,0.7)'; ox.lineWidth=1; ox.stroke();
-          ox.fillStyle='#e5e7eb'; ox.fillText(label, centerP.x, ry + bh/2 + 0.5);
-          ox.restore();
-        } catch(e){}
-        // Label
-        drawLabel('Stairs', s.x, s.z);
-      }
-      // Labels for rooms, garages, pergolas, balconies
-      try{
-  // Rooms: name only, color-coded
-  var roomLabelColor = '#93c5fd'; // blue-300
-  for(var i=0;i<allRooms.length;i++){ var r=allRooms[i]; if((r.level||0)!==lvl) continue; drawLabel(r.name||'Room', r.x, r.z, roomLabelColor); }
-        // Ground: Garage and Pergola with dimensions (draw pill first, then label on top)
-        if(lvl===0){
-          for(var g=0; g<garageComponents.length; g++){
-            var gar=garageComponents[g];
-            try{ var gDim = formatMeters(gar.width)+' × '+formatMeters(gar.depth)+' m'; drawDimPill(gDim, gar.x, gar.z, -26); }catch(e){}
-            drawLabel(gar.name||'Garage', gar.x, gar.z);
-          }
-          for(var pg=0; pg<pergolaComponents.length; pg++){
-            var per=pergolaComponents[pg];
-            try{ var pDim = formatMeters(per.width)+' × '+formatMeters(per.depth)+' m'; drawDimPill(pDim, per.x, per.z, -26); }catch(e){}
-            drawLabel(per.name||'Pergola', per.x, per.z);
-          }
-        }
-        // First: Balcony with dimensions (pill first, then label)
-        if(lvl===1){
-          for(var b=0; b<balconyComponents.length; b++){
-            var bal=balconyComponents[b]; if((bal.level||1)!==1) continue;
-            try{ var bDim = formatMeters(bal.width)+' × '+formatMeters(bal.depth)+' m'; drawDimPill(bDim, bal.x, bal.z, -26); }catch(e){}
-            drawLabel(bal.name||'Balcony', bal.x, bal.z);
-          }
-        }
-      } catch(e){}
       ox.restore();
     }catch(e){}
   })();
@@ -7717,15 +7502,17 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     var stripsOnly = !!opts.stripsOnly;
     var allowRooms = !!opts.allowRooms;
     var quiet = !!opts.quiet;
+    // Which floor to apply to (0=ground, 1=first). Default to ground for backward compatibility.
+    var targetLevel = (typeof opts.level === 'number') ? opts.level : 0;
     var elemsSrc = Array.isArray(elemsSnapshot) ? elemsSnapshot : __plan2d.elements;
     var walls=elemsSrc.filter(function(e){return e.type==='wall';});
     if(walls.length===0){
-      // No walls -> clear ground-floor rooms in 3D so it reflects 2D state
-      allRooms = allRooms.filter(function(r){ return (r.level||0)!==0; });
-      // Also clear any standalone strips
-      wallStrips = [];
+      // No walls -> clear rooms on target level in 3D so it reflects 2D state
+      allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
+      // Also clear any standalone strips if editing ground floor
+      if (targetLevel === 0) wallStrips = [];
       saveProjectSilently(); selectedRoomId=null; renderLoop();
-      if(!quiet) updateStatus('Cleared ground-floor 3D rooms (no walls in 2D)');
+      if(!quiet) updateStatus('Cleared ' + (targetLevel===0?'ground':'first') + ' floor 3D rooms (no walls in 2D)');
       return;
     }
     function approxEq(a,b,eps){ return Math.abs(a-b) < (eps||1e-2); } // ~1 cm tolerance
@@ -7775,45 +7562,51 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
 
     if(roomsFound.length===0 || stripsOnly){
       // Walls present but no closed rectangles: extrude standalone wall strips from 2D
-      // Clear ground-floor rooms and rebuild strips
-      allRooms = allRooms.filter(function(r){ return (r.level||0)!==0; });
-      var sgn = (__plan2d.yFromWorldZSign||1);
-      var strips = [];
-      // Build subsegments excluding openings/intersections using existing helper
-      for(var wi=0; wi<elemsSrc.length; wi++){
-        var e = elemsSrc[wi]; if(!e || e.type!=='wall') continue;
-        var subs = plan2dBuildWallSubsegments(elemsSrc, wi) || [];
-        for(var si=0; si<subs.length; si++){
-          var sg = subs[si];
-          strips.push({
-            x0: sg.ax,
-            z0: sgn*sg.ay,
-            x1: sg.bx,
-            z1: sgn*sg.by,
-            thickness: (e.thickness||__plan2d.wallThicknessM||0.3),
-            height: (__plan2d.wallHeightM||3.0)
-          });
+      // Clear rooms on target level
+      allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
+      if (targetLevel === 0){
+        var sgn = (__plan2d.yFromWorldZSign||1);
+        var strips = [];
+        // Build subsegments excluding openings/intersections using existing helper
+        for(var wi=0; wi<elemsSrc.length; wi++){
+          var e = elemsSrc[wi]; if(!e || e.type!=='wall') continue;
+          var subs = plan2dBuildWallSubsegments(elemsSrc, wi) || [];
+          for(var si=0; si<subs.length; si++){
+            var sg = subs[si];
+            strips.push({
+              x0: (__plan2d.centerX||0) + sg.ax,
+              z0: (__plan2d.centerZ||0) + sgn*sg.ay,
+              x1: (__plan2d.centerX||0) + sg.bx,
+              z1: (__plan2d.centerZ||0) + sgn*sg.by,
+              thickness: (e.thickness||__plan2d.wallThicknessM||0.3),
+              height: (__plan2d.wallHeightM||3.0)
+            });
+          }
         }
+        wallStrips = strips;
+        saveProjectSilently(); selectedRoomId=null; renderLoop();
+        if(!quiet) updateStatus('Applied 2D plan to 3D (standalone walls)');
+      } else {
+        // For first floor there is no strips representation; just update the scene with rooms cleared for this level
+        saveProjectSilently(); selectedRoomId=null; renderLoop();
+        if(!quiet) updateStatus('Applied 2D plan to 3D (no closed rooms on first floor)');
       }
-      wallStrips = strips;
-      saveProjectSilently(); selectedRoomId=null; renderLoop();
-      if(!quiet) updateStatus('Applied 2D plan to 3D (standalone walls)');
       return;
     }
 
   // If rooms are not allowed (live strips-only mode), stop here
   if(!allowRooms){ return; }
 
-  // Replace only ground floor rooms; also clear standalone strips
-    allRooms = allRooms.filter(function(r){ return (r.level||0)!==0; });
-  wallStrips = [];
+  // Replace only rooms on the target level; also clear standalone strips if ground floor
+    allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
+  if (targetLevel === 0) wallStrips = [];
     // 2D y corresponds to world z; 2D x corresponds to world x; plan is centered at (0,0)
     for(var r=0;r<roomsFound.length;r++){
       var R=roomsFound[r];
       var s = (__plan2d.yFromWorldZSign||1);
-      var wx=(R.minX+R.maxX)/2, wz=s*((R.minY+R.maxY)/2); // map plan y back to world z using sign
+  var wx=(__plan2d.centerX||0) + (R.minX+R.maxX)/2, wz=(__plan2d.centerZ||0) + s*((R.minY+R.maxY)/2); // map plan coords back to world using stored center
   var w=R.maxX-R.minX, d=R.maxY-R.minY;
-      var room=createRoom(wx, wz, 0);
+    var room=createRoom(wx, wz, targetLevel);
   room.width=Math.max(0.5, quantizeMeters(w, 2));
   room.depth=Math.max(0.5, quantizeMeters(d, 2));
       room.height=3;
