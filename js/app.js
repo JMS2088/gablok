@@ -6882,6 +6882,78 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       ctx.restore();
     }
   }
+  // Draw stairs overlay aligned to world position using plan mapping
+  try {
+    if (stairsComponent && __plan2d && __plan2d.active) {
+      var lvlNow = (typeof currentFloor==='number' ? currentFloor : 0);
+      var stairsLvl = (typeof stairsComponent.level==='number' ? stairsComponent.level : 0);
+      var sgn = (__plan2d.yFromWorldZSign || 1);
+      var rot = ((stairsComponent.rotation || 0) * Math.PI) / 180;
+      var hwS = (stairsComponent.width || 0)/2;
+      var hdS = (stairsComponent.depth || 0)/2;
+      function rotW(px, pz){ var dx=px - stairsComponent.x, dz=pz - stairsComponent.z; return { x: stairsComponent.x + dx*Math.cos(rot) - dz*Math.sin(rot), z: stairsComponent.z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+      var c1 = rotW(stairsComponent.x - hwS, stairsComponent.z - hdS);
+      var c2 = rotW(stairsComponent.x + hwS, stairsComponent.z - hdS);
+      var c3 = rotW(stairsComponent.x + hwS, stairsComponent.z + hdS);
+      var c4 = rotW(stairsComponent.x - hwS, stairsComponent.z + hdS);
+      function mapPlan(p){ return { x: (p.x - __plan2d.centerX), y: sgn * (p.z - __plan2d.centerZ) }; }
+      var p1 = worldToScreen2D(mapPlan(c1).x, mapPlan(c1).y);
+      var p2 = worldToScreen2D(mapPlan(c2).x, mapPlan(c2).y);
+      var p3 = worldToScreen2D(mapPlan(c3).x, mapPlan(c3).y);
+      var p4 = worldToScreen2D(mapPlan(c4).x, mapPlan(c4).y);
+      // Style: solid on its own floor, faint on the other
+      ctx.save();
+  ctx.globalAlpha = (stairsLvl === lvlNow) ? 0.95 : 0.35;
+  ctx.fillStyle = (stairsLvl === lvlNow) ? 'rgba(15,23,42,0.10)' : 'rgba(15,23,42,0.06)';
+  ctx.strokeStyle = (stairsLvl === lvlNow) ? '#334155' : '#94a3b8';
+  // Make outline 1px thicker
+  ctx.lineWidth = (stairsLvl === lvlNow) ? 3 : 2;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      // Optional: draw a few treads for visual orientation
+      try {
+        var steps = Math.max(1, Math.floor(stairsComponent.steps || 12));
+        for (var si = 1; si < steps; si++) {
+          var t = si / steps; // along depth from -hdS to +hdS
+          var zW = stairsComponent.z - hdS + t * (stairsComponent.depth || 0);
+          var aW = rotW(stairsComponent.x - hwS, zW);
+          var bW = rotW(stairsComponent.x + hwS, zW);
+          var aS = worldToScreen2D(mapPlan(aW).x, mapPlan(aW).y);
+          var bS = worldToScreen2D(mapPlan(bW).x, mapPlan(bW).y);
+          ctx.beginPath(); ctx.strokeStyle = 'rgba(100,116,139,0.9)'; ctx.lineWidth = 1; ctx.moveTo(aS.x, aS.y); ctx.lineTo(bS.x, bS.y); ctx.stroke();
+        }
+      } catch(e) { /* ignore treads errors */ }
+      // Label at center with dimensions
+      try {
+        var cPx = worldToScreen2D((stairsComponent.x - __plan2d.centerX), sgn * (stairsComponent.z - __plan2d.centerZ));
+        var dimTxt = formatMeters(stairsComponent.width) + ' × ' + formatMeters(stairsComponent.depth) + ' m';
+        var labelTxt = 'Stairs';
+        // Draw dimension pill above label
+        ctx.font = '18px sans-serif';
+        var txtW = ctx.measureText(dimTxt).width;
+        var bw = Math.ceil(txtW + 16), bh = 20, rr = 6;
+        var rx = cPx.x - bw/2, ry = cPx.y - 26 - bh; // place above
+        ctx.beginPath();
+        ctx.moveTo(rx+rr,ry); ctx.lineTo(rx+bw-rr,ry); ctx.quadraticCurveTo(rx+bw,ry,rx+bw,ry+rr);
+        ctx.lineTo(rx+bw,ry+bh-rr); ctx.quadraticCurveTo(rx+bw,ry+bh,rx+bw-rr,ry+bh);
+        ctx.lineTo(rx+rr,ry+bh); ctx.quadraticCurveTo(rx,ry+bh,rx,ry+bh-rr);
+        ctx.lineTo(rx,ry+rr); ctx.quadraticCurveTo(rx,ry,rx+rr,ry);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(2,6,23,0.82)'; ctx.fill();
+        ctx.strokeStyle = 'rgba(148,163,184,0.7)'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = '#e5e7eb'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(dimTxt, cPx.x, ry + bh/2);
+  // Stairs label at the exact stairs center
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillStyle = (stairsLvl === lvlNow) ? '#0f172a' : '#475569';
+  ctx.fillText(labelTxt, cPx.x, cPx.y);
+      } catch(e) { /* ignore label errors */ }
+      ctx.restore();
+    }
+  } catch(e) { /* stairs overlay failure should not break plan draw */ }
+
   // Preview during drag
   if(__plan2d.start && __plan2d.last){
     var a=worldToScreen2D(__plan2d.start.x,__plan2d.start.y);
@@ -7833,10 +7905,22 @@ function populatePlan2DFromDesign(){
 
   // Compute overall bounds and center
   var minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;
+  // Track rooms-only bounds for scale so non-room elements don't change zoom level
+  var rMinX=Infinity, rMaxX=-Infinity, rMinZ=Infinity, rMaxZ=-Infinity; var roomCount=0;
+  // Also track rooms across all levels to use as a fallback scale when this floor has no rooms
+  var rAllMinX=Infinity, rAllMaxX=-Infinity, rAllMinZ=Infinity, rAllMaxZ=-Infinity; var roomCountAll=0;
   for (var k=0;k<rects.length;k++){
     var b=rects[k];
     if (b.minX<minX) minX=b.minX; if (b.maxX>maxX) maxX=b.maxX;
     if (b.minZ<minZ) minZ=b.minZ; if (b.maxZ>maxZ) maxZ=b.maxZ;
+    if (b.type === 'room') { rMinX=Math.min(rMinX,b.minX); rMaxX=Math.max(rMaxX,b.maxX); rMinZ=Math.min(rMinZ,b.minZ); rMaxZ=Math.max(rMaxZ,b.maxZ); roomCount++; }
+  }
+  // Rooms across all levels (fallback if current floor has no rooms)
+  for (var riAll=0; riAll<allRooms.length; riAll++){
+    var rA = allRooms[riAll]; var hwA=rA.width/2, hdA=rA.depth/2;
+    rAllMinX=Math.min(rAllMinX, rA.x-hwA); rAllMaxX=Math.max(rAllMaxX, rA.x+hwA);
+    rAllMinZ=Math.min(rAllMinZ, rA.z-hdA); rAllMaxZ=Math.max(rAllMaxZ, rA.z+hdA);
+    roomCountAll++;
   }
   // Also compute global bounds across both floors to keep a stable origin between floor views
   var gMinX=Infinity, gMaxX=-Infinity, gMinZ=Infinity, gMaxZ=-Infinity;
@@ -7857,7 +7941,19 @@ function populatePlan2DFromDesign(){
   var gcz = (isFinite(gMinZ)&&isFinite(gMaxZ)) ? (gMinZ+gMaxZ)/2 : (minZ+maxZ)/2;
   // Use global center so both floors share the same origin
   var cx = gcx; var cz = gcz;
-  var spanX = Math.max(0.5, maxX-minX); var spanZ = Math.max(0.5, maxZ-minZ);
+  // Use rooms-only span to compute scale:
+  // - If this floor has rooms, use them
+  // - Else if any rooms exist globally, use global rooms (keep scale consistent across floors)
+  // - Else fall back to overall bounds (nothing else to scale by)
+  var useMinX, useMaxX, useMinZ, useMaxZ;
+  if (roomCount > 0) {
+    useMinX = rMinX; useMaxX = rMaxX; useMinZ = rMinZ; useMaxZ = rMaxZ;
+  } else if (roomCountAll > 0 && isFinite(rAllMinX) && isFinite(rAllMaxX)) {
+    useMinX = rAllMinX; useMaxX = rAllMaxX; useMinZ = rAllMinZ; useMaxZ = rAllMaxZ;
+  } else {
+    useMinX = minX; useMaxX = maxX; useMinZ = minZ; useMaxZ = maxZ;
+  }
+  var spanX = Math.max(0.5, useMaxX - useMinX); var spanZ = Math.max(0.5, useMaxZ - useMinZ);
   // Persist center so overlays and helpers can map world->plan consistently
   __plan2d.centerX = cx; __plan2d.centerZ = cz;
 
