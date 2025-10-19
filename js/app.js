@@ -432,11 +432,11 @@ function addNewRoom() {
   }
 }
 
-function createStairs() {
+function createStairs(level) {
   return {
     id: 'stairs_' + Date.now(),
     x: -6, z: -6, width: 3, depth: 8, height: 3.5, steps: 14,
-    name: 'Stairs', type: 'stairs', level: 0
+    name: 'Stairs', type: 'stairs', level: (typeof level === 'number' ? level : 0)
   };
 }
 
@@ -445,18 +445,19 @@ function addStairs() {
     updateStatus('Stairs already exist');
     return;
   }
-  stairsComponent = createStairs();
+  // Create stairs on the currently selected floor
+  stairsComponent = createStairs(typeof currentFloor === 'number' ? currentFloor : 0);
   var spot = findFreeSpot(stairsComponent);
   stairsComponent.x = spot.x;
   stairsComponent.z = spot.z;
-  currentFloor = 0;
+  currentFloor = stairsComponent.level;
   selectedRoomId = stairsComponent.id;
   var selector = document.getElementById('levelSelect');
-  if (selector) selector.value = '0';
+  if (selector) selector.value = String(currentFloor);
   updateStatus('Stairs added');
 }
 
-function createPergola(x, z) {
+function createPergola(x, z, level) {
   var count = pergolaComponents.length;
   return {
     id: 'pergola_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
@@ -472,27 +473,27 @@ function createPergola(x, z) {
     slatWidth: 0.15,
     name: count === 0 ? 'Pergola' : 'Pergola ' + (count + 1),
     type: 'pergola',
-    level: 0
+    level: (typeof level === 'number' ? level : 0)
   };
 }
 
 function addPergola() {
-  var newPergola = createPergola();
+  var newPergola = createPergola(undefined, undefined, (typeof currentFloor==='number' ? currentFloor : 0));
   var spot = findFreeSpot(newPergola);
   newPergola.x = spot.x;
   newPergola.z = spot.z;
   
   pergolaComponents.push(newPergola);
-  currentFloor = 0;
+  currentFloor = newPergola.level || 0;
   selectedRoomId = newPergola.id;
   
   var selector = document.getElementById('levelSelect');
-  if (selector) selector.value = '0';
+  if (selector) selector.value = String(currentFloor);
   
   updateStatus('Pergola added (' + pergolaComponents.length + ' total)');
 }
 
-function createGarage(x, z) {
+function createGarage(x, z, level) {
   var count = garageComponents.length;
   return {
     id: 'garage_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
@@ -500,44 +501,44 @@ function createGarage(x, z) {
     doorSlatCount: 8, doorSlatHeight: 0.3, doorSlatDepth: 0.05,
     rotation: 0, // Add rotation property
     name: count === 0 ? 'Garage' : 'Garage ' + (count + 1),
-    type: 'garage', level: 0
+    type: 'garage', level: (typeof level === 'number' ? level : 0)
   };
 }
 
 function addGarage() {
-  var newGarage = createGarage();
+  var newGarage = createGarage(undefined, undefined, (typeof currentFloor==='number' ? currentFloor : 0));
   var spot = findFreeSpot(newGarage);
   newGarage.x = spot.x;
   newGarage.z = spot.z;
   garageComponents.push(newGarage);
-  currentFloor = 0;
+  currentFloor = newGarage.level || 0;
   selectedRoomId = newGarage.id;
   var selector = document.getElementById('levelSelect');
-  if (selector) selector.value = '0';
+  if (selector) selector.value = String(currentFloor);
   updateStatus('Garage added (' + garageComponents.length + ' total)');
 }
 
-function createPool(x, z) {
+function createPool(x, z, level) {
   var count = poolComponents.length;
   return {
     id: 'pool_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
     x: x || 6, z: z || 6, width: 6, depth: 3, height: 1.5,
     wallThickness: 0.3, rotation: 0,
     name: count === 0 ? 'Pool' : 'Pool ' + (count + 1),
-    type: 'pool', level: 0
+    type: 'pool', level: (typeof level === 'number' ? level : 0)
   };
 }
 
 function addPool() {
-  var newPool = createPool();
+  var newPool = createPool(undefined, undefined, (typeof currentFloor==='number' ? currentFloor : 0));
   var spot = findFreeSpot(newPool);
   newPool.x = spot.x;
   newPool.z = spot.z;
   poolComponents.push(newPool);
-  currentFloor = 0;
+  currentFloor = newPool.level || 0;
   selectedRoomId = newPool.id;
   var selector = document.getElementById('levelSelect');
-  if (selector) selector.value = '0';
+  if (selector) selector.value = String(currentFloor);
   updateStatus('Pool added (' + poolComponents.length + ' total)');
 }
 
@@ -599,10 +600,11 @@ function addRoof() {
   var newRoof = createRoof();
   // newRoof.x and newRoof.z are already centered in createRoof
   roofComponents.push(newRoof);
-  currentFloor = 0;
+  // Keep or switch to roof's floor (depends on whether first floor exists)
+  currentFloor = (typeof newRoof.level === 'number' ? newRoof.level : 0);
   selectedRoomId = newRoof.id;
   var selector = document.getElementById('levelSelect');
-  if (selector) selector.value = '0';
+  if (selector) selector.value = String(currentFloor);
   updateStatus('Roof added (' + roofComponents.length + ' total)');
 }
 
@@ -3144,53 +3146,58 @@ function setupEvents() {
 }
 
 function switchLevel() {
-  var selector = document.getElementById('levelSelect');
-  if (!selector) return;
+  // Prevent re-entrant floor switching which can cause duplicate room creation
+  if (window.__switchingFloor) { return; }
+  window.__switchingFloor = true;
+  try {
+    var selector = document.getElementById('levelSelect');
+    if (!selector) return;
   
   var value = selector.value;
-  var resetToFloor = '0';
   
-  // Handle special components first
-  if (value === 'stairs') {
-    addStairs();
-    selector.value = resetToFloor;
-    renderLoop();
-    return;
-  } else if (value === 'pergola') {
-    addPergola();
-    selector.value = resetToFloor;
-    renderLoop();
-    return;
-  } else if (value === 'garage') {
-    addGarage();
-    selector.value = resetToFloor;
-    renderLoop();
-    return;
-  } else if (value === 'roof') {
-    addRoof();
-    selector.value = resetToFloor;
-    renderLoop();
-    return;
-  } else if (value === 'pool') {
-    addPool();
-    selector.value = resetToFloor;
-    renderLoop();
-    return;
-  } else if (value === 'balcony') {
-    dbg('Balcony option selected in switchLevel');
-    addBalcony();
-    currentFloor = 1;  // Ensure we're on first floor
-    selector.value = '1';
-    dbg('Current floor after balcony added:', currentFloor);
-    renderLoop();
-    return;
-  }
+    // Handle special components first
+    if (value === 'stairs') {
+      addStairs();
+      renderLoop();
+      return;
+    } else if (value === 'pergola') {
+      addPergola();
+      renderLoop();
+      return;
+    } else if (value === 'garage') {
+      addGarage();
+      renderLoop();
+      return;
+    } else if (value === 'roof') {
+      addRoof();
+      renderLoop();
+      return;
+    } else if (value === 'pool') {
+      addPool();
+      renderLoop();
+      return;
+    } else if (value === 'balcony') {
+      dbg('Balcony option selected in switchLevel');
+      addBalcony();
+      currentFloor = 1;  // Ensure we're on first floor
+      selector.value = '1';
+      dbg('Current floor after balcony added:', currentFloor);
+      renderLoop();
+      return;
+    }
 
   // Handle floor changes
   var newFloor = parseInt(value) || 0;
-  if (newFloor !== currentFloor) {
-    currentFloor = newFloor;
-    selectedRoomId = null;
+    if (newFloor !== currentFloor) {
+      // If 2D editor is open, apply current floor edits before switching, once
+      try {
+        if (window.__plan2d && __plan2d.active) {
+          var prevLvl = (typeof window.currentFloor==='number' ? window.currentFloor : currentFloor);
+          applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: prevLvl });
+        }
+      } catch(e) {}
+      currentFloor = newFloor;
+      selectedRoomId = null;
 
       // If switching to first floor and there are no rooms on that floor, add one
       if (newFloor === 1 && !allRooms.some(room => room.level === 1)) {
@@ -3204,15 +3211,26 @@ function switchLevel() {
       } else {
         updateStatus('Floor ' + (newFloor + 1));
       }
+      // After any potential room creation, deduplicate allRooms to avoid duplicates from rapid toggles
+      try {
+        var seen = new Set();
+        allRooms = allRooms.filter(function(r){ if(!r || !r.id) return false; if(seen.has(r.id)) return false; seen.add(r.id); return true; });
+      } catch(e) {}
+      // If 2D editor is open, repopulate the plan to reflect the newly selected floor
+      try { if (window.__plan2d && __plan2d.active) { populatePlan2DFromDesign(); plan2dDraw(); updatePlan2DInfo(); } } catch(e){}
       renderLoop();
     }
+  } finally {
+    // Clear the switching flag at the end of this turn
+    window.__switchingFloor = false;
+  }
 }
 
 function fitView() {
   var rooms = allRooms.filter(function(r) { return r.level === currentFloor; });
   var objects = rooms.slice();
   
-  if (stairsComponent && currentFloor === 0) {
+  if (stairsComponent && (stairsComponent.level||0) === currentFloor) {
     objects.push(stairsComponent);
   }
   if (currentFloor === 0) {
@@ -3340,7 +3358,8 @@ function drawStairs(stairs) {
     var stepHeight = stairs.height / stairs.steps;
     var stepDepth = stairs.depth / stairs.steps;
     
-    var opacity = currentFloor === 0 ? 1.0 : 0.6;
+  // Show fully on its own floor, dim on others
+  var opacity = currentFloor === (stairs.level || 0) ? 1.0 : 0.6;
     var strokeColor = selected ? '#007acc' : '#D0D0D0';
     var strokeWidth = selected ? 2 : 1;
     
@@ -3472,7 +3491,7 @@ function drawPergola(pergola) {
     var selected = selectedRoomId === pergola.id;
     var strokeColor = selected ? '#007acc' : '#D0D0D0';
     var strokeWidth = selected ? 2 : 1.5;
-    var opacity = currentFloor === 0 ? 1.0 : 0.6;
+  var opacity = currentFloor === (pergola.level || 0) ? 1.0 : 0.6;
     
     ctx.globalAlpha = opacity;
     ctx.strokeStyle = strokeColor;
@@ -3840,7 +3859,7 @@ function drawPool(pool) {
     var rimColor = selected ? 'rgba(0,122,204,0.25)' : 'rgba(100,150,200,0.18)';
     var waterColor = selected ? 'rgba(40,150,220,0.35)' : 'rgba(60,160,220,0.28)';
     var strokeWidth = selected ? 2 : 1.5;
-    var opacity = currentFloor === 0 ? 1.0 : 0.6;
+  var opacity = currentFloor === (pool.level || 0) ? 1.0 : 0.6;
     var rotRad = ((pool.rotation || 0) * Math.PI) / 180;
     ctx.globalAlpha = opacity;
     ctx.strokeStyle = strokeColor;
@@ -4166,7 +4185,7 @@ function drawGarage(garage) {
     var fillColor = selected ? 'rgba(0,122,204,0.3)' : 'rgba(208,208,208,0.2)';
     var strokeWidth = selected ? 2 : 1.5;
     var rotRad = ((garage.rotation || 0) * Math.PI) / 180; // Add rotation support
-    var opacity = currentFloor === 0 ? 1.0 : 0.6;
+  var opacity = currentFloor === (garage.level || 0) ? 1.0 : 0.6;
     
     ctx.globalAlpha = opacity;
     ctx.strokeStyle = strokeColor;
@@ -4861,19 +4880,9 @@ document.addEventListener('DOMContentLoaded', function(){
     if(list){ list.addEventListener('click', function(e){
       var item=e.target.closest('.dropdown-item'); if(!item || item.classList.contains('separator')) return;
       var val=item.getAttribute('data-value');
-      // If 2D editor is open and switching between numeric floors, first apply current floor plan to 3D
-      try {
-        var isNumericFloor = (val==='0' || val==='1');
-        if (isNumericFloor && window.__plan2d && __plan2d.active) {
-          var prevLvl = (typeof window.currentFloor==='number' ? window.currentFloor : 0);
-          applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: prevLvl });
-        }
-      } catch(err) { /* non-fatal */ }
       if(nativeSel){ nativeSel.value = val; }
       setLabelFromValue(val);
       if(typeof switchLevel==='function') switchLevel();
-      // If 2D editor is open and new level is selected, repopulate plan from 3D to reflect the new floor
-      try { if(window.__plan2d && __plan2d.active && (val==='0' || val==='1')) { populatePlan2DFromDesign(); plan2dDraw(); updatePlan2DInfo(); } } catch(e){}
       close();
     }); }
     document.addEventListener('click', close);
@@ -4894,18 +4903,9 @@ document.addEventListener('DOMContentLoaded', function(){
     }
     function doSwitch(toFloor){
       try {
-        // If switching while editor is open, first apply current floor edits to 3D so openings persist
-        try {
-          if(window.__plan2d && __plan2d.active) {
-            var prevLvl = (typeof window.currentFloor==='number' ? window.currentFloor : 0);
-            applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: prevLvl });
-          }
-        } catch(err) { /* ignore */ }
         var nativeSel = document.getElementById('levelSelect');
         if(nativeSel){ nativeSel.value = String(toFloor); }
         if(typeof switchLevel==='function') switchLevel();
-        // When switching floors, refresh 2D contents if modal is open
-        if(__plan2d && __plan2d.active){ try { populatePlan2DFromDesign(); plan2dDraw(); updatePlan2DInfo(); } catch(e){} }
       } catch(e){}
     }
     var bG = document.getElementById('plan2d-floor-ground');
@@ -6934,7 +6934,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
           try {
             var minXS = Math.min(sp1.x, sp2.x, sp3.x, sp4.x);
             var minYS = Math.min(sp1.y, sp2.y, sp3.y, sp4.y);
-            var padX = 6, padY = 4, fontSize = 12, lineH = 16;
+            var padX = 10, padY = 6, fontSize = 22, lineH = 28;
             ctx.save(); ctx.font = fontSize + 'px sans-serif';
             var sText = (stairsComponent.name || 'Stairs');
             var tW = ctx.measureText(sText).width;
@@ -6977,7 +6977,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         if (labelText) {
           try {
             var minX = Math.min(p1.x,p2.x,p3.x,p4.x), minY = Math.min(p1.y,p2.y,p3.y,p4.y);
-            var padX = 6, padY = 4, fontSize = 12, lineH = 16;
+            var padX = 10, padY = 6, fontSize = 22, lineH = 28;
             ctx.font = fontSize + 'px sans-serif'; var tW = ctx.measureText(labelText).width;
             var bx = Math.round(minX + 6), by = Math.round(minY + 6), bw = Math.round(tW + padX*2), bh = lineH;
             labelBoxes.push({ x: bx, y: by, w: bw, h: bh, text: labelText });
@@ -6987,24 +6987,19 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         }
         ctx.restore();
       }
-      // Ground floor: pergola + garage
-      if (lvlNowC === 0) {
-        for (var iPg=0;iPg<pergolaComponents.length;iPg++){
-          var per=pergolaComponents[iPg];
-          // Avoid duplicate outline: pergola walls already provide edges. Use fill only (no stroke).
-          drawBox(per.x, per.z, per.width, per.depth, per.rotation||0, null, 'rgba(16,185,129,0.15)', 0.95, (per.name||'Pergola'));
-        }
-        for (var iGg=0;iGg<garageComponents.length;iGg++){
-          var gar=garageComponents[iGg];
-          drawBox(gar.x, gar.z, gar.width, gar.depth, gar.rotation||0, '#f59e0b', 'rgba(245,158,11,0.15)', 0.95, (gar.name||'Garage'));
-        }
+      // Draw components present on the current level
+      for (var iPg=0;iPg<pergolaComponents.length;iPg++){
+        var per=pergolaComponents[iPg]; if((per.level||0)!==lvlNowC) continue;
+        // Avoid duplicate outline: pergola walls already provide edges. Use fill only (no stroke).
+        drawBox(per.x, per.z, per.width, per.depth, per.rotation||0, null, 'rgba(16,185,129,0.15)', 0.95, (per.name||'Pergola'));
       }
-      // First floor: balcony
-      if (lvlNowC === 1) {
-        for (var iBl=0;iBl<balconyComponents.length;iBl++){
-          var bal=balconyComponents[iBl]; if((bal.level||1)!==1) continue;
-          drawBox(bal.x, bal.z, bal.width, bal.depth, bal.rotation||0, '#6366f1', 'rgba(99,102,241,0.18)', 0.95, (bal.name||'Balcony'));
-        }
+      for (var iGg=0;iGg<garageComponents.length;iGg++){
+        var gar=garageComponents[iGg]; if((gar.level||0)!==lvlNowC) continue;
+        drawBox(gar.x, gar.z, gar.width, gar.depth, gar.rotation||0, '#f59e0b', 'rgba(245,158,11,0.15)', 0.95, (gar.name||'Garage'));
+      }
+      for (var iBl=0;iBl<balconyComponents.length;iBl++){
+        var bal=balconyComponents[iBl]; if((bal.level||1)!==lvlNowC) continue;
+        drawBox(bal.x, bal.z, bal.width, bal.depth, bal.rotation||0, '#6366f1', 'rgba(99,102,241,0.18)', 0.95, (bal.name||'Balcony'));
       }
       // After drawing backgrounds, draw the label texts on the labels-2d canvas (handled later)
       __plan2d.__labelBoxes2D = labelBoxes;
@@ -7127,17 +7122,16 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
   lx.textAlign = 'center';
   // Use middle baseline so y = center places glyphs visually in the middle reliably across browsers
   lx.textBaseline = 'middle';
-      // Stairs label: center on the footprint, dim when on other floor
+      // Draw each item's name inside its white square at top-left
       lx.save();
-      lx.font = '12px sans-serif';
+      lx.font = '22px sans-serif';
       lx.textAlign = 'left';
       lx.textBaseline = 'middle';
-      // Draw text inside the white boxes recorded earlier
       var boxes = (__plan2d.__labelBoxes2D || []);
       for (var li=0; li<boxes.length; li++){
         var lb = boxes[li];
-        lx.fillStyle = '#111827'; // dark text
-        lx.fillText(lb.text, lb.x + 6, lb.y + lb.h/2);
+        lx.fillStyle = '#000000';
+        lx.fillText(lb.text, lb.x + 10, lb.y + lb.h/2);
       }
   if(__plan2d.debug){
     try {
