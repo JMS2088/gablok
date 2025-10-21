@@ -435,7 +435,7 @@ function addNewRoom() {
 function createStairs(level) {
   return {
     id: 'stairs_' + Date.now(),
-    x: -6, z: -6, width: 3, depth: 8, height: 3.5, steps: 14,
+    x: -6, z: -6, width: 1.2, depth: 4.5, height: 3.5, steps: 19,
     name: 'Stairs', type: 'stairs', level: (typeof level === 'number' ? level : 0)
   };
 }
@@ -3355,8 +3355,18 @@ function drawStairs(stairs) {
   
   try {
     var selected = selectedRoomId === stairs.id;
-    var stepHeight = stairs.height / stairs.steps;
-    var stepDepth = stairs.depth / stairs.steps;
+    var stepsCount = Math.max(1, Math.floor(stairs.steps || 19));
+    var stepHeight = stairs.height / stepsCount;
+  // Weighted per-step depths so the 10th step (index 9) is 5x deeper to create a landing
+    var totalDepth3D = stairs.depth;
+    var stepWeights = new Array(stepsCount);
+  for (var wi3=0; wi3<stepsCount; wi3++) stepWeights[wi3] = (wi3 === 9 ? 5 : 1);
+    var sumW3 = 0; for (var sw3=0; sw3<stepsCount; sw3++) sumW3 += stepWeights[sw3];
+    // Build per-step depths and cumulative Z positions from front (-depth/2) to back (+depth/2)
+    var perStepDepth = new Array(stepsCount);
+    for (var ps=0; ps<stepsCount; ps++) {
+      perStepDepth[ps] = (sumW3 > 0 ? (totalDepth3D * stepWeights[ps] / sumW3) : (totalDepth3D / stepsCount));
+    }
     
   // Show fully on its own floor, dim on others
   var opacity = currentFloor === (stairs.level || 0) ? 1.0 : 0.6;
@@ -3368,19 +3378,21 @@ function drawStairs(stairs) {
     ctx.lineWidth = strokeWidth;
     
     var rotRad = ((stairs.rotation || 0) * Math.PI) / 180;
-    for (var step = 0; step < stairs.steps; step++) {
+    var zCursor = stairs.z - stairs.depth/2; // start at front edge
+    for (var step = 0; step < stepsCount; step++) {
       var stepY = step * stepHeight;
-      var stepZ = stairs.z - stairs.depth/2 + step * stepDepth;
+      var sd = perStepDepth[step];
+      var stepZ = zCursor;
       // Apply rotation around stairs center
       var corners = [
         {x: stairs.x - stairs.width/2, z: stepZ},
         {x: stairs.x + stairs.width/2, z: stepZ},
-        {x: stairs.x + stairs.width/2, z: stepZ + stepDepth},
-        {x: stairs.x - stairs.width/2, z: stepZ + stepDepth},
+        {x: stairs.x + stairs.width/2, z: stepZ + sd},
+        {x: stairs.x - stairs.width/2, z: stepZ + sd},
         {x: stairs.x - stairs.width/2, z: stepZ},
         {x: stairs.x + stairs.width/2, z: stepZ},
-        {x: stairs.x + stairs.width/2, z: stepZ + stepDepth},
-        {x: stairs.x - stairs.width/2, z: stepZ + stepDepth}
+        {x: stairs.x + stairs.width/2, z: stepZ + sd},
+        {x: stairs.x - stairs.width/2, z: stepZ + sd}
       ];
       var rotatedCorners = [];
       for (var i = 0; i < corners.length; i++) {
@@ -3426,6 +3438,9 @@ function drawStairs(stairs) {
       ctx.lineTo(projected[7].x, projected[7].y);
       ctx.closePath();
       ctx.fill();
+
+      // advance to next step start position
+      zCursor += sd;
     }
     
     ctx.globalAlpha = 1.0;
@@ -6634,6 +6649,17 @@ function plan2dBind(){
             __plan2d.elements.splice(__plan2d.selectedIndex,1);
             __plan2d.selectedIndex=-1; __plan2d.selectedSubsegment=null; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return;
           }
+          // No explicit selection: delete hovered window/door if any (quick delete without click)
+          if(typeof __plan2d.hoverWindowIndex==='number' && __plan2d.hoverWindowIndex>=0){
+            __plan2d.elements.splice(__plan2d.hoverWindowIndex,1);
+            __plan2d.hoverWindowIndex = -1; __plan2d.selectedIndex=-1; __plan2d.selectedSubsegment=null;
+            plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return;
+          }
+          if(typeof __plan2d.hoverDoorIndex==='number' && __plan2d.hoverDoorIndex>=0){
+            __plan2d.elements.splice(__plan2d.hoverDoorIndex,1);
+            __plan2d.hoverDoorIndex = -1; __plan2d.selectedIndex=-1; __plan2d.selectedSubsegment=null;
+            plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return;
+          }
           updateStatus && updateStatus('Select a door, window, or wall segment first');
           ev.preventDefault(); ev.stopPropagation(); return;
         }
@@ -6703,7 +6729,19 @@ function plan2dResize(){
   if(ov.width!==W||ov.height!==H){ ov.width=W; ov.height=H; }
   if(l2 && (l2.width!==W||l2.height!==H)){ l2.width=W; l2.height=H; }
 }
-function plan2dCursor(){ var c=document.getElementById('plan2d-canvas'); if(!c) return; c.style.cursor = (__plan2d.tool==='erase') ? 'not-allowed' : (__plan2d.tool==='select' ? 'pointer' : 'crosshair'); }
+function plan2dUpdateActiveButtons(){
+  try {
+    var ids=['plan2d-tool-wall','plan2d-tool-window','plan2d-tool-door','plan2d-tool-select','plan2d-tool-erase'];
+    for(var i=0;i<ids.length;i++){ var el=document.getElementById(ids[i]); if(!el) continue; el.classList.remove('active'); }
+    var map={ wall:'plan2d-tool-wall', window:'plan2d-tool-window', door:'plan2d-tool-door', select:'plan2d-tool-select', erase:'plan2d-tool-erase' };
+    var id = map[__plan2d.tool]; var btn = id && document.getElementById(id); if(btn) btn.classList.add('active');
+  } catch(e){}
+}
+function plan2dCursor(){
+  var c=document.getElementById('plan2d-canvas'); if(!c) return;
+  c.style.cursor = (__plan2d.tool==='erase') ? 'not-allowed' : (__plan2d.tool==='select' ? 'pointer' : 'crosshair');
+  plan2dUpdateActiveButtons();
+}
 
 function plan2dFinalize(a,b){ if(!a||!b) return; // snap to straight axis
   var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='door'){ __plan2d.elements.push({type:'door', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:0.9, meta:{hinge:'left'}}); } plan2dEdited(); }
@@ -6997,11 +7035,23 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
             } catch(e){}
             ctx.restore();
           } catch(e) { /* ignore label bg */ }
-          // Draw a few treads for orientation
+          // Draw treads with weighted spacing: 10th interval (landing) is 5x deeper
           try {
-            var stepsSt = Math.max(1, Math.floor(stairsComponent.steps || 12));
-            for (var siSt = 1; siSt < stepsSt; siSt++) {
-              var tt = siSt / stepsSt; var zW = stairsComponent.z - hdSt + tt * (stairsComponent.depth || 0);
+            var totalDepth = (stairsComponent.depth || 0);
+            var totalSteps = Math.max(1, Math.floor(stairsComponent.steps || 19));
+            var intervals = Math.max(1, totalSteps - 1);
+            var weights = new Array(intervals);
+            for (var wi=0; wi<intervals; wi++) {
+              // Default each interval weight to 1; make the 10th interval (index 9) wider if it exists
+              weights[wi] = (wi === 9 ? 5 : 1);
+            }
+            // Sum of weights for normalization
+            var sumW = 0; for (var sw=0; sw<intervals; sw++) sumW += weights[sw];
+            for (var siSt = 1; siSt <= intervals; siSt++) {
+              // Position this tread line at the end of interval siSt-1
+              var prevW = 0; for (var pi=0; pi<siSt; pi++) prevW += weights[pi];
+              var tt = (sumW > 0) ? (prevW / sumW) : (siSt / (intervals+0));
+              var zW = stairsComponent.z - hdSt + tt * totalDepth;
               var aW = rotStW(stairsComponent.x - hwSt, zW); var bW = rotStW(stairsComponent.x + hwSt, zW);
               var aS = worldToScreen2D(mapPlanSt(aW).x, mapPlanSt(aW).y);
               var bS = worldToScreen2D(mapPlanSt(bW).x, mapPlanSt(bW).y);
