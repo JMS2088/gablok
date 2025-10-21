@@ -289,6 +289,51 @@ var PRICING = {
   soilDensityTPerM3: 1.5        // tonnes per m³ (typical bulk density)
 };
 
+// ---------- De-duplication Utilities (IDs and geometry) ----------
+function _dedupeById(arr){
+  if(!Array.isArray(arr)) return [];
+  var seen = new Set();
+  var out = [];
+  for(var i=0;i<arr.length;i++){
+    var it = arr[i]; if(!it || !it.id) continue;
+    if(seen.has(it.id)) continue; seen.add(it.id); out.push(it);
+  }
+  return out;
+}
+function _dedupeBoxesByGeom(arr, opts){
+  // Geometry-based equality for rectangular components (x,z,width,depth,rotation[,level])
+  if(!Array.isArray(arr)) return [];
+  var EPS = 1e-4; var useLevel = !!(opts && opts.useLevel);
+  var out=[];
+  for(var i=0;i<arr.length;i++){
+    var a=arr[i]; if(!a) continue; var dup=false;
+    for(var j=0;j<out.length;j++){
+      var b=out[j];
+      var sameLevel = useLevel ? ((a.level||0)===(b.level||0)) : true;
+      if(!sameLevel) continue;
+      if(Math.abs((a.x||0)-(b.x||0))<EPS && Math.abs((a.z||0)-(b.z||0))<EPS && Math.abs((a.width||0)-(b.width||0))<EPS && Math.abs((a.depth||0)-(b.depth||0))<EPS && Math.abs(((a.rotation||0)%360)-((b.rotation||0)%360))<EPS){ dup=true; break; }
+    }
+    if(!dup) out.push(a);
+  }
+  return out;
+}
+function dedupeAllEntities(){
+  try {
+    // Rooms: by id then by geometry per-level
+    allRooms = _dedupeById(allRooms);
+    allRooms = _dedupeBoxesByGeom(allRooms, { useLevel:true });
+    // Pergolas, Garages, Balconies: by id then by geometry (pergola/garage no level constraint; balcony has level=1)
+    pergolaComponents = _dedupeById(pergolaComponents);
+    pergolaComponents = _dedupeBoxesByGeom(pergolaComponents, { useLevel:false });
+    garageComponents = _dedupeById(garageComponents);
+    // Ensure garages stay on ground
+    for(var gi=0;gi<garageComponents.length;gi++){ if(garageComponents[gi]) garageComponents[gi].level = 0; }
+    garageComponents = _dedupeBoxesByGeom(garageComponents, { useLevel:false });
+    balconyComponents = _dedupeById(balconyComponents);
+    balconyComponents = _dedupeBoxesByGeom(balconyComponents, { useLevel:true });
+  } catch(e) { /* non-fatal */ }
+}
+
 function createBalcony(x, z) {
   var count = balconyComponents.length;
   return {
@@ -501,17 +546,19 @@ function createGarage(x, z, level) {
     doorSlatCount: 8, doorSlatHeight: 0.3, doorSlatDepth: 0.05,
     rotation: 0, // Add rotation property
     name: count === 0 ? 'Garage' : 'Garage ' + (count + 1),
-    type: 'garage', level: (typeof level === 'number' ? level : 0)
+    // Garage is always ground floor only
+    type: 'garage', level: 0
   };
 }
 
 function addGarage() {
-  var newGarage = createGarage(undefined, undefined, (typeof currentFloor==='number' ? currentFloor : 0));
+  // Force garage to ground floor regardless of current floor
+  var newGarage = createGarage(undefined, undefined, 0);
   var spot = findFreeSpot(newGarage);
   newGarage.x = spot.x;
   newGarage.z = spot.z;
   garageComponents.push(newGarage);
-  currentFloor = newGarage.level || 0;
+  currentFloor = 0;
   selectedRoomId = newGarage.id;
   var selector = document.getElementById('levelSelect');
   if (selector) selector.value = String(currentFloor);
@@ -3213,8 +3260,26 @@ function switchLevel() {
       }
       // After any potential room creation, deduplicate allRooms to avoid duplicates from rapid toggles
       try {
+        // First by id
         var seen = new Set();
         allRooms = allRooms.filter(function(r){ if(!r || !r.id) return false; if(seen.has(r.id)) return false; seen.add(r.id); return true; });
+        // Then by geometry per-level (center/size equality within epsilon)
+        var EPS = 1e-4; var unique = [];
+        for (var i=0;i<allRooms.length;i++){
+          var a=allRooms[i]; if(!a) continue; var dup=false;
+          for (var j=0;j<unique.length;j++){
+            var b=unique[j];
+            if ((a.level||0)===(b.level||0)
+                && Math.abs((a.x||0)-(b.x||0))<EPS
+                && Math.abs((a.z||0)-(b.z||0))<EPS
+                && Math.abs((a.width||0)-(b.width||0))<EPS
+                && Math.abs((a.depth||0)-(b.depth||0))<EPS) { dup=true; break; }
+          }
+          if(!dup) unique.push(a);
+        }
+        allRooms = unique;
+        // Global component dedupe as well
+        dedupeAllEntities();
       } catch(e) {}
       // If 2D editor is open, repopulate the plan to reflect the newly selected floor
       try { if (window.__plan2d && __plan2d.active) { populatePlan2DFromDesign(); plan2dDraw(); updatePlan2DInfo(); } } catch(e){}
@@ -3368,10 +3433,22 @@ function drawStairs(stairs) {
       perStepDepth[ps] = (sumW3 > 0 ? (totalDepth3D * stepWeights[ps] / sumW3) : (totalDepth3D / stepsCount));
     }
     
-  // Show fully on its own floor, dim on others
-  var opacity = currentFloor === (stairs.level || 0) ? 1.0 : 0.6;
-    var strokeColor = selected ? '#007acc' : '#D0D0D0';
-    var strokeWidth = selected ? 2 : 1;
+  // Show fully on its own floor, dim on others (mirror rooms)
+  var onLevel = currentFloor === (stairs.level || 0);
+  var opacity = onLevel ? 1.0 : 0.6;
+    // Match room stroke colors exactly
+    // Rooms:
+    //  - current level: selected #007acc, unselected #D0D0D0
+    //  - other level:  selected #005080, unselected #808080
+    var strokeColor = selected
+      ? (onLevel ? '#007acc' : '#005080')
+      : (onLevel ? '#D0D0D0' : '#808080');
+    // Match room line widths exactly
+    //  - current level: selected 3, unselected 2
+    //  - other level:  selected 2, unselected 1
+    var strokeWidth = selected
+      ? (onLevel ? 3 : 2)
+      : (onLevel ? 2 : 1);
     
     ctx.globalAlpha = opacity;
     ctx.strokeStyle = strokeColor;
@@ -3430,7 +3507,8 @@ function drawStairs(stairs) {
       }
       ctx.stroke();
       
-      ctx.fillStyle = selected ? 'rgba(0,122,204,0.2)' : 'rgba(208,208,208,0.2)';
+  // Keep fill subtle; rooms use 0.15 / 0.1 on current level; we retain a slightly visible fill
+  ctx.fillStyle = selected ? 'rgba(0,122,204,0.2)' : 'rgba(208,208,208,0.2)';
       ctx.beginPath();
       ctx.moveTo(projected[4].x, projected[4].y);
       ctx.lineTo(projected[5].x, projected[5].y);
@@ -4422,6 +4500,8 @@ function drawHandlesForGarage(garage) {
 function renderLoop() {
   var frameStart = (performance && performance.now) ? performance.now() : Date.now();
   try {
+    // Final safety net: if previous steps missed something, dedupe before rendering this frame
+    dedupeAllEntities();
     // Detect camera / selection changes to decide if a re-render is necessary
     var camChanged = false;
     var lc = __perf.lastCamera;
@@ -4548,6 +4628,8 @@ function restoreProject(json) {
   }
     currentFloor = typeof data.currentFloor === 'number' ? data.currentFloor : currentFloor;
     selectedRoomId = null;
+    // Run a global dedupe pass after restore
+    dedupeAllEntities();
     renderLoop();
   } catch (e) {
     console.error('Restore failed', e);
@@ -4709,6 +4791,8 @@ function importOBJ(text) {
     }
     if (created > 0) {
       selectedRoomId = null;
+      // Deduplicate whole scene after import
+      dedupeAllEntities();
       saveProjectSilently();
       renderLoop();
       updateStatus('Imported ' + created + ' object(s) from OBJ');
@@ -6747,8 +6831,8 @@ function plan2dFinalize(a,b){ if(!a||!b) return; // snap to straight axis
   var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='door'){ __plan2d.elements.push({type:'door', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:0.9, meta:{hinge:'left'}}); } plan2dEdited(); }
 
 function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height);
-  // Grid (1m)
-  var step=__plan2d.scale, w=c.width, h=c.height; ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,0.04)';
+  // Grid (1m) — even lighter shade for subtler background
+  var step=__plan2d.scale, w=c.width, h=c.height; ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,0.008)';
   for(var x=w/2 % step; x<w; x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
   for(var y=h/2 % step; y<h; y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
   // Elements
@@ -6907,6 +6991,46 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         ctx.beginPath(); ctx.arc(a.x,a.y,handleR,0,Math.PI*2); ctx.fill();
         ctx.beginPath(); ctx.arc(b.x,b.y,handleR,0,Math.PI*2); ctx.fill();
       }
+      // Persistent window measurement label centered along the window span (stays after finishing drawing)
+      try {
+        // Skip if this very window is being actively dragged; a dedicated live label is drawn later
+        if (!(__plan2d.dragWindow && __plan2d.dragWindow.index === i)){
+          var Lpx = Math.hypot(b.x - a.x, b.y - a.y);
+          if (Lpx >= 20) {
+            // Compute span length in meters using host wall for anchored windows; else world distance
+            var lenM = 0;
+            if (isHostWindow) {
+              var hostWm = elems[el.host];
+              var wallLenM = Math.hypot((hostWm.x1 - hostWm.x0), (hostWm.y1 - hostWm.y0)) || 1;
+              var t0m = Math.max(0, Math.min(1, el.t0||0));
+              var t1m = Math.max(0, Math.min(1, el.t1||0));
+              lenM = wallLenM * Math.abs(t1m - t0m);
+            } else {
+              lenM = Math.hypot((bx - ax), (by - ay));
+            }
+            var txtM = formatMeters(lenM) + ' m';
+            var midxM = (a.x + b.x) * 0.5, midyM = (a.y + b.y) * 0.5;
+            var angM = Math.atan2(b.y - a.y, b.x - a.x);
+            if (angM > Math.PI/2 || angM < -Math.PI/2) angM += Math.PI; // keep upright
+            var padM = 6, maxWM = Math.max(10, Lpx - padM*2), maxHM = 18;
+            ctx.save();
+            ctx.translate(midxM, midyM);
+            ctx.rotate(angM);
+            var baseFontM = 16; ctx.font = baseFontM + 'px sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            var twM = ctx.measureText(txtM).width;
+            var scaleM = Math.min(1, maxWM / Math.max(1, twM), maxHM / baseFontM);
+            if (scaleM >= 0.55) {
+              ctx.scale(scaleM, scaleM);
+              // Outline for contrast
+              ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(15,23,42,0.7)'; ctx.strokeText(txtM, 0, 0.5);
+              ctx.fillStyle = '#e5e7eb';
+              ctx.fillText(txtM, 0, 0.5);
+            }
+            ctx.restore();
+          }
+        }
+      } catch(e) { /* non-fatal measurement draw for windows */ }
     } else if(el.type==='door'){
       // Door rendering: compute endpoints (host-anchored or free)
       var isHostDoor = (typeof el.host==='number');
@@ -6978,17 +7102,17 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
           ctx.save();
           ctx.globalAlpha = (stairsLvl === lvlNow) ? 0.95 : 0.35;
           ctx.fillStyle = (stairsLvl === lvlNow) ? 'rgba(15,23,42,0.10)' : 'rgba(15,23,42,0.06)';
-          ctx.strokeStyle = (stairsLvl === lvlNow) ? '#334155' : '#94a3b8';
-          // Increase stairs keyline stroke by +5px over previous values
-          ctx.lineWidth = (stairsLvl === lvlNow) ? 11 : 10;
+          // Match wall stroke weight and use white keylines for consistency in 2D
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = (__plan2d.wallStrokePx || 1.2);
           ctx.beginPath(); ctx.moveTo(sp1.x, sp1.y); ctx.lineTo(sp2.x, sp2.y); ctx.lineTo(sp3.x, sp3.y); ctx.lineTo(sp4.x, sp4.y); ctx.closePath(); ctx.fill(); ctx.stroke();
           // Label background for stairs at top-left of its screen-space AABB
           try {
             var minXS = Math.min(sp1.x, sp2.x, sp3.x, sp4.x);
             var minYS = Math.min(sp1.y, sp2.y, sp3.y, sp4.y);
             var __dpr = window.devicePixelRatio || 1;
-            // Match DOM .room-label style: pill with shadow, semi-bold, centered
-            var padXCss = 11, padYCss = 6, baseFontPxCss = 12, radiusCss = 19;
+            // Match room label style: 25% smaller base font, semi-bold, centered
+            var padXCss = 11, padYCss = 6, baseFontPxCss = 9, radiusCss = 19;
             var padX = padXCss * __dpr, padY = padYCss * __dpr, fontSize = baseFontPxCss * __dpr, radius = radiusCss * __dpr;
             ctx.save(); ctx.font = '600 ' + fontSize + 'px system-ui, sans-serif';
             var sText = (stairsComponent.name || 'Stairs');
@@ -7001,7 +7125,8 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
               if (cEl) { var cw=cEl.width||0, ch=cEl.height||0; bx = Math.max(6, Math.min(bx, Math.max(6, cw - bw - 6))); by = Math.max(6, Math.min(by, Math.max(6, ch - bh - 6))); }
             } catch(e){}
             // store (not used for drawing now) and draw on base canvas at original location
-            var aVal = ((stairsLvl === lvlNow) ? 0.98 : 0.55);
+            // Use consistent alpha similar to room labels
+            var aVal = 0.95;
             labelBoxes.push({ x: bx, y: by, w: bw, h: bh, text: sText, a: aVal });
             // Draw rounded pill background without shadow
             ctx.globalAlpha = aVal;
@@ -7065,21 +7190,21 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       var lvlNowC = (typeof currentFloor==='number' ? currentFloor : 0);
       var sgnC = (__plan2d.yFromWorldZSign || 1);
       function mapPlanXY(wx, wz){ return worldToScreen2D((wx - __plan2d.centerX), sgnC * (wz - __plan2d.centerZ)); }
-      function drawBox(x, z, w, d, rotDeg, stroke, fill, alpha, labelText) {
+  function drawBox(x, z, w, d, rotDeg, stroke, fill, alpha, labelText) {
         var rot = ((rotDeg||0) * Math.PI) / 180; var hw=w/2, hd=d/2;
         function r(px,pz){ var dx=px-x, dz=pz-z; return { x: x + dx*Math.cos(rot) - dz*Math.sin(rot), z: z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
         var c1=r(x-hw,z-hd), c2=r(x+hw,z-hd), c3=r(x+hw,z+hd), c4=r(x-hw,z+hd);
         var p1=mapPlanXY(c1.x,c1.z), p2=mapPlanXY(c2.x,c2.z), p3=mapPlanXY(c3.x,c3.z), p4=mapPlanXY(c4.x,c4.z);
         ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = fill;
-        ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.lineTo(p4.x,p4.y); ctx.closePath(); ctx.fill();
-        if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.lineTo(p4.x,p4.y); ctx.closePath(); ctx.fill();
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = (__plan2d.wallStrokePx || 1.2); ctx.stroke(); }
         // Draw a white label background at top-left of the overlay's AABB and remember its box for later text drawing
         if (labelText) {
           try {
             var minX = Math.min(p1.x,p2.x,p3.x,p4.x), minY = Math.min(p1.y,p2.y,p3.y,p4.y);
             var __dpr2 = window.devicePixelRatio || 1;
-            // Match DOM .room-label style for overlay labels
-            var padXCss2 = 11, padYCss2 = 6, baseFontPxCss2 = 12, radiusCss2 = 19;
+            // Match room label style (25% smaller)
+            var padXCss2 = 11, padYCss2 = 6, baseFontPxCss2 = 9, radiusCss2 = 19;
             var padX2 = padXCss2 * __dpr2, padY2 = padYCss2 * __dpr2, fontSize2 = baseFontPxCss2 * __dpr2, radius2 = radiusCss2 * __dpr2;
             ctx.font = '600 ' + fontSize2 + 'px system-ui, sans-serif'; var tW = ctx.measureText(labelText).width;
             var bx = Math.round(minX + 6 * __dpr2), by = Math.round(minY + 6 * __dpr2), bw = Math.round(tW + padX2*2), bh = Math.round(fontSize2 + padY2*2);
@@ -7087,9 +7212,9 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
             // Clamp inside canvas bounds
             try { var cEl=document.getElementById('plan2d-canvas'); if(cEl){ var cw=cEl.width||0, ch=cEl.height||0; bx = Math.max(6, Math.min(bx, Math.max(6, cw - bw - 6))); by = Math.max(6, Math.min(by, Math.max(6, ch - bh - 6))); } } catch(e){}
             // Store info (not used for draw now) and draw on base canvas at original location
-            labelBoxes.push({ x: bx, y: by, w: bw, h: bh, text: labelText, a: alpha });
+            labelBoxes.push({ x: bx, y: by, w: bw, h: bh, text: labelText, a: 0.95 });
             // Background pill without shadow
-            ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = '#ffffff';
+            ctx.save(); ctx.globalAlpha = 0.95; ctx.fillStyle = '#ffffff';
             ctx.beginPath();
             ctx.moveTo(bx + radius2, by);
             ctx.lineTo(bx + bw - radius2, by);
@@ -7124,17 +7249,69 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       // Draw components present on the current level
       for (var iPg=0;iPg<pergolaComponents.length;iPg++){
         var per=pergolaComponents[iPg]; if((per.level||0)!==lvlNowC) continue;
-        // Avoid duplicate outline: pergola walls already provide edges. Use fill only (no stroke).
-        drawBox(per.x, per.z, per.width, per.depth, per.rotation||0, null, 'rgba(16,185,129,0.15)', 0.95, (per.name||'Pergola'));
+        // Pergola: draw with a wall-like outline similar to other objects
+        drawBox(per.x, per.z, per.width, per.depth, per.rotation||0, '#10b981', 'rgba(16,185,129,0.15)', 0.95, (per.name||'Pergola'));
       }
       for (var iGg=0;iGg<garageComponents.length;iGg++){
         var gar=garageComponents[iGg]; if((gar.level||0)!==lvlNowC) continue;
-        drawBox(gar.x, gar.z, gar.width, gar.depth, gar.rotation||0, '#f59e0b', 'rgba(245,158,11,0.15)', 0.95, (gar.name||'Garage'));
+        // Use wall-like outline color to match other room outlines
+        drawBox(gar.x, gar.z, gar.width, gar.depth, gar.rotation||0, '#334155', 'rgba(245,158,11,0.15)', 0.95, (gar.name||'Garage'));
       }
       for (var iBl=0;iBl<balconyComponents.length;iBl++){
         var bal=balconyComponents[iBl]; if((bal.level||1)!==lvlNowC) continue;
         drawBox(bal.x, bal.z, bal.width, bal.depth, bal.rotation||0, '#6366f1', 'rgba(99,102,241,0.18)', 0.95, (bal.name||'Balcony'));
       }
+      // 2D Room labels: top-left corner, 25% smaller than standard
+      try {
+        if (Array.isArray(allRooms)){
+          var __dprR = window.devicePixelRatio || 1;
+          var baseFontPxCssRoom = 9; // 25% smaller than 12px
+          var minFontPxCssRoom = 8;  // clamp
+          var padXCssR = 11, padYCssR = 6, radiusCssR = 19;
+          for (var ir=0; ir<allRooms.length; ir++){
+            var rm = allRooms[ir]; if(!rm) continue;
+            var rLvl = (typeof rm.level==='number'? rm.level : 0);
+            if (rLvl !== lvlNowC) continue;
+            var hwR = (rm.width||0)/2, hdR = (rm.depth||0)/2;
+            var c1r = mapPlanXY(rm.x - hwR, rm.z - hdR);
+            var c2r = mapPlanXY(rm.x + hwR, rm.z - hdR);
+            var c3r = mapPlanXY(rm.x + hwR, rm.z + hdR);
+            var c4r = mapPlanXY(rm.x - hwR, rm.z + hdR);
+            var minXr = Math.min(c1r.x,c2r.x,c3r.x,c4r.x);
+            var minYr = Math.min(c1r.y,c2r.y,c3r.y,c4r.y);
+            var labelTextR = (rm.name || 'Room');
+            var padXR = padXCssR * __dprR, padYR = padYCssR * __dprR;
+            var fontPxR = baseFontPxCssRoom * __dprR;
+            ctx.save();
+            ctx.font = '600 ' + fontPxR + 'px system-ui, sans-serif';
+            var tWR = ctx.measureText(labelTextR).width;
+            var bxR = Math.round(minXr + 6 * __dprR), byR = Math.round(minYr + 6 * __dprR);
+            var bwR = Math.round(tWR + padXR*2), bhR = Math.round((baseFontPxCssRoom * __dprR) + padYR*2);
+            var radiusR = Math.min(radiusCssR * __dprR, bhR/2);
+            try { var cElR=document.getElementById('plan2d-canvas'); if(cElR){ var cwR=cElR.width||0, chR=cElR.height||0; bxR = Math.max(6, Math.min(bxR, Math.max(6, cwR - bwR - 6))); byR = Math.max(6, Math.min(byR, Math.max(6, chR - bhR - 6))); } } catch(e){}
+            ctx.globalAlpha = 0.95; ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.moveTo(bxR + radiusR, byR);
+            ctx.lineTo(bxR + bwR - radiusR, byR);
+            ctx.quadraticCurveTo(bxR + bwR, byR, bxR + bwR, byR + radiusR);
+            ctx.lineTo(bxR + bwR, byR + bhR - radiusR);
+            ctx.quadraticCurveTo(bxR + bwR, byR + bhR, bxR + bwR - radiusR, byR + bhR);
+            ctx.lineTo(bxR + radiusR, byR + bhR);
+            ctx.quadraticCurveTo(bxR, byR + bhR, bxR, byR + bhR - radiusR);
+            ctx.lineTo(bxR, byR + radiusR);
+            ctx.quadraticCurveTo(bxR, byR, bxR + radiusR, byR);
+            ctx.closePath(); ctx.fill();
+            try {
+              var availableR = Math.max(0, bwR - padXR*2);
+              var fontCssNow = baseFontPxCssRoom; ctx.font = '600 ' + (fontCssNow * __dprR) + 'px system-ui, sans-serif';
+              var twNow = ctx.measureText(labelTextR).width;
+              if (availableR > 0 && twNow > availableR){ var scaleR = availableR / Math.max(1, twNow); fontCssNow = Math.max(minFontPxCssRoom, Math.floor(baseFontPxCssRoom * scaleR)); ctx.font = '600 ' + (fontCssNow * __dprR) + 'px system-ui, sans-serif'; }
+              var txR = bxR + bwR/2, tyR = byR + bhR/2; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#333333'; ctx.fillText(labelTextR, txR, tyR);
+            } catch(e){}
+            ctx.restore();
+          }
+        }
+      } catch(e) { /* ignore room labels */ }
       // After drawing backgrounds, draw the label texts on the labels-2d canvas (handled later)
       __plan2d.__labelBoxes2D = labelBoxes;
     }
@@ -7175,7 +7352,50 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
 
   // Live label while dragging a window endpoint (host-anchored)
   if(__plan2d.dragWindow){
-  // (Removed) Live label while dragging a window endpoint (host-anchored)
+    try {
+      var dw = __plan2d.dragWindow;
+      var we = __plan2d.elements[dw.index];
+      if(we && we.type==='window' && typeof we.host==='number'){
+        var host = __plan2d.elements[we.host];
+        if(host && host.type==='wall'){
+          // Compute world endpoints from host t0/t1
+          var t0 = Math.max(0, Math.min(1, we.t0||0));
+          var t1 = Math.max(0, Math.min(1, we.t1||0));
+          var wx0 = host.x0 + (host.x1-host.x0)*t0, wy0 = host.y0 + (host.y1-host.y0)*t0;
+          var wx1 = host.x0 + (host.x1-host.x0)*t1, wy1 = host.y0 + (host.y1-host.y0)*t1;
+          var a = worldToScreen2D(wx0, wy0); var b = worldToScreen2D(wx1, wy1);
+          // Pixel-space length for visibility threshold
+          var Lpx = Math.hypot(b.x - a.x, b.y - a.y);
+          if(Lpx >= 20){
+            // Window span in meters along the wall
+            var wallLen = Math.hypot((host.x1-host.x0), (host.y1-host.y0)) || 1;
+            var spanT = Math.abs(t1 - t0);
+            var lenM = wallLen * spanT;
+            var txt = formatMeters(lenM) + ' m';
+            // Midpoint and orientation
+            var midx = (a.x + b.x) * 0.5, midy = (a.y + b.y) * 0.5;
+            var angle = Math.atan2(b.y - a.y, b.x - a.x);
+            if(angle > Math.PI/2 || angle < -Math.PI/2) angle += Math.PI; // keep upright
+            var pad = 6, maxW = Math.max(10, Lpx - pad*2), maxH = 18;
+            ctx.save();
+            ctx.translate(midx, midy);
+            ctx.rotate(angle);
+            var baseFontSize = 16; ctx.font = baseFontSize + 'px sans-serif';
+            ctx.textAlign='center'; ctx.textBaseline='middle';
+            var textW = ctx.measureText(txt).width;
+            var scale = Math.min(1, maxW / Math.max(1, textW), maxH / baseFontSize);
+            if(scale >= 0.55){
+              ctx.scale(scale, scale);
+              // subtle outline for readability
+              ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(15,23,42,0.7)'; ctx.strokeText(txt, 0, 0.5);
+              ctx.fillStyle = '#e5e7eb';
+              ctx.fillText(txt, 0, 0.5);
+            }
+            ctx.restore();
+          }
+        }
+      }
+    } catch(e) { /* non-fatal */ }
   }
   // Hover erase highlight
   if(__plan2d.tool==='erase' && __plan2d.hoverIndex>=0){ var e=__plan2d.elements[__plan2d.hoverIndex]; var a2=worldToScreen2D(e.x0,e.y0), b2=worldToScreen2D(e.x1,e.y1); ctx.beginPath(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.setLineDash([4,4]); ctx.moveTo(a2.x,a2.y); ctx.lineTo(b2.x,b2.y); ctx.stroke(); ctx.setLineDash([]); }
@@ -8036,6 +8256,29 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       } catch(e){ room.openings = []; }
       allRooms.push(room);
     }
+
+  // Deduplicate rooms by id (first), then by geometry on each level as safety
+  try {
+    var seenIds = new Set();
+    allRooms = allRooms.filter(function(r){ if(!r||!r.id) return false; if(seenIds.has(r.id)) return false; seenIds.add(r.id); return true; });
+    // Geometry-based dedupe: same level, center, width, and depth within small epsilon
+    var EPS = 1e-4; var kept = []; var used = [];
+    for (var i=0;i<allRooms.length;i++){
+      var a = allRooms[i]; if(!a) continue; var dup=false;
+      for (var j=0;j<kept.length;j++){
+        var b = kept[j];
+        if ((a.level||0)===(b.level||0)
+            && Math.abs((a.x||0)-(b.x||0))<EPS
+            && Math.abs((a.z||0)-(b.z||0))<EPS
+            && Math.abs((a.width||0)-(b.width||0))<EPS
+            && Math.abs((a.depth||0)-(b.depth||0))<EPS) { dup=true; break; }
+      }
+      if(!dup){ kept.push(a); }
+    }
+    allRooms = kept;
+    // Also run global dedupe for components
+    dedupeAllEntities();
+  } catch(e) { /* non-fatal dedupe */ }
 
   saveProjectSilently(); if(!Array.isArray(elemsSnapshot)) { selectedRoomId=null; } renderLoop(); if(!quiet && !Array.isArray(elemsSnapshot)) updateStatus(roomsFound.length? 'Applied 2D plan to 3D (rooms + openings)' : 'No closed rooms found (auto-snap enabled)');
   } catch(e){ console.error('applyPlan2DTo3D failed', e); updateStatus('Apply to 3D failed'); }
