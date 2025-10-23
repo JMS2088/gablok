@@ -426,10 +426,19 @@ function project3D(worldX, worldY, worldZ) {
     var rotX = _projCache.cosYaw * dx + _projCache.sinYaw * dz;
     var rotZ = -_projCache.sinYaw * dx + _projCache.cosYaw * dz;
 
-    var finalY = _projCache.cosPitch * dy - _projCache.sinPitch * rotZ;
-    var finalZ = _projCache.sinPitch * dy + _projCache.cosPitch * rotZ + camera.distance;
+  var finalY = _projCache.cosPitch * dy - _projCache.sinPitch * rotZ;
+  var finalZ = _projCache.sinPitch * dy + _projCache.cosPitch * rotZ + camera.distance;
 
-    if (finalZ <= 0.1) return null;
+    // Behind camera: allow a small tolerance so near-behind edges still render as an outline
+    if (finalZ <= 0) {
+      // If the point is just slightly behind the camera (within ~1m), clamp to near plane to keep outlines visible
+      if (finalZ > -1.0) {
+        finalZ = 0.1;
+      } else {
+        return null;
+      }
+    }
+  if (finalZ < 0.1) finalZ = 0.1;
 
     var fov = _projCache.fov;
     var screenX = centerX + (rotX * fov) / finalZ + pan.x;
@@ -869,9 +878,9 @@ function drawGrid() {
       var h1 = project3D(minX, 0, z);
       var h2 = project3D(maxX, 0, z);
       if (h1 && h2) {
-        // Style per-line so 1m lines stand out
-        if (isMajor(z)) { octx.strokeStyle = '#cbd5e1'; octx.lineWidth = 1.5; }
-        else { octx.strokeStyle = '#e5e7eb'; octx.lineWidth = 1; }
+        // Lighter grid: subtle gray for better softness on light background
+        if (isMajor(z)) { octx.strokeStyle = '#e5e7eb'; octx.lineWidth = 1; }
+        else { octx.strokeStyle = '#f3f4f6'; octx.lineWidth = 1; }
         octx.beginPath();
         octx.moveTo(h1.x, h1.y);
         octx.lineTo(h2.x, h2.y);
@@ -883,8 +892,8 @@ function drawGrid() {
       var v1 = project3D(x, 0, minZ);
       var v2 = project3D(x, 0, maxZ);
       if (v1 && v2) {
-        if (isMajor(x)) { octx.strokeStyle = '#cbd5e1'; octx.lineWidth = 1.5; }
-        else { octx.strokeStyle = '#e5e7eb'; octx.lineWidth = 1; }
+        if (isMajor(x)) { octx.strokeStyle = '#e5e7eb'; octx.lineWidth = 1; }
+        else { octx.strokeStyle = '#f3f4f6'; octx.lineWidth = 1; }
         octx.beginPath();
         octx.moveTo(v1.x, v1.y);
         octx.lineTo(v2.x, v2.y);
@@ -4535,7 +4544,30 @@ function renderLoop() {
     function withinCull(x,y,z){ var dx=x-camera.targetX, dz=z-camera.targetZ; var d2=dx*dx+dz*dz; return d2 <= cullR2; }
 
     for (var i=0;i<allRooms.length;i++){
-      var room=allRooms[i]; var roomCenterY=room.level*3.5+room.height/2; if(!withinCull(room.x,roomCenterY,room.z)) continue; var centerScreen=project3D(room.x,roomCenterY,room.z); if(centerScreen && !isOffscreenByCenter(centerScreen)){ var dx=room.x-camera.targetX, dz=room.z-camera.targetZ; var d=Math.sqrt(dx*dx+dz*dz); allObjects.push({object:room,type:'room',distance:d,maxHeight:room.level*3.5+room.height}); }
+      var room=allRooms[i];
+      var roomCenterY=room.level*3.5+room.height/2;
+      if(!withinCull(room.x,roomCenterY,room.z)) continue;
+      var centerScreen=project3D(room.x,roomCenterY,room.z);
+      var visible = false;
+      if (centerScreen && !isOffscreenByCenter(centerScreen)) {
+        visible = true;
+      } else {
+        // Fallback: if any corner is on-screen, consider the room visible (prevents pop-out when zoomed very close)
+        var hw = room.width/2, hd = room.depth/2;
+        var cx2 = [room.x - hw, room.x + hw];
+        var cz2 = [room.z - hd, room.z + hd];
+        var yMid = roomCenterY;
+        for (var xi=0; xi<2 && !visible; xi++){
+          for (var zi=0; zi<2 && !visible; zi++){
+            var pt = project3D(cx2[xi], yMid, cz2[zi]);
+            if (pt && !isOffscreenByCenter(pt)) { visible = true; }
+          }
+        }
+      }
+      if (visible) {
+        var dx=room.x-camera.targetX, dz=room.z-camera.targetZ; var d=Math.sqrt(dx*dx+dz*dz);
+        allObjects.push({object:room,type:'room',distance:d,maxHeight:room.level*3.5+room.height});
+      }
     }
     if(stairsComponent){ var scY=stairsComponent.height/2; if(withinCull(stairsComponent.x,scY,stairsComponent.z)){ var sScreen=project3D(stairsComponent.x,scY,stairsComponent.z); if(sScreen && !isOffscreenByCenter(sScreen)){ var dxs=stairsComponent.x-camera.targetX, dzs=stairsComponent.z-camera.targetZ; var ds=Math.sqrt(dxs*dxs+dzs*dzs); allObjects.push({object:stairsComponent,type:'stairs',distance:ds,maxHeight:stairsComponent.height}); } } }
     for (var iB=0;iB<balconyComponents.length;iB++){ var balcony=balconyComponents[iB]; var bCY=balcony.level*3.5+balcony.height/2; if(!withinCull(balcony.x,bCY,balcony.z)) continue; var bScreen=project3D(balcony.x,bCY,balcony.z); if(bScreen && !isOffscreenByCenter(bScreen)){ var dxb=balcony.x-camera.targetX, dzb=balcony.z-camera.targetZ; var db=Math.sqrt(dxb*dxb+dzb*dzb); allObjects.push({object:balcony,type:'balcony',distance:db,maxHeight:balcony.level*3.5+balcony.height}); } }
