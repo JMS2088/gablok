@@ -6492,6 +6492,26 @@ function plan2dBind(){
       var p=screenToWorld2D((e.clientX-rect.left)*(c.width/rect.width),(e.clientY-rect.top)*(c.height/rect.height));
       // marker drag removed
       if(__plan2d.tool==='erase'){ plan2dEraseAt(p); return; }
+      // Multi-point wall chain: Shift-click to start/add points; finish with double-click or Enter; Esc to cancel
+      if(__plan2d.tool==='wall' && (e.shiftKey || __plan2d.chainActive===true)){
+        __plan2d.chainActive = true;
+        if(!Array.isArray(__plan2d.chainPoints)) __plan2d.chainPoints = [];
+        var pt = plan2dSnapPoint(p);
+        if(__plan2d.chainPoints.length===0){
+          __plan2d.chainPoints.push(pt);
+        } else {
+          // If near first point, close and finalize
+          var p0 = __plan2d.chainPoints[0];
+          if(Math.hypot(pt.x - p0.x, pt.y - p0.y) <= 0.1){
+            __plan2d.chainPoints.push({x:p0.x, y:p0.y});
+            plan2dFinalizeChain();
+            return;
+          }
+          __plan2d.chainPoints.push(pt);
+        }
+        plan2dDraw();
+        return;
+      }
       if(__plan2d.tool==='select'){
         // Track click position for click-vs-drag detection in plan units
         __plan2d.mouseDownPosPlan = { x: p.x, y: p.y };
@@ -6509,8 +6529,11 @@ function plan2dBind(){
         if(hitWEnd){
           var w = __plan2d.elements[hitWEnd.index];
           if(w && w.type==='wall'){
+            // Select the wall so both endpoint handles are visible and allow repeated adjustments
+            __plan2d.selectedIndex = hitWEnd.index; __plan2d.selectedSubsegment = null;
             var horiz = Math.abs(w.y1 - w.y0) <= 1e-6;
             __plan2d.dragWall = { index: hitWEnd.index, end: hitWEnd.end, orient: horiz ? 'h' : 'v', other: (hitWEnd.end==='a'? {x:w.x1,y:w.y1}:{x:w.x0,y:w.y0}) };
+            plan2dDraw();
             return;
           }
         }
@@ -6544,12 +6567,17 @@ function plan2dBind(){
           plan2dDraw();
           return;
         }
-        // If user clicks a wall centerline near an intersection, select subsegment
+        // If user clicks a wall centerline: prefer selecting the wall for endpoint editing.
+        // Hold Alt/Ctrl to select a subsegment instead (for precise deletes).
         var segHit = plan2dHitWallSubsegment(p, 0.15);
         if(segHit){
-          // Select wall segment exclusively; clear element selection
-          __plan2d.selectedIndex = -1;
-          __plan2d.selectedSubsegment = segHit;
+          if(e.altKey || e.ctrlKey || e.metaKey){
+            __plan2d.selectedIndex = -1;
+            __plan2d.selectedSubsegment = segHit;
+          } else {
+            __plan2d.selectedIndex = segHit.wallIndex;
+            __plan2d.selectedSubsegment = null;
+          }
           plan2dDraw();
           return;
         }
@@ -6635,6 +6663,13 @@ function plan2dBind(){
       }
       __plan2d.start=p; __plan2d.last=p; plan2dDraw();
     });
+    // Double-click finishes multi-point wall chain
+    c.addEventListener('dblclick', function(e){
+      if(!__plan2d.active) return;
+      if(__plan2d.tool==='wall' && __plan2d.chainActive){
+        plan2dFinalizeChain();
+      }
+    });
     c.addEventListener('mousemove', function(e){
       if(!__plan2d.active) return;
       var rect=c.getBoundingClientRect();
@@ -6648,6 +6683,10 @@ function plan2dBind(){
         var hD = plan2dHitDoorSegment(p, 0.2); if(hD && typeof hD.index==='number') __plan2d.hoverDoorIndex = hD.index;
         var hW = plan2dHitWindowSegment(p, 0.2); if(hW && typeof hW.index==='number') __plan2d.hoverWindowIndex = hW.index;
         if(__plan2d.hoverDoorIndex<0 && __plan2d.hoverWindowIndex<0){ __plan2d.hoverSubsegment = plan2dHitWallSubsegment(p, 0.2); }
+        // Hover endpoint on walls for better affordance
+        __plan2d.hoverWallEnd = plan2dHitWallEndpoint(p, 0.18) || null;
+        // Cursor hint: grab when near a wall endpoint
+        try { if(__plan2d.hoverWallEnd){ c.style.cursor='grab'; } else { c.style.cursor='pointer'; } } catch(_){}
       }
       // If we had a pending door selection for click, but user moved beyond threshold, escalate to dragDoorWhole
       if(__plan2d.maybeDragDoorWhole && __plan2d.mouseDownPosPlan){
@@ -6737,7 +6776,7 @@ function plan2dBind(){
         __plan2d.selectedIndex = __plan2d.pendingSelectIndex;
         __plan2d.pendingSelectIndex = null; plan2dDraw(); updatePlan2DInfo(); return;
       }
-      if(__plan2d.dragWall){ __plan2d.dragWall=null; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); }
+  if(__plan2d.dragWall){ __plan2d.dragWall=null; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); }
       else if(__plan2d.start && __plan2d.last){
         // If it was a short click (no real drag), treat as selection even if not in 'select' tool
         var dx = __plan2d.last.x - __plan2d.start.x, dy = __plan2d.last.y - __plan2d.start.y;
@@ -6755,6 +6794,15 @@ function plan2dBind(){
       window.__plan2dKeydown = function(ev){
         if(!__plan2d.active) return;
         var key = ev.key;
+        // Finish/cancel multi-point wall chain
+        if(__plan2d.tool==='wall' && __plan2d.chainActive){
+          if(key==='Enter'){
+            plan2dFinalizeChain(); ev.preventDefault(); ev.stopPropagation(); return;
+          }
+          if(key==='Escape'){
+            __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return;
+          }
+        }
         if(key==='Delete' || key==='Backspace'){
           // Only delete when an explicit selection exists
           if(__plan2d.selectedSubsegment){
@@ -6862,11 +6910,60 @@ function plan2dCursor(){
 function plan2dFinalize(a,b){ if(!a||!b) return; // snap to straight axis
   var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='door'){ __plan2d.elements.push({type:'door', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:0.9, meta:{hinge:'left'}}); } plan2dEdited(); }
 
+// Finalize multi-point wall chain: create wall segments between consecutive points
+function plan2dFinalizeChain(){
+  try {
+    var pts = Array.isArray(__plan2d.chainPoints) ? __plan2d.chainPoints : [];
+    if(pts.length < 2){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); return; }
+    for(var i=0;i<pts.length-1;i++){
+      var a=pts[i], b=pts[i+1];
+      var segLen = Math.hypot((b.x - a.x), (b.y - a.y));
+      if(segLen < 0.05) continue; // skip tiny
+      // Snap to axis like single-segment finalize
+      var ax=a.x, ay=a.y, bx=b.x, by=b.y;
+      if(Math.abs(bx-ax) > Math.abs(by-ay)) by = ay; else bx = ax;
+      __plan2d.elements.push({ type:'wall', x0:ax, y0:ay, x1:bx, y1:by, thickness: __plan2d.wallThicknessM });
+    }
+    __plan2d.chainActive=false; __plan2d.chainPoints=[];
+    plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited();
+  } catch(e){ try{ console.warn('plan2dFinalizeChain failed', e); }catch(_){} }
+}
+
 function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height);
   // Grid (1m) — even lighter shade for subtler background
   var step=__plan2d.scale, w=c.width, h=c.height; ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,0.008)';
   for(var x=w/2 % step; x<w; x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
   for(var y=h/2 % step; y<h; y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+  // Preview: multi-point wall chain (polyline) when active
+  try {
+    if(__plan2d.tool==='wall' && __plan2d.chainActive && Array.isArray(__plan2d.chainPoints) && __plan2d.chainPoints.length){
+      var pts = __plan2d.chainPoints;
+      // Draw existing segments
+      ctx.save();
+      ctx.strokeStyle = '#64748b'; // slate-500
+      ctx.lineWidth = 2;
+      for(var pi=0; pi<pts.length-1; pi++){
+        var aP = worldToScreen2D(pts[pi].x, pts[pi].y);
+        var bP = worldToScreen2D(pts[pi+1].x, pts[pi+1].y);
+        ctx.beginPath(); ctx.moveTo(aP.x, aP.y); ctx.lineTo(bP.x, bP.y); ctx.stroke();
+      }
+      // Live segment to current mouse
+      if(__plan2d.mouse && pts.length){
+        var mW = screenToWorld2D(__plan2d.mouse.x, __plan2d.mouse.y);
+        var mS = worldToScreen2D(plan2dSnap(mW.x), plan2dSnap(mW.y));
+        var last = worldToScreen2D(pts[pts.length-1].x, pts[pts.length-1].y);
+        ctx.setLineDash([6,4]); ctx.strokeStyle = '#0ea5e9'; // sky-600
+        ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(mS.x, mS.y); ctx.stroke(); ctx.setLineDash([]);
+      }
+      // Vertex handles
+      for(var pj=0; pj<pts.length; pj++){
+        var pS = worldToScreen2D(pts[pj].x, pts[pj].y);
+        ctx.beginPath(); ctx.fillStyle = '#f59e0b'; ctx.strokeStyle='rgba(15,23,42,0.8)'; ctx.lineWidth=2; // amber-500
+        ctx.arc(pS.x, pS.y, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  } catch(e) { /* non-fatal chain preview */ }
   // Elements
   // Precompute connections at endpoints to extend walls and make corners flush
   var elems=__plan2d.elements;
@@ -7446,6 +7543,22 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       var weH = __plan2d.elements[__plan2d.hoverWindowIndex]; if(weH){ var axw,ayw,bxw,byw; if(typeof weH.host==='number'){ var wh=__plan2d.elements[weH.host]; if(wh){ var t0w=Math.max(0,Math.min(1,weH.t0||0)), t1w=Math.max(0,Math.min(1,weH.t1||0)); axw=wh.x0+(wh.x1-wh.x0)*t0w; ayw=wh.y0+(wh.y1-wh.y0)*t0w; bxw=wh.x0+(wh.x1-wh.x0)*t1w; byw=wh.y0+(wh.y1-wh.y0)*t1w; } } if(axw===undefined){ axw=weH.x0; ayw=weH.y0; bxw=weH.x1; byw=weH.y1; } var aSw=worldToScreen2D(axw,ayw), bSw=worldToScreen2D(bxw,byw); ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.lineWidth=3; ctx.setLineDash([6,4]); ctx.moveTo(aSw.x,aSw.y); ctx.lineTo(bSw.x,bSw.y); ctx.stroke(); ctx.setLineDash([]);} }
     // Wall subsegment hover
     if(__plan2d.hoverSubsegment && __plan2d.hoverDoorIndex<0 && __plan2d.hoverWindowIndex<0){ var hs=__plan2d.hoverSubsegment; var aH=worldToScreen2D(hs.ax,hs.ay), bH=worldToScreen2D(hs.bx,hs.by); ctx.beginPath(); ctx.strokeStyle='#f97316'; ctx.lineWidth=4; ctx.setLineDash([8,4]); ctx.moveTo(aH.x,aH.y); ctx.lineTo(bH.x,bH.y); ctx.stroke(); ctx.setLineDash([]); }
+    // Wall endpoint hover: show a small handle at the hovered endpoint for affordance
+    if(__plan2d.hoverWallEnd && typeof __plan2d.hoverWallEnd.index==='number'){
+      try{
+        var wHover = __plan2d.elements[__plan2d.hoverWallEnd.index];
+        if(wHover && wHover.type==='wall'){
+          var pt = (__plan2d.hoverWallEnd.end==='a') ? {x:wHover.x0,y:wHover.y0} : {x:wHover.x1,y:wHover.y1};
+          var pS = worldToScreen2D(pt.x, pt.y);
+          ctx.save();
+          ctx.fillStyle = '#fbbf24'; // amber-400
+          ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(pS.x, pS.y, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+          ctx.restore();
+        }
+      }catch(e){}
+    }
   }
   // Selection highlight
   if(__plan2d.selectedIndex>=0){
@@ -7461,6 +7574,18 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
     }
     var sa=worldToScreen2D(sx0,sy0), sb=worldToScreen2D(sx1,sy1);
     ctx.beginPath(); ctx.strokeStyle='#10b981'; ctx.lineWidth=3; ctx.setLineDash([6,4]); ctx.moveTo(sa.x,sa.y); ctx.lineTo(sb.x,sb.y); ctx.stroke(); ctx.setLineDash([]);
+    // When a wall is selected in Select tool, show explicit draggable endpoint handles
+    if(__plan2d.tool==='select' && se && se.type==='wall'){
+      var handleR = 6;
+      // Draw with a strong fill and subtle outline for visibility over walls
+      ctx.save();
+      ctx.fillStyle = '#f59e0b'; // amber-500
+      ctx.strokeStyle = 'rgba(15,23,42,0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(sa.x, sa.y, handleR, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(sb.x, sb.y, handleR, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
   }
   // Draw selected subsegment highlight if present
   if(__plan2d.selectedSubsegment && typeof __plan2d.selectedSubsegment.wallIndex==='number'){
