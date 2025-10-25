@@ -882,10 +882,16 @@ function plan2dFinalizeChain(){
 }
 
 function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height);
-  // Grid (1m) — even lighter shade for subtler background
-  var step=__plan2d.scale, w=c.width, h=c.height; ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,0.02)';
+  // Grid (1m): increase contrast and draw center axes for better visibility
+  var step=__plan2d.scale, w=c.width, h=c.height; 
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
   for(var x=w/2 % step; x<w; x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
   for(var y=h/2 % step; y<h; y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+  // Center axes (X/Y) a touch brighter
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.beginPath(); ctx.moveTo(w/2,0); ctx.lineTo(w/2,h); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0,h/2); ctx.lineTo(w,h/2); ctx.stroke();
   // Preview: multi-point wall chain (polyline) when active
   try {
     if(__plan2d.tool==='wall' && __plan2d.chainActive && Array.isArray(__plan2d.chainPoints) && __plan2d.chainPoints.length){
@@ -1361,8 +1367,8 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
             // Subtle room footprint fill under walls
             try {
               ctx.save();
-              ctx.globalAlpha = 0.10;
-              ctx.fillStyle = 'rgba(148,163,184,0.35)'; // slate-400 tint
+              // Single alpha for clear but subtle footprint on dark background
+              ctx.fillStyle = 'rgba(148,163,184,0.18)'; // slate-400 at ~18%
               ctx.beginPath();
               ctx.moveTo(c1r.x, c1r.y);
               ctx.lineTo(c2r.x, c2r.y);
