@@ -1,3 +1,8 @@
+// Core engine bootstrap moved to js/core/engine3d.js
+
+// Global animation frame handle to avoid ReferenceErrors before first render
+var animationId = null;
+
 function drawHandlesForPergola(pergola) {
   try {
     var isActive = selectedRoomId === pergola.id;
@@ -14,13 +19,14 @@ function drawHandlesForPergola(pergola) {
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) continue;
 
-      drawHandle(screen, handle.type, handle.label, isActive);
+      var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, HANDLE_RADIUS) : HANDLE_RADIUS;
+      drawHandle(screen, handle.type, handle.label, isActive, r);
 
       resizeHandles.push({
-        screenX: screen.x - HANDLE_RADIUS,
-        screenY: screen.y - HANDLE_RADIUS,
-        width: HANDLE_RADIUS * 2,
-        height: HANDLE_RADIUS * 2,
+        screenX: screen.x - r,
+        screenY: screen.y - r,
+        width: r * 2,
+        height: r * 2,
         type: handle.type,
         roomId: pergola.id
       });
@@ -49,21 +55,20 @@ function drawRoom(room) {
       {x: room.x - hw, y: roomFloorY + room.height, z: room.z + hd}
     ];
     
-  var projected = [];
+  var projected = new Array(corners.length);
     for (var i = 0; i < corners.length; i++) {
-      var p = project3D(corners[i].x, corners[i].y, corners[i].z);
-      if (!p) return;
-      projected.push(p);
+      projected[i] = project3D(corners[i].x, corners[i].y, corners[i].z) || null;
     }
     
+    // Improve room edge visibility on light backgrounds
     if (currentLevel) {
-      ctx.strokeStyle = selected ? '#007acc' : '#D0D0D0';
-      ctx.lineWidth = selected ? 3 : 2;
+      ctx.strokeStyle = selected ? '#007acc' : '#4b5563'; // slate-600 for contrast
+      ctx.lineWidth = selected ? 3 : 2.25;
       ctx.globalAlpha = 1.0;
     } else {
-      ctx.strokeStyle = selected ? '#005080' : '#808080';
-      ctx.lineWidth = selected ? 2 : 1;
-      ctx.globalAlpha = 0.6;
+      ctx.strokeStyle = selected ? '#005080' : '#9ca3af'; // slate-400 when on other floor
+      ctx.lineWidth = selected ? 2.25 : 1.25;
+      ctx.globalAlpha = 0.7;
     }
     
     var edges = [
@@ -76,31 +81,84 @@ function drawRoom(room) {
     ctx.beginPath();
     for (var i = 0; i < edges.length; i++) {
       var e = edges[i];
-      ctx.moveTo(projected[e[0]].x, projected[e[0]].y);
-      ctx.lineTo(projected[e[1]].x, projected[e[1]].y);
+      var a = projected[e[0]];
+      var b = projected[e[1]];
+      if (!a || !b) continue;
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
     }
     ctx.stroke();
     
-    if (currentLevel) {
-      ctx.fillStyle = selected ? 'rgba(0,122,204,0.15)' : 'rgba(208,208,208,0.1)';
-      ctx.beginPath();
-      ctx.moveTo(projected[0].x, projected[0].y);
-      ctx.lineTo(projected[1].x, projected[1].y);
-      ctx.lineTo(projected[2].x, projected[2].y);
-      ctx.lineTo(projected[3].x, projected[3].y);
-      ctx.closePath();
-      ctx.fill();
-    } else if (selected && room.level !== currentFloor) {
-      ctx.fillStyle = 'rgba(0,122,204,0.15)';
-      ctx.beginPath();
-      ctx.moveTo(projected[0].x, projected[0].y);
-      ctx.lineTo(projected[1].x, projected[1].y);
-      ctx.lineTo(projected[2].x, projected[2].y);
-      ctx.lineTo(projected[3].x, projected[3].y);
-      ctx.closePath();
-      ctx.fill();
+    var p0=projected[0], p1=projected[1], p2=projected[2], p3=projected[3];
+    if (p0 && p1 && p2 && p3) {
+      if (currentLevel) {
+        ctx.fillStyle = selected ? 'rgba(0,122,204,0.18)' : 'rgba(120,120,120,0.10)';
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.closePath();
+        ctx.fill();
+      } else if (selected && room.level !== currentFloor) {
+        ctx.fillStyle = 'rgba(0,122,204,0.18)';
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.closePath();
+        ctx.fill();
+      }
     }
+
+    // Always register/draw handles so they are draggable for rooms as well
+    try { if (typeof drawHandlesForRoom === 'function') drawHandlesForRoom(room); } catch(e) {}
   } catch (e) {}
+}
+
+// Resize handles for rooms (X and Z directions). Draw even when not selected so users can grab them.
+function drawHandlesForRoom(room) {
+  try {
+    if (!room) return;
+    var isActive = selectedRoomId === room.id;
+    var levelY = (room.level || 0) * 3.5;
+    var handleY = levelY + (room.height || 3) + 0.2;
+    var rot = ((room.rotation || 0) * Math.PI) / 180;
+    var cos = Math.cos(rot), sin = Math.sin(rot);
+    var hw = (room.width || 1) / 2;
+    var hd = (room.depth || 1) / 2;
+
+    function rotPoint(dx, dz) {
+      return {
+        x: room.x + dx * cos - dz * sin,
+        z: room.z + dx * sin + dz * cos
+      };
+    }
+
+    var handles = [
+      (function(){ var p=rotPoint(hw, 0); return {x:p.x, y:handleY, z:p.z, type:'width+', label:'X+'}; })(),
+      (function(){ var p=rotPoint(-hw, 0); return {x:p.x, y:handleY, z:p.z, type:'width-', label:'X-'}; })(),
+      (function(){ var p=rotPoint(0, hd); return {x:p.x, y:handleY, z:p.z, type:'depth+', label:'Z+'}; })(),
+      (function(){ var p=rotPoint(0, -hd); return {x:p.x, y:handleY, z:p.z, type:'depth-', label:'Z-'}; })()
+    ];
+
+    for (var i = 0; i < handles.length; i++) {
+      var h = handles[i];
+      var s = project3D(h.x, h.y, h.z);
+      if (!s) continue;
+      var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(s, HANDLE_RADIUS) : HANDLE_RADIUS;
+      drawHandle(s, h.type, h.label, isActive, r);
+      resizeHandles.push({
+        screenX: s.x - r,
+        screenY: s.y - r,
+        width: r * 2,
+        height: r * 2,
+        type: h.type,
+        roomId: room.id
+      });
+    }
+  } catch(e) { console.warn('drawHandlesForRoom failed', e); }
 }
 
 function setupEvents() {
@@ -398,7 +456,7 @@ function setupEvents() {
         pan.x += dx * 1.5;
         pan.y += dy * 1.5;
       } else {
-        camera.yaw -= dx * 0.008;
+        camera.yaw += dx * 0.008;
         camera.pitch -= dy * 0.008;
         camera.pitch = Math.max(camera.minPitch, Math.min(camera.maxPitch, camera.pitch));
       }
@@ -638,6 +696,7 @@ function switchLevel() {
         var spot = findFreeSpot(newRoom);
         newRoom.x = spot.x;
         newRoom.z = spot.z;
+        try { var s = applySnap({x:newRoom.x, z:newRoom.z, width:newRoom.width, depth:newRoom.depth, level:newRoom.level, id:newRoom.id, type:'room'}); newRoom.x = s.x; newRoom.z = s.z; } catch(_e) {}
         allRooms.push(newRoom);
         selectedRoomId = newRoom.id;
         updateStatus('Added room on Floor 2');
@@ -978,13 +1037,14 @@ function drawHandlesForStairs(stairs) {
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) continue;
 
-      drawHandle(screen, handle.type, handle.label, isActive);
+      var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, HANDLE_RADIUS) : HANDLE_RADIUS;
+      drawHandle(screen, handle.type, handle.label, isActive, r);
       
       resizeHandles.push({
-        screenX: screen.x - HANDLE_RADIUS,
-        screenY: screen.y - HANDLE_RADIUS,
-        width: HANDLE_RADIUS * 2,
-        height: HANDLE_RADIUS * 2,
+        screenX: screen.x - r,
+        screenY: screen.y - r,
+        width: r * 2,
+        height: r * 2,
         type: handle.type,
         roomId: stairs.id
       });
@@ -1467,7 +1527,13 @@ function drawHandlesForPool(pool) {
       {dx: 0, dz: -hd, type: 'depth-', label: 'Z-'}
     ].forEach(function(h){ var p=rotateHandle(h.dx,h.dz); handles.push({x:p.x, y: BASE_HANDLE_Y, z:p.z, type:h.type, label:h.label, radius: REGULAR_HANDLE_RADIUS}); });
 
-    handles.forEach(function(h){ var s=project3D(h.x,h.y,h.z); if(!s) return; drawHandle(s, h.type, h.label, isActive, h.radius); resizeHandles.push({screenX:s.x-h.radius,screenY:s.y-h.radius,width:h.radius*2,height:h.radius*2,type:h.type,roomId:pool.id}); });
+    handles.forEach(function(h){
+      var s=project3D(h.x,h.y,h.z); if(!s) return;
+      var base = (typeof h.radius==='number'? h.radius : HANDLE_RADIUS);
+      var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(s, base) : base;
+      drawHandle(s, h.type, h.label, isActive, r);
+      resizeHandles.push({ screenX:s.x - r, screenY:s.y - r, width:r*2, height:r*2, type:h.type, roomId:pool.id });
+    });
   } catch (e) { console.error('Pool handle error:', e); }
 }
 
@@ -1669,13 +1735,14 @@ function drawHandlesForBalcony(balcony) {
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) continue;
 
-      drawHandle(screen, handle.type, handle.label, isActive);
+      var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, HANDLE_RADIUS) : HANDLE_RADIUS;
+      drawHandle(screen, handle.type, handle.label, isActive, r);
       
       resizeHandles.push({
-        screenX: screen.x - HANDLE_RADIUS,
-        screenY: screen.y - HANDLE_RADIUS,
-        width: HANDLE_RADIUS * 2,
-        height: HANDLE_RADIUS * 2,
+        screenX: screen.x - r,
+        screenY: screen.y - r,
+        width: r * 2,
+        height: r * 2,
         type: handle.type,
         roomId: balcony.id
       });
@@ -1895,14 +1962,16 @@ function drawHandlesForGarage(garage) {
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) return;
 
-      drawHandle(screen, handle.type, handle.label, isActive, handle.radius);
+      var base = (typeof handle.radius==='number'? handle.radius : HANDLE_RADIUS);
+      var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, base) : base;
+      drawHandle(screen, handle.type, handle.label, isActive, r);
       
       // Register handle for interaction
       resizeHandles.push({
-        screenX: screen.x - handle.radius,
-        screenY: screen.y - handle.radius,
-        width: handle.radius * 2,
-        height: handle.radius * 2,
+        screenX: screen.x - r,
+        screenY: screen.y - r,
+        width: r * 2,
+        height: r * 2,
         type: handle.type,
         roomId: garage.id
       });
@@ -1917,6 +1986,7 @@ function drawHandlesForGarage(garage) {
 function renderLoop() {
   var frameStart = (performance && performance.now) ? performance.now() : Date.now();
   try {
+    try { if (window.__dbgGfx) window.__dbgGfx.frames++; } catch(_e) {}
     // Final safety net: if previous steps missed something, dedupe before rendering this frame
     dedupeAllEntities();
     // Detect camera / selection changes to decide if a re-render is necessary
@@ -1944,9 +2014,17 @@ function renderLoop() {
     try {
       var lastActive = Math.max(_camLastMoveTime || 0, _uiLastInteractionTime || 0);
       var elapsedSinceActive = Math.max(0, frameStart - lastActive);
+      var grace = (typeof UI_FADE_GRACE_MS === 'number' ? UI_FADE_GRACE_MS : 5000);
+      var duration = (typeof UI_FADE_INACTIVITY_MS === 'number' ? UI_FADE_INACTIVITY_MS : 2000);
       var targetAlpha = 1.0;
-      if (elapsedSinceActive >= UI_FADE_INACTIVITY_MS) targetAlpha = 0.0;
-      else targetAlpha = 1.0 - (elapsedSinceActive / UI_FADE_INACTIVITY_MS);
+      if (elapsedSinceActive <= grace) {
+        targetAlpha = 1.0; // no fade during grace period
+      } else if (elapsedSinceActive >= grace + duration) {
+        targetAlpha = 0.0; // fully faded after grace + duration
+      } else {
+        var t = (elapsedSinceActive - grace) / duration; // 0..1
+        targetAlpha = 1.0 - t;
+      }
       // Smooth the change so canvas handles animate nicely across frames
       var cur = (typeof window.__uiFadeAlpha === 'number') ? window.__uiFadeAlpha : 1.0;
       var k = 0.12; // smoothing factor
@@ -2024,11 +2102,27 @@ function renderLoop() {
     if (now - _lastMeasurementsUpdate > MEASURE_UPDATE_INTERVAL_MS) { updateMeasurements(); _lastMeasurementsUpdate = now; }
     _needsFullRender = false;
   } catch (error) {
-    console.error('Render error:', error); updateStatus('Render error');
+    console.error('Render error:', error); updateStatus('Render error: ' + (error && error.message ? error.message : 'unknown'));
   }
   var frameEnd = (performance && performance.now) ? performance.now() : Date.now();
   var frameDur = frameEnd - frameStart; __perf.frameMs = frameDur; __perf.frames++;
   if(frameEnd - __perf.lastFpsSample > 1000){ __perf.fps = (__perf.frames * 1000)/(frameEnd-__perf.lastFpsSample); __perf.frames=0; __perf.lastFpsSample=frameEnd; updatePerfStatsOverlay(); }
+
+  // Debug overlay drawings (screen-space) to confirm loop executes
+  try {
+    if (window.__debug && window.__debug.enabled && ctx && canvas) {
+      ctx.save();
+      // Crosshair at screen center
+      var cx = Math.floor(canvas.width/2), cy = Math.floor(canvas.height/2);
+      ctx.strokeStyle = '#ff00ff'; ctx.lineWidth = 2; ctx.globalAlpha = 0.9;
+      ctx.beginPath(); ctx.moveTo(cx-20, cy); ctx.lineTo(cx+20, cy); ctx.moveTo(cx, cy-20); ctx.lineTo(cx, cy+20); ctx.stroke();
+      // Marker for world origin projection
+      var o = (typeof project3D==='function') ? project3D(0,0,0) : null;
+      if (o) { ctx.fillStyle = '#00ff55'; ctx.fillRect(o.x-4, o.y-4, 8, 8); }
+      else { ctx.fillStyle = '#ff4444'; ctx.fillRect(8, 8, 10, 10); }
+      ctx.restore();
+    }
+  } catch(e) { /* non-fatal */ }
   animationId = requestAnimationFrame(renderLoop);
 }
 
@@ -2439,15 +2533,16 @@ document.addEventListener('DOMContentLoaded', function(){
       var item=e.target.closest('.dropdown-item'); if(!item || item.classList.contains('separator')) return;
       var val=item.getAttribute('data-value');
       // Handle special add actions directly to avoid creation during generic switchLevel()
-      if(val==='pergola' || val==='garage' || val==='roof' || val==='pool' || val==='balcony' || val==='stairs'){
-        try {
-          if(val==='pergola') { addPergola(); }
-          else if(val==='garage') { addGarage(); }
-          else if(val==='roof') { addRoof(); }
-          else if(val==='pool') { addPool(); }
-          else if(val==='balcony') { addBalcony(); }
-          else if(val==='stairs') { addStairs(); }
-        } catch(err) { console.warn('Special add failed', err); }
+      var addMap = {
+        'pergola': function(){ if(typeof addPergola==='function') addPergola(); },
+        'garage': function(){ if(typeof addGarage==='function') addGarage(); },
+        'roof': function(){ if(typeof addRoof==='function') addRoof(); },
+        'pool': function(){ if(typeof addPool==='function') addPool(); },
+        'balcony': function(){ if(typeof addBalcony==='function') addBalcony(); },
+        'stairs': function(){ if(typeof addStairs==='function') addStairs(); }
+      };
+      if (addMap[val]){
+        try { addMap[val](); } catch(err) { console.warn('Add action failed for', val, err); }
         // Normalize selector to the current floor after creation/focus
         if(nativeSel){ nativeSel.value = String(typeof currentFloor==='number' ? currentFloor : 0); }
         setLabelFromValue(nativeSel ? nativeSel.value : '0');
@@ -2455,7 +2550,7 @@ document.addEventListener('DOMContentLoaded', function(){
         return;
       }
       // Regular floor switch
-      if(nativeSel){ nativeSel.value = val; }
+  if(nativeSel){ nativeSel.value = val; }
       setLabelFromValue(val);
       if(typeof switchLevel==='function') switchLevel();
       close();
