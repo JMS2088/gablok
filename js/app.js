@@ -6428,6 +6428,11 @@ var __plan2d = {
   wallHeightM:3.0,
   // Controls orientation: 2D Y = sign * world Z (1 => North up matches world +Z; -1 flips)
   yFromWorldZSign: 1,
+  // Persisted plan center in world meters (used to stabilize recentering)
+  centerX: 0,
+  centerZ: 0,
+  // When set (epoch ms), freeze center/scale for populatePlan2DFromDesign() until this time
+  freezeCenterScaleUntil: 0,
   // Grid snapping step (meters)
   gridStep: 0.5,
   elements:[],       // { type:'wall'|'window'|'door', ... }
@@ -6528,6 +6533,9 @@ function plan2dScheduleApply(now){
       // If walls are unchanged, we can safely rebuild rooms+openings to reflect door/window edits in 3D
       var wallsSigNow = plan2dSigWallsOnly();
       if(wallsSigNow && __plan2d._lastWallsSig && wallsSigNow === __plan2d._lastWallsSig){
+        // Walls unchanged -> we are applying opening-only edits. Freeze 2D center/scale briefly
+        // so the canvas doesn't re-center/zoom slightly due to quantization while rooms are rebuilt.
+        try { __plan2d.freezeCenterScaleUntil = Date.now() + 1000; } catch(e){}
         // Walls unchanged -> safe to rebuild rooms/openings only
         applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl });
       } else {
@@ -8753,6 +8761,15 @@ function populatePlan2DFromDesign(){
     useMinX = minX; useMaxX = maxX; useMinZ = minZ; useMaxZ = maxZ;
   }
   var spanX = Math.max(0.5, useMaxX - useMinX); var spanZ = Math.max(0.5, useMaxZ - useMinZ);
+  // If we're applying opening-only edits, freeze center/scale to avoid subtle canvas jumps
+  var __freezeScale = false;
+  try {
+    if (__plan2d && __plan2d.freezeCenterScaleUntil && Date.now() < __plan2d.freezeCenterScaleUntil) {
+      if (isFinite(__plan2d.centerX)) cx = __plan2d.centerX;
+      if (isFinite(__plan2d.centerZ)) cz = __plan2d.centerZ;
+      __freezeScale = true;
+    }
+  } catch(e) {}
   // Persist center so overlays and helpers can map world->plan consistently
   __plan2d.centerX = cx; __plan2d.centerZ = cz;
 
@@ -8764,6 +8781,7 @@ function populatePlan2DFromDesign(){
   var scaleX = (c.width>0) ? (c.width/(fitWm||1)) : __plan2d.scale;
   var scaleY = (c.height>0) ? (c.height/(fitHm||1)) : __plan2d.scale;
   var newScale = Math.max(10, Math.min(140, Math.floor(Math.min(scaleX, scaleY)))); // clamp sensible range
+  if (__freezeScale) { newScale = __plan2d.scale || newScale; }
   if (isFinite(newScale) && newScale>0) __plan2d.scale = newScale;
 
   // Build wall segments around each rectangle, shifted so center is at (0,0)
