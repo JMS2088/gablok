@@ -135,6 +135,10 @@ var _heightBarAlpha = 1;
 // Throttles for expensive DOM updates
 var LABEL_UPDATE_INTERVAL_MS = 120;
 var MEASURE_UPDATE_INTERVAL_MS = 250;
+// UI fade settings: gently fade UI affordances when user is idle
+var UI_FADE_INACTIVITY_MS = 5000; // 5 seconds to full fade
+var _uiLastInteractionTime = 0;
+window.__uiFadeAlpha = 1.0; // computed each frame in renderLoop
 // Consistent meter formatting across 2D/3D UIs
 function formatMeters(value){
   var n = Number(value);
@@ -211,12 +215,16 @@ function drawHandle(screen, type, label, isActive, radius) {
   var style = getHandleStyle(type, isActive);
   var font = type === 'rotate' ? 'bold 14px sans-serif' : 'bold 10px sans-serif';
 
+  // Apply global UI fade multiplier (set by render loop based on inactivity)
+  var fadeMult = (typeof window.__uiFadeAlpha === 'number') ? window.__uiFadeAlpha : 1.0;
+  var finalOpacity = (typeof style.opacity === 'number' ? style.opacity : 1.0) * fadeMult;
+
   // Shadow glow only for active rotate handles
   if (isActive && type === 'rotate') {
     ctx.save();
     ctx.shadowColor = HANDLE_STYLE.active.stroke.rotate;
     ctx.shadowBlur = 10;
-    ctx.globalAlpha = style.opacity;
+    ctx.globalAlpha = finalOpacity;
     ctx.fillStyle = style.fill;
     ctx.strokeStyle = style.stroke;
     ctx.lineWidth = type === 'rotate' ? 3 : 2;
@@ -227,7 +235,7 @@ function drawHandle(screen, type, label, isActive, radius) {
     ctx.restore();
   } else {
     ctx.save();
-    ctx.globalAlpha = style.opacity;
+    ctx.globalAlpha = finalOpacity;
     ctx.fillStyle = style.fill;
     ctx.strokeStyle = style.stroke;
     ctx.lineWidth = type === 'rotate' ? 3 : 2;
@@ -240,7 +248,7 @@ function drawHandle(screen, type, label, isActive, radius) {
 
   // Label
   ctx.save();
-  ctx.globalAlpha = style.opacity;
+  ctx.globalAlpha = finalOpacity;
   ctx.fillStyle = style.label;
   ctx.font = font;
   ctx.textAlign = 'center';
@@ -390,6 +398,8 @@ function startApp() {
   createInitialRoom();
   setupEvents();
   startRender();
+  // mark UI as recently active so elements are visible on startup
+  _uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now();
   updateStatus('Ready');
 }
 
@@ -2588,7 +2598,7 @@ function updateLabels() {
     label.style.color = selectedRoomId === obj.id ? 'white' : '#333';
 
     // Show static text by default for drag-friendly labels; switch to input on dblclick
-    if (editingLabelId === obj.id) {
+  if (editingLabelId === obj.id) {
       var input = document.createElement('input');
       input.type = 'text';
       input.value = obj.name || '';
@@ -2632,11 +2642,17 @@ function updateLabels() {
       label.appendChild(span);
     }
 
-    // No inline actions anymore
-    
-    if (labelData.type === 'room' && obj.level !== currentFloor) {
-      label.style.opacity = '0.6';
-    }
+    // Determine base opacity (e.g., rooms on other floors are slightly faded)
+    var baseOpacity = 1.0;
+    if (labelData.type === 'room' && obj.level !== currentFloor) baseOpacity = 0.6;
+    // Store base opacity for potential future tweaks and apply current UI fade multiplier
+    label.dataset.baseOpacity = String(baseOpacity);
+    try {
+      var fade = (typeof window.__uiFadeAlpha === 'number') ? window.__uiFadeAlpha : 1.0;
+      label.style.opacity = String(Math.max(0, Math.min(1, baseOpacity * fade)));
+      // Allow CSS transition to handle smooth fades; ensure pointer events remain enabled
+      label.style.transition = 'opacity 5s ease';
+    } catch (e) { /* ignore DOM quirks */ }
     
     // Create or update roof type dropdown for roof objects
     if (labelData.type === 'roof' && selectedRoomId === obj.id) {
@@ -2736,6 +2752,13 @@ function updateLabels() {
       btn.style.top = Math.round(screen.y) + 'px';
       // Open on mousedown to avoid losing click due to frequent re-renders
       btn.onmousedown = function(e){ e.stopPropagation(); e.preventDefault(); openRoomPalette(this.dataset.id); };
+      // Apply base opacity and current UI fade multiplier
+      btn.dataset.baseOpacity = '1.0';
+      try {
+        var btnFade = (typeof window.__uiFadeAlpha === 'number') ? window.__uiFadeAlpha : 1.0;
+        btn.style.opacity = String(Math.max(0, Math.min(1, 1.0 * btnFade)));
+        btn.style.transition = 'opacity 5s ease';
+      } catch (e) {}
       container.appendChild(btn);
     }
 
@@ -2772,6 +2795,13 @@ function updateLabels() {
 
 function setupEvents() {
   window.addEventListener('resize', setupCanvas);
+  // Track UI interactions so we can fade affordances when idle
+  try {
+    canvas.addEventListener('mousemove', function(){ _uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now(); });
+    canvas.addEventListener('mousedown', function(){ _uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now(); });
+    canvas.addEventListener('wheel', function(){ _uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now(); }, { passive: true });
+    canvas.addEventListener('touchstart', function(){ _uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now(); }, { passive: true });
+  } catch (e) { /* canvas may not be ready in some init paths */ }
   
   canvas.addEventListener('mousedown', function(e) {
     var rect = canvas.getBoundingClientRect();
@@ -4530,6 +4560,22 @@ function renderLoop() {
     }
     __perf.skipStreak = 0;
     __perf.lastFrameTime = nowTs;
+
+    // Compute UI fade alpha based on last interaction (camera or input). This controls
+    // fade of DOM labels/buttons (also CSS transitions) and canvas handles (drawHandle).
+    try {
+      var lastActive = Math.max(_camLastMoveTime || 0, _uiLastInteractionTime || 0);
+      var elapsedSinceActive = Math.max(0, frameStart - lastActive);
+      var targetAlpha = 1.0;
+      if (elapsedSinceActive >= UI_FADE_INACTIVITY_MS) targetAlpha = 0.0;
+      else targetAlpha = 1.0 - (elapsedSinceActive / UI_FADE_INACTIVITY_MS);
+      // Smooth the change so canvas handles animate nicely across frames
+      var cur = (typeof window.__uiFadeAlpha === 'number') ? window.__uiFadeAlpha : 1.0;
+      var k = 0.12; // smoothing factor
+      window.__uiFadeAlpha = cur + (targetAlpha - cur) * k;
+      // Also set CSS variable on labels container for any CSS-driven behavior
+      var lblC = document.getElementById('labels-3d'); if (lblC) lblC.style.setProperty('--ui-fade', String(window.__uiFadeAlpha));
+    } catch (e) { /* non-fatal */ }
 
     resizeHandles = [];
     updateProjectionCache();
