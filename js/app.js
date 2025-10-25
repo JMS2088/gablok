@@ -311,7 +311,8 @@ function _dedupeById(arr){
 function _dedupeBoxesByGeom(arr, opts){
   // Geometry-based equality for rectangular components (x,z,width,depth,rotation[,level])
   if(!Array.isArray(arr)) return [];
-  var EPS = 1e-4; var useLevel = !!(opts && opts.useLevel);
+  // Use a slightly larger epsilon to catch near-identical duplicates created by rapid UI events
+  var EPS = 1e-3; var useLevel = !!(opts && opts.useLevel);
   var out=[];
   for(var i=0;i<arr.length;i++){
     var a=arr[i]; if(!a) continue; var dup=false;
@@ -332,14 +333,48 @@ function dedupeAllEntities(){
     allRooms = _dedupeBoxesByGeom(allRooms, { useLevel:true });
     // Pergolas, Garages, Balconies: by id then by geometry (pergola/garage no level constraint; balcony has level=1)
     pergolaComponents = _dedupeById(pergolaComponents);
-    pergolaComponents = _dedupeBoxesByGeom(pergolaComponents, { useLevel:false });
+  // Enforce ground level for pergolas and dedupe by geometry (tolerant)
+  for(var pi=0; pi<pergolaComponents.length; pi++){ if(pergolaComponents[pi]) pergolaComponents[pi].level = 0; }
+  pergolaComponents = _dedupeBoxesByGeom(pergolaComponents, { useLevel:false });
     garageComponents = _dedupeById(garageComponents);
     // Ensure garages stay on ground
     for(var gi=0;gi<garageComponents.length;gi++){ if(garageComponents[gi]) garageComponents[gi].level = 0; }
     garageComponents = _dedupeBoxesByGeom(garageComponents, { useLevel:false });
     balconyComponents = _dedupeById(balconyComponents);
     balconyComponents = _dedupeBoxesByGeom(balconyComponents, { useLevel:true });
+    // Pools (no level constraint) and Roofs (has a level)
+    poolComponents = _dedupeById(poolComponents);
+    poolComponents = _dedupeBoxesByGeom(poolComponents, { useLevel:false });
+    roofComponents = _dedupeById(roofComponents);
+    roofComponents = _dedupeBoxesByGeom(roofComponents, { useLevel:true });
+    // Strong pergola proximity-based dedupe as final safety (catch nearly-overlapping clones)
+    (function(){
+      var kept=[]; var EPSP=0.05, EPSS=0.05, EPSR=0.01;
+      for(var i=0;i<pergolaComponents.length;i++){
+        var a=pergolaComponents[i]; if(!a) continue; var dup=false;
+        for(var j=0;j<kept.length;j++){
+          var b=kept[j];
+          if(Math.hypot((a.x||0)-(b.x||0),(a.z||0)-(b.z||0))<EPSP && Math.abs((a.width||0)-(b.width||0))<EPSS && Math.abs((a.depth||0)-(b.depth||0))<EPSS && Math.abs(((a.rotation||0)%360)-((b.rotation||0)%360))<EPSR){ dup=true; break; }
+        }
+        if(!dup) kept.push(a);
+      }
+      pergolaComponents = kept;
+    })();
   } catch(e) { /* non-fatal */ }
+}
+
+// Robust duplicate guard for components (by geometry, optional level)
+function _componentsGeomEqual(a, b, useLevel){
+  if(!a || !b) return false;
+  if(useLevel && (a.level||0) !== (b.level||0)) return false;
+  var EPS = 1e-3;
+  return Math.abs((a.x||0)-(b.x||0))<EPS && Math.abs((a.z||0)-(b.z||0))<EPS && Math.abs((a.width||0)-(b.width||0))<EPS && Math.abs((a.depth||0)-(b.depth||0))<EPS && Math.abs(((a.rotation||0)%360)-((b.rotation||0)%360))<EPS;
+}
+function pushIfNotDuplicate(list, obj, useLevel){
+  try{
+    for(var i=0;i<list.length;i++){ if(_componentsGeomEqual(list[i], obj, !!useLevel)) { return list[i]; } }
+    list.push(obj); return obj;
+  }catch(e){ list.push(obj); return obj; }
 }
 
 function createBalcony(x, z) {
@@ -365,28 +400,52 @@ function createBalcony(x, z) {
 }
 
 function addBalcony() {
+  // Debounce rapid double-invocations and prefer focusing an existing balcony
+  window.__addDebounce = window.__addDebounce || {};
+  var nowTs = (performance && performance.now ? performance.now() : Date.now());
+  if (window.__addDebounce['balcony'] && (nowTs - window.__addDebounce['balcony']) < 400) {
+    return;
+  }
+  window.__addDebounce['balcony'] = nowTs;
+
+  // If a balcony already exists on level 1, just focus it and switch to level 1
+  var existingBal = null;
+  for (var bi=0; bi<balconyComponents.length; bi++) {
+    if (balconyComponents[bi] && (balconyComponents[bi].level||0) === 1) { existingBal = balconyComponents[bi]; break; }
+  }
+  if (existingBal) {
+    currentFloor = 1;
+    selectedRoomId = existingBal.id;
+    var sel1 = document.getElementById('levelSelect'); if (sel1) sel1.value = '1';
+    try { renderLoop(); } catch(e){}
+    updateStatus('Balcony selected');
+    return;
+  }
+
   dbg('Adding new balcony...');
   var newBalcony = createBalcony();
   dbg('Created balcony:', newBalcony);
-  
+
   var spot = findFreeSpot(newBalcony);
   newBalcony.x = spot.x;
   newBalcony.z = spot.z;
   dbg('Found spot for balcony:', spot);
-  
-  balconyComponents.push(newBalcony);
+
+  // Prevent geometry duplicates on first floor
+  var existing = pushIfNotDuplicate(balconyComponents, newBalcony, true) || newBalcony;
   dbg('Balcony components now:', balconyComponents);
-  
+
   currentFloor = 1;  // Switch to first floor
-  selectedRoomId = newBalcony.id;
+  selectedRoomId = existing.id;
   dbg('Set current floor to:', currentFloor, 'Selected ID:', selectedRoomId);
-  
+
   var selector = document.getElementById('levelSelect');
   if (selector) {
     selector.value = '1';
-  dbg('Updated selector value to:', selector.value);
+    dbg('Updated selector value to:', selector.value);
   }
-  
+
+  try { dedupeAllEntities(); saveProjectSilently(); } catch(e){}
   renderLoop(); // Force a render update
   updateStatus('Balcony added (' + balconyComponents.length + ' total)');
 }
@@ -487,9 +546,16 @@ function addNewRoom() {
     var spot = findFreeSpot(room);
     room.x = spot.x;
     room.z = spot.z;
-    allRooms.push(room);
+    // Prevent duplicate rooms with same geometry on this level
+    var duplicate = false; var EPS=1e-4;
+    for(var i=0;i<allRooms.length;i++){
+      var r=allRooms[i]; if((r.level||0)!==(room.level||0)) continue;
+      if(Math.abs(r.x-room.x)<EPS && Math.abs(r.z-room.z)<EPS && Math.abs(r.width-room.width)<EPS && Math.abs(r.depth-room.depth)<EPS){ duplicate=true; break; }
+    }
+    if(!duplicate) allRooms.push(room);
     selectedRoomId = room.id;
     updateStatus('Room added');
+    try { dedupeAllEntities(); saveProjectSilently(); } catch(e){}
   } catch (error) {
     console.error('Add room error:', error);
     updateStatus('Error adding room');
@@ -518,6 +584,7 @@ function addStairs() {
   selectedRoomId = stairsComponent.id;
   var selector = document.getElementById('levelSelect');
   if (selector) selector.value = String(currentFloor);
+  try { dedupeAllEntities(); saveProjectSilently(); } catch(e){}
   updateStatus('Stairs added');
 }
 
@@ -537,23 +604,33 @@ function createPergola(x, z, level) {
     slatWidth: 0.15,
     name: count === 0 ? 'Pergola' : 'Pergola ' + (count + 1),
     type: 'pergola',
-    level: (typeof level === 'number' ? level : 0)
+    // Always ground floor for pergola
+    level: 0
   };
 }
 
 function addPergola() {
-  var newPergola = createPergola(undefined, undefined, (typeof currentFloor==='number' ? currentFloor : 0));
+  // Debounce to avoid double-adds
+  window.__addDebounce = window.__addDebounce || {};
+  var nowTs = (performance && performance.now ? performance.now() : Date.now());
+  if (window.__addDebounce['pergola'] && (nowTs - window.__addDebounce['pergola']) < 400) { return; }
+  window.__addDebounce['pergola'] = nowTs;
+
+  var newPergola = createPergola(undefined, undefined, 0);
   var spot = findFreeSpot(newPergola);
   newPergola.x = spot.x;
   newPergola.z = spot.z;
-  
-  pergolaComponents.push(newPergola);
-  currentFloor = newPergola.level || 0;
-  selectedRoomId = newPergola.id;
+  // Guard against geometry duplicates (level not enforced for pergola)
+  pushIfNotDuplicate(pergolaComponents, newPergola, false);
+  currentFloor = 0;
+  // Select the instance actually present in the array (existing or newly added)
+  var sel = pergolaComponents.find(function(p){ return Math.abs((p.x||0)-(newPergola.x||0))<1e-3 && Math.abs((p.z||0)-(newPergola.z||0))<1e-3 && Math.abs((p.width||0)-(newPergola.width||0))<1e-3 && Math.abs((p.depth||0)-(newPergola.depth||0))<1e-3; });
+  selectedRoomId = (sel && sel.id) || newPergola.id;
   
   var selector = document.getElementById('levelSelect');
   if (selector) selector.value = String(currentFloor);
   
+  try { dedupeAllEntities(); saveProjectSilently(); } catch(e){}
   updateStatus('Pergola added (' + pergolaComponents.length + ' total)');
 }
 
@@ -572,15 +649,21 @@ function createGarage(x, z, level) {
 
 function addGarage() {
   // Force garage to ground floor regardless of current floor
+  window.__addDebounce = window.__addDebounce || {};
+  var nowTs = (performance && performance.now ? performance.now() : Date.now());
+  if (window.__addDebounce['garage'] && (nowTs - window.__addDebounce['garage']) < 400) { return; }
+  window.__addDebounce['garage'] = nowTs;
+
   var newGarage = createGarage(undefined, undefined, 0);
   var spot = findFreeSpot(newGarage);
   newGarage.x = spot.x;
   newGarage.z = spot.z;
-  garageComponents.push(newGarage);
+  pushIfNotDuplicate(garageComponents, newGarage, false);
   currentFloor = 0;
   selectedRoomId = newGarage.id;
   var selector = document.getElementById('levelSelect');
   if (selector) selector.value = String(currentFloor);
+  try { dedupeAllEntities(); saveProjectSilently(); } catch(e){}
   updateStatus('Garage added (' + garageComponents.length + ' total)');
 }
 
@@ -596,15 +679,21 @@ function createPool(x, z, level) {
 }
 
 function addPool() {
+  window.__addDebounce = window.__addDebounce || {};
+  var nowTs = (performance && performance.now ? performance.now() : Date.now());
+  if (window.__addDebounce['pool'] && (nowTs - window.__addDebounce['pool']) < 400) { return; }
+  window.__addDebounce['pool'] = nowTs;
+
   var newPool = createPool(undefined, undefined, (typeof currentFloor==='number' ? currentFloor : 0));
   var spot = findFreeSpot(newPool);
   newPool.x = spot.x;
   newPool.z = spot.z;
-  poolComponents.push(newPool);
+  pushIfNotDuplicate(poolComponents, newPool, false);
   currentFloor = newPool.level || 0;
   selectedRoomId = newPool.id;
   var selector = document.getElementById('levelSelect');
   if (selector) selector.value = String(currentFloor);
+  try { dedupeAllEntities(); saveProjectSilently(); } catch(e){}
   updateStatus('Pool added (' + poolComponents.length + ' total)');
 }
 
@@ -663,14 +752,20 @@ function createRoof(x, z) {
 }
 
 function addRoof() {
+  window.__addDebounce = window.__addDebounce || {};
+  var nowTs = (performance && performance.now ? performance.now() : Date.now());
+  if (window.__addDebounce['roof'] && (nowTs - window.__addDebounce['roof']) < 400) { return; }
+  window.__addDebounce['roof'] = nowTs;
+
   var newRoof = createRoof();
   // newRoof.x and newRoof.z are already centered in createRoof
-  roofComponents.push(newRoof);
+  pushIfNotDuplicate(roofComponents, newRoof, true);
   // Keep or switch to roof's floor (depends on whether first floor exists)
   currentFloor = (typeof newRoof.level === 'number' ? newRoof.level : 0);
   selectedRoomId = newRoof.id;
   var selector = document.getElementById('levelSelect');
   if (selector) selector.value = String(currentFloor);
+  try { dedupeAllEntities(); saveProjectSilently(); } catch(e){}
   updateStatus('Roof added (' + roofComponents.length + ' total)');
 }
 
@@ -3247,8 +3342,13 @@ function switchLevel() {
       renderLoop();
       return;
     } else if (value === 'pergola') {
-      addPergola();
-      renderLoop();
+      // Never create pergolas during level switching; only focus an existing one on ground if present
+      var existing = pergolaComponents && pergolaComponents[0];
+      if (existing) {
+        currentFloor = 0; selectedRoomId = existing.id; selector.value = '0';
+        try { dedupeAllEntities(); saveProjectSilently(); } catch(e){}
+        renderLoop();
+      }
       return;
     } else if (value === 'garage') {
       addGarage();
@@ -3319,6 +3419,8 @@ function switchLevel() {
         allRooms = unique;
         // Global component dedupe as well
         dedupeAllEntities();
+        // Extra safety: ensure pergolas remain ground-only and deduped after level change
+        try { for(var di=0; di<pergolaComponents.length; di++){ if(pergolaComponents[di]) pergolaComponents[di].level = 0; } } catch(e){}
       } catch(e) {}
       // If 2D editor is open, repopulate the plan to reflect the newly selected floor
       try { if (window.__plan2d && __plan2d.active) { populatePlan2DFromDesign(); plan2dDraw(); updatePlan2DInfo(); } } catch(e){}
@@ -5057,6 +5159,23 @@ document.addEventListener('DOMContentLoaded', function(){
     if(list){ list.addEventListener('click', function(e){
       var item=e.target.closest('.dropdown-item'); if(!item || item.classList.contains('separator')) return;
       var val=item.getAttribute('data-value');
+      // Handle special add actions directly to avoid creation during generic switchLevel()
+      if(val==='pergola' || val==='garage' || val==='roof' || val==='pool' || val==='balcony' || val==='stairs'){
+        try {
+          if(val==='pergola') { addPergola(); }
+          else if(val==='garage') { addGarage(); }
+          else if(val==='roof') { addRoof(); }
+          else if(val==='pool') { addPool(); }
+          else if(val==='balcony') { addBalcony(); }
+          else if(val==='stairs') { addStairs(); }
+        } catch(err) { console.warn('Special add failed', err); }
+        // Normalize selector to the current floor after creation/focus
+        if(nativeSel){ nativeSel.value = String(typeof currentFloor==='number' ? currentFloor : 0); }
+        setLabelFromValue(nativeSel ? nativeSel.value : '0');
+        close();
+        return;
+      }
+      // Regular floor switch
       if(nativeSel){ nativeSel.value = val; }
       setLabelFromValue(val);
       if(typeof switchLevel==='function') switchLevel();
@@ -7966,7 +8085,7 @@ function plan2dProjectParamOnWall(p, wall){ var x0=wall.x0,y0=wall.y0,x1=wall.x1
 // ===== Wall subsegment modeling (intersections and openings) =====
 function plan2dComputeWallIntersections(elems){
   var walls = [];
-  for(var i=0;i<elems.length;i++){ var e=elems[i]; if(e && e.type==='wall') walls.push({i:i, e:e}); }
+  for(var i=0;i<elems.length;i++){ var e=elems[i]; if(e && e.type==='wall' && e.wallRole!=='nonroom') walls.push({i:i, e:e}); }
   // Precompute param positions along each wall where intersections occur
   var map = {}; // wallIndex -> array of t in (0,1)
   function addT(idx, t){ if(t<=1e-6 || t>=1-1e-6) return; (map[idx]||(map[idx]=[])).push(t); }
@@ -8006,7 +8125,7 @@ function plan2dComputeWallIntersections(elems){
 }
 
 function plan2dBuildWallSubsegments(elems, wallIndex){
-  var wall = elems[wallIndex]; if(!wall || wall.type!=='wall') return [];
+  var wall = elems[wallIndex]; if(!wall || wall.type!=='wall' || wall.wallRole==='nonroom') return [];
   var x0=wall.x0,y0=wall.y0,x1=wall.x1,y1=wall.y1; var dx=x1-x0, dy=y1-y0; var len=Math.hypot(dx,dy)||1; var dirx=dx/len, diry=dy/len;
   // Collect split params: intersections + openings
   var ts=[0,1];
@@ -8288,7 +8407,7 @@ function updatePlan2DInfo(){ var cnt=document.getElementById('plan2d-count'); if
 function plan2dExport(){ try{ var data=JSON.stringify(__plan2d.elements); var blob=new Blob([data],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='plan2d.json'; a.click(); URL.revokeObjectURL(a.href); updateStatus('2D plan exported'); }catch(e){ updateStatus('Export failed'); } }
 // ================= END 2D FLOOR PLAN EDITOR =================
 
-// Apply 2D plan edits back to 3D: rebuild ground floor rooms from closed rectangles
+  // Apply 2D plan edits back to 3D: rebuild ground floor rooms from closed rectangles
 function applyPlan2DTo3D(elemsSnapshot, opts){
   try {
     opts = opts || {};
@@ -8298,7 +8417,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     // Which floor to apply to (0=ground, 1=first). Default to ground for backward compatibility.
     var targetLevel = (typeof opts.level === 'number') ? opts.level : 0;
     var elemsSrc = Array.isArray(elemsSnapshot) ? elemsSnapshot : __plan2d.elements;
-    var walls=elemsSrc.filter(function(e){return e.type==='wall';});
+  // Only room walls should contribute to 3D reconstruction
+  var walls=elemsSrc.filter(function(e){ return e && e.type==='wall' && e.wallRole!=='nonroom'; });
     if(walls.length===0){
       // No walls -> clear rooms on target level in 3D so it reflects 2D state
       allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
@@ -8316,7 +8436,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     var V = {}; // xKey -> array of [y0,y1]
     function addSpan(map, key, a0, a1){ if(a1<a0){ var t=a0;a0=a1;a1=t; } if(!map[key]) map[key]=[]; map[key].push([a0,a1]); }
     for(var wi=0; wi<elemsSrc.length; wi++){
-      var w = elemsSrc[wi]; if(!w || w.type!=='wall') continue;
+      var w = elemsSrc[wi]; if(!w || w.type!=='wall' || w.wallRole==='nonroom') continue;
       var x0=w.x0,y0=w.y0,x1=w.x1,y1=w.y1;
       if(approxEq(y0,y1,1e-2)){ var yk=keyCoord((y0+y1)/2); addSpan(H, yk, Math.min(x0,x1), Math.max(x0,x1)); }
       else if(approxEq(x0,x1,1e-2)){ var xk=keyCoord((x0+x1)/2); addSpan(V, xk, Math.min(y0,y1), Math.max(y0,y1)); }
@@ -8670,9 +8790,18 @@ function populatePlan2DFromDesign(){
     var i4 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p4.x,y0:p4.y, x1:p1.x,y1:p1.y, thickness:__plan2d.wallThicknessM});
     return { top: i1, right: i2, bottom: i3, left: i4, coords: {p1:p1,p2:p2,p3:p3,p4:p4} };
   }
+  function markWallRole(idxObj, role){
+    try{
+      var r = role||'room';
+      var els = __plan2d.elements;
+      if(idxObj && els){
+        [idxObj.top, idxObj.right, idxObj.bottom, idxObj.left].forEach(function(ii){ if(typeof ii==='number' && els[ii] && els[ii].type==='wall'){ els[ii].wallRole = r; } });
+      }
+    }catch(e){}
+  }
   for (var rci=0;rci<rects.length;rci++){
     var rb=rects[rci];
-  // Build walls for rooms, garages, pergolas, and balconies
+  // Build walls for rooms only; non-room outlines should not feedback into 3D room creation
   if(rb.type!=='room' && rb.type!=='garage' && rb.type!=='pergola' && rb.type!=='balcony') continue;
     var wallIdx;
     var hasRotation = (typeof rb.rotation==='number' && Math.abs(rb.rotation)%360>1e-6);
@@ -8681,6 +8810,8 @@ function populatePlan2DFromDesign(){
     } else {
       wallIdx = addRectWalls(rb.minX, rb.maxX, rb.minZ, rb.maxZ);
     }
+    // Tag walls so applyPlan2DTo3D can ignore non-room walls
+    markWallRole(wallIdx, (rb.type==='room' ? 'room' : 'nonroom'));
     // Re-create openings (windows/doors) anchored to walls for rooms
     if(rb.type==='room' && Array.isArray(rb.openings) && rb.openings.length){
       var s = (__plan2d.yFromWorldZSign||1);
