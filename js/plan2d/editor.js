@@ -883,7 +883,7 @@ function plan2dFinalizeChain(){
 
 function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height);
   // Grid (1m) — even lighter shade for subtler background
-  var step=__plan2d.scale, w=c.width, h=c.height; ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,0.008)';
+  var step=__plan2d.scale, w=c.width, h=c.height; ctx.lineWidth=1; ctx.strokeStyle='rgba(255,255,255,0.02)';
   for(var x=w/2 % step; x<w; x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
   for(var y=h/2 % step; y<h; y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
   // Preview: multi-point wall chain (polyline) when active
@@ -1342,7 +1342,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         var bal=balconyComponents[iBl]; if((bal.level||1)!==lvlNowC) continue;
         drawBox(bal.x, bal.z, bal.width, bal.depth, bal.rotation||0, '#6366f1', 'rgba(99,102,241,0.18)', 0.95, (bal.name||'Balcony'));
       }
-      // 2D Room labels: top-left corner, 25% smaller than standard
+      // 2D Room outlines and labels: draw subtle room footprint plus a small top-left label
       try {
         if (Array.isArray(allRooms)){
           var __dprR = window.devicePixelRatio || 1;
@@ -1358,6 +1358,20 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
             var c2r = mapPlanXY(rm.x + hwR, rm.z - hdR);
             var c3r = mapPlanXY(rm.x + hwR, rm.z + hdR);
             var c4r = mapPlanXY(rm.x - hwR, rm.z + hdR);
+            // Subtle room footprint fill under walls
+            try {
+              ctx.save();
+              ctx.globalAlpha = 0.10;
+              ctx.fillStyle = 'rgba(148,163,184,0.35)'; // slate-400 tint
+              ctx.beginPath();
+              ctx.moveTo(c1r.x, c1r.y);
+              ctx.lineTo(c2r.x, c2r.y);
+              ctx.lineTo(c3r.x, c3r.y);
+              ctx.lineTo(c4r.x, c4r.y);
+              ctx.closePath();
+              ctx.fill();
+              ctx.restore();
+            } catch(e){}
             var minXr = Math.min(c1r.x,c2r.x,c3r.x,c4r.x);
             var minYr = Math.min(c1r.y,c2r.y,c3r.y,c4r.y);
             var labelTextR = (rm.name || 'Room');

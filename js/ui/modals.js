@@ -34,7 +34,21 @@
           if (input) { input.value = best; input.focus(); input.select(); }
           if (openA) { openA.href = best; }
           var isForwarded = /app\.github\.dev|githubpreview\.dev|gitpod\.io|codespaces|gitpod/.test(best);
-          if (hint) { hint.textContent = isForwarded ? 'Forwarded URL detected.' : 'If using Codespaces/Gitpod, share the forwarded URL from your browser address bar.'; }
+          if (hint) {
+            if (isForwarded) {
+              var extra = '';
+              try {
+                var u = new URL(best);
+                var looksCodespaces = /app\.github\.dev$/.test(u.hostname);
+                if (looksCodespaces) {
+                  extra = ' If this link returns 404/403 for others, set port 8000 to Public in the Ports panel.';
+                }
+              } catch(e) {}
+              hint.textContent = 'Forwarded URL detected.' + extra;
+            } else {
+              hint.textContent = 'If using Codespaces/Gitpod, share the forwarded URL from your browser address bar.';
+            }
+          }
           modal.style.display = 'flex';
         })
         .catch(function(){

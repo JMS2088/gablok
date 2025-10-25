@@ -42,10 +42,39 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         if self.path == '/__forwarded':
             try:
                 host = self.headers.get('Host', '')
-                scheme = 'https' if any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io')) else 'http'
-                url = f"{scheme}://{host}" if host else ''
-                local = f"http://localhost:{getattr(self.server, 'server_port', 8000)}"
-                resp = {'host': host, 'url': url, 'local': local}
+                port = getattr(self.server, 'server_port', 8000)
+                local = f"http://localhost:{port}"
+
+                # Prefer the forwarded host from the Host header if it looks like a remote domain
+                is_forwarded_host = bool(host) and not host.startswith(('0.0.0.0', '127.0.0.1')) and 'localhost' not in host
+                looks_remote = any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io')) if host else False
+                if is_forwarded_host:
+                    scheme = 'https' if looks_remote else 'http'
+                    url = f"{scheme}://{host}"
+                    source = 'host'
+                else:
+                    # Fall back to environment-derived forwarded URLs (Codespaces/Gitpod)
+                    codespace = os.environ.get('CODESPACE_NAME')
+                    fwd_domain = os.environ.get('GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN') or 'app.github.dev'
+                    gitpod_base = os.environ.get('GITPOD_WORKSPACE_URL')
+                    url = ''
+                    source = 'env'
+                    if codespace:
+                        # https://<port>-<codespace>.<domain>
+                        url = f"https://{port}-{codespace}.{fwd_domain}"
+                    elif gitpod_base:
+                        try:
+                            u = urlparse(gitpod_base)
+                            host_only = u.netloc
+                            url = f"https://{port}-{host_only}"
+                        except Exception:
+                            url = ''
+                    # If no env-derived URL, fall back to local
+                    if not url:
+                        url = local
+                        source = 'local'
+
+                resp = {'host': host, 'url': url, 'local': local, 'source': source}
                 body = json.dumps(resp).encode('utf-8')
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json; charset=utf-8')
