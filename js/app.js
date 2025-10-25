@@ -41,6 +41,8 @@ var deviceRatio = 1;
 var allRooms = [];
 // Standalone wall strips extruded from 2D plan when no closed rooms are present
 var wallStrips = [];
+// Index of selected interior wall strip in wallStrips array; -1 means none
+var selectedWallStripIndex = -1;
 var selectedRoomId = null;
 var editingLabelId = null; // which object's label is currently being edited
 var paletteOpenForId = null; // which room/component is open in palette
@@ -323,6 +325,32 @@ function _dedupeBoxesByGeom(arr, opts){
       if(Math.abs((a.x||0)-(b.x||0))<EPS && Math.abs((a.z||0)-(b.z||0))<EPS && Math.abs((a.width||0)-(b.width||0))<EPS && Math.abs((a.depth||0)-(b.depth||0))<EPS && Math.abs(((a.rotation||0)%360)-((b.rotation||0)%360))<EPS){ dup=true; break; }
     }
     if(!dup) out.push(a);
+  }
+  return out;
+}
+
+// Geometry-based dedupe for wall strips: compares segments irrespective of endpoint order
+function _dedupeStripsByGeom(strips){
+  if(!Array.isArray(strips)) return [];
+  var out=[];
+  var EPS=1e-4;
+  function same(a,b){
+    if(((a.level||0)!==(b.level||0))) return false;
+    if(Math.abs((a.thickness||0)-(b.thickness||0))>EPS) return false;
+    if(Math.abs((a.height||0)-(b.height||0))>0.01) return false;
+    if(Math.abs(((a.baseY||0)-(b.baseY||0)))>0.01) return false;
+    var a1={x:a.x0,z:a.z0}, a2={x:a.x1,z:a.z1};
+    var b1={x:b.x0,z:b.z0}, b2={x:b.x1,z:b.z1};
+    var d11=Math.hypot(a1.x-b1.x,a1.z-b1.z);
+    var d22=Math.hypot(a2.x-b2.x,a2.z-b2.z);
+    var d12=Math.hypot(a1.x-b2.x,a1.z-b2.z);
+    var d21=Math.hypot(a2.x-b1.x,a2.z-b1.z);
+    return (d11<EPS && d22<EPS) || (d12<EPS && d21<EPS);
+  }
+  for(var i=0;i<strips.length;i++){
+    var s=strips[i]; if(!s) continue; var dup=false;
+    for(var j=0;j<out.length;j++){ if(same(s,out[j])){ dup=true; break; } }
+    if(!dup) out.push(s);
   }
   return out;
 }
@@ -1560,7 +1588,7 @@ function drawRoof(roof) {
 }
 
 // Draw a single standalone wall strip between (x0,z0)-(x1,z1), extruded from y=0 to y=height
-function drawWallStrip(strip){
+function drawWallStrip(strip, isSelected, onLevel){
   try{
     var dx = strip.x1 - strip.x0, dz = strip.z1 - strip.z0; var L = Math.hypot(dx,dz)||0; if(L<=1e-6) return;
     var t = (strip.thickness||0.3);
@@ -1576,9 +1604,21 @@ function drawWallStrip(strip){
     if(ptsBottom.some(function(p){return !p;}) || ptsTop.some(function(p){return !p;})) return;
     // style
     ctx.save();
-    ctx.strokeStyle = '#a8a29e';
-    ctx.fillStyle = 'rgba(168,162,158,0.28)';
-    ctx.lineWidth = 2;
+    var sameLevel = (onLevel !== false); // default true if not provided
+    if (!sameLevel) {
+      // Other-floor style (dim), mirror rooms styling
+      ctx.strokeStyle = '#808080';
+      ctx.fillStyle = 'rgba(128,128,128,0.18)';
+      ctx.lineWidth = isSelected ? 2 : 1;
+    } else if (isSelected) {
+      ctx.strokeStyle = '#ff4d4f';
+      ctx.fillStyle = 'rgba(255,77,79,0.25)';
+      ctx.lineWidth = 3;
+    } else {
+      ctx.strokeStyle = '#a8a29e';
+      ctx.fillStyle = 'rgba(168,162,158,0.28)';
+      ctx.lineWidth = 2;
+    }
     // vertical faces (quads 0-1-1'-0', 1-2-2'-1', ...)
     for(var i=0;i<4;i++){
       var j=(i+1)%4;
@@ -1589,6 +1629,43 @@ function drawWallStrip(strip){
     ctx.beginPath(); ctx.moveTo(ptsTop[0].x,ptsTop[0].y); for(var k=1;k<4;k++){ ctx.lineTo(ptsTop[k].x, ptsTop[k].y); } ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.restore();
   }catch(e){ /* ignore strip draw errors */ }
+}
+
+// Screen-space hit test for wall strips: tests if point lies within projected top quad
+function hitTestWallStrips(screenX, screenY){
+  function pointInPoly(px, py, poly){
+    var inside=false; for(var i=0,j=poly.length-1;i<poly.length;j=i++){
+      var xi=poly[i].x, yi=poly[i].y; var xj=poly[j].x, yj=poly[j].y;
+      var intersect = ((yi>py)!=(yj>py)) && (px < (xj-xi)*(py-yi)/((yj-yi)||1e-6) + xi);
+      if(intersect) inside=!inside;
+    } return inside;
+  }
+  var bestIdx = -1; var bestDist = Infinity;
+  for(var i=wallStrips.length-1;i>=0;i--){
+    var ws=wallStrips[i]; if((ws.level||0)!==currentFloor) continue;
+    var dx=ws.x1-ws.x0, dz=ws.z1-ws.z0; var L=Math.hypot(dx,dz)||0; if(L<=1e-6) continue;
+    var t=(ws.thickness||0.3); var nx=-(dz/(L||1)); var nz=(dx/(L||1)); var half=t/2;
+    var p0={x:ws.x0+nx*half, z:ws.z0+nz*half}; var p1={x:ws.x1+nx*half, z:ws.z1+nz*half};
+    var p2={x:ws.x1-nx*half, z:ws.z1-nz*half}; var p3={x:ws.x0-nx*half, z:ws.z0-nz*half};
+    var h1=(typeof ws.baseY==='number'? ws.baseY : 0) + (ws.height||3.0);
+    var top=[p0,p1,p2,p3].map(function(w){ return project3D(w.x,h1,w.z); });
+    if(!top.some(function(p){return !p;})){
+      if(pointInPoly(screenX, screenY, top)) { return i; }
+    }
+    // Fallback: distance to centerline at mid-height (more reliable when top face is edge-on)
+    var midY = (typeof ws.baseY==='number'? ws.baseY : 0) + (ws.height||3.0)/2;
+    var a = project3D(ws.x0, midY, ws.z0);
+    var b = project3D(ws.x1, midY, ws.z1);
+    if(!a || !b) continue;
+    var vx = b.x - a.x, vy = b.y - a.y; var denom = (vx*vx + vy*vy) || 1;
+    var tParam = ((screenX - a.x)*vx + (screenY - a.y)*vy) / denom; tParam = Math.max(0, Math.min(1, tParam));
+    var cx = a.x + tParam*vx, cy = a.y + tParam*vy;
+    var dist = Math.hypot(screenX - cx, screenY - cy);
+    var thresh = 8; // px tolerance
+    if(dist <= thresh && dist < bestDist){ bestDist = dist; bestIdx = i; }
+  }
+  if(bestIdx !== -1) return bestIdx;
+  return -1;
 }
 
 function drawGableRoof(roof, selected, strokeColor, fillColor, strokeWidth) {
@@ -2963,6 +3040,19 @@ function setupEvents() {
       }
     }
     
+    // If not resizing a handle, try selecting a wall strip on current floor
+    var hitIdx = hitTestWallStrips(mouseX, mouseY);
+    if (hitIdx !== -1) {
+      selectedWallStripIndex = hitIdx;
+      selectedRoomId = null; // clear any object selection
+      // Ensure keyboard events (Delete) reach us
+      try { if (!canvas.hasAttribute('tabindex')) canvas.setAttribute('tabindex','0'); canvas.focus({preventScroll:true}); } catch(_e) {}
+      mouse.down = false; mouse.dragType = null; mouse.dragInfo = null;
+      updateStatus('Wall selected');
+      renderLoop();
+      return;
+    }
+
     mouse.down = true;
     mouse.lastX = e.clientX;
     mouse.lastY = e.clientY;
@@ -3201,9 +3291,10 @@ function setupEvents() {
         hideRoomPalette();
       } else {
         selectedRoomId = null;
+        selectedWallStripIndex = -1;
         updateStatus('Selection cleared');
       }
-    } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedRoomId) {
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedRoomId || (typeof selectedWallStripIndex==='number' && selectedWallStripIndex>-1))) {
       e.preventDefault();
       
       var roomIndex = -1;
@@ -3319,6 +3410,19 @@ function setupEvents() {
         updateStatus((furn.name || 'Item') + ' deleted');
         return;
       }
+      // If a wall strip is selected (and no object matched), delete it
+      if (typeof selectedWallStripIndex === 'number' && selectedWallStripIndex > -1) {
+        var del = wallStrips[selectedWallStripIndex];
+        if (del) {
+          wallStrips.splice(selectedWallStripIndex, 1);
+          selectedWallStripIndex = -1;
+          selectedRoomId = null;
+          saveProjectSilently();
+          renderLoop();
+          updateStatus('Wall deleted');
+          return;
+        }
+      }
       
       updateStatus('Cannot delete - select an object first');
     }
@@ -3335,6 +3439,8 @@ function switchLevel() {
     if (!selector) return;
   
   var value = selector.value;
+  // Clear any strip selection on level switch triggers
+  selectedWallStripIndex = -1;
   
     // Handle special components first
     if (value === 'stairs') {
@@ -3375,15 +3481,18 @@ function switchLevel() {
   // Handle floor changes
   var newFloor = parseInt(value) || 0;
     if (newFloor !== currentFloor) {
-      // If 2D editor is open, apply current floor edits before switching, once
+      // If 2D editor is open, save current floor draft before switching (do NOT auto-apply to 3D)
       try {
         if (window.__plan2d && __plan2d.active) {
           var prevLvl = (typeof window.currentFloor==='number' ? window.currentFloor : currentFloor);
-          applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: prevLvl });
+          plan2dSaveDraft(prevLvl);
         }
       } catch(e) {}
       currentFloor = newFloor;
-      selectedRoomId = null;
+  selectedRoomId = null;
+      // Clear any strip selection when switching floors
+      selectedWallStripIndex = -1;
+  selectedWallStripIndex = -1;
 
       // If switching to first floor and there are no rooms on that floor, add one
       if (newFloor === 1 && !allRooms.some(room => room.level === 1)) {
@@ -3422,8 +3531,8 @@ function switchLevel() {
         // Extra safety: ensure pergolas remain ground-only and deduped after level change
         try { for(var di=0; di<pergolaComponents.length; di++){ if(pergolaComponents[di]) pergolaComponents[di].level = 0; } } catch(e){}
       } catch(e) {}
-      // If 2D editor is open, repopulate the plan to reflect the newly selected floor
-      try { if (window.__plan2d && __plan2d.active) { populatePlan2DFromDesign(); plan2dDraw(); updatePlan2DInfo(); } } catch(e){}
+      // If 2D editor is open, load the draft for the new floor or populate from 3D if no draft exists
+      try { if (window.__plan2d && __plan2d.active) { var ok = plan2dLoadDraft(newFloor); if (!ok) { populatePlan2DFromDesign(); } plan2dDraw(); updatePlan2DInfo(); } } catch(e){}
       renderLoop();
     }
   } finally {
@@ -3462,15 +3571,15 @@ function fitView() {
     minZ = Math.min(minZ, obj.z - hd);
     maxZ = Math.max(maxZ, obj.z + hd);
   }
-  // Include wallStrips on ground floor in fit
-  if (currentFloor === 0) {
-    for (var wsI=0; wsI<wallStrips.length; wsI++){
-      var ws = wallStrips[wsI]; var t = (ws.thickness||0.3)/2;
-      var xMin = Math.min(ws.x0, ws.x1) - t, xMax = Math.max(ws.x0, ws.x1) + t;
-      var zMin = Math.min(ws.z0, ws.z1) - t, zMax = Math.max(ws.z0, ws.z1) + t;
-      minX = Math.min(minX, xMin); maxX = Math.max(maxX, xMax);
-      minZ = Math.min(minZ, zMin); maxZ = Math.max(maxZ, zMax);
-    }
+  // Include wallStrips on current floor in fit
+  for (var wsI=0; wsI<wallStrips.length; wsI++){
+    var ws = wallStrips[wsI];
+    if ((ws.level||0) !== currentFloor) continue;
+    var t = (ws.thickness||0.3)/2;
+    var xMin = Math.min(ws.x0, ws.x1) - t, xMax = Math.max(ws.x0, ws.x1) + t;
+    var zMin = Math.min(ws.z0, ws.z1) - t, zMax = Math.max(ws.z0, ws.z1) + t;
+    minX = Math.min(minX, xMin); maxX = Math.max(maxX, xMax);
+    minZ = Math.min(minZ, zMin); maxZ = Math.max(maxZ, zMax);
   }
   
   camera.targetX = (minX + maxX) / 2;
@@ -3497,6 +3606,8 @@ function resetAll() {
   mouse.down = false;
   mouse.dragType = null;
   mouse.dragInfo = null;
+  // Clear 3D wall strip selection as well
+  try { selectedWallStripIndex = -1; } catch(e) {}
 
   // Reset camera and pan
   camera.yaw = 0.0;
@@ -3524,8 +3635,35 @@ function resetAll() {
   roofComponents = [];
   balconyComponents = [];
 
+  // Clear any 2D floor plan drafts and in-memory editor state so 3D and 2D are in sync
+  try {
+    __plan2dDrafts = { 0: null, 1: null };
+    localStorage.removeItem('gablok_plan2dDrafts_v1');
+  } catch(e) {}
+  try {
+    if (window.__plan2d) {
+      // Stop sync/apply timers
+      if (__plan2d._applyTimer) { clearTimeout(__plan2d._applyTimer); __plan2d._applyTimer = null; }
+      try { if (typeof plan2dStopSyncLoop === 'function') plan2dStopSyncLoop(); } catch(e2) {}
+      // Clear editor elements and signatures
+  __plan2d.elements = [];
+  __plan2d.selectedIndex = -1; __plan2d.selectedRef = null; __plan2d.selectedSnapshot = null;
+      __plan2d._last3Dsig = null;
+      __plan2d._last2Dsig = null;
+      __plan2d._lastWallsSig = null;
+    }
+  } catch(e) {}
+
   // Start with a fresh initial room
   createInitialRoom();
+
+  // If 2D editor is open, repopulate it from the new 3D model to keep in sync
+  try {
+    if (window.__plan2d && __plan2d.active) {
+      if (populatePlan2DFromDesign()) { plan2dDraw(); }
+      updatePlan2DInfo();
+    }
+  } catch(e) {}
 
   // Hide info/pricing modals if open
   var infoModal = document.getElementById('info-modal');
@@ -4727,11 +4865,12 @@ function renderLoop() {
 
     allObjects.sort(function(a,b){ var distDiff=b.distance-a.distance; if(Math.abs(distDiff)>1.0) return distDiff; return a.maxHeight-b.maxHeight; });
 
-  // Draw standalone wall strips first (ground-level); not part of allObjects
+  // Draw standalone wall strips for both floors; dim those on the other floor
   for (var iWS=0;iWS<wallStrips.length;iWS++){
     var ws = wallStrips[iWS];
+    var onLevel = ((ws.level||0) === currentFloor);
     // simple cull by mid point and half height
-    var cx=(ws.x0+ws.x1)/2, cz=(ws.z0+ws.z1)/2, cy=(ws.height||3.0)/2; if(!withinCull(cx,cy,cz)) continue; drawWallStrip(ws);
+    var cx=(ws.x0+ws.x1)/2, cz=(ws.z0+ws.z1)/2, cy=(ws.height||3.0)/2; if(!withinCull(cx,cy,cz)) continue; drawWallStrip(ws, onLevel && (iWS===selectedWallStripIndex), onLevel);
   }
   var selectedEntry=null; for (var iO=0;iO<allObjects.length;iO++){ var it=allObjects[iO]; if(selectedRoomId && it.object && it.object.id===selectedRoomId){ selectedEntry=it; continue;} switch(it.type){ case 'room': drawRoom(it.object); break; case 'stairs': drawStairs(it.object); break; case 'furniture': drawFurniture(it.object); break; case 'balcony': drawBalcony(it.object); break; case 'pergola': drawPergola(it.object); break; case 'garage': drawGarage(it.object); break; case 'pool': drawPool(it.object); break; case 'roof': drawRoof(it.object); break; } }
   if(selectedEntry){ switch(selectedEntry.type){ case 'room': drawRoom(selectedEntry.object); break; case 'stairs': drawStairs(selectedEntry.object); break; case 'furniture': drawFurniture(selectedEntry.object); break; case 'balcony': drawBalcony(selectedEntry.object); break; case 'pergola': drawPergola(selectedEntry.object); break; case 'garage': drawGarage(selectedEntry.object); break; case 'pool': drawPool(selectedEntry.object); break; case 'roof': drawRoof(selectedEntry.object); break; }}
@@ -4762,6 +4901,8 @@ function startRender() {
 
 document.addEventListener('DOMContentLoaded', function() {
   console.log('DOM loaded, starting app...');
+  // Load any persisted 2D drafts so the editor can restore per-floor in-progress work
+  try { loadPlan2dDraftsFromStorage(); } catch(e) {}
   startApp();
 });
 
@@ -5199,6 +5340,11 @@ document.addEventListener('DOMContentLoaded', function(){
     }
     function doSwitch(toFloor){
       try {
+        // If 2D editor is active and enhanced switch is available, use it to apply+switch atomically
+        if (window.__plan2d && __plan2d.active && typeof plan2dSwitchFloorInEditor==='function') {
+          plan2dSwitchFloorInEditor(toFloor);
+          return;
+        }
         var nativeSel = document.getElementById('levelSelect');
         if(nativeSel){ nativeSel.value = String(toFloor); }
         if(typeof switchLevel==='function') switchLevel();
@@ -6442,6 +6588,12 @@ var __plan2d = {
   mouse:null,        // {x,y} current mouse position in canvas pixels for overlay anchoring
   hoverIndex:-1,
   selectedIndex:-1,
+  // Stable reference to the currently selected element object (guards against reindexing)
+  selectedRef:null,
+  // Geometry snapshot of selected element for resilient re-identification
+  selectedSnapshot:null,
+  // Briefly pause 3D→2D repopulate after selection so Delete can act before selection is cleared
+  freezeSyncUntil: 0,
   // Window editing state (for host-anchored windows)
   dragWindow:null,   // { index, end:'t0'|'t1' }
   // Standard sizes
@@ -6461,6 +6613,64 @@ var __plan2d = {
   drawLabelBoxesOnLabelsLayer:false
 };
 
+// Per-floor 2D drafts so in-progress edits persist across floor switches within the 2D editor
+var __plan2dDrafts = { 0: null, 1: null };
+
+// Persist 2D drafts across reloads so in-progress edits survive page refresh
+function loadPlan2dDraftsFromStorage(){
+  try {
+    var raw = localStorage.getItem('gablok_plan2dDrafts_v1');
+    if (!raw) return false;
+    var data = JSON.parse(raw);
+    if (data && (typeof data === 'object') && ('0' in data || '1' in data)) {
+      __plan2dDrafts = data;
+      return true;
+    }
+  } catch(e) { /* ignore */ }
+  return false;
+}
+function savePlan2dDraftsToStorage(){
+  try { localStorage.setItem('gablok_plan2dDrafts_v1', JSON.stringify(__plan2dDrafts)); } catch(e) { /* ignore */ }
+}
+
+function plan2dSaveDraft(level){
+  try{
+    var lvl = (typeof level==='number' ? level : (typeof currentFloor==='number'? currentFloor : 0));
+    __plan2dDrafts[lvl] = {
+      elements: Array.isArray(__plan2d.elements) ? JSON.parse(JSON.stringify(__plan2d.elements)) : [],
+      centerX: __plan2d.centerX || 0,
+      centerZ: __plan2d.centerZ || 0,
+      scale: __plan2d.scale || 50,
+      yFromWorldZSign: __plan2d.yFromWorldZSign || 1,
+      lastWallsSig: (__plan2d._lastWallsSig || null),
+      last2Dsig: (__plan2d._last2Dsig || null),
+      last3Dsig: (function(){ try { return plan2dSig3D(); } catch(e){ return null; } })()
+    };
+    // Persist drafts so they survive reloads
+    savePlan2dDraftsToStorage();
+    return true;
+  }catch(e){ return false; }
+}
+
+function plan2dLoadDraft(level){
+  try{
+    // Refresh from storage if available
+    loadPlan2dDraftsFromStorage();
+    var lvl = (typeof level==='number' ? level : (typeof currentFloor==='number'? currentFloor : 0));
+    var d = __plan2dDrafts[lvl];
+    if(!d || !Array.isArray(d.elements)) return false;
+    __plan2d.elements = JSON.parse(JSON.stringify(d.elements));
+    __plan2d.centerX = d.centerX || 0;
+    __plan2d.centerZ = d.centerZ || 0;
+    if (typeof d.scale==='number' && isFinite(d.scale)) __plan2d.scale = d.scale;
+    if (d.yFromWorldZSign===1 || d.yFromWorldZSign===-1) __plan2d.yFromWorldZSign = d.yFromWorldZSign;
+    __plan2d._lastWallsSig = d.lastWallsSig || null;
+    __plan2d._last2Dsig = d.last2Dsig || null;
+    __plan2d._last3Dsig = d.last3Dsig || null;
+    return true;
+  }catch(e){ return false; }
+}
+
 // ===== 2D/3D LIVE SYNC HELPERS =====
 __plan2d.syncInProgress = false;      // prevent feedback while applying
 __plan2d._applyTimer = null;          // debounce timer id
@@ -6478,6 +6688,12 @@ function plan2dSig3D(){
       if((r.level||0)!==lvl) continue;
       var ops=(r.openings||[]).map(function(o){ return [o.type,o.edge, +(o.startM||0).toFixed(3), +(o.endM||0).toFixed(3), (typeof o.heightM==='number'? +o.heightM.toFixed(3): null) ]; });
       parts.push([ +r.x.toFixed(3), +r.z.toFixed(3), +r.width.toFixed(3), +r.depth.toFixed(3), ops ]);
+    }
+    // Include current-floor interior wall strips so 2D sync picks up changes in 3D strips too
+    for(var wsi=0; wsi<wallStrips.length; wsi++){
+      var ws = wallStrips[wsi]; var lvl2 = (typeof currentFloor==='number' ? currentFloor : 0);
+      if((ws.level||0)!==lvl2) continue;
+      parts.push(['ws', +ws.x0.toFixed(3), +ws.z0.toFixed(3), +ws.x1.toFixed(3), +ws.z1.toFixed(3), +(ws.thickness||0).toFixed(3), +(ws.height||0).toFixed(3), +(ws.baseY||0).toFixed(3)]);
     }
     return JSON.stringify(parts);
   }catch(e){ return ''; }
@@ -6539,21 +6755,71 @@ function plan2dScheduleApply(now){
         // Walls unchanged -> safe to rebuild rooms/openings only
         applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl });
       } else {
-        // Walls changed
-        var isActivelyDrawingWall = (__plan2d.tool === 'wall' && !!__plan2d.start);
-        if (isActivelyDrawingWall && lvl === 0) {
-          // Live preview as standalone strips only while drawing walls on ground floor
-          applyPlan2DTo3D(plan2dGetElementsSnapshot(), { stripsOnly:true, quiet:true, level: 0 });
-        } else {
-          // For edits like windows/doors or non-drawing states, rebuild rooms+openings
-          applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl });
-        }
+        // Walls changed: apply live as strips or rooms (if rectangles are closed) to keep 2D and 3D in sync
+        // Also freeze 2D center/scale briefly to prevent noticeable jumps during/after wall edits
+        try { __plan2d.freezeCenterScaleUntil = Date.now() + 1000; } catch(e){}
+        applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl });
       }
       __plan2d._lastWallsSig = wallsSigNow;
       __plan2d._last3Dsig = plan2dSig3D(); __plan2d._last2Dsig = plan2dSig2D();
+      // Autosave per-floor draft so changes (including deletes) persist across reloads
+      try { plan2dSaveDraft(lvl); } catch(e){}
     } finally { setTimeout(function(){ __plan2d.syncInProgress=false; }, 30); }
   };
   if(now){ run(); } else { __plan2d._applyTimer = setTimeout(run, 150); }
+}
+// Helper: set current selection index and keep a stable object reference
+function plan2dSetSelection(idx){
+  try{
+    __plan2d.selectedIndex = (typeof idx==='number' ? idx : -1);
+    __plan2d.selectedRef = (__plan2d.selectedIndex>=0 && Array.isArray(__plan2d.elements)) ? __plan2d.elements[__plan2d.selectedIndex] : null;
+    // Capture a snapshot of selection geometry so we can re-identify on array rebuild
+    (function(){
+      var snap=null; var els=__plan2d.elements||[]; var e=(__plan2d.selectedIndex>=0? els[__plan2d.selectedIndex] : null);
+      if(e){
+        if(e.type==='wall'){
+          snap={type:'wall', x0:e.x0, y0:e.y0, x1:e.x1, y1:e.y1, thickness:(e.thickness||__plan2d.wallThicknessM)};
+        } else if(e.type==='window' || e.type==='door'){
+          if(typeof e.host==='number') snap={type:e.type, host:e.host, t0:(e.t0||0), t1:(e.t1||0)};
+          else snap={type:e.type, x0:e.x0, y0:e.y0, x1:e.x1, y1:e.y1};
+        }
+      }
+      __plan2d.selectedSnapshot = snap;
+    })();
+    // Give the user a short grace period to hit Delete without the sync loop clearing selection
+    __plan2d.freezeSyncUntil = Date.now() + 900; // ~0.9s
+  }catch(e){ __plan2d.selectedIndex = (typeof idx==='number'? idx : -1); __plan2d.selectedRef = null; }
+}
+
+// Find element index by matching a stored geometry snapshot (with tolerance)
+function plan2dFindElementIndexFromSnapshot(snap){
+  try{
+    if(!snap) return -1; var els = __plan2d.elements||[];
+    var tol = 1e-4; // meters
+    function eq(a,b){ return Math.abs((a||0)-(b||0)) <= tol; }
+    if(snap.type==='wall'){
+      for(var i=0;i<els.length;i++){
+        var e=els[i]; if(!e||e.type!=='wall') continue;
+        // Match either orientation (endpoints swapped)
+        var m1 = eq(e.x0,snap.x0)&&eq(e.y0,snap.y0)&&eq(e.x1,snap.x1)&&eq(e.y1,snap.y1);
+        var m2 = eq(e.x0,snap.x1)&&eq(e.y0,snap.y1)&&eq(e.x1,snap.x0)&&eq(e.y1,snap.y0);
+        if(m1||m2) return i;
+      }
+    } else if(snap.type==='window' || snap.type==='door'){
+      for(var j=0;j<els.length;j++){
+        var d=els[j]; if(!d || d.type!==snap.type) continue;
+        if(typeof snap.host==='number' && typeof d.host==='number'){
+          // consider same host and similar params
+          if(d.host===snap.host){
+            if(eq((d.t0||0),(snap.t0||0)) && eq((d.t1||0),(snap.t1||0))) return j;
+          }
+        } else if(typeof snap.x0==='number'){
+          if(eq(d.x0,snap.x0)&&eq(d.y0,snap.y0)&&eq(d.x1,snap.x1)&&eq(d.y1,snap.y1)) return j;
+        }
+      }
+    }
+  }catch(e){}
+  return -1;
 }
 function plan2dStartSyncLoop(){
   if(__plan2d._syncTimer) return;
@@ -6563,11 +6829,15 @@ function plan2dStartSyncLoop(){
   __plan2d._syncTimer = setInterval(function(){
     if(!__plan2d.active) return;
     if(__plan2d.syncInProgress) return;
+    // Briefly pause repopulate right after selection so Delete can act on the selected element
+    if(__plan2d.freezeSyncUntil && Date.now() < __plan2d.freezeSyncUntil) return;
     // don't overwrite while user is actively dragging in 2D
-    if(__plan2d.start || __plan2d.dragWindow || __plan2d.dragDoor || __plan2d.dragDoorWhole) return;
+    if(__plan2d.start || __plan2d.dragWindow || __plan2d.dragDoor || __plan2d.dragDoorWhole || __plan2d.dragWall || __plan2d.chainActive) return;
     var sig = plan2dSig3D();
     if(sig && sig !== __plan2d._last3Dsig){
       try{ if(populatePlan2DFromDesign()){ plan2dDraw(); } }catch(e){}
+  // Clear any stale selection, as the elements list was rebuilt from 3D
+  __plan2d.selectedIndex = -1; __plan2d.selectedRef = null; __plan2d.selectedSnapshot = null; __plan2d.selectedSubsegment = null;
       __plan2d._last3Dsig = sig; __plan2d._last2Dsig = plan2dSig2D();
     }
   }, 250);
@@ -6594,8 +6864,33 @@ function openPlan2DModal(){
   } catch(e) {}
   plan2dBind();
   plan2dResize();
-  // Populate from the currently selected floor so 2D reflects the active level
-  try { populatePlan2DFromDesign(); } catch(e) { console.warn('populatePlan2DFromDesign failed', e); }
+  // Bind 2D floor toggle buttons: apply current floor then switch and load the new floor
+  try {
+    var bGround = document.getElementById('plan2d-floor-ground');
+    var bFirst = document.getElementById('plan2d-floor-first');
+    if (bGround && !bGround.__bound2d) {
+      bGround.__bound2d = true;
+      bGround.addEventListener('click', function(){ plan2dSwitchFloorInEditor(0); });
+    }
+    if (bFirst && !bFirst.__bound2d) {
+      bFirst.__bound2d = true;
+      bFirst.addEventListener('click', function(){ plan2dSwitchFloorInEditor(1); });
+    }
+  } catch(e){}
+  // Load existing draft for this floor if available; otherwise populate from current 3D
+  try {
+    var lvlOpen = (typeof currentFloor==='number' ? currentFloor : 0);
+    var loaded = plan2dLoadDraft(lvlOpen);
+    var currentSig3D = plan2dSig3D();
+    // If no draft, or draft's last3Dsig differs from current 3D, repopulate from 3D to ensure sync
+    var needsPopulate = (!loaded) || (!__plan2d._last3Dsig) || (__plan2d._last3Dsig !== currentSig3D);
+    if (needsPopulate) {
+      populatePlan2DFromDesign();
+      __plan2d._last3Dsig = plan2dSig3D();
+      __plan2d._last2Dsig = plan2dSig2D();
+      __plan2d._lastWallsSig = plan2dSigWallsOnly();
+    }
+  } catch(e) { console.warn('populatePlan2DFromDesign/loadDraft failed', e); }
   plan2dDraw();
   updatePlan2DInfo();
   // start live sync with 3D
@@ -6603,9 +6898,32 @@ function openPlan2DModal(){
 }
 function closePlan2DModal(){
   var m=document.getElementById('plan2d-modal'); if(m) m.style.display='none';
+  try { if (__plan2d && __plan2d.active) { var lvlClose=(typeof currentFloor==='number'? currentFloor : 0); applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvlClose }); plan2dSaveDraft(lvlClose); } } catch(e){}
   __plan2d.active=false;
   plan2dUnbind();
   try{ plan2dStopSyncLoop(); }catch(e){}
+}
+
+// Apply current floor and switch floors inside the 2D editor, keeping 3D in sync
+function plan2dSwitchFloorInEditor(newLevel){
+  try {
+    var lvlNow = (typeof currentFloor==='number' ? currentFloor : 0);
+    // Apply current floor to 3D before switching
+    applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvlNow });
+    plan2dSaveDraft(lvlNow);
+  } catch(e){}
+  // Change floor globally so labels/rooms update
+  currentFloor = (newLevel===1 ? 1 : 0);
+  try { var nativeSel=document.getElementById('levelSelect'); if(nativeSel) nativeSel.value=String(currentFloor); } catch(e){}
+  // Update toggle button states
+  try {
+    var bG = document.getElementById('plan2d-floor-ground');
+    var bF = document.getElementById('plan2d-floor-first');
+    if (bG && bF){ if(currentFloor===0){ bG.classList.add('active'); bF.classList.remove('active'); } else { bF.classList.add('active'); bG.classList.remove('active'); } }
+  } catch(e){}
+  // Load draft for new floor or populate from 3D and redraw
+  try { if (!plan2dLoadDraft(currentFloor)) { populatePlan2DFromDesign(); } } catch(e){}
+  try { plan2dDraw(); updatePlan2DInfo(); } catch(e){}
 }
 
 // Screen mapping: X right = +X (world), Y up = +Y in plan space. World Z maps to plan Y with a configurable sign.
@@ -6626,11 +6944,11 @@ function plan2dBind(){
   var bDoor=document.getElementById('plan2d-tool-door'); if(bDoor) bDoor.onclick=function(){ __plan2d.tool='door'; plan2dCursor(); };
   var bSel=document.getElementById('plan2d-tool-select'); if(bSel) bSel.onclick=function(){ __plan2d.tool='select'; plan2dCursor(); };
   var bErase=document.getElementById('plan2d-tool-erase'); if(bErase) bErase.onclick=function(){ __plan2d.tool='erase'; plan2dCursor(); };
-  var bClear=document.getElementById('plan2d-clear'); if(bClear) bClear.onclick=function(){ if(confirm('Clear all elements?')) { __plan2d.elements=[]; __plan2d.selectedIndex=-1; plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); } };
+  var bClear=document.getElementById('plan2d-clear'); if(bClear) bClear.onclick=function(){ if(confirm('Clear all elements?')) { __plan2d.elements=[]; __plan2d.selectedIndex=-1; __plan2d.selectedRef=null; __plan2d.selectedSnapshot=null; __plan2d.selectedSubsegment=null; plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); } };
   var bClose=document.getElementById('plan2d-close'); if(bClose) bClose.onclick=closePlan2DModal;
   var bExp=document.getElementById('plan2d-export'); if(bExp) bExp.onclick=plan2dExport;
   var bImp=document.getElementById('plan2d-import'); if(bImp) bImp.onclick=function(){ var f=document.getElementById('plan2d-import-file'); if(f) f.click(); };
-  var fi=document.getElementById('plan2d-import-file'); if(fi) fi.onchange=function(e){ var f=e.target.files&&e.target.files[0]; if(!f)return; var r=new FileReader(); r.onload=function(){ try{ var arr=JSON.parse(r.result); if(Array.isArray(arr)){ __plan2d.elements=arr; __plan2d.selectedIndex=-1; plan2dDraw(); updatePlan2DInfo(); updateStatus('2D plan imported'); plan2dEdited(); } }catch(err){ updateStatus('Import failed'); } }; r.readAsText(f); fi.value=''; };
+  var fi=document.getElementById('plan2d-import-file'); if(fi) fi.onchange=function(e){ var f=e.target.files&&e.target.files[0]; if(!f)return; var r=new FileReader(); r.onload=function(){ try{ var arr=JSON.parse(r.result); if(Array.isArray(arr)){ __plan2d.elements=arr; __plan2d.selectedIndex=-1; __plan2d.selectedRef=null; __plan2d.selectedSnapshot=null; __plan2d.selectedSubsegment=null; plan2dDraw(); updatePlan2DInfo(); updateStatus('2D plan imported'); plan2dEdited(); } }catch(err){ updateStatus('Import failed'); } }; r.readAsText(f); fi.value=''; };
   var bApply3D=document.getElementById('plan2d-apply-3d'); if(bApply3D) bApply3D.onclick=function(){ try{
     var lvl = (typeof currentFloor==='number' ? currentFloor : 0);
     applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false, level: lvl });
@@ -6641,15 +6959,51 @@ function plan2dBind(){
     // 1) Prefer wall subsegment if selected
     if(__plan2d.selectedSubsegment){
       if(plan2dDeleteSelectedSubsegment()){
-        __plan2d.selectedSubsegment=null; __plan2d.selectedIndex=-1;
+  __plan2d.selectedSubsegment=null; __plan2d.selectedIndex=-1; __plan2d.selectedRef=null;
         plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
       }
     }
     // 2) Next: delete current explicit selection (door/window/wall)
     if(__plan2d.selectedIndex>=0){
-      __plan2d.elements.splice(__plan2d.selectedIndex,1);
-      __plan2d.selectedIndex=-1; __plan2d.selectedSubsegment=null;
+      // Resolve current index using stable object reference if available
+      var delIdx = __plan2d.selectedIndex; var didDel=false;
+      try{
+        if(__plan2d.selectedRef){
+          var idxNow = __plan2d.elements.indexOf(__plan2d.selectedRef);
+          if(idxNow >= 0) delIdx = idxNow;
+          else if (delIdx>=__plan2d.elements.length || __plan2d.elements[delIdx]!==__plan2d.selectedRef){ delIdx = -1; }
+        }
+      }catch(e){}
+      // If reference lookup failed, try geometry snapshot matching
+      if(delIdx<0 && __plan2d.selectedSnapshot){
+        var idxSnap = plan2dFindElementIndexFromSnapshot(__plan2d.selectedSnapshot);
+        if(idxSnap>=0) delIdx = idxSnap;
+      }
+      if(delIdx>=0){ __plan2d.elements.splice(delIdx,1); didDel=true; }
+      if(didDel){
+        __plan2d.selectedIndex=-1; __plan2d.selectedRef=null; __plan2d.selectedSnapshot=null; __plan2d.selectedSubsegment=null;
+        plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
+      }
+      // If we could not resolve the element (stale ref/index), fall through to hover-based deletion
+    }
+    // 3) If nothing explicitly selected, delete hovered door/window or hovered wall subsegment (quick delete)
+    if(typeof __plan2d.hoverWindowIndex==='number' && __plan2d.hoverWindowIndex>=0){
+      __plan2d.elements.splice(__plan2d.hoverWindowIndex,1);
+  __plan2d.hoverWindowIndex = -1; __plan2d.selectedIndex=-1; __plan2d.selectedRef=null; __plan2d.selectedSnapshot=null; __plan2d.selectedSubsegment=null;
       plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
+    }
+    if(typeof __plan2d.hoverDoorIndex==='number' && __plan2d.hoverDoorIndex>=0){
+      __plan2d.elements.splice(__plan2d.hoverDoorIndex,1);
+  __plan2d.hoverDoorIndex = -1; __plan2d.selectedIndex=-1; __plan2d.selectedRef=null; __plan2d.selectedSnapshot=null; __plan2d.selectedSubsegment=null;
+      plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
+    }
+    if(__plan2d.hoverSubsegment){
+      // Promote hover subsegment to selected and delete via the same routine
+      __plan2d.selectedSubsegment = __plan2d.hoverSubsegment;
+      if(plan2dDeleteSelectedSubsegment()){
+  __plan2d.selectedSubsegment = null; __plan2d.selectedIndex = -1; __plan2d.selectedRef = null; __plan2d.selectedSnapshot = null;
+        plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
+      }
     }
     // Else: nothing selected; do nothing
     updateStatus && updateStatus('Select a door, window, or wall segment first');
@@ -6703,7 +7057,7 @@ function plan2dBind(){
           var w = __plan2d.elements[hitWEnd.index];
           if(w && w.type==='wall'){
             // Select the wall so both endpoint handles are visible and allow repeated adjustments
-            __plan2d.selectedIndex = hitWEnd.index; __plan2d.selectedSubsegment = null;
+            plan2dSetSelection(hitWEnd.index); __plan2d.selectedSubsegment = null;
             var horiz = Math.abs(w.y1 - w.y0) <= 1e-6;
             __plan2d.dragWall = { index: hitWEnd.index, end: hitWEnd.end, orient: horiz ? 'h' : 'v', other: (hitWEnd.end==='a'? {x:w.x1,y:w.y1}:{x:w.x0,y:w.y0}) };
             plan2dDraw();
@@ -6719,7 +7073,7 @@ function plan2dBind(){
             // Clear any previously selected wall subsegment when selecting a door
             __plan2d.selectedSubsegment = null;
             __plan2d.pendingSelectIndex = selDoor.index;
-            __plan2d.selectedIndex = selDoor.index; // reflect selection immediately
+            plan2dSetSelection(selDoor.index); // reflect selection immediately
             plan2dDraw();
             __plan2d.maybeDragDoorWhole = {
               index: selDoor.index,
@@ -6736,7 +7090,7 @@ function plan2dBind(){
           // Clear any previously selected wall subsegment when selecting a window
           __plan2d.selectedSubsegment = null;
           __plan2d.pendingSelectIndex = selWin.index;
-          __plan2d.selectedIndex = selWin.index; // reflect selection immediately
+          plan2dSetSelection(selWin.index); // reflect selection immediately
           plan2dDraw();
           return;
         }
@@ -6745,10 +7099,10 @@ function plan2dBind(){
         var segHit = plan2dHitWallSubsegment(p, 0.15);
         if(segHit){
           if(e.altKey || e.ctrlKey || e.metaKey){
-            __plan2d.selectedIndex = -1;
+            plan2dSetSelection(-1);
             __plan2d.selectedSubsegment = segHit;
           } else {
-            __plan2d.selectedIndex = segHit.wallIndex;
+            plan2dSetSelection(segHit.wallIndex);
             __plan2d.selectedSubsegment = null;
           }
           plan2dDraw();
@@ -6781,7 +7135,7 @@ function plan2dBind(){
           if(t0 > t1){ var tmp=t0; t0=t1; t1=tmp; }
           var door = { type:'door', host:hostIdx, t0:t0, t1:t1, widthM: __plan2d.doorWidthM, heightM: __plan2d.doorHeightM, thickness: wall.thickness || __plan2d.wallThicknessM, meta:{ hinge:'t0', swing:'in' } };
           __plan2d.elements.push(door);
-          __plan2d.selectedIndex = __plan2d.elements.length - 1;
+          plan2dSetSelection(__plan2d.elements.length - 1);
           plan2dDraw(); updatePlan2DInfo(); plan2dEdited();
           return;
         } else {
@@ -6802,7 +7156,7 @@ function plan2dBind(){
           var t = plan2dProjectParamOnWall(p, hostW);
           var win = { type:'window', host:widx, t0:t, t1:t, thickness: hostW.thickness || __plan2d.wallThicknessM };
           __plan2d.elements.push(win);
-          __plan2d.selectedIndex = __plan2d.elements.length - 1;
+          plan2dSetSelection(__plan2d.elements.length - 1);
           __plan2d.dragWindow = { index: __plan2d.selectedIndex, end:'t1' };
           plan2dDraw();
           // No preview gap until user moves the mouse again
@@ -6942,11 +7296,11 @@ function plan2dBind(){
     if(__plan2d.dragDoorWhole){ __plan2d.dragDoorWhole=null; updatePlan2DInfo(); plan2dEdited(); }
       // If click without drag on door/window segment was pending, select it
       if(__plan2d.maybeDragDoorWhole && typeof __plan2d.pendingSelectIndex==='number'){
-        __plan2d.selectedIndex = __plan2d.pendingSelectIndex;
+        plan2dSetSelection(__plan2d.pendingSelectIndex);
         __plan2d.pendingSelectIndex = null; __plan2d.maybeDragDoorWhole = null; plan2dDraw(); updatePlan2DInfo(); return;
       }
       if(typeof __plan2d.pendingSelectIndex==='number'){
-        __plan2d.selectedIndex = __plan2d.pendingSelectIndex;
+        plan2dSetSelection(__plan2d.pendingSelectIndex);
         __plan2d.pendingSelectIndex = null; plan2dDraw(); updatePlan2DInfo(); return;
       }
   if(__plan2d.dragWall){ __plan2d.dragWall=null; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); }
@@ -6977,28 +7331,9 @@ function plan2dBind(){
           }
         }
         if(key==='Delete' || key==='Backspace'){
-          // Only delete when an explicit selection exists
-          if(__plan2d.selectedSubsegment){
-            var ok = plan2dDeleteSelectedSubsegment();
-            if(ok){ __plan2d.selectedSubsegment=null; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return; }
-          }
-          if(__plan2d.selectedIndex>=0){
-            __plan2d.elements.splice(__plan2d.selectedIndex,1);
-            __plan2d.selectedIndex=-1; __plan2d.selectedSubsegment=null; plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return;
-          }
-          // No explicit selection: delete hovered window/door if any (quick delete without click)
-          if(typeof __plan2d.hoverWindowIndex==='number' && __plan2d.hoverWindowIndex>=0){
-            __plan2d.elements.splice(__plan2d.hoverWindowIndex,1);
-            __plan2d.hoverWindowIndex = -1; __plan2d.selectedIndex=-1; __plan2d.selectedSubsegment=null;
-            plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return;
-          }
-          if(typeof __plan2d.hoverDoorIndex==='number' && __plan2d.hoverDoorIndex>=0){
-            __plan2d.elements.splice(__plan2d.hoverDoorIndex,1);
-            __plan2d.hoverDoorIndex = -1; __plan2d.selectedIndex=-1; __plan2d.selectedSubsegment=null;
-            plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return;
-          }
-          updateStatus && updateStatus('Select a door, window, or wall segment first');
-          ev.preventDefault(); ev.stopPropagation(); return;
+          var did = plan2dDeleteSelection();
+          ev.preventDefault(); ev.stopPropagation();
+          return;
         }
         // Door hinge/swing toggles when a door is selected
         if(__plan2d.selectedIndex>=0){
@@ -7051,7 +7386,15 @@ function plan2dBind(){
   }
   plan2dCursor();
 }
-function plan2dUnbind(){ try{ if(window.__plan2dResize) window.removeEventListener('resize', window.__plan2dResize); if(window.__plan2dKeydown) document.removeEventListener('keydown', window.__plan2dKeydown, true); }catch(e){} }
+function plan2dUnbind(){
+  try{
+    if(window.__plan2dResize){ window.removeEventListener('resize', window.__plan2dResize); }
+    if(window.__plan2dKeydown){ document.removeEventListener('keydown', window.__plan2dKeydown, true); }
+  }catch(e){}
+  // Ensure handlers are re-attachable next time we open the 2D editor
+  try { window.__plan2dResize = null; } catch(e){}
+  try { window.__plan2dKeydown = null; } catch(e){}
+}
 
 function plan2dResize(){
   var c=document.getElementById('plan2d-canvas');
@@ -8066,7 +8409,15 @@ function plan2dEraseAt(p){
   if(__plan2d.hoverIndex>=0){ var delIdx = __plan2d.hoverIndex; plan2dEraseElementAt(delIdx); __plan2d.hoverIndex=-1; plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); }
 }
 // Selection prefers windows if window tool is active; else any nearest element
-function plan2dSelectAt(p){ var best=-1, bestDist=0.2; for(var i=0;i<__plan2d.elements.length;i++){ var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; } } __plan2d.selectedIndex=best; plan2dDraw(); }
+function plan2dSelectAt(p){
+  var best=-1, bestDist=0.2;
+  for(var i=0;i<__plan2d.elements.length;i++){
+    var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e);
+    if(d<bestDist){ bestDist=d; best=i; }
+  }
+  plan2dSetSelection(best);
+  plan2dDraw();
+}
 function plan2dPointSegDist(px,py,e){
   var x0=e.x0,y0=e.y0,x1=e.x1,y1=e.y1;
   if(e && e.type==='window' && typeof e.host==='number'){
@@ -8425,13 +8776,13 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     // Which floor to apply to (0=ground, 1=first). Default to ground for backward compatibility.
     var targetLevel = (typeof opts.level === 'number') ? opts.level : 0;
     var elemsSrc = Array.isArray(elemsSnapshot) ? elemsSnapshot : __plan2d.elements;
-  // Only room walls should contribute to 3D reconstruction
-  var walls=elemsSrc.filter(function(e){ return e && e.type==='wall' && e.wallRole!=='nonroom'; });
+  // Only perimeter room walls (tagged 'room') should contribute to room reconstruction
+  var walls=elemsSrc.filter(function(e){ return e && e.type==='wall' && e.wallRole==='room'; });
     if(walls.length===0){
       // No walls -> clear rooms on target level in 3D so it reflects 2D state
       allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
-      // Also clear any standalone strips if editing ground floor
-      if (targetLevel === 0) wallStrips = [];
+      // Also clear any standalone strips for this level and rebuild below if needed
+      wallStrips = wallStrips.filter(function(ws){ return (ws.level||0)!==targetLevel ? true : false; });
       saveProjectSilently(); selectedRoomId=null; renderLoop();
       if(!quiet) updateStatus('Cleared ' + (targetLevel===0?'ground':'first') + ' floor 3D rooms (no walls in 2D)');
       return;
@@ -8444,7 +8795,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     var V = {}; // xKey -> array of [y0,y1]
     function addSpan(map, key, a0, a1){ if(a1<a0){ var t=a0;a0=a1;a1=t; } if(!map[key]) map[key]=[]; map[key].push([a0,a1]); }
     for(var wi=0; wi<elemsSrc.length; wi++){
-      var w = elemsSrc[wi]; if(!w || w.type!=='wall' || w.wallRole==='nonroom') continue;
+      var w = elemsSrc[wi]; if(!w || w.type!=='wall' || w.wallRole!=='room') continue;
       var x0=w.x0,y0=w.y0,x1=w.x1,y1=w.y1;
       if(approxEq(y0,y1,1e-2)){ var yk=keyCoord((y0+y1)/2); addSpan(H, yk, Math.min(x0,x1), Math.max(x0,x1)); }
       else if(approxEq(x0,x1,1e-2)){ var xk=keyCoord((x0+x1)/2); addSpan(V, xk, Math.min(y0,y1), Math.max(y0,y1)); }
@@ -8485,33 +8836,33 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       // Walls present but no closed rectangles: extrude standalone wall strips from 2D
       // Clear rooms on target level
       allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
-      if (targetLevel === 0){
-        var sgn = (__plan2d.yFromWorldZSign||1);
-        var strips = [];
-        // Build subsegments excluding openings/intersections using existing helper
-        for(var wi=0; wi<elemsSrc.length; wi++){
-          var e = elemsSrc[wi]; if(!e || e.type!=='wall') continue;
-          var subs = plan2dBuildWallSubsegments(elemsSrc, wi) || [];
-          for(var si=0; si<subs.length; si++){
-            var sg = subs[si];
-            strips.push({
-              x0: (__plan2d.centerX||0) + sg.ax,
-              z0: (__plan2d.centerZ||0) + sgn*sg.ay,
-              x1: (__plan2d.centerX||0) + sg.bx,
-              z1: (__plan2d.centerZ||0) + sgn*sg.by,
-              thickness: (e.thickness||__plan2d.wallThicknessM||0.3),
-              height: (__plan2d.wallHeightM||3.0)
-            });
-          }
+      // Build strip representation for this level
+      var sgn = (__plan2d.yFromWorldZSign||1);
+      var strips = [];
+      for(var wi=0; wi<elemsSrc.length; wi++){
+        var e = elemsSrc[wi]; if(!e || e.type!=='wall') continue;
+        var subs = plan2dBuildWallSubsegments(elemsSrc, wi) || [];
+        for(var si=0; si<subs.length; si++){
+          var sg = subs[si];
+          strips.push({
+            x0: (__plan2d.centerX||0) + sg.ax,
+            z0: (__plan2d.centerZ||0) + sgn*sg.ay,
+            x1: (__plan2d.centerX||0) + sg.bx,
+            z1: (__plan2d.centerZ||0) + sgn*sg.by,
+            thickness: (e.thickness||__plan2d.wallThicknessM||0.3),
+            height: (__plan2d.wallHeightM||3.0),
+            baseY: (targetLevel||0) * 3.5,
+            level: (targetLevel||0)
+          });
         }
-        wallStrips = strips;
-        saveProjectSilently(); selectedRoomId=null; renderLoop();
-        if(!quiet) updateStatus('Applied 2D plan to 3D (standalone walls)');
-      } else {
-        // For first floor there is no strips representation; just update the scene with rooms cleared for this level
-        saveProjectSilently(); selectedRoomId=null; renderLoop();
-        if(!quiet) updateStatus('Applied 2D plan to 3D (no closed rooms on first floor)');
       }
+  // Merge new strips with existing strips on this level and dedupe
+  var keepOther = wallStrips.filter(function(ws){ return (ws.level||0)!==targetLevel; });
+  var existingLvl = wallStrips.filter(function(ws){ return (ws.level||0)===targetLevel; });
+  var merged = _dedupeStripsByGeom(existingLvl.concat(strips));
+  wallStrips = keepOther.concat(merged);
+  saveProjectSilently(); selectedRoomId=null; selectedWallStripIndex = -1; renderLoop();
+      if(!quiet) updateStatus('Applied 2D plan to 3D (standalone walls)');
       return;
     }
 
@@ -8520,7 +8871,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
 
   // Replace only rooms on the target level; also clear standalone strips if ground floor
     allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
-  if (targetLevel === 0) wallStrips = [];
+  // We'll build interior strips and merge with existing ones for this level below
     // 2D y corresponds to world z; 2D x corresponds to world x; plan is centered at (0,0)
     for(var r=0;r<roomsFound.length;r++){
       var R=roomsFound[r];
@@ -8610,6 +8961,38 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     // Also run global dedupe for components
     dedupeAllEntities();
   } catch(e) { /* non-fatal dedupe */ }
+
+  // Additionally, extrude interior 2D walls (non-perimeter) into 3D wall strips for this level
+  try {
+    var sgn2 = (__plan2d.yFromWorldZSign||1);
+    var strips2 = [];
+    for (var wi2=0; wi2<elemsSrc.length; wi2++){
+      var ew = elemsSrc[wi2]; if(!ew || ew.type!=='wall') continue;
+      // Skip perimeter room walls and non-room component outlines; include only user interior walls (no role)
+      if (ew.wallRole === 'room') continue;
+      if (ew.wallRole === 'nonroom') continue;
+      var subs2 = plan2dBuildWallSubsegments(elemsSrc, wi2) || [];
+      for (var sj2=0; sj2<subs2.length; sj2++){
+        var sg2 = subs2[sj2];
+        strips2.push({
+          x0: (__plan2d.centerX||0) + sg2.ax,
+          z0: (__plan2d.centerZ||0) + sgn2*sg2.ay,
+          x1: (__plan2d.centerX||0) + sg2.bx,
+          z1: (__plan2d.centerZ||0) + sgn2*sg2.by,
+          thickness: (ew.thickness||__plan2d.wallThicknessM||0.3),
+          height: (__plan2d.wallHeightM||3.0),
+          baseY: (targetLevel||0) * 3.5,
+          level: (targetLevel||0)
+        });
+      }
+    }
+  // Append interior strips for this level, merged with existing same-level strips, and dedupe
+  var keepOther2 = wallStrips.filter(function(ws){ return (ws.level||0)!==targetLevel; });
+  var existingLvl2 = wallStrips.filter(function(ws){ return (ws.level||0)===targetLevel; });
+  var merged2 = _dedupeStripsByGeom(existingLvl2.concat(strips2));
+  wallStrips = keepOther2.concat(merged2);
+  selectedWallStripIndex = -1;
+  } catch(e){ /* interior strips non-fatal */ }
 
   saveProjectSilently(); if(!Array.isArray(elemsSnapshot)) { selectedRoomId=null; } renderLoop(); if(!quiet && !Array.isArray(elemsSnapshot)) updateStatus(roomsFound.length? 'Applied 2D plan to 3D (rooms + openings)' : 'No closed rooms found (auto-snap enabled)');
   } catch(e){ console.error('applyPlan2DTo3D failed', e); updateStatus('Apply to 3D failed'); }
@@ -8869,5 +9252,25 @@ function populatePlan2DFromDesign(){
       }
     }
   }
+
+  // Also include existing interior wall strips from 3D for the current floor as free-standing walls.
+  // This ensures previously applied walls are visible/editable in 2D when adding more later.
+  try {
+    var sgnWS = (__plan2d.yFromWorldZSign||1);
+    for (var wsi=0; wsi<wallStrips.length; wsi++){
+      var ws = wallStrips[wsi];
+      if ((ws.level||0) !== lvl) continue;
+      // Map world to plan: x -> x-cx, z -> s*(z-cz)
+      var eWall = {
+        type: 'wall',
+        x0: ws.x0 - cx,
+        y0: sgnWS * (ws.z0 - cz),
+        x1: ws.x1 - cx,
+        y1: sgnWS * (ws.z1 - cz),
+        thickness: (ws.thickness || __plan2d.wallThicknessM || 0.3)
+      };
+      __plan2d.elements.push(eWall);
+    }
+  } catch(e) { /* non-fatal */ }
   return true;
 }
