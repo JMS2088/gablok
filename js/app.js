@@ -577,6 +577,13 @@ function renderLoop() {
           var autoBaseY = computeRoofBaseHeight();
           if (typeof autoBaseY==='number' && isFinite(autoBaseY)) roof.baseHeight = autoBaseY;
         }
+        // Auto-fit footprint to cover all rooms if enabled
+        if (roof && roof.autoFit !== false && typeof computeRoofFootprint==='function') {
+          var fp = computeRoofFootprint();
+          if (fp && isFinite(fp.x) && isFinite(fp.z) && isFinite(fp.width) && isFinite(fp.depth)) {
+            roof.x = fp.x; roof.z = fp.z; roof.width = fp.width; roof.depth = fp.depth;
+          }
+        }
       } catch(__e){}
       var baseH = (typeof roof.baseHeight==='number' && isFinite(roof.baseHeight)) ? roof.baseHeight : 3.0;
       var hgt = (typeof roof.height==='number' && isFinite(roof.height)) ? roof.height : 0.6;
@@ -665,12 +672,20 @@ function startRender() {
   renderLoop();
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  console.log('DOM loaded, starting app...');
+// Ensure startApp runs whether this file loads before or after DOMContentLoaded
+function __appDomStart(){
+  try { console.log('DOM loaded, starting app...'); } catch(e){}
   // Load any persisted 2D drafts so the editor can restore per-floor in-progress work
   try { loadPlan2dDraftsFromStorage(); } catch(e) {}
-  startApp();
-});
+  try { startApp(); } catch(e) { /* engine3d will call startApp once boot-ready if gated */ }
+}
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', __appDomStart);
+  } else {
+    setTimeout(__appDomStart, 0);
+  }
+}
 
 // (perf block moved earlier)
 
@@ -920,7 +935,8 @@ async function exportPDF() {
 }
 
 // Wire buttons
-document.addEventListener('DOMContentLoaded', function(){
+// Wire UI regardless of when this script is loaded relative to DOM readiness
+function __wireAppUi(){
   // Force dropdown styles at runtime (fallback for environments that ignore CSS)
   try {
     function forceSelectStyle(sel){
@@ -1123,7 +1139,14 @@ document.addEventListener('DOMContentLoaded', function(){
     // Initialize state when DOM ready
     setActive(bG,bF);
   })();
-});
+}
+if (typeof document !== 'undefined') {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', __wireAppUi);
+  } else {
+    setTimeout(__wireAppUi, 0);
+  }
+}
 
 // ---------------- Floorplan Import (SVG) ----------------
 // Basic heuristic: extract <rect> and top-level <path> elements, compute bounding boxes in SVG user units, map to meters.

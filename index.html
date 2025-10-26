@@ -179,10 +179,8 @@
 			<button class="secondary" onclick="hideShare()" title="Close">✕</button>
 		</div>
 		<div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
-			<div style="font-size:13px; color:#334155;">Copy this address to share your current session. In Codespaces, this will be the forwarded URL.</div>
+			<div style="font-size:13px; color:#334155;">Open your share link in a new tab. In Codespaces, this will be the forwarded URL.</div>
 			<div style="display:flex; gap:8px; align-items:center;">
-				<input id="share-url" type="text" readonly style="flex:1; padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;" />
-				<button id="share-copy" class="secondary" title="Copy URL" onclick="copyShareUrl()">Copy</button>
 				<a id="share-open" class="secondary" style="text-decoration:none; display:inline-flex; align-items:center; padding:6px 10px; border-radius:8px; border:1px solid #cbd5e1;" target="_blank" rel="noopener">Open</a>
 			</div>
 			<div id="share-hint" style="font-size:12px; color:#64748b;"></div>
@@ -300,36 +298,8 @@
 
 <!-- Splash/progress overlay (non-deferred to show immediately) -->
 <script src="js/boot/splash.js?v=20251026-2"></script>
-<script>
-// Declare how many core modules we expect so the bar can show real progress
-window.__splashSetTotal && window.__splashSetTotal(15);
-</script>
-<!-- Core 3D engine bootstrap (must load before render/app) -->
-<script src="js/core/engine3d.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Core engine')"></script>
-<!-- Labels are light and needed early for UX -->
-<link rel="preload" as="script" href="js/ui/labels.js?v=20251026-1" />
-<script src="js/ui/labels.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('UI labels')"></script>
-<!-- Share badge makes the current URL visible & copyable -->
-<script src="js/ui/shareBadge.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Share badge')"></script>
-<!-- Roof type dropdown UI -->
-<script src="js/ui/roofDropdown.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Roof dropdown')"></script>
-<!-- Staged loader: provides lazy-load stubs and idle prefetching -->
-<script src="js/boot/loader.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Loader')"></script>
-<!-- Critical renderer for rooms only (others lazy via loader stubs) -->
-<script src="js/render/drawRoom.js?v=20251026-2" defer onload="window.__splashTick && __splashTick('Room renderer')"></script>
-<!-- Make renderers eager to guarantee immediate drawing after add -->
-<script src="js/render/drawRoof.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Roof renderer')"></script>
-<script src="js/render/drawStairs.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Stairs renderer')"></script>
-<script src="js/render/drawPergola.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Pergola renderer')"></script>
-<script src="js/render/drawGarage.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Garage renderer')"></script>
-<script src="js/render/drawPool.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Pool renderer')"></script>
-<script src="js/render/drawBalcony.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Balcony renderer')"></script>
-<!-- Input/events module to wire interactions (slims app.js) -->
-<script src="js/input/events.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Input/events')"></script>
-<!-- Core app -->
-<script src="js/app.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('App core')"></script>
-<!-- In-browser smoke test for grid + room -->
-<script src="js/smoke/smoke3d.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Smoke test')"></script>
+<!-- Coordinated bootstrap: loads all modules with progress, then starts app -->
+<script src="js/boot/bootstrap.js?v=20251026-1"></script>
 
 
 <!-- 2D Floor Plan Editor Modal -->

@@ -1,0 +1,9 @@
+{
+  // Auto-forward port 8000 and open in a browser to speed up first-load feedback
+  "remote.portsAttributes": {
+    "8000": {
+      "label": "Gablok dev server",
+      "onAutoForward": "openBrowser"
+    }
+  }
+}

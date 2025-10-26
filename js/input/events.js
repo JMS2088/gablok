@@ -188,6 +188,8 @@
           var snap = applySnap({x: newX, z: newZ, width: roof.width, depth: roof.depth, level: roof.level, id: roof.id, type: 'roof'});
           roof.x = snap.x;
           roof.z = snap.z;
+          // User moved the roof manually: disable autoFit so it doesn't snap back
+          roof.autoFit = false;
           currentSnapGuides = snap.guides;
           updateStatus('Moving ' + roof.name + '...');
         }
@@ -259,6 +261,7 @@
             // Center is midpoint between opposite face and dragged face
             target.x = mouse.dragInfo.faceOppStart.x + (newW / 2) * (sX * axisXx);
             target.z = mouse.dragInfo.faceOppStart.z + (newW / 2) * (sX * axisXz);
+            if (target.type === 'roof') target.autoFit = false; // manual resize disables auto-fit
             updateStatus('Resizing width...');
           } else if (type === 'depth+' || type === 'depth-') {
             // Measure along dragged face normal (sZ * axisZ)
@@ -280,6 +283,7 @@
 
             target.x = mouse.dragInfo.faceOppStart.x + (newD / 2) * (sZ * axisZx);
             target.z = mouse.dragInfo.faceOppStart.z + (newD / 2) * (sZ * axisZz);
+            if (target.type === 'roof') target.autoFit = false; // manual resize disables auto-fit
             updateStatus('Resizing depth...');
           } else if (type === 'height') {
             var heightChange = -(dy * 0.005);

@@ -30,6 +30,9 @@
       wrap.style.borderRadius = '8px';
       wrap.style.background = '#ffffff';
       wrap.style.font = '12px system-ui, sans-serif';
+      wrap.style.whiteSpace = 'normal';
+      wrap.style.maxWidth = '70vw';
+      wrap.style.flexWrap = 'wrap';
       var icon = document.createElement('span');
       icon.textContent = '🔗';
       icon.setAttribute('aria-hidden','true');
@@ -39,30 +42,17 @@
       link.textContent = 'Share';
       link.style.color = '#1f2937';
       link.style.textDecoration = 'none';
+      link.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+      link.style.fontSize = '12px';
+      link.style.overflowWrap = 'anywhere';
       link.target = '_blank'; link.rel = 'noopener';
-      var copy = document.createElement('button');
-      copy.id = 'share-badge-copy';
-      copy.className = 'secondary';
-      copy.textContent = 'Copy';
-      copy.style.padding = '4px 8px';
-      copy.addEventListener('click', function(){
-        var url = link.getAttribute('data-url') || link.href || window.location.href;
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(url).then(function(){ try{ var s=document.getElementById('status'); if(s) s.textContent='URL copied'; }catch(e){}; });
-        } else {
-          try { var ta=document.createElement('textarea'); ta.value=url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); } catch(e) {}
-        }
-      });
       wrap.appendChild(icon);
       wrap.appendChild(link);
-      wrap.appendChild(copy);
       controls.appendChild(wrap);
     }
     return wrap;
   }
-  function hostLabel(u){
-    try { var url = new URL(u); return url.hostname; } catch(e){ return u; }
-  }
+  function displayText(u){ try { return String(u||''); } catch(e){ return String(u||''); } }
   function refresh(){
     var wrap = ensureBadge();
     fetch('/__forwarded', { cache: 'no-store' })
@@ -70,11 +60,11 @@
       .then(function(info){
         var best = bestUrlFrom(info, window.location.href);
         var link = document.getElementById('share-badge-link');
-        if (link) { link.href = best; link.setAttribute('data-url', best); link.textContent = hostLabel(best); }
+        if (link) { link.href = best; link.setAttribute('data-url', best); link.textContent = displayText(best); link.title = best; }
       })
       .catch(function(){
         var link = document.getElementById('share-badge-link');
-        if (link) { link.href = window.location.href; link.setAttribute('data-url', window.location.href); link.textContent = hostLabel(window.location.href); }
+        if (link) { link.href = window.location.href; link.setAttribute('data-url', window.location.href); link.textContent = displayText(window.location.href); link.title = window.location.href; }
       });
   }
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', refresh); } else { refresh(); }

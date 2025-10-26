@@ -9,7 +9,10 @@
     var barInner = el('div', { id:'loading-bar-inner', style:{ width:'0%' } });
     var bar = el('div', { id:'loading-bar' }, [ barInner ]);
     var text = el('div', { id:'loading-text' }, ['Loading…']);
-    var card = el('div', { id:'loading-card' }, [ el('div',{id:'loading-title'},['Gablok 3D']), bar, text ]);
+    // Per-module list wrapper (optional)
+    var listWrap = el('div', { id:'loading-list', style:{ marginTop:'10px', display:'flex', flexDirection:'column', gap:'6px' } }, []);
+    var title = el('div', { id:'loading-title', style:{ textAlign:'center', fontWeight:'700', fontSize:'22px', letterSpacing:'0.8px' } }, ['Gablok']);
+    var card = el('div', { id:'loading-card' }, [ title, bar, text, listWrap ]);
     var root = el('div', { id:'loading-overlay' }, [ card ]);
     document.body.appendChild(root);
     return root;
@@ -22,9 +25,26 @@
   // Small public API for external progress ticks (script onload hooks)
   (function(){
     var total=0, loaded=0, lastMsg='';
+    var items = Object.create(null); // label -> {row, bar}
+    function ensureItem(label){
+      try{
+        var list = document.getElementById('loading-list'); if(!list) return null;
+        if(items[label]) return items[label];
+        var outer = document.createElement('div'); outer.style.display='flex'; outer.style.flexDirection='column'; outer.style.gap='4px';
+        var lab = document.createElement('div'); lab.textContent = label; lab.style.fontSize='12px'; lab.style.color='#8b949e';
+        var barO = document.createElement('div'); barO.style.height='6px'; barO.style.border='1px solid #30363d'; barO.style.borderRadius='999px'; barO.style.overflow='hidden'; barO.style.background='#21262d';
+        var barI = document.createElement('div'); barI.style.height='100%'; barI.style.width='0%'; barI.style.background='linear-gradient(90deg, #238636, #2ea043)'; barI.style.transition='width .3s ease';
+        barO.appendChild(barI);
+        outer.appendChild(lab); outer.appendChild(barO);
+        list.appendChild(outer);
+        items[label] = { row: outer, bar: barI };
+        return items[label];
+      }catch(e){ return null; }
+    }
     function pct(){ return total>0 ? Math.round((loaded/total)*100) : (loaded%100); }
     window.__splashSetTotal = function(n){ try{ total = Math.max(total, parseInt(n)||0); setProgress(pct(), lastMsg||'Loading…'); }catch(e){} };
-    window.__splashTick = function(label){ try{ loaded++; lastMsg = label || lastMsg || 'Loading…'; setProgress(pct(), String(lastMsg)); }catch(e){} };
+    window.__splashExpect = function(labels){ try{ ensureOverlay(); if(Array.isArray(labels)){ labels.forEach(function(l){ ensureItem(String(l)); }); } }catch(e){} };
+    window.__splashTick = function(label){ try{ loaded++; lastMsg = label || lastMsg || 'Loading…'; setProgress(pct(), String(lastMsg)); if(label){ var it = ensureItem(String(label)); if(it && it.bar) it.bar.style.width = '100%'; } }catch(e){} };
     window.__splashSetMessage = function(msg){ lastMsg = msg || lastMsg; setProgress(pct(), lastMsg); };
     window.__splashHide = hideOverlay;
   })();
@@ -61,7 +81,10 @@
       // Hide when the first frame is rendered (preferred), with small safety timeout as fallback
       var hidden=false; function done(){ if(!hidden){ hidden=true; hideOverlay(); } }
       window.addEventListener('gablok:first-render', function(){ setTimeout(done, 100); }, { once:true });
-      setTimeout(done, 1800);
+      // Only use a safety timeout when not running under the gated bootstrap
+      if (!window.__requireBoot) {
+        setTimeout(done, 1800);
+      }
     })();
   });
 })();

@@ -4,11 +4,13 @@
   var TYPES = [
     {v:'flat', label:'Flat'},
     {v:'gable', label:'Gable'},
+    {v:'apex', label:'Apex'},
     {v:'hip', label:'Hip'},
     {v:'pyramid', label:'Pyramid'},
     {v:'skillion', label:'Skillion'},
-    {v:'gambrel', label:'Gambrel'},
-    {v:'mansard', label:'Mansard'}
+    {v:'barn', label:'Barn'},
+    {v:'mansard', label:'Mansard'},
+    {v:'cylinder', label:'Cylinder'}
   ];
 
   function getTargetRoof(){

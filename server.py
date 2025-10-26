@@ -30,7 +30,68 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             msg = format
         print(f"{client} host={host} :: {msg}")
 
+    def _normalize_remote_host(self, host: str):
+        """Return (normalized_host, looks_remote) where normalized_host reorders Codespaces/Gitpod
+        subdomain to the canonical "8000-<codespace>.<domain>" when applicable. If the host is
+        not remote-looking, returns (host, False)."""
+        if not host:
+            return host, False
+        # Treat these as remote forwarded domains
+        looks_remote = any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io'))
+        if not looks_remote:
+            return host, False
+        try:
+            parts = host.split('.')
+            sub = parts[0] if parts else ''
+            rest = '.'.join(parts[1:]) if len(parts) > 1 else ''
+            fixed_port = 8000
+            port_suffix = f"-{fixed_port}"
+            # Three forms we might see:
+            #  1) canonical: 8000-<codespace>
+            #  2) reversed:  <codespace>-8000
+            #  3) no port:   <codespace>
+            if sub.startswith(f"{fixed_port}-"):
+                new_sub = sub  # already canonical
+            elif sub.endswith(port_suffix):
+                base = sub[: -len(port_suffix)] or ''
+                new_sub = f"{fixed_port}-{base}" if base else f"{fixed_port}"
+            else:
+                new_sub = f"{fixed_port}-{sub}" if sub else f"{fixed_port}"
+            norm = f"{new_sub}.{rest}" if rest else new_sub
+            return norm, True
+        except Exception:
+            return host, looks_remote
+
+    def _maybe_redirect_host(self):
+        """If the current Host header is a remote forwarded host in a non-canonical form
+        (like <codespace>-8000.app.github.dev), issue a 307 redirect to the canonical
+        8000-<codespace>.app.github.dev preserving path and query. Returns True if redirected."""
+        try:
+            host = self.headers.get('Host', '')
+            norm_host, looks_remote = self._normalize_remote_host(host)
+            if looks_remote and norm_host and norm_host != host:
+                # Always redirect to https for remote forwarded hosts
+                scheme = 'https'
+                location = f"{scheme}://{norm_host}{self.path}"
+                self.send_response(307)
+                self.send_header('Location', location)
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                return True
+        except Exception:
+            return False
+        return False
+
+    def do_HEAD(self):
+        # Normalize/redirect bad forwarded host pattern before handling
+        if self._maybe_redirect_host():
+            return
+        return super().do_HEAD()
+
     def do_GET(self):
+        # Normalize/redirect bad forwarded host pattern before handling
+        if self._maybe_redirect_host():
+            return
         # Simple health check endpoint
         if self.path in ('/__health','/__ping'):
             self.send_response(200)
@@ -50,15 +111,10 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 is_forwarded_host = bool(host) and not host.startswith(('0.0.0.0', '127.0.0.1')) and 'localhost' not in host
                 looks_remote = any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io')) if host else False
                 if is_forwarded_host:
-                    # Normalize Codespaces/Gitpod host to 8000-<rest> when applicable
+                    # Normalize Codespaces/Gitpod host to canonical 8000-<codespace>.<domain>
                     try:
                         if looks_remote:
-                            parts = host.split('.')
-                            sub = parts[0] if parts else ''
-                            rest = '.'.join(parts[1:]) if len(parts) > 1 else ''
-                            if '-' in sub:
-                                sub_rest = sub.split('-', 1)[1]
-                                host = f"{fixed_port}-{sub_rest}.{rest}" if rest else host
+                            host, _ = self._normalize_remote_host(host)
                     except Exception:
                         pass
                     scheme = 'https' if looks_remote else 'http'
@@ -106,11 +162,8 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 host = self.headers.get('Host') or ''
                 if host and not host.startswith('0.0.0.0') and not host.startswith('127.0.0.1') and 'localhost' not in host:
                     looks_remote = any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io'))
-                    if looks_remote and '-' in host.split('.')[0]:
-                        # Normalize to 8000- prefix when printing
-                        sub, *rest = host.split('.')
-                        sub_rest = sub.split('-', 1)[1] if '-' in sub else sub
-                        host_norm = f"8000-{sub_rest}." + '.'.join(rest)
+                    if looks_remote:
+                        host_norm, _ = self._normalize_remote_host(host)
                     else:
                         host_norm = host
                     scheme = 'https' if looks_remote else 'http'

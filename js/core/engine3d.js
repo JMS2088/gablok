@@ -556,11 +556,31 @@
       return 3.0;
     } catch(e){ return 3.0; }
   };
+  // Compute a world-aligned bounding rectangle that covers all rooms across both floors
+  if (typeof window.computeRoofFootprint === 'undefined') window.computeRoofFootprint = function(){
+    try {
+      if (!Array.isArray(allRooms) || allRooms.length === 0) return { x: camera.targetX || 0, z: camera.targetZ || 0, width: 6, depth: 6 };
+      var minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      for (var i=0;i<allRooms.length;i++){
+        var r = allRooms[i]; if(!r) continue;
+        var hw = Math.max(0, (r.width||0)/2), hd = Math.max(0, (r.depth||0)/2);
+        minX = Math.min(minX, (r.x||0) - hw);
+        maxX = Math.max(maxX, (r.x||0) + hw);
+        minZ = Math.min(minZ, (r.z||0) - hd);
+        maxZ = Math.max(maxZ, (r.z||0) + hd);
+      }
+      if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minZ) || !isFinite(maxZ)) return { x: 0, z: 0, width: 6, depth: 6 };
+      var margin = 0.2; // small eave overhang
+      minX -= margin; maxX += margin; minZ -= margin; maxZ += margin;
+      return { x: (minX+maxX)/2, z: (minZ+maxZ)/2, width: Math.max(1, maxX-minX), depth: Math.max(1, maxZ-minZ) };
+    } catch(e){ return { x: 0, z: 0, width: 6, depth: 6 }; }
+  };
   if (typeof window.addRoof === 'undefined') window.addRoof = function(){
-    var lvl=0, w=6, d=6; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'roof'});
+    var lvl=0; var fp = (typeof computeRoofFootprint==='function') ? computeRoofFootprint() : { x:camera.targetX, z:camera.targetZ, width:6, depth:6 };
+    var s=applySnap({x:fp.x,z:fp.z,width:fp.width,depth:fp.depth,level:lvl,type:'roof'});
     // Place roof atop first floor if present, else above ground floor rooms
     var baseY = (typeof computeRoofBaseHeight==='function') ? computeRoofBaseHeight() : 3.0;
-    var r={ id:newId('roof'), name:'Roof', x:s.x, z:s.z, width:Math.max(0.5,w), depth:Math.max(0.5,d), baseHeight:baseY, height:0.6, level:lvl, type:'roof', roofType:'flat', rotation:0, autoBase:true };
+    var r={ id:newId('roof'), name:'Roof', x:s.x, z:s.z, width:Math.max(0.5,fp.width), depth:Math.max(0.5,fp.depth), baseHeight:baseY, height:1.2, level:lvl, type:'roof', roofType:'flat', rotation:0, autoBase:true, autoFit:true };
     (window.roofComponents||[]).push(r); window.selectedRoomId=r.id; updateStatus('Added Roof');
     try { focusCameraOnObject(r); } catch(_e) {}
     _needsFullRender=true; startRender(); };
@@ -571,12 +591,24 @@
     try { focusCameraOnObject(b); } catch(_e) {}
     _needsFullRender=true; startRender(); };
 
-  // Failsafe: ensure app starts once DOM is ready even if other listeners fail
+  // Failsafe: ensure app starts once DOM is ready, but allow a boot orchestrator to gate startup
   try {
     if (!window.__appStarted) {
       document.addEventListener('DOMContentLoaded', function(){
         try {
-          if (!window.__appStarted) { window.__appStarted = true; if (typeof startApp==='function') startApp(); }
+          var bootStart = function(){
+            if (!window.__appStarted) { window.__appStarted = true; if (typeof startApp==='function') startApp(); }
+          };
+          // If a bootstrap loader is coordinating script loads, wait for it
+          if (window.__bootPromise && typeof window.__bootPromise.then === 'function') {
+            window.__bootPromise.then(function(){ bootStart(); });
+          } else if (window.__requireBoot) {
+            // Explicit gating: wait for boot-ready event
+            window.addEventListener('gablok:boot-ready', function(){ bootStart(); }, { once:true });
+          } else {
+            // No gating configured -> start immediately
+            bootStart();
+          }
         } catch(e) { console.error('startApp failed:', e); }
       });
     }
