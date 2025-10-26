@@ -34,32 +34,19 @@
       el.style.borderRadius = '8px';
       el.style.pointerEvents = 'none';
       document.body.appendChild(el);
-      // Mark that status should not be used for sticky debug text
       window.__debugStickyStatus = true;
     }
     return el;
   }
   function __updateDebugOverlay(){
-    var el = __ensureDebugOverlay(); if (!el) return;
     try {
-      var dims = canvas ? (canvas.width + 'x' + canvas.height) : 'no-canvas';
-      var cssW = (canvas && canvas.style && canvas.style.width) ? canvas.style.width : '-';
-      var cssH = (canvas && canvas.style && canvas.style.height) ? canvas.style.height : '-';
-      var origin = (typeof project3D === 'function') ? project3D(0,0,0) : null;
-      var originTxt = origin ? ('(' + Math.round(origin.x) + ',' + Math.round(origin.y) + ') z=' + (origin._cz||'') ) : 'offscreen/null';
-      el.textContent = [
-        'frames=' + (window.__dbgGfx.frames||0),
-        'clear=' + (window.__dbgGfx.clearCalls||0),
-        'grid=' + (window.__dbgGfx.gridCalls||0),
-        'rooms=' + (Array.isArray(window.allRooms)? allRooms.length : 'n/a'),
-        'cam yaw=' + (camera? camera.yaw.toFixed(2):'n/a') + ' pitch=' + (camera? camera.pitch.toFixed(2):'n/a') + ' dist=' + (camera? camera.distance.toFixed(1):'n/a'),
-        'target x=' + (camera? camera.targetX.toFixed(2):'n/a') + ' z=' + (camera? camera.targetZ.toFixed(2):'n/a'),
-        'canvas=' + dims + ' css=' + cssW + 'x' + cssH,
-        'proj(0,0,0) ' + originTxt
-      ].join('\n');
-    } catch(e) {
-      el.textContent = 'debug overlay error';
-    }
+      var el = __ensureDebugOverlay();
+      if (!el) return;
+      var g = window.__dbgGfx || { frames:0, clearCalls:0, gridCalls:0 };
+      var cam = window.camera || { yaw:0, pitch:0, distance:0 };
+      var msg = 'frames='+g.frames+' clear='+g.clearCalls+' grid='+g.gridCalls+' | cam[yaw='+cam.yaw.toFixed(2)+',pitch='+cam.pitch.toFixed(2)+',dist='+cam.distance.toFixed(1)+']';
+      el.textContent = msg;
+    } catch(e) { /* ignore */ }
   }
   try { setInterval(__updateDebugOverlay, 500); } catch(e) {}
 
@@ -111,8 +98,9 @@
   // Frame pacing defaults used by renderLoop
   if (typeof window.MIN_DYNAMIC_FPS === 'undefined') window.MIN_DYNAMIC_FPS = 12; // fps when idle
   if (typeof window._minFrameInterval === 'undefined') window._minFrameInterval = 16; // ms when active (≈60fps)
-  if (typeof window.UI_FADE_INACTIVITY_MS === 'undefined') window.UI_FADE_INACTIVITY_MS = 2200;
-  if (typeof window.UI_FADE_GRACE_MS === 'undefined') window.UI_FADE_GRACE_MS = 5000; // no fade until 5s idle
+  // UI fade policy: fully fade out within 3s of no interaction, no grace period
+  if (typeof window.UI_FADE_INACTIVITY_MS === 'undefined') window.UI_FADE_INACTIVITY_MS = 3000;
+  if (typeof window.UI_FADE_GRACE_MS === 'undefined') window.UI_FADE_GRACE_MS = 0;
   if (typeof window.MEASURE_UPDATE_INTERVAL_MS === 'undefined') window.MEASURE_UPDATE_INTERVAL_MS = 180;
   if (typeof window.LABEL_UPDATE_INTERVAL_MS === 'undefined') window.LABEL_UPDATE_INTERVAL_MS = 200;
   if (typeof window._lastLabelsUpdate === 'undefined') window._lastLabelsUpdate = 0;
@@ -268,7 +256,7 @@
       // No base dimming; rely solely on UI fade alpha so handles are fully opaque while active
       var alpha = 1.0;
       var uiA = (typeof window.__uiFadeAlpha === 'number' ? window.__uiFadeAlpha : 1.0);
-      ctx.globalAlpha = Math.max(0.15, alpha * uiA);
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha * uiA));
       ctx.beginPath(); ctx.arc(screenPt.x, screenPt.y, r, 0, Math.PI*2); ctx.fillStyle = color; ctx.fill();
       ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
       // glyph/label
@@ -499,12 +487,12 @@
       }
       if (!pick || !p0 || !p1) return;
 
-      // Fade with UI inactivity just like handles/labels
-      var uiA = (typeof window.__uiFadeAlpha === 'number') ? window.__uiFadeAlpha : 1.0;
-      if (uiA <= 0.02) return;
+  // Fade with UI inactivity just like handles/labels
+  var uiA = (typeof window.__uiFadeAlpha === 'number') ? window.__uiFadeAlpha : 1.0;
+  if (uiA <= 0.0) return;
 
-      ctx.save();
-      ctx.globalAlpha = Math.max(0.1, uiA);
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, uiA));
 
       // Draw main vertical line at the chosen corner
       ctx.strokeStyle = '#111827'; // near-black for visibility

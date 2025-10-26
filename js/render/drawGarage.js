@@ -152,13 +152,14 @@ function drawGarage(garage) {
 
 function drawHandlesForGarage(garage) {
   try {
+    if (window.__focusActive && window.__focusId && garage.id !== window.__focusId) return;
     var isActive = selectedRoomId === garage.id;
     dbg('Drawing garage handles');
     // Set constants
     var REGULAR_HANDLE_RADIUS = HANDLE_RADIUS;
     var ROTATION_HANDLE_RADIUS = 14;
-    var BASE_HANDLE_Y = garage.height + 0.2;
-    var ROTATION_HANDLE_Y = garage.height + 1.0;
+  var BASE_HANDLE_Y = (garage.height||2.6) * 0.5;
+  var ROTATION_HANDLE_Y = (garage.height||2.6) * 0.5 + 0.6;
     
     var rotRad = ((garage.rotation || 0) * Math.PI) / 180;
     
@@ -183,9 +184,12 @@ function drawHandlesForGarage(garage) {
     ].forEach(function(data){ var p=rotateHandle(data.dx,data.dz); garageHandles.push({ x:p.x, y: BASE_HANDLE_Y, z:p.z, type:data.type, label:data.label, radius: REGULAR_HANDLE_RADIUS }); });
     
     // Draw each handle
+    // Precompute center at handle height for inset
+    var cScreen = project3D(garage.x, BASE_HANDLE_Y, garage.z);
     garageHandles.forEach(function(handle) {
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) return;
+      if (handle.type !== 'rotate' && cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
 
       var base = (typeof handle.radius==='number'? handle.radius : HANDLE_RADIUS);
       var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, base) : base;

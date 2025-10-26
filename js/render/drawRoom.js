@@ -86,9 +86,10 @@ function drawRoom(room) {
 function drawHandlesForRoom(room) {
   try {
     if (!room) return;
+    if (window.__focusActive && window.__focusId && room.id !== window.__focusId) return; // hide other handles during focus
     var isActive = selectedRoomId === room.id;
     var levelY = (room.level || 0) * 3.5;
-    var handleY = levelY + (room.height || 3) + 0.2;
+    var handleY = levelY + (room.height || 3) * 0.5; // mid-height of object
     var rot = ((room.rotation || 0) * Math.PI) / 180;
     var cos = Math.cos(rot), sin = Math.sin(rot);
     var hw = (room.width || 1) / 2;
@@ -108,10 +109,17 @@ function drawHandlesForRoom(room) {
       (function(){ var p=rotPoint(0, -hd); return {x:p.x, y:handleY, z:p.z, type:'depth-', label:'Z-'}; })()
     ];
 
+    // Project center for 20px inset calculation
+    var cScreen = project3D(room.x, handleY, room.z);
+
     for (var i = 0; i < handles.length; i++) {
       var h = handles[i];
       var s = project3D(h.x, h.y, h.z);
       if (!s) continue;
+      // Inset 20px toward center in screen space
+      if (cScreen) {
+        var dx = (cScreen.x - s.x), dy = (cScreen.y - s.y); var L = Math.hypot(dx,dy)||1; var ux = dx/L, uy = dy/L; s.x += ux*20; s.y += uy*20;
+      }
       var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(s, HANDLE_RADIUS) : HANDLE_RADIUS;
       drawHandle(s, h.type, h.label, isActive, r);
       resizeHandles.push({

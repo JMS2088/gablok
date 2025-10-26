@@ -6,9 +6,42 @@
     window.addEventListener('resize', setupCanvas);
     // Track UI interactions so we can fade affordances when idle
     try {
-      canvas.addEventListener('mousemove', function(){ _uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now(); });
+      canvas.addEventListener('mousemove', function(e){
+        _uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now();
+        // Track hovered object for focus mode
+        try {
+          var rect = canvas.getBoundingClientRect();
+          var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+          var dpr = window.devicePixelRatio || 1; var sx = mx * dpr, sy = my * dpr;
+          var bestId = null, bestD = Infinity;
+          function consider(obj){
+            if(!obj) return; var yMid=0; try{
+              if (obj.type === 'roof') { var bY=(typeof obj.baseHeight==='number'?obj.baseHeight:3.0), h=(typeof obj.height==='number'?obj.height:0.6); yMid=bY+h*0.5; }
+              else if (obj.type === 'pergola') { yMid = (obj.totalHeight!=null ? obj.totalHeight*0.5 : (obj.height||2.2)*0.5); }
+              else if (obj.type === 'pool') { yMid = 0.2; }
+              else if (obj.type === 'furniture') { var lv=(obj.level||0)*3.5; yMid = lv + Math.max(0, obj.elevation||0) + (obj.height||0.7)/2; }
+              else { yMid = (obj.level||0)*3.5 + (obj.height||3)/2; }
+            }catch(_e){ yMid = (obj.level||0)*3.5 + 1.5; }
+            var p = project3D(obj.x||0, yMid, obj.z||0); if(!p) return;
+            var dx = p.x - sx, dy = p.y - sy; var d2 = dx*dx + dy*dy;
+            if (d2 < bestD) { bestD = d2; bestId = obj.id; }
+          }
+          // Prefer current floor items by considering them first
+          for (var i=0;i<(allRooms||[]).length;i++){ if((allRooms[i].level||0)===(currentFloor||0)) consider(allRooms[i]); }
+          if (stairsComponent && (stairsComponent.level||0)===(currentFloor||0)) consider(stairsComponent);
+          ['pergolaComponents','garageComponents','poolComponents','roofComponents','balconyComponents','furnitureItems'].forEach(function(k){ var arr=window[k]||[]; for(var i=0;i<arr.length;i++){ var o=arr[i]; if(!o) continue; if((o.level||0)===(currentFloor||0)) consider(o); }});
+          // If nothing on current floor, consider all
+          if (!bestId){ (allRooms||[]).forEach(consider); if(stairsComponent) consider(stairsComponent); ['pergolaComponents','garageComponents','poolComponents','roofComponents','balconyComponents','furnitureItems'].forEach(function(k){ var arr=window[k]||[]; for(var i=0;i<arr.length;i++) consider(arr[i]); }); }
+          var thresh = 180*180; // px^2
+          if (bestId && bestD <= thresh) { if (window.__hoverRoomId !== bestId){ window.__hoverRoomId = bestId; renderLoop(); } }
+          else if (window.__hoverRoomId) { window.__hoverRoomId = null; renderLoop(); }
+        } catch(_e) {}
+      });
       canvas.addEventListener('mousedown', function(){ _uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now(); });
-      canvas.addEventListener('wheel', function(){ _uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now(); }, { passive: true });
+      canvas.addEventListener('wheel', function(){
+        _uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now();
+        try { var nowT = (performance && performance.now)? performance.now(): Date.now(); var tgt = window.__hoverRoomId || selectedRoomId || null; if (tgt){ window.__focusRoomId = tgt; window.__focusUntilTime = nowT + 1800; renderLoop(); } } catch(_e) {}
+      }, { passive: true });
       canvas.addEventListener('touchstart', function(){ _uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now(); }, { passive: true });
     } catch (e) { /* canvas may not be ready in some init paths */ }
     

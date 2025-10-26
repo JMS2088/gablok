@@ -502,7 +502,7 @@ function renderLoop() {
     __perf.skipStreak = 0;
     __perf.lastFrameTime = nowTs;
 
-    // Compute UI fade alpha based on last interaction (camera or input). This controls
+  // Compute UI fade alpha based on last interaction (camera or input). This controls
     // fade of DOM labels/buttons (also CSS transitions) and canvas handles (drawHandle).
     try {
       var lastActive = Math.max(_camLastMoveTime || 0, _uiLastInteractionTime || 0);
@@ -522,6 +522,11 @@ function renderLoop() {
       var cur = (typeof window.__uiFadeAlpha === 'number') ? window.__uiFadeAlpha : 1.0;
       var k = 0.12; // smoothing factor
       window.__uiFadeAlpha = cur + (targetAlpha - cur) * k;
+      // Track whether we're actively fading this frame to drive per-frame label updates
+      var prevA = (typeof window.__prevUiFadeAlpha === 'number') ? window.__prevUiFadeAlpha : window.__uiFadeAlpha;
+      // Consider it fading if alpha changed meaningfully or we're between 0 and 1
+      window.__isFadingFrame = (Math.abs(window.__uiFadeAlpha - prevA) > 0.001) || (window.__uiFadeAlpha > 0.0 && window.__uiFadeAlpha < 1.0);
+      window.__prevUiFadeAlpha = window.__uiFadeAlpha;
       // Also set CSS variable on labels container for any CSS-driven behavior
       var lblC = document.getElementById('labels-3d'); if (lblC) lblC.style.setProperty('--ui-fade', String(window.__uiFadeAlpha));
     } catch (e) { /* non-fatal */ }
@@ -531,6 +536,22 @@ function renderLoop() {
     clearCanvas();
     drawGrid();
     drawSnapGuides();
+
+    // Determine focus mode: when hovering or after a wheel event on a specific object,
+    // hide other objects' labels/handles to reduce clutter
+    (function(){
+      try {
+        var nowT = frameStart;
+        var focusId = null;
+        if (typeof window.__focusUntilTime === 'number' && window.__focusUntilTime > nowT && window.__focusRoomId) {
+          focusId = window.__focusRoomId;
+        } else if (window.__hoverRoomId) {
+          focusId = window.__hoverRoomId;
+        }
+        window.__focusId = focusId || null;
+        window.__focusActive = !!focusId;
+      } catch(_e) {}
+    })();
 
     // Build unified object list with squared distance culling
     var allObjects = [];
@@ -667,7 +688,11 @@ function renderLoop() {
     drawWorldHeightScale();
 
     var now = (performance && performance.now)? performance.now(): Date.now();
-    if (now - _lastLabelsUpdate > LABEL_UPDATE_INTERVAL_MS) {
+    // While fading or while camera is moving, drive labels per-frame for smoothness
+    if (!window.__labelsFrozen && (window.__isFadingFrame || camChanged)) {
+      updateLabels();
+      _lastLabelsUpdate = now;
+    } else if (now - _lastLabelsUpdate > LABEL_UPDATE_INTERVAL_MS) {
       if (!window.__labelsFrozen) { updateLabels(); _lastLabelsUpdate = now; }
     }
   drawCompass();

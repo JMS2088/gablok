@@ -120,8 +120,9 @@ function drawStairs(stairs) {
 
 function drawHandlesForStairs(stairs) {
   try {
+    if (window.__focusActive && window.__focusId && stairs.id !== window.__focusId) return;
     var isActive = selectedRoomId === stairs.id;
-    var handleY = stairs.height + 0.2;
+    var handleY = (stairs.height||3.0) * 0.5;
     
     var rotRad = ((stairs.rotation || 0) * Math.PI) / 180;
     function rotateHandle(dx, dz) {
@@ -132,7 +133,7 @@ function drawHandlesForStairs(stairs) {
     }
     var stairHandles = [
       // X+ (width+)
-      (function() { var p = rotateHandle(stairs.width/2, 0); return {x: p.x, y: handleY, z: p.z, type: 'width+', label: 'X+'}; })(),
+  (function() { var p = rotateHandle(stairs.width/2, 0); return {x: p.x, y: handleY, z: p.z, type: 'width+', label: 'X+'}; })(),
       // X- (width-)
       (function() { var p = rotateHandle(-stairs.width/2, 0); return {x: p.x, y: handleY, z: p.z, type: 'width-', label: 'X-'}; })(),
       // Z+ (depth+)
@@ -140,13 +141,15 @@ function drawHandlesForStairs(stairs) {
       // Z- (depth-)
       (function() { var p = rotateHandle(0, -stairs.depth/2); return {x:p.x, y:handleY, z:p.z, type: 'depth-', label: 'Z-'}; })(),
       // 360 handle remains centered
-      {x: stairs.x, y: handleY + 0.3, z: stairs.z, type: 'rotate', label: '360'}
+      {x: stairs.x, y: handleY + 0.5, z: stairs.z, type: 'rotate', label: '360'}
     ];
+    var cScreen = project3D(stairs.x, handleY, stairs.z);
     
     for (var i = 0; i < stairHandles.length; i++) {
       var handle = stairHandles[i];
-      var screen = project3D(handle.x, handle.y, handle.z);
+  var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) continue;
+  if (handle.type !== 'rotate' && cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
 
       var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, HANDLE_RADIUS) : HANDLE_RADIUS;
       drawHandle(screen, handle.type, handle.label, isActive, r);

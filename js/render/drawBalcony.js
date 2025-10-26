@@ -229,8 +229,9 @@ function drawBalcony(balcony) {
 
 function drawHandlesForBalcony(balcony) {
   try {
+    if (window.__focusActive && window.__focusId && balcony.id !== window.__focusId) return;
     var isActive = selectedRoomId === balcony.id;
-    var handleY = balcony.level * 3.5 + balcony.height + 0.2;
+    var handleY = balcony.level * 3.5 + (balcony.height||2.2) * 0.5;
     
     var balconyHandles = [
       {x: balcony.x + balcony.width/2, y: handleY, z: balcony.z, type: 'width+', label: 'X+'},
@@ -238,11 +239,13 @@ function drawHandlesForBalcony(balcony) {
       {x: balcony.x, y: handleY, z: balcony.z + balcony.depth/2, type: 'depth+', label: 'Z+'},
       {x: balcony.x, y: handleY, z: balcony.z - balcony.depth/2, type: 'depth-', label: 'Z-'}
     ];
+    var cScreen = project3D(balcony.x, handleY, balcony.z);
     
     for (var i = 0; i < balconyHandles.length; i++) {
       var handle = balconyHandles[i];
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) continue;
+      if (cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
 
       var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, HANDLE_RADIUS) : HANDLE_RADIUS;
       drawHandle(screen, handle.type, handle.label, isActive, r);

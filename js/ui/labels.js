@@ -16,6 +16,13 @@
   window.updateLabels = function updateLabels(){
     try {
       var container = document.getElementById('labels-3d'); if(!container) return;
+      var nowT = (performance && performance.now)? performance.now(): Date.now();
+      if (!window.__labelCache) window.__labelCache = Object.create(null);
+      var focusId = null;
+      try {
+        if (typeof window.__focusUntilTime==='number' && window.__focusUntilTime > nowT && window.__focusRoomId) focusId = window.__focusRoomId;
+        else if (window.__hoverRoomId) focusId = window.__hoverRoomId;
+      } catch(_e) {}
       // keyed reconciliation by id
       var existingLabel = {}, existingEdit = {};
       Array.prototype.forEach.call(container.querySelectorAll('.room-label'), function(el){ var id = el.getAttribute('data-id'); if(id) existingLabel[id] = el; });
@@ -52,10 +59,11 @@
 
       function placeLabelFor(box){
         if(!box || !box.id) return;
+        if (focusId && box.id !== focusId) return; // hide non-focused labels during focus
         var y = anchorYFor(box);
         var p = project3D(box.x||0, y, box.z||0); if(!p) return;
         var dpr = window.devicePixelRatio||1;
-        var left = (p.x / dpr)|0, top = (p.y / dpr)|0;
+        var targetLeft = (p.x / dpr), targetTop = (p.y / dpr);
 
         // Label pill
         var el = existingLabel[box.id];
@@ -63,7 +71,7 @@
           el = document.createElement('div');
           el.className='room-label';
           el.setAttribute('data-id', box.id);
-          el.textContent = box.name || 'Room';
+          el.textContent = box.name || 'Room'; el.__txt = (box.name || 'Room'); el.__w = null; el.__h = null;
           // Select on click
           el.addEventListener('click', function(e){ e.stopPropagation(); try{ window.selectedRoomId = box.id; if(typeof updateStatus==='function') updateStatus((box.name||'Item')+' selected'); if (typeof renderLoop==='function') renderLoop(); }catch(_){} });
           // Drag room by label
@@ -81,9 +89,51 @@
           el.addEventListener('touchstart', function(e){ try{ var t=e.touches&&e.touches[0]; if(t){ startDrag(t.clientX, t.clientY); e.preventDefault(); e.stopPropagation(); } }catch(_e){} }, { passive:false });
           container.appendChild(el);
         } else {
-          if (el.textContent !== (box.name || 'Room')) el.textContent = box.name || 'Room';
+          var newTxt = (box.name || 'Room');
+          if (el.__txt !== newTxt) { el.textContent = newTxt; el.__txt = newTxt; el.__w = null; el.__h = null; }
         }
-        el.style.left = left + 'px'; el.style.top = top + 'px'; el.style.opacity = String(Math.max(0.15, (window.__uiFadeAlpha||1.0)));
+        // Smooth placement to reduce jitter while camera is moving
+        var prev = window.__labelCache[box.id] || { x: targetLeft, y: targetTop };
+        var isCamDrag = !!(window.mouse && window.mouse.down && window.mouse.dragType === 'camera');
+        var recentlyMoved = (typeof window._camLastMoveTime==='number') ? (nowT - window._camLastMoveTime < 80) : false;
+        var k = (isCamDrag || recentlyMoved) ? 0.25 : 1.0; // stronger smoothing while moving
+        var smX = prev.x + (targetLeft - prev.x) * k;
+        var smY = prev.y + (targetTop - prev.y) * k;
+        window.__labelCache[box.id] = { x: smX, y: smY };
+        var left = smX, top = smY;
+        el.style.left = left.toFixed(2) + 'px'; el.style.top = top.toFixed(2) + 'px'; el.style.opacity = String(Math.max(0, Math.min(1, (window.__uiFadeAlpha||1.0))));
+
+        // Ensure label doesn't sit on top of this object's handles: nudge away from overlapping handle circles
+        try {
+          var skipAvoid = !!(window.mouse && window.mouse.down && window.mouse.dragType === 'camera');
+          var handles = Array.isArray(window.resizeHandles) ? window.resizeHandles.filter(function(h){ return h && h.roomId === box.id; }) : [];
+          if (handles.length && !skipAvoid) {
+            // Use current rect to know size; fallback to approx if not measurable yet
+            var w = Math.max(40, (el.__w || 0) || 60), h = Math.max(18, (el.__h || 0) || 22);
+            var posX = left, posY = top;
+            function overlapsAny(x, y){
+              var Lx = x - w/2, Rx = x + w/2, Ty = y - h/2, By = y + h/2;
+              for (var hi=0; hi<handles.length; hi++){
+                var hh = handles[hi];
+                var hx = (hh.screenX + hh.width/2) / dpr; var hy = (hh.screenY + hh.height/2) / dpr;
+                var hr = Math.max(hh.width, hh.height) / (2*dpr);
+                // Circle-rect overlap test: clamp circle center to rect
+                var cx = Math.max(Lx, Math.min(hx, Rx));
+                var cy = Math.max(Ty, Math.min(hy, By));
+                var dx = hx - cx, dy = hy - cy; if ((dx*dx + dy*dy) <= (hr*hr)) return { overlap:true, hx:hx, hy:hy };
+              }
+              return { overlap:false };
+            }
+            var tries = 0, maxTries = 4; var step = 20;
+            while (tries < maxTries){
+              var ov = overlapsAny(posX, posY); if (!ov.overlap) break;
+              // Push away from the nearest overlapping handle center
+              var dx = posX - ov.hx, dy = posY - ov.hy; var len = Math.hypot(dx,dy) || 1; posX += (dx/len) * step; posY += (dy/len) * step; tries++;
+            }
+            left = posX; top = posY;
+            el.style.left = left + 'px'; el.style.top = top + 'px';
+          }
+        } catch(_e) {}
 
         // Edit button to the right of the label, vertically centered
         var eb = existingEdit[box.id];
@@ -97,7 +147,8 @@
           container.appendChild(eb);
         }
         try {
-          var rect = el.getBoundingClientRect();
+          if (!el.__w || !el.__h) { var rectM = el.getBoundingClientRect(); el.__w = rectM.width; el.__h = rectM.height; }
+          var rect = { width: el.__w, height: el.__h };
           var gap = 12; // base gap between pill and button
           var offsetRight = 25; // additional right shift requested
           var editLeft = left + (rect.width/2) + gap + offsetRight;
@@ -108,7 +159,7 @@
           eb.style.left = (left + 32 + 25) + 'px';
           eb.style.top = top + 'px';
         }
-        eb.style.opacity = String(Math.max(0.15, (window.__uiFadeAlpha||1.0)));
+  eb.style.opacity = String(Math.max(0, Math.min(1, (window.__uiFadeAlpha||1.0))));
         seen[box.id] = true;
       }
 

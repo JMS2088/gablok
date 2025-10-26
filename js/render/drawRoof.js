@@ -183,24 +183,28 @@ function drawRoof(roof) {
 
 function drawHandlesForRoof(roof, apexY){
   try {
+    if (window.__focusActive && window.__focusId && roof.id !== window.__focusId) return;
     var isActive = selectedRoomId === roof.id;
-    var yTop = (typeof apexY==='number' && isFinite(apexY)) ? apexY : (((typeof roof.baseHeight==='number' && isFinite(roof.baseHeight)) ? roof.baseHeight : 3.0) + ((typeof roof.height==='number' && isFinite(roof.height)) ? roof.height : 1.0));
-    var y = yTop + 0.25;
+    var baseY = (typeof roof.baseHeight==='number' && isFinite(roof.baseHeight)) ? roof.baseHeight : 3.0;
+    var hgt = (typeof roof.height==='number' && isFinite(roof.height)) ? roof.height : 1.0;
+    var yMid = baseY + hgt * 0.5;
     var rotRad = ((roof.rotation || 0) * Math.PI) / 180;
     function r(dx,dz){ return { x: roof.x + dx*Math.cos(rotRad) - dz*Math.sin(rotRad), z: roof.z + dx*Math.sin(rotRad) + dz*Math.cos(rotRad) }; }
     var hw = Math.max(0.25, (roof.width||4)/2), hd=Math.max(0.25, (roof.depth||4)/2);
     var handles = [
-      (function(){ var q=r(hw,0); return {x:q.x,y:y,z:q.z,type:'width+',label:'X+'}; })(),
-      (function(){ var q=r(-hw,0); return {x:q.x,y:y,z:q.z,type:'width-',label:'X-'}; })(),
-      (function(){ var q=r(0,hd); return {x:q.x,y:y,z:q.z,type:'depth+',label:'Z+'}; })(),
-      (function(){ var q=r(0,-hd); return {x:q.x,y:y,z:q.z,type:'depth-',label:'Z-'}; })(),
-      // Height handle above center
-      { x: roof.x, y: yTop + 0.35, z: roof.z, type:'height', label:'Y' }
+      (function(){ var q=r(hw,0); return {x:q.x,y:yMid,z:q.z,type:'width+',label:'X+'}; })(),
+      (function(){ var q=r(-hw,0); return {x:q.x,y:yMid,z:q.z,type:'width-',label:'X-'}; })(),
+      (function(){ var q=r(0,hd); return {x:q.x,y:yMid,z:q.z,type:'depth+',label:'Z+'}; })(),
+      (function(){ var q=r(0,-hd); return {x:q.x,y:yMid,z:q.z,type:'depth-',label:'Z-'}; })()
     ];
+    var cScreen = project3D(roof.x, yMid, roof.z);
     for (var i=0;i<handles.length;i++){
-      var h=handles[i]; var s=project3D(h.x,h.y,h.z); if(!s) continue; var rr = (typeof computeHandleRadius==='function')? computeHandleRadius(s,HANDLE_RADIUS): HANDLE_RADIUS;
+      var h=handles[i]; var s=project3D(h.x,h.y,h.z); if(!s) continue; if(cScreen){ var dx=cScreen.x-s.x, dy=cScreen.y-s.y; var L=Math.hypot(dx,dy)||1; s.x+=(dx/L)*20; s.y+=(dy/L)*20; }
+      var rr = (typeof computeHandleRadius==='function')? computeHandleRadius(s,HANDLE_RADIUS): HANDLE_RADIUS;
       drawHandle(s, h.type, h.label, isActive, rr);
       if (Array.isArray(resizeHandles)) resizeHandles.push({ screenX:s.x-rr, screenY:s.y-rr, width:rr*2, height:rr*2, type:h.type, roomId:roof.id });
     }
+    // Height handle above center remains
+    var sH = project3D(roof.x, yMid + 0.5, roof.z); if (sH) { var rrH = (typeof computeHandleRadius==='function')? computeHandleRadius(sH,HANDLE_RADIUS): HANDLE_RADIUS; drawHandle(sH, 'height', 'Y', isActive, rrH); if (Array.isArray(resizeHandles)) resizeHandles.push({ screenX:sH.x-rrH, screenY:sH.y-rrH, width:rrH*2, height:rrH*2, type:'height', roomId:roof.id }); }
   } catch(e){ console.error('Roof handle error:', e); }
 }
