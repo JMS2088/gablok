@@ -264,10 +264,28 @@
   if (typeof window.drawCompass === 'undefined') {
     window.drawCompass = function drawCompass(){
       if (!ctx || !canvas) return;
-      var r=28, cx=18+r, cy=18+r;
+      var r = 28;
+      // Place in bottom-right corner with a small margin
+      var margin = 18;
+      var cx = (canvas.width  - (margin + r));
+      var cy = (canvas.height - (margin + r));
       ctx.save();
+      // Base circle
       ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fill(); ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.stroke();
-      ctx.strokeStyle='#e2e8f0'; ctx.beginPath(); ctx.moveTo(cx-r+4,cy); ctx.lineTo(cx+r-4,cy); ctx.stroke(); ctx.beginPath(); ctx.moveTo(cx,cy-r+4); ctx.lineTo(cx,cy+r-4); ctx.stroke();
+      // Cross hairs
+      ctx.strokeStyle='#e2e8f0';
+      ctx.beginPath(); ctx.moveTo(cx-r+4,cy); ctx.lineTo(cx+r-4,cy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx,cy-r+4); ctx.lineTo(cx,cy+r-4); ctx.stroke();
+      // Cardinal labels (fixed in compass space)
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('N', cx, cy - r + 10);
+      ctx.fillText('E', cx + r - 10, cy);
+      ctx.fillText('S', cx, cy + r - 10);
+      ctx.fillText('W', cx - r + 10, cy);
+      // North arrow: rotate relative to camera yaw so it points toward world north
       var ang = -camera.yaw; ctx.translate(cx,cy); ctx.rotate(ang);
       ctx.beginPath(); ctx.moveTo(0,-r+6); ctx.lineTo(-5,-r+14); ctx.lineTo(5,-r+14); ctx.closePath(); ctx.fillStyle='#3b82f6'; ctx.fill();
       ctx.restore();
@@ -382,38 +400,10 @@
   if (typeof window.hitTestWallStrips === 'undefined') window.hitTestWallStrips = function(){ return -1; };
   if (typeof window.drawWallStrip === 'undefined') window.drawWallStrip = function(){};
   if (typeof window.dedupeAllEntities === 'undefined') window.dedupeAllEntities = function(){};
-  // Minimal DOM labeler for rooms so selection is possible
-  window.updateLabels = function updateLabels(){
-    try {
-      var container = document.getElementById('labels-3d'); if(!container) return;
-      // simple keyed reconciliation by id
-      var existing = {};
-      Array.prototype.forEach.call(container.querySelectorAll('.room-label'), function(el){ var id = el.getAttribute('data-id'); if(id) existing[id] = el; });
-      var seen = {};
-      function placeLabelFor(box){
-        if(!box || !box.id) return;
-        var y = (box.level||0)*3.5 + (box.height||3)/2;
-        var p = project3D(box.x||0, y, box.z||0); if(!p) return;
-        var dpr = window.devicePixelRatio||1;
-        var left = (p.x / dpr)|0, top = (p.y / dpr)|0;
-        var el = existing[box.id]; if(!el){
-          el = document.createElement('div'); el.className='room-label'; el.setAttribute('data-id', box.id);
-          el.addEventListener('click', function(e){ e.stopPropagation(); try{ window.selectedRoomId = box.id; if(typeof updateStatus==='function') updateStatus((box.name||'Room')+' selected'); }catch(_){} });
-          el.textContent = box.name || 'Room';
-          container.appendChild(el);
-        } else {
-          // Update label text if changed
-          if (el.textContent !== (box.name || 'Room')) el.textContent = box.name || 'Room';
-        }
-        el.style.left = left + 'px'; el.style.top = top + 'px'; el.style.opacity = String(Math.max(0.15, (window.__uiFadeAlpha||1.0)));
-        seen[box.id] = true;
-      }
-      // Rooms only for now
-      for (var i=0;i<(allRooms||[]).length;i++) placeLabelFor(allRooms[i]);
-      // Remove stale labels
-      for (var id in existing){ if(!seen[id]) { var n = existing[id]; if(n && n.parentNode===container) container.removeChild(n); } }
-    } catch(e) { /* non-fatal */ }
-  };
+  // Minimal DOM labeler for rooms (provided by ui/labels.js). Guard to avoid duplication.
+  if (typeof window.updateLabels === 'undefined') {
+    window.updateLabels = function(){};
+  }
   if (typeof window.updateMeasurements === 'undefined') window.updateMeasurements = function(){};
   if (typeof window.drawWorldHeightScale === 'undefined') window.drawWorldHeightScale = function(){};
   if (typeof window.updatePerfStatsOverlay === 'undefined') window.updatePerfStatsOverlay = function(){};

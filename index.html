@@ -291,8 +291,13 @@
 <!-- Core 3D engine bootstrap (must load before UI/editor/app) -->
 <script src="js/core/engine3d.js?v=20251025-1" defer></script>
 <!-- Modularized UI helpers -->
+<script src="js/ui/labels.js?v=20251026-1" defer></script>
+<script src="js/ui/roomPalette.js?v=20251026-1" defer></script>
 <script src="js/ui/modals.js?v=20251025-1" defer></script>
 <script src="js/ui/pricing.js?v=20251025-1" defer></script>
+<!-- Rendering modules (split from app.js) -->
+<script src="js/render/drawRoom.js?v=20251026-1" defer></script>
+<script src="js/render/drawPool.js?v=20251026-1" defer></script>
 <!-- 2D Floor Plan Editor module (must load before app.js for global hooks) -->
 <script src="js/plan2d/editor.js?v=20251025-1" defer></script>
 <!-- Core app -->
