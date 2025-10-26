@@ -80,9 +80,9 @@
       targetX: 0,
       targetZ: 0,
       // Raise camera pivot above ground so the orbit path doesn't dip underground
-      targetY: 3.0,
+      targetY: 2.5,
       // Ensure the camera's eye doesn't go below a small height above ground
-      minCamY: 0.25
+      minCamY: 0.15
     };
   }
   if (typeof window.pan === 'undefined') window.pan = { x:0, y:0 };
@@ -156,10 +156,12 @@
         fwd[2]*right[0] - fwd[0]*right[2],
         fwd[0]*right[1] - fwd[1]*right[0]
       ];
-      var norm = function(v){ var L=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/L,v[1]/L,v[2]/L]; };
+    var norm = function(v){ var L=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/L,v[1]/L,v[2]/L]; };
       right = norm(right); up = norm(up); fwd = norm(fwd);
-  var camY = (camera.targetY||0) - fwd[1]*camera.distance;
-  if (typeof camera.minCamY === 'number') camY = Math.max(camera.minCamY, camY);
+    // Bias vertical offset so when pitching downward the camera hugs the floor a bit closer
+    var verticalScale = (fwd[1] < 0 ? 0.6 : 1.0); // reduce upward lift when looking down
+    var camY = (camera.targetY||0) - fwd[1]*camera.distance*verticalScale;
+    if (typeof camera.minCamY === 'number') camY = Math.max(camera.minCamY, camY);
   var cam = [ camera.targetX - fwd[0]*camera.distance, camY, camera.targetZ - fwd[2]*camera.distance ];
       __proj.right = right; __proj.up = up; __proj.fwd = fwd; __proj.cam = cam;
       var dpr = window.devicePixelRatio || 1;
@@ -422,9 +424,120 @@
     window.updateLabels = function(){};
   }
   if (typeof window.updateMeasurements === 'undefined') window.updateMeasurements = function(){};
-  if (typeof window.drawWorldHeightScale === 'undefined') window.drawWorldHeightScale = function(){};
+  if (typeof window.drawWorldHeightScale === 'undefined') window.drawWorldHeightScale = function(){
+    try {
+      if (!ctx || !canvas || !Array.isArray(allRooms) || allRooms.length === 0) return;
+      // Pick a target room: prefer selected on current floor, else first room on current floor, else first room
+      var target = null;
+      if (selectedRoomId) {
+        for (var i=0;i<allRooms.length;i++){ var r=allRooms[i]; if(r && r.id===selectedRoomId) { target=r; break; } }
+      }
+      if (!target) {
+        for (var j=0;j<allRooms.length;j++){ var r2=allRooms[j]; if (r2 && (r2.level||0) === (currentFloor||0)) { target=r2; break; } }
+      }
+      if (!target) target = allRooms[0];
+      if (!target) return;
+
+      // Compute global footprint and total building top height so the ruler grows to full height (across floors/roof)
+      var fp = null;
+      try { if (typeof computeRoofFootprint==='function') fp = computeRoofFootprint(); } catch(_e) { fp = null; }
+      if (!fp) {
+        // Fallback footprint from rooms
+        var minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+        for (var ri=0; ri<allRooms.length; ri++){
+          var rr=allRooms[ri]; if(!rr) continue;
+          var hw2=(rr.width||1)/2, hd2=(rr.depth||1)/2;
+          minX=Math.min(minX,(rr.x||0)-hw2); maxX=Math.max(maxX,(rr.x||0)+hw2);
+          minZ=Math.min(minZ,(rr.z||0)-hd2); maxZ=Math.max(maxZ,(rr.z||0)+hd2);
+        }
+        if (isFinite(minX)&&isFinite(maxX)&&isFinite(minZ)&&isFinite(maxZ)) {
+          fp = { x:(minX+maxX)/2, z:(minZ+maxZ)/2, width:Math.max(1,maxX-minX), depth:Math.max(1,maxZ-minZ) };
+        } else {
+          fp = { x:(target.x||0), z:(target.z||0), width:(target.width||3), depth:(target.depth||3) };
+        }
+      }
+
+      var baseY = 0.0; // ground reference
+      var topY = 0.0;
+      for (var ti=0; ti<allRooms.length; ti++){
+        var rTop = (allRooms[ti].level||0)*3.5 + Math.max(0.1, allRooms[ti].height||3.0);
+        if (rTop>topY) topY=rTop;
+      }
+      for (var ri2=0; ri2<(roofComponents||[]).length; ri2++){
+        var rf=roofComponents[ri2]; if(!rf) continue; var bH=(typeof rf.baseHeight==='number'&&isFinite(rf.baseHeight))?rf.baseHeight:3.0; var hH=(typeof rf.height==='number'&&isFinite(rf.height))?rf.height:0.6; var rTop2=bH+hH; if(rTop2>topY) topY=rTop2;
+      }
+      if (topY <= baseY + 0.05) topY = baseY + Math.max(3.0, (target.height||3.0));
+
+      // Smooth the displayed height so it grows elegantly as the building grows
+      var targetH = Math.max(0.1, topY - baseY);
+      var curH = (typeof window.__heightRuleH==='number' ? window.__heightRuleH : targetH);
+      var k = 0.2; // smoothing factor per frame
+      var newH = curH + (targetH - curH) * k;
+      if (Math.abs(newH - targetH) < 0.02) newH = targetH;
+      window.__heightRuleH = newH;
+
+      var h = newH;
+
+      // Build footprint corners and choose a visible corner just outside the footprint
+      var hw = Math.max(0.05, (fp.width||1)/2);
+      var hd = Math.max(0.05, (fp.depth||1)/2);
+      var corners = [
+        { x:(fp.x||0)+hw, z:(fp.z||0)+hd },
+        { x:(fp.x||0)+hw, z:(fp.z||0)-hd },
+        { x:(fp.x||0)-hw, z:(fp.z||0)+hd },
+        { x:(fp.x||0)-hw, z:(fp.z||0)-hd }
+      ];
+      var pick=null, p0=null, p1=null; var outset=0.18; // place the scale just outside the room
+      for (var ci=0; ci<corners.length; ci++){
+        var cx=corners[ci].x, cz=corners[ci].z;
+        // offset outward away from room center to position the scale outside of the cube
+        var dirX = cx - (fp.x||0); var dirZ = cz - (fp.z||0); var len=Math.hypot(dirX,dirZ)||1; dirX/=len; dirZ/=len;
+        var ox = cx + dirX*outset, oz = cz + dirZ*outset;
+        var q0 = project3D(ox, baseY, oz);
+        var q1 = project3D(ox, baseY + h, oz);
+        if (q0 && q1) { pick={x:ox,z:oz}; p0=q0; p1=q1; break; }
+      }
+      if (!pick || !p0 || !p1) return;
+
+      // Fade with UI inactivity just like handles/labels
+      var uiA = (typeof window.__uiFadeAlpha === 'number') ? window.__uiFadeAlpha : 1.0;
+      if (uiA <= 0.02) return;
+
+      ctx.save();
+      ctx.globalAlpha = Math.max(0.1, uiA);
+
+      // Draw main vertical line at the chosen corner
+      ctx.strokeStyle = '#111827'; // near-black for visibility
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+
+      // Draw ticks and labels every 0.5m
+      var step = 0.5; // meters
+      var ticks = Math.round(h / step);
+      ctx.lineWidth = 1.5; ctx.strokeStyle = '#4b5563';
+      ctx.font = 'bold 13px system-ui, sans-serif';
+      for (var t=0; t<=ticks; t++){
+        var yy = baseY + Math.min(h, t*step);
+        var pt = project3D(pick.x, yy, pick.z); if (!pt) continue;
+        // Tick mark (constant screen-space length for clarity)
+        var lenPx = (t % 2 === 0) ? 12 : 8; // longer tick each 1.0m
+        ctx.beginPath(); ctx.moveTo(pt.x, pt.y); ctx.lineTo(pt.x + lenPx, pt.y); ctx.stroke();
+        // Label text on the right of tick
+        var val = (t*step).toFixed(1).replace(/\.0$/, '.0');
+        var label = val + ' m';
+        ctx.fillStyle = '#111827';
+        ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+        ctx.fillText(label, pt.x + lenPx + 4, pt.y);
+      }
+
+      ctx.restore();
+    } catch(e) { /* non-fatal */ }
+  };
   if (typeof window.updatePerfStatsOverlay === 'undefined') window.updatePerfStatsOverlay = function(){};
-  // Minimal measurements panel updater
+  // Minimal measurements panel updater (live-edit friendly)
   window.updateMeasurements = function(){
     try {
       var panel = document.getElementById('measurements'); if(!panel) return;
@@ -432,14 +545,14 @@
       if (!sel) { panel.classList.remove('visible'); return; }
       panel.classList.add('visible');
       // Populate fields
-      function val(id, v){ var el=document.getElementById(id); if(el){ el.value = (v==null?'':v); } }
+      function setIfNotActive(id, v){ var el=document.getElementById(id); if(!el) return; if (document.activeElement === el) return; el.value = (v==null?'':v); }
       function txt(id, v){ var el=document.getElementById(id); if(el){ el.textContent = (v==null?'--':v); } }
-      val('input-name', sel.name||'');
-      val('input-width', (sel.width||0).toFixed(2));
-      val('input-depth', (sel.depth||0).toFixed(2));
-      val('input-height', (sel.height||0).toFixed(2));
-      val('input-pos-x', (sel.x||0).toFixed(2));
-      val('input-pos-z', (sel.z||0).toFixed(2));
+      setIfNotActive('input-name', sel.name||'');
+      setIfNotActive('input-width', (sel.width||0).toFixed(2));
+      setIfNotActive('input-depth', (sel.depth||0).toFixed(2));
+      setIfNotActive('input-height', (sel.height||0).toFixed(2));
+      setIfNotActive('input-pos-x', (sel.x||0).toFixed(2));
+      setIfNotActive('input-pos-z', (sel.z||0).toFixed(2));
       txt('measure-floor', String(sel.level!=null? sel.level : (sel.type==='balcony'? 1 : 0)));
       // Wire save once
       var save = document.getElementById('save-measurements');
@@ -459,6 +572,27 @@
             if (typeof renderLoop==='function') renderLoop();
           } catch(e) { console.warn('Save measurements failed', e); }
         });
+      }
+      // Live wiring for inputs (type and arrow keys supported by native <input type=number>)
+      if (!panel.__measWired) {
+        panel.__measWired = true;
+        function onLiveChange(){
+          try {
+            var s = findObjectById(window.selectedRoomId); if(!s) return;
+            var nameEl = document.getElementById('input-name'); if (nameEl && document.activeElement === nameEl) { s.name = nameEl.value || s.name; }
+            function clampNum(id, def, minV, maxV){ var el=document.getElementById(id); if(!el) return def; var v=parseFloat(el.value); if(!isFinite(v)) return def; if(minV!=null) v=Math.max(minV,v); if(maxV!=null) v=Math.min(maxV,v); return v; }
+            // Apply changes from active or recently changed inputs
+            var w = clampNum('input-width', s.width||1, 0.5, 1e6);
+            var d = clampNum('input-depth', s.depth||1, 0.5, 1e6);
+            var h = clampNum('input-height', s.height||1, 0.1, 100);
+            var px = clampNum('input-pos-x', s.x||0, -1000, 1000);
+            var pz = clampNum('input-pos-z', s.z||0, -1000, 1000);
+            s.width = w; s.depth = d; s.height = h; s.x = px; s.z = pz;
+            _needsFullRender = true; if (typeof renderLoop==='function') renderLoop();
+          } catch(e){ /* non-fatal */ }
+        }
+        var ids = ['input-name','input-width','input-depth','input-height','input-pos-x','input-pos-z'];
+        ids.forEach(function(id){ var el=document.getElementById(id); if(!el) return; if (!el.__wired){ el.__wired=true; el.addEventListener('input', onLiveChange); el.addEventListener('change', onLiveChange); } });
       }
     } catch(e) { /* non-fatal */ }
   };
@@ -512,8 +646,9 @@
   // Component creation helpers (only if missing)
   if (typeof window.addStairs === 'undefined') window.addStairs = function(){
     var id='stairs_'+Date.now(); var lvl=(typeof currentFloor==='number'? currentFloor:0);
-    var w=1.2,d=3.0; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'stairs'});
-    stairsComponent={ id:id, name:'Stairs', x:s.x, z:s.z, width:w, depth:d, height:3.0, steps:12, type:'stairs', rotation:0, level:lvl };
+    // Design spec: 19 steps over 4 meters total run; keep default height 3.0m
+    var w=1.2,d=4.0; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'stairs'});
+    stairsComponent={ id:id, name:'Stairs', x:s.x, z:s.z, width:w, depth:d, height:3.0, steps:19, type:'stairs', rotation:0, level:lvl };
     window.selectedRoomId = id; if(typeof updateStatus==='function') updateStatus('Added Stairs');
     try { focusCameraOnObject(stairsComponent); } catch(_e) {}
     _needsFullRender=true; startRender();
@@ -582,11 +717,13 @@
     var baseY = (typeof computeRoofBaseHeight==='function') ? computeRoofBaseHeight() : 3.0;
     var r={ id:newId('roof'), name:'Roof', x:s.x, z:s.z, width:Math.max(0.5,fp.width), depth:Math.max(0.5,fp.depth), baseHeight:baseY, height:1.2, level:lvl, type:'roof', roofType:'flat', rotation:0, autoBase:true, autoFit:true };
     (window.roofComponents||[]).push(r); window.selectedRoomId=r.id; updateStatus('Added Roof');
+    // Lazy-load the roof UI dropdown when a roof is first added
+    try { if (typeof window.loadScript==='function') { window.loadScript('js/ui/roofDropdown.js?v=20251026-1'); } } catch(_e) {}
     try { focusCameraOnObject(r); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   if (typeof window.addBalcony === 'undefined') window.addBalcony = function(){
     var lvl=1, w=2.5, d=1.5; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'balcony'});
-    var b={ id:newId('balcony'), name:'Balcony', x:s.x, z:s.z, width:w, depth:d, height:1.0, totalHeight:1.0, wallThickness:0.2, wallHeight:1.0, level:lvl, type:'balcony', rotation:0 };
+    var b={ id:newId('balcony'), name:'Balcony', x:s.x, z:s.z, width:w, depth:d, height:2.2, totalHeight:2.2, wallThickness:0.12, wallHeight:1.0, legWidth:0.18, floorThickness:0.1, slatCount:8, slatWidth:0.12, roofHeight:0.25, level:lvl, type:'balcony', rotation:0 };
     (window.balconyComponents||[]).push(b); window.selectedRoomId=b.id; updateStatus('Added Balcony');
     try { focusCameraOnObject(b); } catch(_e) {}
     _needsFullRender=true; startRender(); };
@@ -600,12 +737,18 @@
             if (!window.__appStarted) { window.__appStarted = true; if (typeof startApp==='function') startApp(); }
           };
           // If a bootstrap loader is coordinating script loads, wait for it
+          var wired = false;
           if (window.__bootPromise && typeof window.__bootPromise.then === 'function') {
-            window.__bootPromise.then(function(){ bootStart(); });
-          } else if (window.__requireBoot) {
-            // Explicit gating: wait for boot-ready event
-            window.addEventListener('gablok:boot-ready', function(){ bootStart(); }, { once:true });
-          } else {
+            wired = true; window.__bootPromise.then(function(){ bootStart(); });
+          }
+          // Always listen for the boot-ready event as a secondary trigger
+          window.addEventListener('gablok:boot-ready', function(){ bootStart(); }, { once:true });
+          if (!wired && window.__requireBoot) {
+            // Boot required but no promise: rely on event
+            // add a safety timer to avoid indefinite waiting if event never fires
+            setTimeout(function(){ bootStart(); }, 4000);
+          }
+          if (!window.__requireBoot && !wired) {
             // No gating configured -> start immediately
             bootStart();
           }

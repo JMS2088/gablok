@@ -7,12 +7,12 @@ function drawStairs(stairs) {
   
   try {
     var selected = selectedRoomId === stairs.id;
-    var stepsCount = Math.max(1, Math.floor(stairs.steps || 19));
+  var stepsCount = Math.max(1, Math.floor(stairs.steps || 19));
     var stepHeight = stairs.height / stepsCount;
-    // Weighted per-step depths so the 10th step (index 9) is 5x deeper to create a landing
+  // Weighted per-step depths so the 9th step (index 8) is the deepest to create a visual landing
     var totalDepth3D = stairs.depth;
     var stepWeights = new Array(stepsCount);
-    for (var wi3=0; wi3<stepsCount; wi3++) stepWeights[wi3] = (wi3 === 9 ? 5 : 1);
+  for (var wi3=0; wi3<stepsCount; wi3++) stepWeights[wi3] = (wi3 === 8 ? 5 : 1);
     var sumW3 = 0; for (var sw3=0; sw3<stepsCount; sw3++) sumW3 += stepWeights[sw3];
     // Build per-step depths and cumulative Z positions from front (-depth/2) to back (+depth/2)
     var perStepDepth = new Array(stepsCount);

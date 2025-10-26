@@ -74,9 +74,13 @@
     if ('requestIdleCallback' in window) requestIdleCallback(fn, { timeout: 1500 }); else setTimeout(fn, 600);
   }
   afterFirstPaint(function(){
-    // Prefetch UI modules and renderers commonly used later
-    ['js/ui/roomPalette.js','js/ui/pricing.js','js/ui/modals.js','js/plan2d/editor.js',
-     'js/render/drawPergola.js','js/render/drawGarage.js','js/render/drawBalcony.js','js/render/drawStairs.js','js/render/drawPool.js','js/render/drawRoof.js']
-    .forEach(prefetch);
+    // Prefetch commonly used assets but stagger them to avoid bursty connection spikes
+    var urls = ['js/ui/roomPalette.js','js/ui/pricing.js','js/ui/modals.js','js/ui/roofDropdown.js','js/plan2d/editor.js',
+      'js/render/drawPergola.js','js/render/drawGarage.js','js/render/drawBalcony.js','js/render/drawStairs.js','js/render/drawPool.js','js/render/drawRoof.js'];
+    var delay = 0;
+    for (var i=0;i<urls.length;i++){
+      (function(u, d){ setTimeout(function(){ prefetch(u); }, d); })(urls[i], delay);
+      delay += 120; // 120ms spacing keeps concurrency low
+    }
   });
 })();

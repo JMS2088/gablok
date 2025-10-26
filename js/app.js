@@ -565,10 +565,48 @@ function renderLoop() {
       }
     }
     if(stairsComponent){ var scY=stairsComponent.height/2; if(withinCull(stairsComponent.x,scY,stairsComponent.z)){ var sScreen=project3D(stairsComponent.x,scY,stairsComponent.z); if(sScreen && !isOffscreenByCenter(sScreen)){ var dxs=stairsComponent.x-camera.targetX, dzs=stairsComponent.z-camera.targetZ; var ds=Math.sqrt(dxs*dxs+dzs*dzs); allObjects.push({object:stairsComponent,type:'stairs',distance:ds,maxHeight:stairsComponent.height}); } } }
-    for (var iB=0;iB<balconyComponents.length;iB++){ var balcony=balconyComponents[iB]; var bCY=balcony.level*3.5+balcony.height/2; if(!withinCull(balcony.x,bCY,balcony.z)) continue; var bScreen=project3D(balcony.x,bCY,balcony.z); if(bScreen && !isOffscreenByCenter(bScreen)){ var dxb=balcony.x-camera.targetX, dzb=balcony.z-camera.targetZ; var db=Math.sqrt(dxb*dxb+dzb*dzb); allObjects.push({object:balcony,type:'balcony',distance:db,maxHeight:balcony.level*3.5+balcony.height}); } }
-    for (var iP=0;iP<pergolaComponents.length;iP++){ var perg=pergolaComponents[iP]; var pCY=perg.totalHeight/2; if(!withinCull(perg.x,pCY,perg.z)) continue; var pScreen=project3D(perg.x,pCY,perg.z); if(pScreen && !isOffscreenByCenter(pScreen)){ var dxp=perg.x-camera.targetX, dzp=perg.z-camera.targetZ; var dp=Math.sqrt(dxp*dxp+dzp*dzp); allObjects.push({object:perg,type:'pergola',distance:dp,maxHeight:perg.totalHeight}); } }
-    for (var iG=0;iG<garageComponents.length;iG++){ var gar=garageComponents[iG]; var gCY=gar.height/2; if(!withinCull(gar.x,gCY,gar.z)) continue; var gScreen=project3D(gar.x,gCY,gar.z); if(gScreen && !isOffscreenByCenter(gScreen)){ var dxg=gar.x-camera.targetX, dzg=gar.z-camera.targetZ; var dg=Math.sqrt(dxg*dxg+dzg*dzg); allObjects.push({object:gar,type:'garage',distance:dg,maxHeight:gar.height}); } }
-  for (var iPl=0;iPl<poolComponents.length;iPl++){ var pol=poolComponents[iPl]; var pCY2=0.2; if(!withinCull(pol.x,pCY2,pol.z)) continue; var plScreen=project3D(pol.x,pCY2,pol.z); if(plScreen && !isOffscreenByCenter(plScreen)){ var dxpl=pol.x-camera.targetX, dzpl=pol.z-camera.targetZ; var dpl=Math.sqrt(dxpl*dxpl+dzpl*dzpl); allObjects.push({object:pol,type:'pool',distance:dpl,maxHeight:0}); } }
+    // Balcony visibility with corner fallback
+    for (var iB=0;iB<balconyComponents.length;iB++){
+      var balcony=balconyComponents[iB]; var bCY=balcony.level*3.5+balcony.height/2; if(!withinCull(balcony.x,bCY,balcony.z)) continue;
+      var bScreen=project3D(balcony.x,bCY,balcony.z); var bVis = (bScreen && !isOffscreenByCenter(bScreen));
+      if (!bVis) {
+        var bhw=balcony.width/2, bhd=balcony.depth/2; var yMid=bCY;
+        var bx=[balcony.x-bhw, balcony.x+bhw], bz=[balcony.z-bhd, balcony.z+bhd];
+        for (var xi=0; xi<2 && !bVis; xi++) for (var zi=0; zi<2 && !bVis; zi++) {
+          var pt = project3D(bx[xi], yMid, bz[zi]); if (pt && !isOffscreenByCenter(pt)) bVis = true;
+        }
+      }
+      if (bVis){ var dxb=balcony.x-camera.targetX, dzb=balcony.z-camera.targetZ; var db=Math.sqrt(dxb*dxb+dzb*dzb); allObjects.push({object:balcony,type:'balcony',distance:db,maxHeight:balcony.level*3.5+balcony.height}); }
+    }
+    // Pergola visibility with corner fallback
+    for (var iP=0;iP<pergolaComponents.length;iP++){
+      var perg=pergolaComponents[iP]; var pCY=perg.totalHeight/2; if(!withinCull(perg.x,pCY,perg.z)) continue;
+      var pScreen=project3D(perg.x,pCY,perg.z); var pVis = (pScreen && !isOffscreenByCenter(pScreen));
+      if (!pVis) {
+        var phw=perg.width/2 || 1.5, phd=perg.depth/2 || 1.5; var yMid=pCY; var px=[perg.x-phw, perg.x+phw], pz=[perg.z-phd, perg.z+phd];
+        for (var xi=0; xi<2 && !pVis; xi++) for (var zi=0; zi<2 && !pVis; zi++) { var pt=project3D(px[xi], yMid, pz[zi]); if(pt && !isOffscreenByCenter(pt)) pVis=true; }
+      }
+      if (pVis){ var dxp=perg.x-camera.targetX, dzp=perg.z-camera.targetZ; var dp=Math.sqrt(dxp*dxp+dzp*dzp); allObjects.push({object:perg,type:'pergola',distance:dp,maxHeight:perg.totalHeight}); }
+    }
+    // Garage visibility with corner fallback
+    for (var iG=0;iG<garageComponents.length;iG++){
+      var gar=garageComponents[iG]; var gCY=gar.height/2; if(!withinCull(gar.x,gCY,gar.z)) continue;
+      var gScreen=project3D(gar.x,gCY,gar.z); var gVis = (gScreen && !isOffscreenByCenter(gScreen));
+      if (!gVis) {
+        var ghw=gar.width/2, ghd=gar.depth/2; var yMid=gCY; var gx=[gar.x-ghw, gar.x+ghw], gz=[gar.z-ghd, gar.z+ghd];
+        for (var xi=0; xi<2 && !gVis; xi++) for (var zi=0; zi<2 && !gVis; zi++) { var pt=project3D(gx[xi], yMid, gz[zi]); if(pt && !isOffscreenByCenter(pt)) gVis=true; }
+      }
+      if (gVis){ var dxg=gar.x-camera.targetX, dzg=gar.z-camera.targetZ; var dg=Math.sqrt(dxg*dxg+dzg*dzg); allObjects.push({object:gar,type:'garage',distance:dg,maxHeight:gar.height}); }
+    }
+    // Pool visibility with corner fallback
+    for (var iPl=0;iPl<poolComponents.length;iPl++){
+      var pol=poolComponents[iPl]; var pCY2=0.2; if(!withinCull(pol.x,pCY2,pol.z)) continue;
+      var plScreen=project3D(pol.x,pCY2,pol.z); var plVis = (plScreen && !isOffscreenByCenter(plScreen));
+      if (!plVis){ var phw2=pol.width/2||1, phd2=pol.depth/2||1; var yMid2=pCY2; var px2=[pol.x-phw2, pol.x+phw2], pz2=[pol.z-phd2, pol.z+phd2];
+        for (var xi=0; xi<2 && !plVis; xi++) for (var zi=0; zi<2 && !plVis; zi++) { var pt=project3D(px2[xi], yMid2, pz2[zi]); if(pt && !isOffscreenByCenter(pt)) plVis=true; }
+      }
+      if (plVis){ var dxpl=pol.x-camera.targetX, dzpl=pol.z-camera.targetZ; var dpl=Math.sqrt(dxpl*dxpl+dzpl*dzpl); allObjects.push({object:pol,type:'pool',distance:dpl,maxHeight:0}); }
+    }
     for (var iR=0;iR<roofComponents.length;iR++){
       var roof=roofComponents[iR];
       // Auto-sync roof base height to building top if flagged

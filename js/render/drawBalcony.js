@@ -13,14 +13,14 @@ function drawBalcony(balcony) {
     var selected = selectedRoomId === balcony.id;
     var strokeColor = selected ? '#007acc' : '#D0D0D0';
     var strokeWidth = selected ? 2 : 1.5;
-    var opacity = currentFloor === 1 ? 1.0 : 0.6;
+    var opacity = currentFloor === (balcony.level || 1) ? 1.0 : 0.6;
     
     ctx.globalAlpha = opacity;
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = strokeWidth;
     
     var legSize = balcony.legWidth;
-    var baseY = balcony.level * 3.5; // Floor level height
+    var baseY = (balcony.level||0) * 3.5; // Floor level height
     var legPositions = [
       {x: balcony.x - balcony.width/2 + legSize/2, z: balcony.z - balcony.depth/2 + legSize/2},
       {x: balcony.x + balcony.width/2 - legSize/2, z: balcony.z - balcony.depth/2 + legSize/2},
@@ -28,6 +28,32 @@ function drawBalcony(balcony) {
       {x: balcony.x - balcony.width/2 + legSize/2, z: balcony.z + balcony.depth/2 - legSize/2}
     ];
     
+    // Draw floor slab (thin)
+    var floorThick = Math.max(0.06, Math.min(0.2, balcony.floorThickness || 0.1));
+    var floorCorners = [
+      {x: balcony.x - balcony.width/2, y: baseY, z: balcony.z - balcony.depth/2},
+      {x: balcony.x + balcony.width/2, y: baseY, z: balcony.z - balcony.depth/2},
+      {x: balcony.x + balcony.width/2, y: baseY, z: balcony.z + balcony.depth/2},
+      {x: balcony.x - balcony.width/2, y: baseY, z: balcony.z + balcony.depth/2},
+      {x: balcony.x - balcony.width/2, y: baseY - floorThick, z: balcony.z - balcony.depth/2},
+      {x: balcony.x + balcony.width/2, y: baseY - floorThick, z: balcony.z - balcony.depth/2},
+      {x: balcony.x + balcony.width/2, y: baseY - floorThick, z: balcony.z + balcony.depth/2},
+      {x: balcony.x - balcony.width/2, y: baseY - floorThick, z: balcony.z + balcony.depth/2}
+    ];
+    ;(function(){
+      var proj=[], ok=true; for(var i=0;i<floorCorners.length;i++){ var p=project3D(floorCorners[i].x,floorCorners[i].y,floorCorners[i].z); if(!p){ ok=false; break; } proj.push(p); }
+      if(ok){
+        // Top face
+        ctx.fillStyle = selected ? 'rgba(0,122,204,0.15)' : 'rgba(180,180,180,0.15)';
+        ctx.beginPath(); ctx.moveTo(proj[0].x,proj[0].y); ctx.lineTo(proj[1].x,proj[1].y); ctx.lineTo(proj[2].x,proj[2].y); ctx.lineTo(proj[3].x,proj[3].y); ctx.closePath(); ctx.fill(); ctx.stroke();
+        // Bottom face (slightly darker)
+        ctx.fillStyle = selected ? 'rgba(0,122,204,0.10)' : 'rgba(160,160,160,0.12)';
+        ctx.beginPath(); ctx.moveTo(proj[4].x,proj[4].y); ctx.lineTo(proj[5].x,proj[5].y); ctx.lineTo(proj[6].x,proj[6].y); ctx.lineTo(proj[7].x,proj[7].y); ctx.closePath(); ctx.fill();
+        // Sides
+        var edges=[[0,4],[1,5],[2,6],[3,7]]; ctx.beginPath(); for(var e=0;e<edges.length;e++){ var ed=edges[e]; ctx.moveTo(proj[ed[0]].x,proj[ed[0]].y); ctx.lineTo(proj[ed[1]].x,proj[ed[1]].y);} ctx.stroke();
+      }
+    })();
+
     // Draw walls
     var wallThickness = balcony.wallThickness;
     var wallHeight = balcony.wallHeight;
@@ -90,18 +116,18 @@ function drawBalcony(balcony) {
       }
     }
     
-    var roofY = baseY + balcony.height;
+  var roofY = baseY + balcony.height;
     
-    // Draw legs
+    // Draw legs (start at floor up to roof)
     for (var legIdx = 0; legIdx < legPositions.length; legIdx++) {
       var legPos = legPositions[legIdx];
       var legHalf = legSize / 2;
       
       var legCorners = [
-        {x: legPos.x - legHalf, y: baseY + wallHeight, z: legPos.z - legHalf},
-        {x: legPos.x + legHalf, y: baseY + wallHeight, z: legPos.z - legHalf},
-        {x: legPos.x + legHalf, y: baseY + wallHeight, z: legPos.z + legHalf},
-        {x: legPos.x - legHalf, y: baseY + wallHeight, z: legPos.z + legHalf},
+        {x: legPos.x - legHalf, y: baseY, z: legPos.z - legHalf},
+        {x: legPos.x + legHalf, y: baseY, z: legPos.z - legHalf},
+        {x: legPos.x + legHalf, y: baseY, z: legPos.z + legHalf},
+        {x: legPos.x - legHalf, y: baseY, z: legPos.z + legHalf},
         {x: legPos.x - legHalf, y: roofY, z: legPos.z - legHalf},
         {x: legPos.x + legHalf, y: roofY, z: legPos.z - legHalf},
         {x: legPos.x + legHalf, y: roofY, z: legPos.z + legHalf},
@@ -136,35 +162,61 @@ function drawBalcony(balcony) {
       }
     }
     
-    // Draw roof/floor
+    // Draw roof (match pergola style: shallow box + slats)
+    var roofHeight = Math.max(0.18, Math.min(0.35, balcony.roofHeight || 0.25));
     var roofCorners = [
       {x: balcony.x - balcony.width/2, y: roofY, z: balcony.z - balcony.depth/2},
       {x: balcony.x + balcony.width/2, y: roofY, z: balcony.z - balcony.depth/2},
       {x: balcony.x + balcony.width/2, y: roofY, z: balcony.z + balcony.depth/2},
-      {x: balcony.x - balcony.width/2, y: roofY, z: balcony.z + balcony.depth/2}
+      {x: balcony.x - balcony.width/2, y: roofY, z: balcony.z + balcony.depth/2},
+      {x: balcony.x - balcony.width/2, y: roofY + roofHeight, z: balcony.z - balcony.depth/2},
+      {x: balcony.x + balcony.width/2, y: roofY + roofHeight, z: balcony.z - balcony.depth/2},
+      {x: balcony.x + balcony.width/2, y: roofY + roofHeight, z: balcony.z + balcony.depth/2},
+      {x: balcony.x - balcony.width/2, y: roofY + roofHeight, z: balcony.z + balcony.depth/2}
     ];
-    
-    var projectedRoof = [];
-    var roofVisible = true;
-    for (var r = 0; r < roofCorners.length; r++) {
-      var p3 = project3D(roofCorners[r].x, roofCorners[r].y, roofCorners[r].z);
-      if (!p3) {
-        roofVisible = false;
-        break;
-      }
-      projectedRoof.push(p3);
-    }
-    
+    var projectedRoof = []; var roofVisible = true;
+    for (var r = 0; r < roofCorners.length; r++) { var p3 = project3D(roofCorners[r].x, roofCorners[r].y, roofCorners[r].z); if(!p3){ roofVisible=false; break; } projectedRoof.push(p3); }
     if (roofVisible) {
+      var roofEdges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
       ctx.fillStyle = selected ? 'rgba(0,122,204,0.2)' : 'rgba(208,208,208,0.15)';
-      ctx.beginPath();
-      ctx.moveTo(projectedRoof[0].x, projectedRoof[0].y);
-      ctx.lineTo(projectedRoof[1].x, projectedRoof[1].y);
-      ctx.lineTo(projectedRoof[2].x, projectedRoof[2].y);
-      ctx.lineTo(projectedRoof[3].x, projectedRoof[3].y);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+      // Draw top and bottom faces
+      ctx.beginPath(); ctx.moveTo(projectedRoof[4].x, projectedRoof[4].y); ctx.lineTo(projectedRoof[5].x, projectedRoof[5].y); ctx.lineTo(projectedRoof[6].x, projectedRoof[6].y); ctx.lineTo(projectedRoof[7].x, projectedRoof[7].y); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(projectedRoof[0].x, projectedRoof[0].y); ctx.lineTo(projectedRoof[1].x, projectedRoof[1].y); ctx.lineTo(projectedRoof[2].x, projectedRoof[2].y); ctx.lineTo(projectedRoof[3].x, projectedRoof[3].y); ctx.closePath(); ctx.fill();
+      // Edges
+      ctx.beginPath(); for (var k=0;k<roofEdges.length;k++){ var e2=roofEdges[k]; ctx.moveTo(projectedRoof[e2[0]].x, projectedRoof[e2[0]].y); ctx.lineTo(projectedRoof[e2[1]].x, projectedRoof[e2[1]].y);} ctx.stroke();
+      // Slats
+      var slats = Math.max(0, Math.min(64, Math.floor(balcony.slatCount != null ? balcony.slatCount : 8)));
+      var slatThickness = Math.max(0.04, Math.min(0.2, balcony.slatWidth || 0.12));
+      if (slats > 0) {
+        var slatSpacing = balcony.width / (slats + 1);
+        for (var si = 0; si < slats; si++) {
+          var slatX = balcony.x - balcony.width/2 + (si + 1) * slatSpacing;
+          var sh = slatThickness;
+          var sw = slatThickness/2;
+          var sc = [
+            {x: slatX - sw, y: roofY + roofHeight, z: balcony.z - balcony.depth/2},
+            {x: slatX + sw, y: roofY + roofHeight, z: balcony.z - balcony.depth/2},
+            {x: slatX + sw, y: roofY + roofHeight, z: balcony.z + balcony.depth/2},
+            {x: slatX - sw, y: roofY + roofHeight, z: balcony.z + balcony.depth/2},
+            {x: slatX - sw, y: roofY + roofHeight + sh, z: balcony.z - balcony.depth/2},
+            {x: slatX + sw, y: roofY + roofHeight + sh, z: balcony.z - balcony.depth/2},
+            {x: slatX + sw, y: roofY + roofHeight + sh, z: balcony.z + balcony.depth/2},
+            {x: slatX - sw, y: roofY + roofHeight + sh, z: balcony.z + balcony.depth/2}
+          ];
+          var ps=[]; var ok2=true; for (var si2=0; si2<sc.length; si2++){ var pp=project3D(sc[si2].x,sc[si2].y,sc[si2].z); if(!pp){ ok2=false; break; } ps.push(pp); }
+          if (ok2){
+            ctx.strokeStyle = selected ? '#007acc' : '#909090';
+            ctx.lineWidth = 1;
+            ctx.fillStyle = selected ? 'rgba(0,85,128,0.3)' : 'rgba(192,192,192,0.5)';
+            // top
+            ctx.beginPath(); ctx.moveTo(ps[4].x,ps[4].y); ctx.lineTo(ps[5].x,ps[5].y); ctx.lineTo(ps[6].x,ps[6].y); ctx.lineTo(ps[7].x,ps[7].y); ctx.closePath(); ctx.fill();
+            // edges
+            var sedges=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+            ctx.beginPath(); for (var se=0; se<sedges.length; se++){ var sE=sedges[se]; ctx.moveTo(ps[sE[0]].x,ps[sE[0]].y); ctx.lineTo(ps[sE[1]].x,ps[sE[1]].y);} ctx.stroke();
+            ctx.strokeStyle = strokeColor; ctx.lineWidth = strokeWidth;
+          }
+        }
+      }
     }
     
     // Always draw handles so all handles are draggable

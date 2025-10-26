@@ -19,6 +19,25 @@
   }
   var ensure = window.loadScript || loadScript;
 
+  // Fallback: fetch JS text and execute synchronously via inline script
+  async function loadByFetch(url){
+    var u = url; try {
+      // Avoid cached broken responses
+      var sep = (u.indexOf('?') === -1) ? '?' : '&';
+      u = u + sep + 'cbf=' + Date.now();
+    } catch(_){}
+    var res = await fetch(u, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Fetch failed '+url+' '+res.status);
+    var code = await res.text();
+    return new Promise(function(resolve){
+      var s = document.createElement('script');
+      // Add sourceURL for better stack traces in devtools
+      try { s.text = code + "\n//# sourceURL=" + url; } catch(_e) { s.appendChild(document.createTextNode(code)); }
+      document.head.appendChild(s);
+      resolve(true);
+    });
+  }
+
   // Race a script load against a timeout; add cache-busting on retries
   function ensureWithTimeout(url, timeoutMs, attempt){
     var u = url;
@@ -33,23 +52,15 @@
     ]).finally(function(){ if (t) clearTimeout(t); });
   }
 
-  // Module plan (ordered)
-  // Mark renderers and nice-to-haves as optional so a failure there doesn't block first paint
+  // Single ordered list (simple, step-by-step). Keep renderers after core.
+  // Keep boot minimal: only hard requirements to render grid + a room and accept input.
   var modules = [
     { label: 'Core engine', url: 'js/core/engine3d.js?v=20251026-1', critical: true },
-    { label: 'UI labels', url: 'js/ui/labels.js?v=20251026-1', critical: true },
-    { label: 'Roof dropdown', url: 'js/ui/roofDropdown.js?v=20251026-1', optional: true },
     { label: 'Loader', url: 'js/boot/loader.js?v=20251026-1', critical: true },
+    { label: 'UI labels', url: 'js/ui/labels.js?v=20251026-1', critical: true },
     { label: 'Room renderer', url: 'js/render/drawRoom.js?v=20251026-2', critical: true },
-    { label: 'Roof renderer', url: 'js/render/drawRoof.js?v=20251026-1', optional: true },
-    { label: 'Stairs renderer', url: 'js/render/drawStairs.js?v=20251026-1', optional: true },
-    { label: 'Pergola renderer', url: 'js/render/drawPergola.js?v=20251026-1', optional: true },
-    { label: 'Garage renderer', url: 'js/render/drawGarage.js?v=20251026-1', optional: true },
-    { label: 'Pool renderer', url: 'js/render/drawPool.js?v=20251026-1', optional: true },
-    { label: 'Balcony renderer', url: 'js/render/drawBalcony.js?v=20251026-1', optional: true },
     { label: 'Input/events', url: 'js/input/events.js?v=20251026-1', critical: true },
-    { label: 'App core', url: 'js/app.js?v=20251026-1', critical: true },
-    { label: 'Smoke test', url: 'js/smoke/smoke3d.js?v=20251026-1', optional: true }
+    { label: 'App core', url: 'js/app.js?v=20251026-1', critical: true }
   ];
 
   try {
@@ -63,44 +74,49 @@
   function tick(label){ try{ if (typeof window.__splashTick==='function') window.__splashTick(label); } catch(e){} }
 
   (async function(){
+    // Enable interactive step mode with ?boot=step
+    var stepMode = false;
+    try { stepMode = /(^|[?&])boot=step(&|$)/.test(String(location.search||'')); } catch(e){}
+
+    var trace = [];
     for (var i=0;i<modules.length;i++){
-      var m = modules[i]; var tries = 0; var maxTries = 2; // one retry on failure
-      while (true){
+      var m = modules[i]; var tries = 0; var maxTries = m.critical ? 2 : 1;
+      var ok = false; var errLast = null; var t0, t1;
+      while (tries < maxTries && !ok){
         try {
           setMsg('Loading '+m.label+'…');
-          var to = m.critical ? 8000 : 4000;
-          await ensureWithTimeout(m.url, to, tries+1);
-          tick(m.label);
-          break;
-        } catch(err){
-          tries++;
-          if (tries > maxTries) {
-            // If optional, log and continue; otherwise stop boot
-            try { console.error('[Boot] Failed to load', m.label, 'from', m.url, err); } catch(e){}
-            if (m.optional) {
-              setMsg(m.label+' unavailable');
-              // still advance the bar for this step so progress completes
-              tick(m.label+' (skipped)');
-              break;
-            } else {
-              setMsg('Failed to load '+m.label+'. Please reload.');
-              // Stop boot; leave splash visible
-              return;
-            }
-          }
-        }
+          t0 = (performance && performance.now) ? performance.now() : Date.now();
+          await ensureWithTimeout(m.url, m.critical ? 6000 : 3000, tries+1);
+          t1 = (performance && performance.now) ? performance.now() : Date.now();
+          ok = true;
+        } catch(err){ errLast = err; tries++; }
       }
+      // Final fallback for critical modules: fetch-and-eval to bypass missing onload events
+      if (!ok && m.critical) {
+        try {
+          setMsg('Recovering '+m.label+'…');
+          t0 = (performance && performance.now) ? performance.now() : Date.now();
+          await loadByFetch(m.url);
+          t1 = (performance && performance.now) ? performance.now() : Date.now();
+          ok = true;
+        } catch(err2){ errLast = errLast || err2; }
+      }
+      var dur = (t1 && t0) ? Math.round(t1 - t0) : null;
+      trace.push({ module: m.label, url: m.url, ok: !!ok, ms: dur, attempts: tries || 1, critical: !!m.critical });
+      try { if (typeof window.__splashMark==='function') window.__splashMark(m.label, (ok? 'Loaded' : (m.optional? 'Skipped' : 'Failed')) + (dur!=null? (' in '+dur+'ms') : '')); } catch(e){}
+      if (ok) tick(m.label); else {
+        try { console[(m.optional? 'warn':'error')]('[Boot] '+(m.optional? 'Optional failed':'Critical failed'), m.label, 'from', m.url, errLast); } catch(_e){}
+        // For critical failures, continue to next to allow app to try starting; splash has a hard cap auto-hide.
+        tick(m.label + (m.optional? ' (skipped)':' (failed)'));
+      }
+      if (stepMode) { try { if (typeof window.__splashWaitForContinue==='function') await window.__splashWaitForContinue(); } catch(_e){} }
     }
-    // All loaded
+    try { if (console && console.table) console.table(trace); else console.log('[Boot trace]', trace); } catch(e){}
+
+    // All attempted; start app if possible
     window.__bootReady = true;
+    try { if (typeof bootResolve === 'function') bootResolve(true); } catch(e){}
     try { window.dispatchEvent(new CustomEvent('gablok:boot-ready')); } catch(e){}
-    try { if (typeof bootResolve==='function') bootResolve(true); } catch(e){}
-    // If engine already defined startApp and DOM ready, it will start via engine3d's gated listener.
-    // As a safety, start if everything is ready and it hasn't started.
-    try {
-      if (document.readyState !== 'loading' && typeof window.startApp==='function' && !window.__appStarted) {
-        window.__appStarted = true; window.startApp();
-      }
-    } catch(e){}
+    try { if (document.readyState !== 'loading' && typeof window.startApp==='function' && !window.__appStarted) { window.__appStarted = true; window.startApp(); } } catch(e){}
   })();
 })();

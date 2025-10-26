@@ -28,6 +28,39 @@
       var openA = document.getElementById('share-open');
       var hint = document.getElementById('share-hint');
       var fallUrl = window.location.href;
+      function normalizeForwardedUrl(urlStr){
+        try{
+          var u = new URL(urlStr);
+          var host = u.hostname;
+          // Detect common forwarded domains
+          var isFwdHost = /app\.github\.dev$|githubpreview\.dev$|gitpod\.io$/.test(host);
+          if (!isFwdHost) return urlStr; // nothing to do
+          var parts = host.split('.');
+          if (parts.length === 0) return urlStr;
+          var sub = parts[0] || '';
+          var rest = parts.slice(1).join('.');
+          var portLabel = '8000';
+          var newSub = sub;
+          if (sub.startsWith(portLabel + '-')) {
+            // already canonical
+            newSub = sub;
+          } else if (sub.endsWith('-' + portLabel)) {
+            // reversed form: <codespace>-8000 -> 8000-<codespace>
+            newSub = portLabel + '-' + sub.slice(0, -(portLabel.length + 1));
+          } else if (/^\d+-.+/.test(sub)) {
+            // starts with some other port: <port>-<codespace> -> 8000-<codespace>
+            var subParts = sub.split('-'); subParts.shift();
+            newSub = portLabel + '-' + subParts.join('-');
+          } else {
+            // plain codespace name -> 8000-<codespace>
+            newSub = portLabel + '-' + sub;
+          }
+          u.hostname = newSub + (rest ? ('.' + rest) : '');
+          // Prefer https for forwarded hosts
+          u.protocol = 'https:';
+          return u.toString();
+        } catch(e){ return urlStr; }
+      }
       // Try to fetch forwarded URL from server helper
       fetch('/__forwarded', { cache: 'no-store' })
         .then(function(r){ return r.ok ? r.json() : null; })
@@ -41,23 +74,8 @@
               best = info.url;
             }
           }
-          // Ensure https for known forwarded hosts and normalize to port 8000 in subdomain
-          try {
-            var u = new URL(best);
-            var isFwdHost = /app\.github\.dev|githubpreview\.dev|gitpod\.io/.test(u.hostname);
-            if (isFwdHost) {
-              if (u.protocol !== 'https:') { u.protocol = 'https:'; }
-              var host = u.hostname;
-              var parts = host.split('.');
-              var sub = parts[0] || '';
-              if (sub && sub.indexOf('-') !== -1) {
-                var subRest = sub.split('-', 1)[1] || '';
-                parts[0] = '8000-' + subRest;
-                u.hostname = parts.join('.');
-              }
-              best = u.toString();
-            }
-          } catch(e) {}
+          // Normalize forwarded host to canonical 8000- form, keep https
+          best = normalizeForwardedUrl(best);
           if (input) { input.value = best; input.focus(); input.select(); }
           if (openA) { openA.href = best; }
           var isForwarded = /app\.github\.dev|githubpreview\.dev|gitpod\.io|codespaces|gitpod/.test(best);

@@ -1,4 +1,4 @@
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import HTTPServer, SimpleHTTPRequestHandler, ThreadingHTTPServer
 import os
 import socket
 import argparse
@@ -7,6 +7,14 @@ from urllib.parse import urlparse
 
 
 class NoCacheHandler(SimpleHTTPRequestHandler):
+    def setup(self):
+        # Apply a per-connection timeout so stuck clients don’t hold server threads forever
+        try:
+            # 30s is generous for large assets while preventing indefinite hangs
+            self.request.settimeout(30)
+        except Exception:
+            pass
+        return super().setup()
     def __init__(self, *args, directory=None, **kwargs):
         # Default to current working directory if not provided
         if directory is None:
@@ -18,6 +26,8 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
+        # Avoid lingering keep-alive connections behind proxies that may timeout
+        self.send_header('Connection', 'close')
         super().end_headers()
 
     def log_message(self, format, *args):
@@ -36,12 +46,17 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         not remote-looking, returns (host, False)."""
         if not host:
             return host, False
-        # Treat these as remote forwarded domains
-        looks_remote = any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io'))
-        if not looks_remote:
-            return host, False
+        # Strip any :port from Host header for normalization
         try:
-            parts = host.split('.')
+            host_no_port = host.split(':', 1)[0]
+        except Exception:
+            host_no_port = host
+        # Treat these as remote forwarded domains
+        looks_remote = any(host_no_port.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io'))
+        if not looks_remote:
+            return host_no_port, False
+        try:
+            parts = host_no_port.split('.')
             sub = parts[0] if parts else ''
             rest = '.'.join(parts[1:]) if len(parts) > 1 else ''
             fixed_port = 8000
@@ -60,7 +75,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             norm = f"{new_sub}.{rest}" if rest else new_sub
             return norm, True
         except Exception:
-            return host, looks_remote
+            return host_no_port, looks_remote
 
     def _maybe_redirect_host(self):
         """If the current Host header is a remote forwarded host in a non-canonical form
@@ -86,7 +101,11 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         # Normalize/redirect bad forwarded host pattern before handling
         if self._maybe_redirect_host():
             return
-        return super().do_HEAD()
+        try:
+            return super().do_HEAD()
+        except (BrokenPipeError, ConnectionResetError):
+            # Client went away (often due to proxy timeout); ignore noise
+            return
 
     def do_GET(self):
         # Normalize/redirect bad forwarded host pattern before handling
@@ -108,8 +127,9 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 local = f"http://localhost:{fixed_port}"
 
                 # Prefer the forwarded host from the Host header if it looks like a remote domain
-                is_forwarded_host = bool(host) and not host.startswith(('0.0.0.0', '127.0.0.1')) and 'localhost' not in host
-                looks_remote = any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io')) if host else False
+                host_no_port = host.split(':', 1)[0] if host else ''
+                is_forwarded_host = bool(host_no_port) and not host_no_port.startswith(('0.0.0.0', '127.0.0.1')) and 'localhost' not in host_no_port
+                looks_remote = any(host_no_port.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io')) if host_no_port else False
                 if is_forwarded_host:
                     # Normalize Codespaces/Gitpod host to canonical 8000-<codespace>.<domain>
                     try:
@@ -160,22 +180,29 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             global _printed_forwarded_host
             if not _printed_forwarded_host:
                 host = self.headers.get('Host') or ''
-                if host and not host.startswith('0.0.0.0') and not host.startswith('127.0.0.1') and 'localhost' not in host:
-                    looks_remote = any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io'))
+                host_no_port = host.split(':', 1)[0] if host else ''
+                if host_no_port and not host_no_port.startswith('0.0.0.0') and not host_no_port.startswith('127.0.0.1') and 'localhost' not in host_no_port:
+                    looks_remote = any(host_no_port.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io'))
                     if looks_remote:
-                        host_norm, _ = self._normalize_remote_host(host)
+                        host_norm, _ = self._normalize_remote_host(host_no_port)
                     else:
-                        host_norm = host
+                        host_norm = host_no_port
                     scheme = 'https' if looks_remote else 'http'
                     print(f"Detected Forwarded URL: {scheme}://{host_norm}", flush=True)
                     _printed_forwarded_host = True
         except Exception:
             pass
-        return super().do_GET()
+        try:
+            return super().do_GET()
+        except (BrokenPipeError, ConnectionResetError):
+            # Client closed connection (e.g., gateway timed out and dropped it)
+            return
 
 
-class ReusableHTTPServer(HTTPServer):
+class ReusableHTTPServer(ThreadingHTTPServer):
+    # Threaded server to serve concurrent requests to avoid proxy 504s under burst loads
     allow_reuse_address = True
+    daemon_threads = True
 
 
 def run(host='0.0.0.0', port=8000, directory=None):

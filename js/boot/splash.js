@@ -4,6 +4,7 @@
   if (window.__splashReady) return; window.__splashReady = true;
   function el(tag, attrs, children){ var n=document.createElement(tag); if(attrs){ for(var k in attrs){ if(k==='style'){ for(var sk in attrs.style){ n.style[sk]=attrs.style[sk]; } } else if(k==='class'){ n.className=attrs[k]; } else { n.setAttribute(k, attrs[k]); } } } (children||[]).forEach(function(c){ if(typeof c==='string') n.appendChild(document.createTextNode(c)); else if(c) n.appendChild(c); }); return n; }
 
+  var __splash = { continueResolve: null };
   function ensureOverlay(){
     var ex = document.getElementById('loading-overlay'); if (ex) return ex;
     var barInner = el('div', { id:'loading-bar-inner', style:{ width:'0%' } });
@@ -12,7 +13,9 @@
     // Per-module list wrapper (optional)
     var listWrap = el('div', { id:'loading-list', style:{ marginTop:'10px', display:'flex', flexDirection:'column', gap:'6px' } }, []);
     var title = el('div', { id:'loading-title', style:{ textAlign:'center', fontWeight:'700', fontSize:'22px', letterSpacing:'0.8px' } }, ['Gablok']);
-    var card = el('div', { id:'loading-card' }, [ title, bar, text, listWrap ]);
+    var btn = el('button', { id:'loading-continue', style:{ display:'none', marginTop:'10px', alignSelf:'center', padding:'6px 12px', border:'1px solid #30363d', borderRadius:'8px', background:'#0f172a', color:'#cbd5e1', cursor:'pointer' } }, ['Continue']);
+    btn.addEventListener('click', function(){ try{ var r=__splash.continueResolve; __splash.continueResolve=null; btn.style.display='none'; if(r) r(true); }catch(e){} });
+    var card = el('div', { id:'loading-card' }, [ title, bar, text, listWrap, btn ]);
     var root = el('div', { id:'loading-overlay' }, [ card ]);
     document.body.appendChild(root);
     return root;
@@ -25,19 +28,19 @@
   // Small public API for external progress ticks (script onload hooks)
   (function(){
     var total=0, loaded=0, lastMsg='';
-    var items = Object.create(null); // label -> {row, bar}
+    var items = Object.create(null); // label -> {row, bar, lab}
     function ensureItem(label){
       try{
         var list = document.getElementById('loading-list'); if(!list) return null;
         if(items[label]) return items[label];
-        var outer = document.createElement('div'); outer.style.display='flex'; outer.style.flexDirection='column'; outer.style.gap='4px';
-        var lab = document.createElement('div'); lab.textContent = label; lab.style.fontSize='12px'; lab.style.color='#8b949e';
+        var outer = document.createElement('div'); outer.style.display='flex'; outer.style.flexDirection='column'; outer.style.gap='4px'; outer.setAttribute('data-label', label);
+        var lab = document.createElement('div'); lab.textContent = label; lab.style.fontSize='12px'; lab.style.color='#8b949e'; lab.id = 'loading-item-label-'+label.replace(/[^a-z0-9_-]+/ig,'_');
         var barO = document.createElement('div'); barO.style.height='6px'; barO.style.border='1px solid #30363d'; barO.style.borderRadius='999px'; barO.style.overflow='hidden'; barO.style.background='#21262d';
         var barI = document.createElement('div'); barI.style.height='100%'; barI.style.width='0%'; barI.style.background='linear-gradient(90deg, #238636, #2ea043)'; barI.style.transition='width .3s ease';
         barO.appendChild(barI);
         outer.appendChild(lab); outer.appendChild(barO);
         list.appendChild(outer);
-        items[label] = { row: outer, bar: barI };
+        items[label] = { row: outer, bar: barI, lab: lab };
         return items[label];
       }catch(e){ return null; }
     }
@@ -45,6 +48,8 @@
     window.__splashSetTotal = function(n){ try{ total = Math.max(total, parseInt(n)||0); setProgress(pct(), lastMsg||'Loading…'); }catch(e){} };
     window.__splashExpect = function(labels){ try{ ensureOverlay(); if(Array.isArray(labels)){ labels.forEach(function(l){ ensureItem(String(l)); }); } }catch(e){} };
     window.__splashTick = function(label){ try{ loaded++; lastMsg = label || lastMsg || 'Loading…'; setProgress(pct(), String(lastMsg)); if(label){ var it = ensureItem(String(label)); if(it && it.bar) it.bar.style.width = '100%'; } }catch(e){} };
+    window.__splashMark = function(label, text){ try{ var it = ensureItem(String(label)); if(it && it.lab){ it.lab.textContent = String(label) + (text ? ' — '+ String(text) : ''); } }catch(e){} };
+    window.__splashWaitForContinue = function(){ try { ensureOverlay(); var b = document.getElementById('loading-continue'); if(!b) return Promise.resolve(true); b.style.display='inline-block'; return new Promise(function(res){ __splash.continueResolve = res; }); } catch(e){ return Promise.resolve(true); } };
     window.__splashSetMessage = function(msg){ lastMsg = msg || lastMsg; setProgress(pct(), lastMsg); };
     window.__splashHide = hideOverlay;
   })();
@@ -81,10 +86,10 @@
       // Hide when the first frame is rendered (preferred), with small safety timeout as fallback
       var hidden=false; function done(){ if(!hidden){ hidden=true; hideOverlay(); } }
       window.addEventListener('gablok:first-render', function(){ setTimeout(done, 100); }, { once:true });
-      // Only use a safety timeout when not running under the gated bootstrap
-      if (!window.__requireBoot) {
-        setTimeout(done, 1800);
-      }
+      // Global safety: hide splash even under gated boot after a hard cap
+      // This prevents rare stalls from leaving users stuck on the splash.
+      var HARD_CAP_MS = 5000;
+      setTimeout(function(){ try { if (!window.__firstFrameEmitted) { done(); } } catch(e){ done(); } }, HARD_CAP_MS);
     })();
   });
 })();
