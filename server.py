@@ -42,13 +42,25 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         if self.path == '/__forwarded':
             try:
                 host = self.headers.get('Host', '')
-                port = getattr(self.server, 'server_port', 8000)
-                local = f"http://localhost:{port}"
+                # Team policy: advertise 8000 as the forwarded port regardless of bind port
+                fixed_port = 8000
+                local = f"http://localhost:{fixed_port}"
 
                 # Prefer the forwarded host from the Host header if it looks like a remote domain
                 is_forwarded_host = bool(host) and not host.startswith(('0.0.0.0', '127.0.0.1')) and 'localhost' not in host
                 looks_remote = any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io')) if host else False
                 if is_forwarded_host:
+                    # Normalize Codespaces/Gitpod host to 8000-<rest> when applicable
+                    try:
+                        if looks_remote:
+                            parts = host.split('.')
+                            sub = parts[0] if parts else ''
+                            rest = '.'.join(parts[1:]) if len(parts) > 1 else ''
+                            if '-' in sub:
+                                sub_rest = sub.split('-', 1)[1]
+                                host = f"{fixed_port}-{sub_rest}.{rest}" if rest else host
+                    except Exception:
+                        pass
                     scheme = 'https' if looks_remote else 'http'
                     url = f"{scheme}://{host}"
                     source = 'host'
@@ -60,13 +72,13 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                     url = ''
                     source = 'env'
                     if codespace:
-                        # https://<port>-<codespace>.<domain>
-                        url = f"https://{port}-{codespace}.{fwd_domain}"
+                        # https://8000-<codespace>.<domain>
+                        url = f"https://{fixed_port}-{codespace}.{fwd_domain}"
                     elif gitpod_base:
                         try:
                             u = urlparse(gitpod_base)
                             host_only = u.netloc
-                            url = f"https://{port}-{host_only}"
+                            url = f"https://{fixed_port}-{host_only}"
                         except Exception:
                             url = ''
                     # If no env-derived URL, fall back to local
@@ -93,8 +105,16 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             if not _printed_forwarded_host:
                 host = self.headers.get('Host') or ''
                 if host and not host.startswith('0.0.0.0') and not host.startswith('127.0.0.1') and 'localhost' not in host:
-                    scheme = 'https' if any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io')) else 'http'
-                    print(f"Detected Forwarded URL: {scheme}://{host}", flush=True)
+                    looks_remote = any(host.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io'))
+                    if looks_remote and '-' in host.split('.')[0]:
+                        # Normalize to 8000- prefix when printing
+                        sub, *rest = host.split('.')
+                        sub_rest = sub.split('-', 1)[1] if '-' in sub else sub
+                        host_norm = f"8000-{sub_rest}." + '.'.join(rest)
+                    else:
+                        host_norm = host
+                    scheme = 'https' if looks_remote else 'http'
+                    print(f"Detected Forwarded URL: {scheme}://{host_norm}", flush=True)
                     _printed_forwarded_host = True
         except Exception:
             pass
@@ -164,12 +184,8 @@ if __name__ == '__main__':
     _printed_forwarded_host = False
     # Defaults from env vars with sensible fallbacks
     default_host = os.environ.get('HOST', '0.0.0.0')
-    # Support common platforms that inject PORT
-    default_port_env = os.environ.get('PORT')
-    try:
-        default_port = int(default_port_env) if default_port_env else 8000
-    except ValueError:
-        default_port = 8000
+    # Team policy: default to 8000 regardless of PORT env to avoid broken forwarded ports
+    default_port = 8000
     default_dir = os.path.abspath(os.environ.get('SERVE_DIR', '.'))
 
     parser = argparse.ArgumentParser(description='Lightweight no-cache static server for development.')

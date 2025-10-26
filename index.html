@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>3D Home Configurator with Pricing</title>
 <link rel="stylesheet" href="css/styles.css?v=20251016-1">
+<style>
+/* Loading splash overlay (lightweight, isolated) */
+#loading-overlay{ position:fixed; inset:0; background:#0d1117; color:#c9d1d9; display:flex; align-items:center; justify-content:center; z-index:10000; transition:opacity .35s ease; }
+#loading-overlay.hide{ opacity:0; pointer-events:none; }
+#loading-card{ width:min(520px, 90vw); padding:24px 20px; background:#161b22; border:1px solid #30363d; border-radius:8px; box-shadow:0 8px 30px rgba(0,0,0,.45); }
+#loading-title{ font-size:18px; font-weight:600; margin-bottom:14px; letter-spacing:.3px; }
+#loading-bar{ width:100%; height:10px; background:#21262d; border-radius:6px; overflow:hidden; border:1px solid #30363d; }
+#loading-bar-inner{ height:100%; width:0%; background:linear-gradient(90deg, #238636, #28a745); transition:width .25s ease; }
+#loading-text{ margin-top:10px; font-size:13px; color:#8b949e; }
+</style>
 </head>
 <body>
 
@@ -288,19 +298,38 @@
 	</div>
 </div>
 
+<!-- Splash/progress overlay (non-deferred to show immediately) -->
+<script src="js/boot/splash.js?v=20251026-2"></script>
+<script>
+// Declare how many core modules we expect so the bar can show real progress
+window.__splashSetTotal && window.__splashSetTotal(15);
+</script>
 <!-- Core 3D engine bootstrap (must load before render/app) -->
-<script src="js/core/engine3d.js?v=20251026-1" defer></script>
+<script src="js/core/engine3d.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Core engine')"></script>
 <!-- Labels are light and needed early for UX -->
 <link rel="preload" as="script" href="js/ui/labels.js?v=20251026-1" />
-<script src="js/ui/labels.js?v=20251026-1" defer></script>
+<script src="js/ui/labels.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('UI labels')"></script>
+<!-- Share badge makes the current URL visible & copyable -->
+<script src="js/ui/shareBadge.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Share badge')"></script>
+<!-- Roof type dropdown UI -->
+<script src="js/ui/roofDropdown.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Roof dropdown')"></script>
 <!-- Staged loader: provides lazy-load stubs and idle prefetching -->
-<script src="js/boot/loader.js?v=20251026-1" defer></script>
+<script src="js/boot/loader.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Loader')"></script>
 <!-- Critical renderer for rooms only (others lazy via loader stubs) -->
-<script src="js/render/drawRoom.js?v=20251026-2" defer></script>
+<script src="js/render/drawRoom.js?v=20251026-2" defer onload="window.__splashTick && __splashTick('Room renderer')"></script>
+<!-- Make renderers eager to guarantee immediate drawing after add -->
+<script src="js/render/drawRoof.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Roof renderer')"></script>
+<script src="js/render/drawStairs.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Stairs renderer')"></script>
+<script src="js/render/drawPergola.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Pergola renderer')"></script>
+<script src="js/render/drawGarage.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Garage renderer')"></script>
+<script src="js/render/drawPool.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Pool renderer')"></script>
+<script src="js/render/drawBalcony.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Balcony renderer')"></script>
+<!-- Input/events module to wire interactions (slims app.js) -->
+<script src="js/input/events.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Input/events')"></script>
 <!-- Core app -->
-<script src="js/app.js?v=20251026-1" defer></script>
+<script src="js/app.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('App core')"></script>
 <!-- In-browser smoke test for grid + room -->
-<script src="js/smoke/smoke3d.js?v=20251026-1" defer></script>
+<script src="js/smoke/smoke3d.js?v=20251026-1" defer onload="window.__splashTick && __splashTick('Smoke test')"></script>
 
 
 <!-- 2D Floor Plan Editor Modal -->

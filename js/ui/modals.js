@@ -9,13 +9,15 @@
   window.showInfo = function(){
     var modal = document.getElementById('info-modal'); if (!modal) return;
     // Hide roof dropdown while modal is open
-    var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.style.display = 'none';
+  var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.style.display = 'none';
+  var roofControls = document.getElementById('roof-controls'); if (roofControls) roofControls.style.display = 'none';
     modal.style.display = 'block';
   };
   window.hideInfo = function(){
     var modal = document.getElementById('info-modal'); if (modal) modal.style.display = 'none';
     // Restore roof dropdown visibility after closing
-    var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.style.display = 'block';
+  var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.style.display = 'block';
+  var roofControls = document.getElementById('roof-controls'); if (roofControls) { var hasRoof = Array.isArray(window.roofComponents) && roofComponents.length>0; roofControls.style.display = hasRoof ? 'inline-flex' : 'none'; }
   };
 
   // Share modal controls
@@ -30,7 +32,32 @@
       fetch('/__forwarded', { cache: 'no-store' })
         .then(function(r){ return r.ok ? r.json() : null; })
         .then(function(info){
-          var best = fallUrl; if (info && info.url) best = info.url;
+          var best = fallUrl;
+          if (info && info.url) {
+            // Prefer server-reported URL unless it points to localhost and our current page is remote
+            var isLocal = /localhost|127\.0\.0\.1/.test(info.url);
+            var pageIsRemote = !/localhost|127\.0\.0\.1/.test(window.location.host);
+            if (!isLocal || !pageIsRemote) {
+              best = info.url;
+            }
+          }
+          // Ensure https for known forwarded hosts and normalize to port 8000 in subdomain
+          try {
+            var u = new URL(best);
+            var isFwdHost = /app\.github\.dev|githubpreview\.dev|gitpod\.io/.test(u.hostname);
+            if (isFwdHost) {
+              if (u.protocol !== 'https:') { u.protocol = 'https:'; }
+              var host = u.hostname;
+              var parts = host.split('.');
+              var sub = parts[0] || '';
+              if (sub && sub.indexOf('-') !== -1) {
+                var subRest = sub.split('-', 1)[1] || '';
+                parts[0] = '8000-' + subRest;
+                u.hostname = parts.join('.');
+              }
+              best = u.toString();
+            }
+          } catch(e) {}
           if (input) { input.value = best; input.focus(); input.select(); }
           if (openA) { openA.href = best; }
           var isForwarded = /app\.github\.dev|githubpreview\.dev|gitpod\.io|codespaces|gitpod/.test(best);

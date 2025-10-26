@@ -166,6 +166,23 @@
       __proj.scale = Math.max(300, (Math.min(canvas ? canvas.height : 800, canvas ? canvas.width : 1200) * 0.6)) / dpr;
     };
   }
+  // Focus camera on an object's center with a distance scaled to its size
+  if (typeof window.focusCameraOnObject === 'undefined') {
+    window.focusCameraOnObject = function focusCameraOnObject(obj){
+      try {
+        if (!obj) return;
+        var w = Math.max(0.5, obj.width || 2);
+        var d = Math.max(0.5, obj.depth || 2);
+        camera.targetX = obj.x || 0;
+        camera.targetZ = obj.z || 0;
+        // Pad distance so object fills a good portion of the view
+        camera.distance = Math.max(8, Math.max(w, d) * 2 + 5);
+        // Reset pan to center screen
+        pan.x = 0; pan.y = 0;
+        _camLastMoveTime = (performance && performance.now) ? performance.now() : Date.now();
+      } catch(e) { /* non-fatal */ }
+    };
+  }
   if (typeof window.project3D === 'undefined') {
     window.project3D = function project3D(x,y,z){
       if (!canvas) return null;
@@ -459,7 +476,27 @@
       try{ createInitialRoom(); }catch(e){}
       try{ if(typeof setupEvents==='function') setupEvents(); }catch(e){}
       try{ if(typeof fitView==='function') fitView(); }catch(e){}
+      // Smoothly animate the camera into position on first load
+      var targetYaw = camera.yaw, targetPitch = camera.pitch, targetDist = camera.distance;
+      var startYaw = targetYaw - 0.35;
+      var startPitch = Math.min(0.0, targetPitch + 0.25);
+      var startDist = Math.min(targetDist + 10, targetDist * 1.6);
+      camera.yaw = startYaw; camera.pitch = startPitch; camera.distance = startDist;
+      var t0 = (performance && performance.now)? performance.now(): Date.now();
+      var dur = 650; // ms
+      function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+      function animateIn(){
+        var now = (performance && performance.now)? performance.now(): Date.now();
+        var t = Math.min(1, (now - t0) / dur);
+        var e = easeOutCubic(t);
+        camera.yaw = startYaw + (targetYaw - startYaw) * e;
+        camera.pitch = startPitch + (targetPitch - startPitch) * e;
+        camera.distance = startDist + (targetDist - startDist) * e;
+        _camLastMoveTime = now;
+        if (t < 1) { requestAnimationFrame(animateIn); }
+      }
       startRender();
+      requestAnimationFrame(animateIn);
       // One-time report after first ticks
       setTimeout(function(){
         try {
@@ -477,29 +514,62 @@
     var id='stairs_'+Date.now(); var lvl=(typeof currentFloor==='number'? currentFloor:0);
     var w=1.2,d=3.0; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'stairs'});
     stairsComponent={ id:id, name:'Stairs', x:s.x, z:s.z, width:w, depth:d, height:3.0, steps:12, type:'stairs', rotation:0, level:lvl };
-    window.selectedRoomId = id; if(typeof updateStatus==='function') updateStatus('Added Stairs'); _needsFullRender=true; startRender();
+    window.selectedRoomId = id; if(typeof updateStatus==='function') updateStatus('Added Stairs');
+    try { focusCameraOnObject(stairsComponent); } catch(_e) {}
+    _needsFullRender=true; startRender();
   };
   function newId(prefix){ return prefix+'_'+Date.now()+Math.random().toString(36).slice(2); }
   if (typeof window.addPergola === 'undefined') window.addPergola = function(){
     var lvl=0, w=3, d=3; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'pergola'});
     var p={ id:newId('pergola'), name:'Pergola', x:s.x, z:s.z, width:w, depth:d, height:2.2, totalHeight:2.2, legWidth:0.25, slatCount:8, slatWidth:0.12, level:lvl, type:'pergola', rotation:0 };
-    (window.pergolaComponents||[]).push(p); window.selectedRoomId=p.id; updateStatus('Added Pergola'); _needsFullRender=true; startRender(); };
+    (window.pergolaComponents||[]).push(p); window.selectedRoomId=p.id; updateStatus('Added Pergola');
+    try { focusCameraOnObject(p); } catch(_e) {}
+    _needsFullRender=true; startRender(); };
   if (typeof window.addGarage === 'undefined') window.addGarage = function(){
     var lvl=0, w=3.2, d=5.5; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'garage'});
     var g={ id:newId('garage'), name:'Garage', x:s.x, z:s.z, width:w, depth:d, height:2.6, level:lvl, type:'garage', rotation:0 };
-    (window.garageComponents||[]).push(g); window.selectedRoomId=g.id; updateStatus('Added Garage'); _needsFullRender=true; startRender(); };
+    (window.garageComponents||[]).push(g); window.selectedRoomId=g.id; updateStatus('Added Garage');
+    try { focusCameraOnObject(g); } catch(_e) {}
+    _needsFullRender=true; startRender(); };
   if (typeof window.addPool === 'undefined') window.addPool = function(){
     var lvl=0, w=4, d=2; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'pool'});
     var p={ id:newId('pool'), name:'Pool', x:s.x, z:s.z, width:w, depth:d, height:1.5, level:lvl, type:'pool', rotation:0 };
-    (window.poolComponents||[]).push(p); window.selectedRoomId=p.id; updateStatus('Added Pool'); _needsFullRender=true; startRender(); };
+    (window.poolComponents||[]).push(p); window.selectedRoomId=p.id; updateStatus('Added Pool');
+    try { focusCameraOnObject(p); } catch(_e) {}
+    _needsFullRender=true; startRender(); };
+  // Compute the Y base where roofs should sit: on top of first floor if any rooms exist there, otherwise on top of ground floor
+  if (typeof window.computeRoofBaseHeight === 'undefined') window.computeRoofBaseHeight = function(){
+    try {
+      var lvl0 = [], lvl1 = [];
+      for (var i=0;i<(allRooms||[]).length;i++){
+        var r = allRooms[i]; if(!r) continue; var lv = (r.level||0); if (lv===1) lvl1.push(r); else if (lv===0) lvl0.push(r);
+      }
+      if (lvl1.length>0){
+        var maxH1 = 0; for (var j=0;j<lvl1.length;j++){ var h = Math.max(0.5, lvl1[j].height||3.0); if (h>maxH1) maxH1 = h; }
+        return 3.5 + maxH1;
+      }
+      if (lvl0.length>0){
+        var maxH0 = 0; for (var k=0;k<lvl0.length;k++){ var h0 = Math.max(0.5, lvl0[k].height||3.0); if (h0>maxH0) maxH0 = h0; }
+        return maxH0;
+      }
+      // Fallback if no rooms present
+      return 3.0;
+    } catch(e){ return 3.0; }
+  };
   if (typeof window.addRoof === 'undefined') window.addRoof = function(){
     var lvl=0, w=6, d=6; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'roof'});
-    var r={ id:newId('roof'), name:'Roof', x:s.x, z:s.z, width:w, depth:d, baseHeight:3.0, height:0.6, level:lvl, type:'roof', roofType:'flat', rotation:0 };
-    (window.roofComponents||[]).push(r); window.selectedRoomId=r.id; updateStatus('Added Roof'); _needsFullRender=true; startRender(); };
+    // Place roof atop first floor if present, else above ground floor rooms
+    var baseY = (typeof computeRoofBaseHeight==='function') ? computeRoofBaseHeight() : 3.0;
+    var r={ id:newId('roof'), name:'Roof', x:s.x, z:s.z, width:Math.max(0.5,w), depth:Math.max(0.5,d), baseHeight:baseY, height:0.6, level:lvl, type:'roof', roofType:'flat', rotation:0, autoBase:true };
+    (window.roofComponents||[]).push(r); window.selectedRoomId=r.id; updateStatus('Added Roof');
+    try { focusCameraOnObject(r); } catch(_e) {}
+    _needsFullRender=true; startRender(); };
   if (typeof window.addBalcony === 'undefined') window.addBalcony = function(){
     var lvl=1, w=2.5, d=1.5; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'balcony'});
     var b={ id:newId('balcony'), name:'Balcony', x:s.x, z:s.z, width:w, depth:d, height:1.0, totalHeight:1.0, wallThickness:0.2, wallHeight:1.0, level:lvl, type:'balcony', rotation:0 };
-    (window.balconyComponents||[]).push(b); window.selectedRoomId=b.id; updateStatus('Added Balcony'); _needsFullRender=true; startRender(); };
+    (window.balconyComponents||[]).push(b); window.selectedRoomId=b.id; updateStatus('Added Balcony');
+    try { focusCameraOnObject(b); } catch(_e) {}
+    _needsFullRender=true; startRender(); };
 
   // Failsafe: ensure app starts once DOM is ready even if other listeners fail
   try {
