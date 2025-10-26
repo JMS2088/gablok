@@ -1455,8 +1455,7 @@ document.addEventListener('DOMContentLoaded', function(){
     }
   };
 
-  // Populate palette items
-  setupPalette();
+  // Room palette is now lazy-loaded on first open (no eager setup here)
 
   // Wire SVG floorplan upload input
   var uploadSvg = document.getElementById('upload-svg-floorplan');
