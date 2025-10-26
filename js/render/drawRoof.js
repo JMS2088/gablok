@@ -183,7 +183,7 @@ function drawRoof(roof) {
 
 function drawHandlesForRoof(roof, apexY){
   try {
-    if (window.__focusActive && window.__focusId && roof.id !== window.__focusId) return;
+    var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(roof.id) : 1.0;
     var isActive = selectedRoomId === roof.id;
     var baseY = (typeof roof.baseHeight==='number' && isFinite(roof.baseHeight)) ? roof.baseHeight : 3.0;
     var hgt = (typeof roof.height==='number' && isFinite(roof.height)) ? roof.height : 1.0;
@@ -201,10 +201,12 @@ function drawHandlesForRoof(roof, apexY){
     for (var i=0;i<handles.length;i++){
       var h=handles[i]; var s=project3D(h.x,h.y,h.z); if(!s) continue; if(cScreen){ var dx=cScreen.x-s.x, dy=cScreen.y-s.y; var L=Math.hypot(dx,dy)||1; s.x+=(dx/L)*20; s.y+=(dy/L)*20; }
       var rr = (typeof computeHandleRadius==='function')? computeHandleRadius(s,HANDLE_RADIUS): HANDLE_RADIUS;
+      ctx.save(); var prevGA = ctx.globalAlpha; ctx.globalAlpha = prevGA * Math.max(0, Math.min(1, objA * (typeof window.__uiFadeAlpha==='number'? window.__uiFadeAlpha:1)));
       drawHandle(s, h.type, h.label, isActive, rr);
+      ctx.restore();
       if (Array.isArray(resizeHandles)) resizeHandles.push({ screenX:s.x-rr, screenY:s.y-rr, width:rr*2, height:rr*2, type:h.type, roomId:roof.id });
     }
     // Height handle above center remains
-    var sH = project3D(roof.x, yMid + 0.5, roof.z); if (sH) { var rrH = (typeof computeHandleRadius==='function')? computeHandleRadius(sH,HANDLE_RADIUS): HANDLE_RADIUS; drawHandle(sH, 'height', 'Y', isActive, rrH); if (Array.isArray(resizeHandles)) resizeHandles.push({ screenX:sH.x-rrH, screenY:sH.y-rrH, width:rrH*2, height:rrH*2, type:'height', roomId:roof.id }); }
+    var sH = project3D(roof.x, yMid + 0.5, roof.z); if (sH) { var rrH = (typeof computeHandleRadius==='function')? computeHandleRadius(sH,HANDLE_RADIUS): HANDLE_RADIUS; ctx.save(); var prevGAH = ctx.globalAlpha; ctx.globalAlpha = prevGAH * Math.max(0, Math.min(1, objA * (typeof window.__uiFadeAlpha==='number'? window.__uiFadeAlpha:1))); drawHandle(sH, 'height', 'Y', isActive, rrH); ctx.restore(); if (Array.isArray(resizeHandles)) resizeHandles.push({ screenX:sH.x-rrH, screenY:sH.y-rrH, width:rrH*2, height:rrH*2, type:'height', roomId:roof.id }); }
   } catch(e){ console.error('Roof handle error:', e); }
 }

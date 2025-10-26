@@ -86,7 +86,7 @@ function drawRoom(room) {
 function drawHandlesForRoom(room) {
   try {
     if (!room) return;
-    if (window.__focusActive && window.__focusId && room.id !== window.__focusId) return; // hide other handles during focus
+    var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(room.id) : 1.0;
     var isActive = selectedRoomId === room.id;
     var levelY = (room.level || 0) * 3.5;
     var handleY = levelY + (room.height || 3) * 0.5; // mid-height of object
@@ -120,8 +120,11 @@ function drawHandlesForRoom(room) {
       if (cScreen) {
         var dx = (cScreen.x - s.x), dy = (cScreen.y - s.y); var L = Math.hypot(dx,dy)||1; var ux = dx/L, uy = dy/L; s.x += ux*20; s.y += uy*20;
       }
-      var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(s, HANDLE_RADIUS) : HANDLE_RADIUS;
+  var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(s, HANDLE_RADIUS) : HANDLE_RADIUS;
+  // Apply per-object alpha to handle drawing
+  ctx.save(); var prevGA = ctx.globalAlpha; ctx.globalAlpha = prevGA * Math.max(0, Math.min(1, objA * (typeof window.__uiFadeAlpha==='number'? window.__uiFadeAlpha:1)));
       drawHandle(s, h.type, h.label, isActive, r);
+  ctx.restore();
       resizeHandles.push({
         screenX: s.x - r,
         screenY: s.y - r,

@@ -4,7 +4,7 @@
 
 function drawHandlesForPergola(pergola) {
   try {
-    if (window.__focusActive && window.__focusId && pergola.id !== window.__focusId) return;
+    var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(pergola.id) : 1.0;
     var isActive = selectedRoomId === pergola.id;
     var handleY = (pergola.totalHeight!=null ? pergola.totalHeight : (pergola.height||2.2)) * 0.5;
     var handleData = [
@@ -21,8 +21,11 @@ function drawHandlesForPergola(pergola) {
       if (!screen) continue;
   if (cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
 
-      var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, HANDLE_RADIUS) : HANDLE_RADIUS;
-      drawHandle(screen, handle.type, handle.label, isActive, r);
+  var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, HANDLE_RADIUS) : HANDLE_RADIUS;
+  // Apply per-object and global UI fade alpha to handle drawing
+  ctx.save(); var prevGA = ctx.globalAlpha; ctx.globalAlpha = prevGA * Math.max(0, Math.min(1, objA * (typeof window.__uiFadeAlpha==='number'? window.__uiFadeAlpha:1)));
+  drawHandle(screen, handle.type, handle.label, isActive, r);
+  ctx.restore();
 
       resizeHandles.push({
         screenX: screen.x - r,

@@ -253,10 +253,8 @@
       else if (type && /depth/.test(type)) color = '#10b981'; // green for Z
       else if (type === 'height') color = '#f59e0b'; // amber
       else if (type === 'rotate') color = '#8b5cf6'; // violet
-      // No base dimming; rely solely on UI fade alpha so handles are fully opaque while active
-      var alpha = 1.0;
-      var uiA = (typeof window.__uiFadeAlpha === 'number' ? window.__uiFadeAlpha : 1.0);
-  ctx.globalAlpha = Math.max(0, Math.min(1, alpha * uiA));
+      // Caller controls alpha (per-object × global fade). Respect current globalAlpha without overriding.
+      ctx.globalAlpha = Math.max(0, Math.min(1, ctx.globalAlpha));
       ctx.beginPath(); ctx.arc(screenPt.x, screenPt.y, r, 0, Math.PI*2); ctx.fillStyle = color; ctx.fill();
       ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
       // glyph/label
@@ -306,58 +304,60 @@
   if (typeof window.createRoom === 'undefined') {
     window.createRoom = function(x,z,level){ var id='room_'+Date.now()+'_'+Math.random().toString(36).slice(2); return { id:id, name:'Room', x:x||0, z:z||0, width:4, depth:3, height:3, level:(level||0), type:'room', rotation:0 }; };
   }
+  // Generic free-spot finder that considers all object footprints on a level and snaps to grid
+  function __collectFootprints(level){
+    var fps = [];
+    try {
+      // Rooms
+      for (var i=0;i<(allRooms||[]).length;i++){ var r=allRooms[i]; if(!r) continue; if((r.level||0)!==level) continue; fps.push({x:r.x||0, z:r.z||0, w:r.width||0, d:r.depth||0}); }
+      // Stairs
+      if (stairsComponent && (stairsComponent.level||0)===level) fps.push({x:stairsComponent.x||0, z:stairsComponent.z||0, w:stairsComponent.width||0, d:stairsComponent.depth||0});
+      // Arrays
+      function addArray(arr){ for (var j=0;j<(arr||[]).length;j++){ var o=arr[j]; if(!o) continue; var lv=(o.level!=null? o.level : 0); if(lv!==level) continue; fps.push({x:o.x||0, z:o.z||0, w:o.width||0, d:o.depth||0}); } }
+      addArray(pergolaComponents); addArray(garageComponents); addArray(poolComponents); addArray(roofComponents); addArray(balconyComponents);
+      // furniture not included by default (small), but harmless to include
+      // addArray(furnitureItems);
+    } catch(e) {}
+    return fps;
+  }
+  function __aabbOverlap(ax0,ax1,az0,az1, bx0,bx1,bz0,bz1){ return (ax0 < bx1 && ax1 > bx0 && az0 < bz1 && az1 > bz0); }
+  function findFreeSpotForFootprint(width, depth, level){
+    try {
+      var grid = (typeof GRID_SPACING==='number' && GRID_SPACING>0)? GRID_SPACING : 1;
+      var halfW = Math.max(0.25, (width||1)/2);
+      var halfD = Math.max(0.25, (depth||1)/2);
+      var startX = (typeof camera==='object' ? camera.targetX : 0);
+      var startZ = (typeof camera==='object' ? camera.targetZ : 0);
+      var footprints = __collectFootprints(level);
+      function collides(nx,nz){
+        var ax0 = nx - halfW, ax1 = nx + halfW, az0 = nz - halfD, az1 = nz + halfD;
+        for (var i=0;i<footprints.length;i++){
+          var f=footprints[i]; var bx0=f.x - (f.w||0)/2, bx1=f.x + (f.w||0)/2, bz0=f.z - (f.d||0)/2, bz1=f.z + (f.d||0)/2;
+          if (__aabbOverlap(ax0,ax1,az0,az1, bx0,bx1,bz0,bz1)) return true;
+        }
+        return false;
+      }
+      function snapCenter(x,z){ try { var s=applySnap({x:x,z:z,width:width||1,depth:depth||1,level:level}); return {x:s.x,z:s.z}; } catch(e){ return {x:x,z:z}; } }
+      var seen = new Set(); var maxRings = 30; // spiral search
+      function keyFor(x,z){ return (Math.round(x/grid)*grid)+'|'+(Math.round(z/grid)*grid); }
+      for (var ring=0; ring<=maxRings; ring++){
+        for (var dx=-ring; dx<=ring; dx++){
+          for (var dz=-ring; dz<=ring; dz++){
+            if (Math.max(Math.abs(dx),Math.abs(dz)) !== ring) continue;
+            var cx = startX + dx*grid, cz = startZ + dz*grid;
+            var s = snapCenter(cx, cz); var k = keyFor(s.x, s.z); if (seen.has(k)) continue; seen.add(k);
+            if (!collides(s.x, s.z)) return { x: s.x, z: s.z };
+          }
+        }
+      }
+      var fb = snapCenter(startX, startZ); return { x: fb.x, z: fb.z };
+    } catch(e){ var a=Math.random()*Math.PI*2; var r=0.5+Math.random()*2; return { x:(camera.targetX||0)+Math.cos(a)*r, z:(camera.targetZ||0)+Math.sin(a)*r }; }
+  }
   if (typeof window.findFreeSpot === 'undefined') {
     window.findFreeSpot = function(room){
-      try {
-        var grid = (typeof GRID_SPACING==='number' && GRID_SPACING>0)? GRID_SPACING : 1;
-        var level = (room && typeof room.level==='number') ? room.level : (typeof currentFloor==='number'? currentFloor:0);
-        var halfW = Math.max(0.25, (room && room.width ? room.width : 1)/2);
-        var halfD = Math.max(0.25, (room && room.depth ? room.depth : 1)/2);
-
-        function snapCenter(x,z){
-          try { var s = applySnap({x:x, z:z, width: (room.width||1), depth:(room.depth||1), level: level, type:'room'}); return {x:s.x, z:s.z}; } catch(e){ return {x:x, z:z}; }
-        }
-        function aabbOverlap(ax0,ax1,az0,az1, bx0,bx1,bz0,bz1){
-          // Overlap if strictly intersecting; touching edges is allowed (no overlap)
-          return (ax0 < bx1 && ax1 > bx0 && az0 < bz1 && az1 > bz0);
-        }
-        function collides(nx,nz){
-          var ax0 = nx - halfW, ax1 = nx + halfW, az0 = nz - halfD, az1 = nz + halfD;
-          for (var i=0;i<allRooms.length;i++){
-            var r = allRooms[i]; if(!r) continue; if ((r.level||0)!==level) continue;
-            var bx0 = (r.x||0) - (r.width||0)/2, bx1 = (r.x||0) + (r.width||0)/2;
-            var bz0 = (r.z||0) - (r.depth||0)/2, bz1 = (r.z||0) + (r.depth||0)/2;
-            if (aabbOverlap(ax0,ax1,az0,az1, bx0,bx1,bz0,bz1)) return true;
-          }
-          return false;
-        }
-
-        var startX = (typeof camera==='object' ? camera.targetX : 0);
-        var startZ = (typeof camera==='object' ? camera.targetZ : 0);
-
-        var seen = new Set();
-        function keyFor(x,z){ return (Math.round(x/grid)*grid)+'|'+(Math.round(z/grid)*grid); }
-
-        // Spiral search outwards on the grid up to a reasonable radius
-        var maxRings = 30; // ~1800 candidates worst case
-        for (var ring=0; ring<=maxRings; ring++){
-          for (var dx=-ring; dx<=ring; dx++){
-            for (var dz=-ring; dz<=ring; dz++){
-              if (Math.max(Math.abs(dx),Math.abs(dz)) !== ring) continue; // only border of the square ring
-              var cx = startX + dx*grid, cz = startZ + dz*grid;
-              var snapped = snapCenter(cx, cz);
-              var k = keyFor(snapped.x, snapped.z); if (seen.has(k)) continue; seen.add(k);
-              if (!collides(snapped.x, snapped.z)) return { x: snapped.x, z: snapped.z };
-            }
-          }
-        }
-        // Fallback to a nearby snapped spot if none found
-        var fallback = snapCenter(startX, startZ);
-        return { x: fallback.x, z: fallback.z };
-      } catch(e) {
-        // Simple random fallback if anything goes wrong
-        var a=Math.random()*Math.PI*2; var r=0.5+Math.random()*2; return { x:camera.targetX+Math.cos(a)*r, z:camera.targetZ+Math.sin(a)*r };
-      }
+      var lvl = (room && typeof room.level==='number') ? room.level : (typeof currentFloor==='number'? currentFloor:0);
+      var w = (room && room.width) || 1, d = (room && room.depth) || 1;
+      return findFreeSpotForFootprint(w, d, lvl);
     };
   }
   if (typeof window.createInitialRoom === 'undefined') {
@@ -635,7 +635,7 @@
   if (typeof window.addStairs === 'undefined') window.addStairs = function(){
     var id='stairs_'+Date.now(); var lvl=(typeof currentFloor==='number'? currentFloor:0);
     // Design spec: 19 steps over 4 meters total run; keep default height 3.0m
-    var w=1.2,d=4.0; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'stairs'});
+    var w=1.2,d=4.0; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'stairs'});
     stairsComponent={ id:id, name:'Stairs', x:s.x, z:s.z, width:w, depth:d, height:3.0, steps:19, type:'stairs', rotation:0, level:lvl };
     window.selectedRoomId = id; if(typeof updateStatus==='function') updateStatus('Added Stairs');
     try { focusCameraOnObject(stairsComponent); } catch(_e) {}
@@ -643,19 +643,19 @@
   };
   function newId(prefix){ return prefix+'_'+Date.now()+Math.random().toString(36).slice(2); }
   if (typeof window.addPergola === 'undefined') window.addPergola = function(){
-    var lvl=0, w=3, d=3; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'pergola'});
+    var lvl=0, w=3, d=3; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'pergola'});
     var p={ id:newId('pergola'), name:'Pergola', x:s.x, z:s.z, width:w, depth:d, height:2.2, totalHeight:2.2, legWidth:0.25, slatCount:8, slatWidth:0.12, level:lvl, type:'pergola', rotation:0 };
     (window.pergolaComponents||[]).push(p); window.selectedRoomId=p.id; updateStatus('Added Pergola');
     try { focusCameraOnObject(p); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   if (typeof window.addGarage === 'undefined') window.addGarage = function(){
-    var lvl=0, w=3.2, d=5.5; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'garage'});
+    var lvl=0, w=3.2, d=5.5; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'garage'});
     var g={ id:newId('garage'), name:'Garage', x:s.x, z:s.z, width:w, depth:d, height:2.6, level:lvl, type:'garage', rotation:0 };
     (window.garageComponents||[]).push(g); window.selectedRoomId=g.id; updateStatus('Added Garage');
     try { focusCameraOnObject(g); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   if (typeof window.addPool === 'undefined') window.addPool = function(){
-    var lvl=0, w=4, d=2; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'pool'});
+    var lvl=0, w=4, d=2; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'pool'});
     var p={ id:newId('pool'), name:'Pool', x:s.x, z:s.z, width:w, depth:d, height:1.5, level:lvl, type:'pool', rotation:0 };
     (window.poolComponents||[]).push(p); window.selectedRoomId=p.id; updateStatus('Added Pool');
     try { focusCameraOnObject(p); } catch(_e) {}
@@ -710,7 +710,7 @@
     try { focusCameraOnObject(r); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   if (typeof window.addBalcony === 'undefined') window.addBalcony = function(){
-    var lvl=1, w=2.5, d=1.5; var s=applySnap({x:camera.targetX,z:camera.targetZ,width:w,depth:d,level:lvl,type:'balcony'});
+    var lvl=1, w=2.5, d=1.5; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'balcony'});
     var b={ id:newId('balcony'), name:'Balcony', x:s.x, z:s.z, width:w, depth:d, height:2.2, totalHeight:2.2, wallThickness:0.12, wallHeight:1.0, legWidth:0.18, floorThickness:0.1, slatCount:8, slatWidth:0.12, roofHeight:0.25, level:lvl, type:'balcony', rotation:0 };
     (window.balconyComponents||[]).push(b); window.selectedRoomId=b.id; updateStatus('Added Balcony');
     try { focusCameraOnObject(b); } catch(_e) {}

@@ -59,7 +59,6 @@
 
       function placeLabelFor(box){
         if(!box || !box.id) return;
-        if (focusId && box.id !== focusId) return; // hide non-focused labels during focus
         var y = anchorYFor(box);
         var p = project3D(box.x||0, y, box.z||0); if(!p) return;
         var dpr = window.devicePixelRatio||1;
@@ -101,7 +100,9 @@
         var smY = prev.y + (targetTop - prev.y) * k;
         window.__labelCache[box.id] = { x: smX, y: smY };
         var left = smX, top = smY;
-        el.style.left = left.toFixed(2) + 'px'; el.style.top = top.toFixed(2) + 'px'; el.style.opacity = String(Math.max(0, Math.min(1, (window.__uiFadeAlpha||1.0))));
+  var objA = (typeof window.getObjectUiAlpha === 'function') ? window.getObjectUiAlpha(box.id) : 1.0;
+  var globalA = Math.max(0, Math.min(1, (window.__uiFadeAlpha||1.0)));
+  el.style.left = left.toFixed(2) + 'px'; el.style.top = top.toFixed(2) + 'px'; el.style.opacity = String(Math.max(0, Math.min(1, objA * globalA)));
 
         // Ensure label doesn't sit on top of this object's handles: nudge away from overlapping handle circles
         try {
@@ -159,7 +160,7 @@
           eb.style.left = (left + 32 + 25) + 'px';
           eb.style.top = top + 'px';
         }
-  eb.style.opacity = String(Math.max(0, Math.min(1, (window.__uiFadeAlpha||1.0))));
+  eb.style.opacity = String(Math.max(0, Math.min(1, objA * globalA)));
         seen[box.id] = true;
       }
 

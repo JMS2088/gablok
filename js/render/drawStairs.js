@@ -120,7 +120,7 @@ function drawStairs(stairs) {
 
 function drawHandlesForStairs(stairs) {
   try {
-    if (window.__focusActive && window.__focusId && stairs.id !== window.__focusId) return;
+    var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(stairs.id) : 1.0;
     var isActive = selectedRoomId === stairs.id;
     var handleY = (stairs.height||3.0) * 0.5;
     
@@ -147,12 +147,14 @@ function drawHandlesForStairs(stairs) {
     
     for (var i = 0; i < stairHandles.length; i++) {
       var handle = stairHandles[i];
-  var screen = project3D(handle.x, handle.y, handle.z);
+      var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) continue;
-  if (handle.type !== 'rotate' && cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
+      if (handle.type !== 'rotate' && cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
 
       var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, HANDLE_RADIUS) : HANDLE_RADIUS;
+      ctx.save(); var prevGA = ctx.globalAlpha; ctx.globalAlpha = prevGA * Math.max(0, Math.min(1, objA * (typeof window.__uiFadeAlpha==='number'? window.__uiFadeAlpha:1)));
       drawHandle(screen, handle.type, handle.label, isActive, r);
+      ctx.restore();
       
       resizeHandles.push({
         screenX: screen.x - r,

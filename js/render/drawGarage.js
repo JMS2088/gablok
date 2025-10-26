@@ -152,7 +152,7 @@ function drawGarage(garage) {
 
 function drawHandlesForGarage(garage) {
   try {
-    if (window.__focusActive && window.__focusId && garage.id !== window.__focusId) return;
+    var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(garage.id) : 1.0;
     var isActive = selectedRoomId === garage.id;
     dbg('Drawing garage handles');
     // Set constants
@@ -193,7 +193,9 @@ function drawHandlesForGarage(garage) {
 
       var base = (typeof handle.radius==='number'? handle.radius : HANDLE_RADIUS);
       var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, base) : base;
+      ctx.save(); var prevGA = ctx.globalAlpha; ctx.globalAlpha = prevGA * Math.max(0, Math.min(1, objA * (typeof window.__uiFadeAlpha==='number'? window.__uiFadeAlpha:1)));
       drawHandle(screen, handle.type, handle.label, isActive, r);
+      ctx.restore();
       
       // Register handle for interaction
       resizeHandles.push({

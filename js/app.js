@@ -538,18 +538,43 @@ function renderLoop() {
     drawSnapGuides();
 
     // Determine focus mode: when hovering or after a wheel event on a specific object,
-    // hide other objects' labels/handles to reduce clutter
+    // drive per-object UI alpha so only the focus/selection fades in
     (function(){
       try {
         var nowT = frameStart;
         var focusId = null;
-        if (typeof window.__focusUntilTime === 'number' && window.__focusUntilTime > nowT && window.__focusRoomId) {
+        // Selection overrides focus/hover
+        if (window.selectedRoomId) {
+          focusId = window.selectedRoomId;
+        } else if (typeof window.__focusUntilTime === 'number' && window.__focusUntilTime > nowT && window.__focusRoomId) {
           focusId = window.__focusRoomId;
         } else if (window.__hoverRoomId) {
           focusId = window.__hoverRoomId;
         }
         window.__focusId = focusId || null;
         window.__focusActive = !!focusId;
+
+        // Update per-object UI alpha for smooth fade of labels/handles
+        if (!window.__uiObjectAlpha) window.__uiObjectAlpha = Object.create(null);
+        function touch(id){ if (!id) return; if (!(id in window.__uiObjectAlpha)) window.__uiObjectAlpha[id] = 0; }
+        // collect ids
+        var ids = [];
+        (allRooms||[]).forEach(function(r){ if(r&&r.id) { ids.push(r.id); touch(r.id); } });
+        if (stairsComponent&&stairsComponent.id){ ids.push(stairsComponent.id); touch(stairsComponent.id); }
+        ;['pergolaComponents','garageComponents','poolComponents','roofComponents','balconyComponents','furnitureItems'].forEach(function(k){ var arr=window[k]||[]; for(var i=0;i<arr.length;i++){ var o=arr[i]; if(o&&o.id){ ids.push(o.id); touch(o.id);} } });
+        // desired alpha: 1 for focused id (or all if none), else 0
+        var fadeK = 0.20;
+        for (var i2=0;i2<ids.length;i2++){
+          var id = ids[i2]; var desired = (focusId ? (id===focusId?1:0) : 1);
+          var cur = window.__uiObjectAlpha[id];
+          var next = cur + (desired - cur) * fadeK;
+          if (Math.abs(next - desired) < 0.01) next = desired;
+          window.__uiObjectAlpha[id] = next;
+        }
+        // helper
+        if (typeof window.getObjectUiAlpha !== 'function') window.getObjectUiAlpha = function(id){
+          try { var a = window.__uiObjectAlpha && id ? window.__uiObjectAlpha[id] : 1; if (typeof a !== 'number') return 1; return Math.max(0, Math.min(1, a)); } catch(e){ return 1; }
+        };
       } catch(_e) {}
     })();
 
