@@ -5,11 +5,13 @@
 function drawRoof(roof) {
   if (!roof) return;
   try {
-    var selected = selectedRoomId === roof.id;
-    var strokeColor = selected ? '#007acc' : '#A0A0A0';
-    var fillColor = selected ? 'rgba(0,122,204,0.18)' : 'rgba(160,160,160,0.12)';
-    var strokeWidth = selected ? 2 : 1.5;
-    var opacity = (typeof currentFloor==='number' ? (currentFloor === (roof.level || 0)) : true) ? 1.0 : 0.7;
+  var selected = selectedRoomId === roof.id;
+  var onLevel = (typeof currentFloor==='number' ? (currentFloor === (roof.level || 0)) : true);
+  // Match room stroke colors and widths across components
+  var strokeColor = selected ? (onLevel ? '#007acc' : '#005080') : (onLevel ? '#D0D0D0' : '#808080');
+  var fillColor = selected ? 'rgba(0,122,204,0.18)' : 'rgba(160,160,160,0.12)';
+  var strokeWidth = selected ? (onLevel ? 3 : 2) : (onLevel ? 2 : 1);
+  var opacity = onLevel ? 1.0 : 0.7;
     var rotRad = ((roof.rotation || 0) * Math.PI) / 180;
 
     var baseY = (typeof roof.baseHeight === 'number' && isFinite(roof.baseHeight)) ? roof.baseHeight : 3.0;

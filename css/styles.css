@@ -94,6 +94,27 @@
   }
   #levelDropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
 
+  /* Roof type dropdown: white text on blue for rollover/open, and white text on hovered items */
+  #roof-type-dropdown .dropdown-button:hover {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 3px 12px rgba(0,122,204,0.35) !important;
+  }
+  #roof-type-dropdown .dropdown-button:hover .caret svg path { stroke: #ffffff !important; }
+  #roof-type-dropdown.open .dropdown-button {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 0 0 3px rgba(0,122,204,0.18) !important;
+  }
+  #roof-type-dropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
+  /* Dropdown list item rollover: brand blue background with white text (scoped to roof dropdown only) */
+  #roof-type-dropdown .dropdown-list .dropdown-item:hover {
+    background-color: #007acc !important;
+    color: #ffffff !important;
+  }
+
   /* Main menu: make all secondary buttons white with black text (except primary Add Room) */
   #controls button.secondary {
     background: #ffffff !important;

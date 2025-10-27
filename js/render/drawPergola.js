@@ -43,10 +43,12 @@ function drawPergola(pergola) {
   if (!pergola) return;
   
   try {
-    var selected = selectedRoomId === pergola.id;
-    var strokeColor = selected ? '#007acc' : '#D0D0D0';
-    var strokeWidth = selected ? 2 : 1.5;
-    var opacity = currentFloor === (pergola.level || 0) ? 1.0 : 0.6;
+  var selected = selectedRoomId === pergola.id;
+  var onLevel = currentFloor === (pergola.level || 0);
+  // Match room stroke colors and widths across components
+  var strokeColor = selected ? (onLevel ? '#007acc' : '#005080') : (onLevel ? '#D0D0D0' : '#808080');
+  var strokeWidth = selected ? (onLevel ? 3 : 2) : (onLevel ? 2 : 1);
+  var opacity = onLevel ? 1.0 : 0.6;
     
     ctx.globalAlpha = opacity;
     ctx.strokeStyle = strokeColor;
@@ -197,7 +199,7 @@ function drawPergola(pergola) {
             [0,4],[1,5],[2,6],[3,7]
           ];
           
-          ctx.strokeStyle = selected ? '#007acc' : '#909090';
+          ctx.strokeStyle = selected ? (onLevel ? '#007acc' : '#005080') : (onLevel ? '#D0D0D0' : '#808080');
           ctx.lineWidth = 1;
           ctx.fillStyle = selected ? 'rgba(0,85,128,0.3)' : 'rgba(192,192,192,0.5)';
           

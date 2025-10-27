@@ -69,7 +69,7 @@
       // Raise camera pivot above ground so the orbit path doesn't dip underground
       targetY: 2.5,
       // Ensure the camera's eye doesn't go below a small height above ground
-      minCamY: 0.15
+      minCamY: 0.0
     };
   }
   if (typeof window.pan === 'undefined') window.pan = { x:0, y:0 };
@@ -130,6 +130,8 @@
 
   // ---- Projection math ----
   var __proj = { right:[1,0,0], up:[0,1,0], fwd:[0,0,1], cam:[0,0,10], scale: 600 };
+  // Blend between perspective (1.0) and near-orthographic (0.0). Lowering this reduces perspective foreshortening.
+  if (typeof window.PERSPECTIVE_STRENGTH === 'undefined') window.PERSPECTIVE_STRENGTH = 0.88;
   if (typeof window.updateProjectionCache === 'undefined') {
     window.updateProjectionCache = function updateProjectionCache(){
       var cy = Math.cos(camera.yaw), sy = Math.sin(camera.yaw);
@@ -183,10 +185,14 @@
       // Make near-plane very permissive; clamp extremely close points instead of dropping them
       if (cz <= 1e-5) return null; // behind or at camera plane
       if (cz < 0.01) cz = 0.01;    // clamp very close points so they remain projectable
-      var s = __proj.scale / cz;
+      // Reduce perspective a little by blending cz with a reference depth (camera distance)
+      var k = Math.max(0, Math.min(1, window.PERSPECTIVE_STRENGTH));
+      var refZ = Math.max(0.5, camera.distance || 12);
+      var czEff = cz * k + refZ * (1 - k);
+      var s = __proj.scale / czEff;
       var sx = (canvas.width/2) + (cx * s) + pan.x;
       var sy = (canvas.height/2) - (cy * s) + pan.y;
-      return { x:sx, y:sy, _cz:cz };
+      return { x:sx, y:sy, _cz:czEff };
     };
   }
 

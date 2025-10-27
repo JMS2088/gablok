@@ -1,5 +1,22 @@
 // Pricing modal logic extracted for SRP
 (function(){
+  // Default median per‑sqm pricing (editable). These are ballpark estimates meant
+  // to be tuned per region/vendor. The pergola example matches 10 m² ≈ $5,000 → $500/m².
+  if (typeof window.PRICING === 'undefined') window.PRICING = {};
+  var P = window.PRICING;
+  if (typeof P.roomPerSqm === 'undefined') P.roomPerSqm = 650; // basic build shell per m²
+  if (typeof P.pergolaPerSqm === 'undefined') P.pergolaPerSqm = 500; // hardwood + plastic roof sheets
+  if (typeof P.garagePerSqm === 'undefined') P.garagePerSqm = 400; // single garage, basic finish
+  if (typeof P.poolPerSqm === 'undefined') P.poolPerSqm = 850; // in-ground, excludes equipment premium
+  if (typeof P.roofPerSqm === 'undefined') P.roofPerSqm = 120; // sheet/tiles average incl. install
+  if (typeof P.balconyPerSqm === 'undefined') P.balconyPerSqm = 450; // deck + railing avg
+  if (typeof P.stairsPerSqm === 'undefined') P.stairsPerSqm = 300; // footprint-based allowance
+  // Concrete/site defaults
+  if (typeof P.concreteSlabPerSqm === 'undefined') P.concreteSlabPerSqm = 120; // 100mm reinforced slab
+  if (typeof P.slabThicknessM === 'undefined') P.slabThicknessM = 0.10; // meters
+  if (typeof P.soilPerM3 === 'undefined') P.soilPerM3 = 600; // fallback per m³
+  if (typeof P.soilDensityTPerM3 === 'undefined') P.soilDensityTPerM3 = 1.6; // t/m³ (optional)
+  if (typeof P.soilCostPerTonne === 'undefined') P.soilCostPerTonne = 0; // if used instead of per m³
   function formatCurrency(amount) {
     return '$' + Math.round(amount).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   }
@@ -11,22 +28,34 @@
       for (var i=0;i<allRooms.length;i++){
         var r = allRooms[i]; if(!r) continue;
         var area = Math.max(0, (r.width||0) * (r.depth||0));
-        var cost = area * (window.PRICING && PRICING.room || 600);
+        var cost = area * (window.PRICING && PRICING.roomPerSqm || 650);
         breakdown.rooms.push({ name: r.name || ('Room '+(i+1)), area: area, cost: cost });
         breakdown.totalCost += cost;
       }
     }
-    // Components (flat pricing or per-area)
-    function addBoxComponent(list, name, priceKey){
+    // Components (per-area)
+    function addBoxComponent(list, name, rateKey){
       if(!Array.isArray(list)) return;
-      for(var j=0;j<list.length;j++){ var c=list[j]; if(!c) continue; breakdown.components.push({ name: name, area: (c.width||0)*(c.depth||0), cost: (window.PRICING && PRICING[priceKey] || 0) }); breakdown.totalCost += (window.PRICING && PRICING[priceKey] || 0); }
+      for(var j=0;j<list.length;j++){
+        var c=list[j]; if(!c) continue;
+        var a = Math.max(0, (c.width||0)*(c.depth||0));
+        var rate = (window.PRICING && PRICING[rateKey]) || 0;
+        var cost = a * rate;
+        breakdown.components.push({ name: name, area: a, cost: cost });
+        breakdown.totalCost += cost;
+      }
     }
-    if (window.stairsComponent) { breakdown.components.push({ name:'Stairs', area:(stairsComponent.width||0)*(stairsComponent.depth||0), cost:(window.PRICING && PRICING.stairs || 1200) }); breakdown.totalCost += (window.PRICING && PRICING.stairs || 1200); }
-    addBoxComponent(window.pergolaComponents, 'Pergola', 'pergola');
-    addBoxComponent(window.garageComponents, 'Garage', 'garage');
-    addBoxComponent(window.poolComponents, 'Pool', 'pool');
-    addBoxComponent(window.roofComponents, 'Roof', 'roof');
-    addBoxComponent(window.balconyComponents, 'Balcony', 'balcony');
+    if (window.stairsComponent) {
+      var sArea = Math.max(0, (stairsComponent.width||0)*(stairsComponent.depth||0));
+      var sRate = (window.PRICING && PRICING.stairsPerSqm) || 300;
+      var sCost = sArea * sRate;
+      breakdown.components.push({ name:'Stairs', area:sArea, cost:sCost }); breakdown.totalCost += sCost;
+    }
+    addBoxComponent(window.pergolaComponents, 'Pergola', 'pergolaPerSqm');
+    addBoxComponent(window.garageComponents, 'Garage', 'garagePerSqm');
+    addBoxComponent(window.poolComponents, 'Pool', 'poolPerSqm');
+    addBoxComponent(window.roofComponents, 'Roof', 'roofPerSqm');
+    addBoxComponent(window.balconyComponents, 'Balcony', 'balconyPerSqm');
     // Concrete slab and soil
     var groundRooms = (Array.isArray(window.allRooms)? allRooms.filter(function(r){ return (r.level||0)===0; }) : []);
     var groundSlabArea = 0; for (var g=0; g<groundRooms.length; g++){ groundSlabArea += Math.max(0, (groundRooms[g].width||0) * (groundRooms[g].depth||0)); }

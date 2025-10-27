@@ -23,19 +23,11 @@ function drawStairs(stairs) {
     // Show fully on its own floor, dim on others (mirror rooms)
     var onLevel = currentFloor === (stairs.level || 0);
     var opacity = onLevel ? 1.0 : 0.6;
-    // Match room stroke colors exactly
-    // Rooms:
+    // Standardize stroke colors and widths to match rooms
     //  - current level: selected #007acc, unselected #D0D0D0
     //  - other level:  selected #005080, unselected #808080
-    var strokeColor = selected
-      ? (onLevel ? '#007acc' : '#005080')
-      : (onLevel ? '#D0D0D0' : '#808080');
-    // Match room line widths exactly
-    //  - current level: selected 3, unselected 2
-    //  - other level:  selected 2, unselected 1
-    var strokeWidth = selected
-      ? (onLevel ? 3 : 2)
-      : (onLevel ? 2 : 1);
+    var strokeColor = selected ? (onLevel ? '#007acc' : '#005080') : (onLevel ? '#D0D0D0' : '#808080');
+    var strokeWidth = selected ? (onLevel ? 3 : 2) : (onLevel ? 2 : 1);
     
     ctx.globalAlpha = opacity;
     ctx.strokeStyle = strokeColor;

@@ -7,12 +7,20 @@ function drawGarage(garage) {
   
   try {
     dbg('Drawing garage:', garage.id, 'Selected:', selectedRoomId);
-    var selected = selectedRoomId === garage.id;
-    var strokeColor = selected ? '#007acc' : '#D0D0D0';
-    var fillColor = selected ? 'rgba(0,122,204,0.3)' : 'rgba(208,208,208,0.2)';
-    var strokeWidth = selected ? 2 : 1.5;
+  var selected = selectedRoomId === garage.id;
+  var onLevel = currentFloor === (garage.level || 0);
+  // Match room stroke colors and widths exactly across components
+  // Colors:
+  //  - current level: selected #007acc, unselected #D0D0D0
+  //  - other level:  selected #005080, unselected #808080
+  // Widths:
+  //  - current level: selected 3, unselected 2
+  //  - other level:  selected 2, unselected 1
+  var strokeColor = selected ? (onLevel ? '#007acc' : '#005080') : (onLevel ? '#D0D0D0' : '#808080');
+  var fillColor = selected ? 'rgba(0,122,204,0.3)' : 'rgba(208,208,208,0.2)';
+  var strokeWidth = selected ? (onLevel ? 3 : 2) : (onLevel ? 2 : 1);
     var rotRad = ((garage.rotation || 0) * Math.PI) / 180; // Add rotation support
-    var opacity = currentFloor === (garage.level || 0) ? 1.0 : 0.6;
+  var opacity = onLevel ? 1.0 : 0.6;
     
     ctx.globalAlpha = opacity;
     ctx.strokeStyle = strokeColor;

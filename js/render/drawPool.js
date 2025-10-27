@@ -5,12 +5,14 @@
 function drawPool(pool) {
   if (!pool) return;
   try {
-    var selected = selectedRoomId === pool.id;
-    var strokeColor = selected ? '#007acc' : '#9ecae1';
+  var selected = selectedRoomId === pool.id;
+  var onLevel = currentFloor === (pool.level || 0);
+  // Match room stroke colors and widths across components
+  var strokeColor = selected ? (onLevel ? '#007acc' : '#005080') : (onLevel ? '#D0D0D0' : '#808080');
     var rimColor = selected ? 'rgba(0,122,204,0.25)' : 'rgba(100,150,200,0.18)';
     var waterColor = selected ? 'rgba(40,150,220,0.35)' : 'rgba(60,160,220,0.28)';
-    var strokeWidth = selected ? 2 : 1.5;
-    var opacity = currentFloor === (pool.level || 0) ? 1.0 : 0.6;
+  var strokeWidth = selected ? (onLevel ? 3 : 2) : (onLevel ? 2 : 1);
+  var opacity = onLevel ? 1.0 : 0.6;
     var rotRad = ((pool.rotation || 0) * Math.PI) / 180;
     ctx.globalAlpha = opacity;
     ctx.strokeStyle = strokeColor;

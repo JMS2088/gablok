@@ -10,10 +10,12 @@ function drawBalcony(balcony) {
   }
   
   try {
-    var selected = selectedRoomId === balcony.id;
-    var strokeColor = selected ? '#007acc' : '#D0D0D0';
-    var strokeWidth = selected ? 2 : 1.5;
-    var opacity = currentFloor === (balcony.level || 1) ? 1.0 : 0.6;
+  var selected = selectedRoomId === balcony.id;
+  var onLevel = currentFloor === (balcony.level || 1);
+  // Match room stroke colors and widths across components
+  var strokeColor = selected ? (onLevel ? '#007acc' : '#005080') : (onLevel ? '#D0D0D0' : '#808080');
+  var strokeWidth = selected ? (onLevel ? 3 : 2) : (onLevel ? 2 : 1);
+  var opacity = onLevel ? 1.0 : 0.6;
     
     ctx.globalAlpha = opacity;
     ctx.strokeStyle = strokeColor;
@@ -104,7 +106,7 @@ function drawBalcony(balcony) {
       }
       
       if (wallVisible) {
-        ctx.fillStyle = selected ? 'rgba(0,122,204,0.2)' : 'rgba(208,208,208,0.15)';
+  ctx.fillStyle = selected ? 'rgba(0,122,204,0.2)' : 'rgba(208,208,208,0.15)';
         ctx.beginPath();
         ctx.moveTo(projectedWall[0].x, projectedWall[0].y);
         for (var pIdx = 1; pIdx < projectedWall.length; pIdx++) {
@@ -178,7 +180,7 @@ function drawBalcony(balcony) {
     for (var r = 0; r < roofCorners.length; r++) { var p3 = project3D(roofCorners[r].x, roofCorners[r].y, roofCorners[r].z); if(!p3){ roofVisible=false; break; } projectedRoof.push(p3); }
     if (roofVisible) {
       var roofEdges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
-      ctx.fillStyle = selected ? 'rgba(0,122,204,0.2)' : 'rgba(208,208,208,0.15)';
+  ctx.fillStyle = selected ? 'rgba(0,122,204,0.2)' : 'rgba(208,208,208,0.15)';
       // Draw top and bottom faces
       ctx.beginPath(); ctx.moveTo(projectedRoof[4].x, projectedRoof[4].y); ctx.lineTo(projectedRoof[5].x, projectedRoof[5].y); ctx.lineTo(projectedRoof[6].x, projectedRoof[6].y); ctx.lineTo(projectedRoof[7].x, projectedRoof[7].y); ctx.closePath(); ctx.fill();
       ctx.beginPath(); ctx.moveTo(projectedRoof[0].x, projectedRoof[0].y); ctx.lineTo(projectedRoof[1].x, projectedRoof[1].y); ctx.lineTo(projectedRoof[2].x, projectedRoof[2].y); ctx.lineTo(projectedRoof[3].x, projectedRoof[3].y); ctx.closePath(); ctx.fill();
@@ -205,7 +207,7 @@ function drawBalcony(balcony) {
           ];
           var ps=[]; var ok2=true; for (var si2=0; si2<sc.length; si2++){ var pp=project3D(sc[si2].x,sc[si2].y,sc[si2].z); if(!pp){ ok2=false; break; } ps.push(pp); }
           if (ok2){
-            ctx.strokeStyle = selected ? '#007acc' : '#909090';
+            ctx.strokeStyle = selected ? (onLevel ? '#007acc' : '#005080') : (onLevel ? '#D0D0D0' : '#808080');
             ctx.lineWidth = 1;
             ctx.fillStyle = selected ? 'rgba(0,85,128,0.3)' : 'rgba(192,192,192,0.5)';
             // top

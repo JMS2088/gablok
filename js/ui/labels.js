@@ -42,6 +42,13 @@
             // Pools are below ground; anchor just above ground
             return Math.max(0.0, (obj.anchorY!=null? obj.anchorY : 0.2));
           }
+          if (obj.type === 'stairs') {
+            // Place label closer to the lower portion of the stairs so it appears near the geometry
+            var h = (obj.height!=null ? obj.height : 3.0);
+            // Aim around 0.8–1.0m above the floor, capped relative to total height
+            var rel = Math.min(1.0, Math.max(0.5, h * 0.35));
+            return lvlY + rel;
+          }
           if (obj.type === 'furniture') {
             var elev = Math.max(0, obj.elevation||0);
             return lvlY + elev + (obj.height||0.7)/2;
@@ -57,10 +64,39 @@
         return 'room';
       }
 
+      function stairsLabelAnchor(obj){
+        try {
+          var stepsCount = Math.max(1, Math.floor(obj.steps || 19));
+          var stepHeight = (obj.height || 3.0) / stepsCount;
+          // Depth distribution with the 9th step (index 8) weighted deeper to match renderer
+          var stepWeights = new Array(stepsCount);
+          for (var wi=0; wi<stepsCount; wi++) stepWeights[wi] = (wi === 8 ? 5 : 1);
+          var sumW = 0; for (var sw=0; sw<stepsCount; sw++) sumW += stepWeights[sw];
+          var perStepDepth = new Array(stepsCount);
+          for (var ps=0; ps<stepsCount; ps++) perStepDepth[ps] = (sumW > 0 ? ((obj.depth||1) * stepWeights[ps] / sumW) : ((obj.depth||1) / stepsCount));
+          // Target the 8th step (index 7); clamp within range
+          var targetIdx = Math.max(0, Math.min(stepsCount-1, 7));
+          var cum = 0; for (var i=0;i<targetIdx;i++) cum += perStepDepth[i];
+          var localZ = - (obj.depth||1)/2 + cum + perStepDepth[targetIdx] * 0.5;
+          var rot = ((obj.rotation||0) * Math.PI) / 180;
+          var dx = 0, dz = localZ;
+          var worldX = (obj.x||0) + dx * Math.cos(rot) - dz * Math.sin(rot);
+          var worldZ = (obj.z||0) + dx * Math.sin(rot) + dz * Math.cos(rot);
+          var lvlY = ((obj.level||0) * 3.5);
+          var worldY = lvlY + (targetIdx + 1) * stepHeight + 0.05; // a touch above the tread
+          return { x: worldX, y: worldY, z: worldZ };
+        } catch(e){ return { x: obj.x||0, y: ((obj.level||0)*3.5) + Math.min(1.0, (obj.height||3.0)*0.35), z: obj.z||0 }; }
+      }
+
       function placeLabelFor(box){
         if(!box || !box.id) return;
-        var y = anchorYFor(box);
-        var p = project3D(box.x||0, y, box.z||0); if(!p) return;
+        var anchorPos;
+        if (box.type === 'stairs') {
+          anchorPos = stairsLabelAnchor(box);
+        } else {
+          anchorPos = { x: box.x||0, y: anchorYFor(box), z: box.z||0 };
+        }
+        var p = project3D(anchorPos.x, anchorPos.y, anchorPos.z); if(!p) return;
         var dpr = window.devicePixelRatio||1;
         var targetLeft = (p.x / dpr), targetTop = (p.y / dpr);
 
@@ -102,7 +138,10 @@
         var left = smX, top = smY;
   var objA = (typeof window.getObjectUiAlpha === 'function') ? window.getObjectUiAlpha(box.id) : 1.0;
   var globalA = Math.max(0, Math.min(1, (window.__uiFadeAlpha||1.0)));
-  el.style.left = left.toFixed(2) + 'px'; el.style.top = top.toFixed(2) + 'px'; el.style.opacity = String(Math.max(0, Math.min(1, objA * globalA)));
+  el.style.left = left.toFixed(2) + 'px'; el.style.top = top.toFixed(2) + 'px';
+  // Exclude name labels from all fades (global inactivity and per-object focus dimming)
+  // Keep labels always fully visible so the user can click to select items even when unfocused.
+  el.style.opacity = '1';
 
         // Ensure label doesn't sit on top of this object's handles: nudge away from overlapping handle circles
         try {
