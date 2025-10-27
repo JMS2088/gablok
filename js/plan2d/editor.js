@@ -33,8 +33,11 @@ var __plan2d = {
   // Window editing state (for host-anchored windows)
   dragWindow:null,   // { index, end:'t0'|'t1' }
   // Standard sizes
-  doorWidthM:0.87,
+  doorWidthM:0.92,
   doorHeightM:2.04,
+  // Window defaults: sill at 1.0m, height 1.5m
+  windowSillM:1.0,
+  windowHeightM:1.5,
   // Default preview width for windows before sizing
   windowDefaultWidthM:1.2,
   // Door editing state (for dragging endpoints)
@@ -1081,7 +1084,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         if(near && typeof near.index==='number' && near.index===i){
           var tHover = plan2dProjectParamOnWall(pWorld, el);
           if(__plan2d.tool==='door'){
-            var halfT = ((__plan2d.doorWidthM||0.87) / 2) / wLen0; var t0p=tHover-halfT, t1p=tHover+halfT;
+            var halfT = ((__plan2d.doorWidthM||0.92) / 2) / wLen0; var t0p=tHover-halfT, t1p=tHover+halfT;
             if(t1p>t0p){ t0p=Math.max(0,t0p); t1p=Math.min(1,t1p); if(t1p>t0p+1e-6) spans.push([t0p,t1p]); }
           } else if(__plan2d.tool==='window'){
             var wPreview = (__plan2d.windowDefaultWidthM||1.2);

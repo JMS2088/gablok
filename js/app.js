@@ -35,6 +35,10 @@ if (typeof window !== 'undefined') {
   }
 }
 
+// Always clear any persisted 2D floor plan drafts on page load so stale drafts
+// don't survive refresh/relaunch and appear in the floor plan window.
+try { if (typeof localStorage !== 'undefined') { localStorage.removeItem('gablok_plan2dDrafts_v1'); } } catch(e) {}
+
 // drawHandlesForPergola moved to js/render/drawPergola.js
 
 // drawRoom and drawHandlesForRoom moved to js/render/drawRoom.js
@@ -1892,7 +1896,7 @@ var __plan2d = {
   // Window editing state (for host-anchored windows)
   dragWindow:null,   // { index, end:'t0'|'t1' }
   // Standard sizes
-  doorWidthM:0.87,
+  doorWidthM:0.92,
   doorHeightM:2.04,
   // Default preview width for windows before sizing
   windowDefaultWidthM:1.2,
@@ -2845,7 +2849,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         if(near && typeof near.index==='number' && near.index===i){
           var tHover = plan2dProjectParamOnWall(pWorld, el);
           if(__plan2d.tool==='door'){
-            var halfT = ((__plan2d.doorWidthM||0.87) / 2) / wLen0; var t0p=tHover-halfT, t1p=tHover+halfT;
+            var halfT = ((__plan2d.doorWidthM||0.92) / 2) / wLen0; var t0p=tHover-halfT, t1p=tHover+halfT;
             if(t1p>t0p){ t0p=Math.max(0,t0p); t1p=Math.min(1,t1p); if(t1p>t0p+1e-6) spans.push([t0p,t1p]); }
           } else if(__plan2d.tool==='window'){
             var wPreview = (__plan2d.windowDefaultWidthM||1.2);
@@ -4092,7 +4096,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     var V = {}; // xKey -> array of [y0,y1]
     function addSpan(map, key, a0, a1){ if(a1<a0){ var t=a0;a0=a1;a1=t; } if(!map[key]) map[key]=[]; map[key].push([a0,a1]); }
     for(var wi=0; wi<elemsSrc.length; wi++){
-      var w = elemsSrc[wi]; if(!w || w.type!=='wall' || w.wallRole!=='room') continue;
+      var w = elemsSrc[wi]; if(!w || w.type!=='wall' || w.wallRole==='nonroom') continue;
       var x0=w.x0,y0=w.y0,x1=w.x1,y1=w.y1;
       if(approxEq(y0,y1,1e-2)){ var yk=keyCoord((y0+y1)/2); addSpan(H, yk, Math.min(x0,x1), Math.max(x0,x1)); }
       else if(approxEq(x0,x1,1e-2)){ var xk=keyCoord((x0+x1)/2); addSpan(V, xk, Math.min(y0,y1), Math.max(y0,y1)); }
@@ -4204,7 +4208,17 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             var ex = Math.max(R.minX, Math.min(R.maxX, Math.max(ax,bx)));
             var q0 = quantizeMeters(sx - R.minX, 2);
             var q1 = quantizeMeters(ex - R.minX, 2);
-            if(q1 > q0 + 1e-4){ var hM=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'minZ', startM:q0, endM:q1, heightM:hM, meta:(el.meta||null)}); added=true; }
+            if(q1 > q0 + 1e-4){
+              var span = q1 - q0;
+              if (el.type==='door') {
+                var hM=(typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04));
+                openings.push({type:'door', edge:'minZ', startM:q0, endM:q1, widthM: span, heightM:hM, sillM:0, meta:(el.meta||null)});
+              } else { // window
+                var wh=(__plan2d&&__plan2d.windowHeightM)||1.5; var wsill=(__plan2d&&__plan2d.windowSillM)||1.0;
+                openings.push({type:'window', edge:'minZ', startM:q0, endM:q1, widthM: span, heightM:wh, sillM:wsill, meta:(el.meta||null)});
+              }
+              added=true;
+            }
           }
           // Bottom side (world maxZ) => plan y=botY
           if(!added && Math.abs(ay - botY) <= TOL && Math.abs(by - botY) <= TOL){
@@ -4212,7 +4226,17 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             var e2 = Math.max(R.minX, Math.min(R.maxX, Math.max(ax,bx)));
             var q02 = quantizeMeters(s2 - R.minX, 2);
             var q12 = quantizeMeters(e2 - R.minX, 2);
-            if(q12 > q02 + 1e-4){ var hM2=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'maxZ', startM:q02, endM:q12, heightM:hM2, meta:(el.meta||null)}); added=true; }
+            if(q12 > q02 + 1e-4){
+              var span2 = q12 - q02;
+              if (el.type==='door'){
+                var hM2=(typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04));
+                openings.push({type:'door', edge:'maxZ', startM:q02, endM:q12, widthM: span2, heightM:hM2, sillM:0, meta:(el.meta||null)});
+              } else {
+                var wh2=(__plan2d&&__plan2d.windowHeightM)||1.5; var wsill2=(__plan2d&&__plan2d.windowSillM)||1.0;
+                openings.push({type:'window', edge:'maxZ', startM:q02, endM:q12, widthM: span2, heightM:wh2, sillM:wsill2, meta:(el.meta||null)});
+              }
+              added=true;
+            }
           }
           // Left side (minX at x=R.minX), vertical span along Y
           if(!added && Math.abs(ax - R.minX) <= TOL && Math.abs(bx - R.minX) <= TOL){
@@ -4220,7 +4244,17 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             var ev = Math.max(R.minY, Math.min(R.maxY, Math.max(ay,by)));
             var q03 = quantizeMeters(sv - R.minY, 2);
             var q13 = quantizeMeters(ev - R.minY, 2);
-            if(q13 > q03 + 1e-4){ var hM3=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'minX', startM:q03, endM:q13, heightM:hM3, meta:(el.meta||null)}); added=true; }
+            if(q13 > q03 + 1e-4){
+              var span3 = q13 - q03;
+              if (el.type==='door'){
+                var hM3=(typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04));
+                openings.push({type:'door', edge:'minX', startM:q03, endM:q13, widthM: span3, heightM:hM3, sillM:0, meta:(el.meta||null)});
+              } else {
+                var wh3=(__plan2d&&__plan2d.windowHeightM)||1.5; var wsill3=(__plan2d&&__plan2d.windowSillM)||1.0;
+                openings.push({type:'window', edge:'minX', startM:q03, endM:q13, widthM: span3, heightM:wh3, sillM:wsill3, meta:(el.meta||null)});
+              }
+              added=true;
+            }
           }
           // Right side (maxX at x=R.maxX)
           if(!added && Math.abs(ax - R.maxX) <= TOL && Math.abs(bx - R.maxX) <= TOL){
@@ -4228,7 +4262,17 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             var ev2 = Math.max(R.minY, Math.min(R.maxY, Math.max(ay,by)));
             var q04 = quantizeMeters(sv2 - R.minY, 2);
             var q14 = quantizeMeters(ev2 - R.minY, 2);
-            if(q14 > q04 + 1e-4){ var hM4=(el.type==='door') ? (typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04)) : undefined; openings.push({type:el.type, edge:'maxX', startM:q04, endM:q14, heightM:hM4, meta:(el.meta||null)}); added=true; }
+            if(q14 > q04 + 1e-4){
+              var span4 = q14 - q04;
+              if (el.type==='door'){
+                var hM4=(typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04));
+                openings.push({type:'door', edge:'maxX', startM:q04, endM:q14, widthM: span4, heightM:hM4, sillM:0, meta:(el.meta||null)});
+              } else {
+                var wh4=(__plan2d&&__plan2d.windowHeightM)||1.5; var wsill4=(__plan2d&&__plan2d.windowSillM)||1.0;
+                openings.push({type:'window', edge:'maxX', startM:q04, endM:q14, widthM: span4, heightM:wh4, sillM:wsill4, meta:(el.meta||null)});
+              }
+              added=true;
+            }
           }
         }
         room.openings = openings;
