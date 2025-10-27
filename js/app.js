@@ -8,6 +8,33 @@ if (typeof window !== 'undefined' && typeof window.dbg !== 'function') {
   window.dbg = function(){ /* no-op debug */ };
 }
 
+// Global measurement helpers used across 2D/3D modules
+// - formatMeters: pretty-print a meter value with sensible decimals and trimmed zeros
+// - quantizeMeters: snap a meter value to the nearest increment (in centimeters)
+if (typeof window !== 'undefined') {
+  if (typeof window.formatMeters !== 'function') {
+    window.formatMeters = function(m, opts) {
+      var value = Number(m);
+      if (!isFinite(value)) return '0';
+      var decimals = (opts && typeof opts.decimals === 'number')
+        ? opts.decimals
+        : (Math.abs(value) >= 10 ? 1 : 2);
+      var s = value.toFixed(decimals);
+      if (s.indexOf('.') >= 0) s = s.replace(/\.?0+$/,'');
+      return s;
+    };
+  }
+  if (typeof window.quantizeMeters !== 'function') {
+    // incrementCm defaults to 1 cm; pass 2 for 2 cm, 5 for 5 cm, etc.
+    window.quantizeMeters = function(value, incrementCm) {
+      var v = Number(value) || 0;
+      var stepCm = (typeof incrementCm === 'number' && incrementCm > 0) ? incrementCm : 1;
+      var stepM = stepCm / 100;
+      return Math.round(v / stepM) * stepM;
+    };
+  }
+}
+
 // drawHandlesForPergola moved to js/render/drawPergola.js
 
 // drawRoom and drawHandlesForRoom moved to js/render/drawRoom.js
@@ -4045,8 +4072,9 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     // Which floor to apply to (0=ground, 1=first). Default to ground for backward compatibility.
     var targetLevel = (typeof opts.level === 'number') ? opts.level : 0;
     var elemsSrc = Array.isArray(elemsSnapshot) ? elemsSnapshot : __plan2d.elements;
-  // Only perimeter room walls (tagged 'room') should contribute to room reconstruction
-  var walls=elemsSrc.filter(function(e){ return e && e.type==='wall' && e.wallRole==='room'; });
+  // Room reconstruction should consider any wall that isn't explicitly marked as a non-room outline.
+  // This way, newly drawn user walls (no role) can form rooms. Non-room component outlines (garage/pergola/balcony) are excluded.
+  var walls = elemsSrc.filter(function(e){ return e && e.type==='wall' && e.wallRole !== 'nonroom'; });
     if(walls.length===0){
       // No walls -> clear rooms on target level in 3D so it reflects 2D state
       allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
@@ -4331,7 +4359,51 @@ function populatePlan2DFromDesign(){
     var p1=r(s.x-hwS, s.z-hdS), p2=r(s.x+hwS, s.z-hdS), p3=r(s.x+hwS, s.z+hdS), p4=r(s.x-hwS, s.z+hdS);
     rects.push({ name:'Stairs', minX: Math.min(p1.x,p2.x,p3.x,p4.x), maxX: Math.max(p1.x,p2.x,p3.x,p4.x), minZ: Math.min(p1.z,p2.z,p3.z,p4.z), maxZ: Math.max(p1.z,p2.z,p3.z,p4.z), type:'stairs' });
   }
-  if (rects.length === 0) return false;
+  if (rects.length === 0) {
+    // If no room/component rectangles, still try to populate from existing 3D wall strips on this floor
+    try {
+      var lvlNow0 = (typeof currentFloor==='number' ? currentFloor : 0);
+      var hasStrips0 = false;
+      var sMinX=Infinity, sMaxX=-Infinity, sMinZ=Infinity, sMaxZ=-Infinity;
+      for (var wsi0=0; wsi0<wallStrips.length; wsi0++){
+        var ws0 = wallStrips[wsi0]; if(!ws0 || (ws0.level||0)!==lvlNow0) continue;
+        hasStrips0 = true;
+        sMinX = Math.min(sMinX, ws0.x0, ws0.x1);
+        sMaxX = Math.max(sMaxX, ws0.x0, ws0.x1);
+        sMinZ = Math.min(sMinZ, ws0.z0, ws0.z1);
+        sMaxZ = Math.max(sMaxZ, ws0.z0, ws0.z1);
+      }
+      if (!hasStrips0) return false;
+      // Compute center and scale from strips extents
+      var cx0 = (isFinite(sMinX) && isFinite(sMaxX)) ? (sMinX + sMaxX) / 2 : 0;
+      var cz0 = (isFinite(sMinZ) && isFinite(sMaxZ)) ? (sMinZ + sMaxZ) / 2 : 0;
+      __plan2d.centerX = cx0; __plan2d.centerZ = cz0;
+      var c0 = document.getElementById('plan2d-canvas'); if(!c0) return false;
+      var spanX0 = Math.max(0.5, (sMaxX - sMinX));
+      var spanZ0 = Math.max(0.5, (sMaxZ - sMinZ));
+      var pad0 = 0.15;
+      var fitWm0 = spanX0 * (1 + pad0), fitHm0 = spanZ0 * (1 + pad0);
+      var scaleX0 = (c0.width>0) ? (c0.width/(fitWm0||1)) : (__plan2d.scale||50);
+      var scaleY0 = (c0.height>0) ? (c0.height/(fitHm0||1)) : (__plan2d.scale||50);
+      var newScale0 = Math.max(10, Math.min(140, Math.floor(Math.min(scaleX0, scaleY0))));
+      if (isFinite(newScale0) && newScale0>0) __plan2d.scale = newScale0;
+      // Populate 2D elements as free-standing walls from strips
+      __plan2d.elements = [];
+      var sgn0 = (__plan2d.yFromWorldZSign||1);
+      for (var wsi1=0; wsi1<wallStrips.length; wsi1++){
+        var ws1 = wallStrips[wsi1]; if(!ws1 || (ws1.level||0)!==lvlNow0) continue;
+        __plan2d.elements.push({
+          type: 'wall',
+          x0: ws1.x0 - cx0,
+          y0: sgn0 * (ws1.z0 - cz0),
+          x1: ws1.x1 - cx0,
+          y1: sgn0 * (ws1.z1 - cz0),
+          thickness: (ws1.thickness || __plan2d.wallThicknessM || 0.3)
+        });
+      }
+      return true;
+    } catch(e) { return false; }
+  }
 
   // Compute overall bounds and center (use rotation-aware bounds where available)
   var minX=Infinity, maxX=-Infinity, minZ=Infinity, maxZ=-Infinity;

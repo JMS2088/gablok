@@ -131,6 +131,48 @@ function plan2dSig3D(){
       if((ws.level||0)!==lvl2) continue;
       parts.push(['ws', +ws.x0.toFixed(3), +ws.z0.toFixed(3), +ws.x1.toFixed(3), +ws.z1.toFixed(3), +(ws.thickness||0).toFixed(3), +(ws.height||0).toFixed(3), +(ws.baseY||0).toFixed(3)]);
     }
+    // Include non-room components on current floor so overlay refreshes when they change
+    var lvlNow = (typeof currentFloor==='number' ? currentFloor : 0);
+    try {
+      if (stairsComponent && (stairsComponent.level||0)===lvlNow) {
+        parts.push(['st', +(+stairsComponent.x).toFixed(3), +(+stairsComponent.z).toFixed(3), +(+stairsComponent.width||0).toFixed(3), +(+stairsComponent.depth||0).toFixed(3), +(+stairsComponent.rotation||0).toFixed(3)]);
+      }
+    } catch(e){}
+    try {
+      var pergs = Array.isArray(window.pergolaComponents) ? pergolaComponents : [];
+      for (var pg=0; pg<pergs.length; pg++){
+        var p = pergs[pg]; if(!p) continue; if((p.level||0)!==lvlNow) continue;
+        parts.push(['pg', +(+p.x).toFixed(3), +(+p.z).toFixed(3), +(+p.width||0).toFixed(3), +(+p.depth||0).toFixed(3), +(+p.rotation||0).toFixed(3)]);
+      }
+    } catch(e){}
+    try {
+      var gars = Array.isArray(window.garageComponents) ? garageComponents : [];
+      for (var gg=0; gg<gars.length; gg++){
+        var g = gars[gg]; if(!g) continue; if((g.level||0)!==lvlNow) continue;
+        parts.push(['ga', +(+g.x).toFixed(3), +(+g.z).toFixed(3), +(+g.width||0).toFixed(3), +(+g.depth||0).toFixed(3), +(+g.rotation||0).toFixed(3)]);
+      }
+    } catch(e){}
+    try {
+      var bls = Array.isArray(window.balconyComponents) ? balconyComponents : [];
+      for (var bi=0; bi<bls.length; bi++){
+        var b = bls[bi]; if(!b) continue; if((b.level||0)!==lvlNow) continue;
+        parts.push(['ba', +(+b.x).toFixed(3), +(+b.z).toFixed(3), +(+b.width||0).toFixed(3), +(+b.depth||0).toFixed(3), +(+b.rotation||0).toFixed(3)]);
+      }
+    } catch(e){}
+    try {
+      var pls = Array.isArray(window.poolComponents) ? poolComponents : [];
+      for (var pi=0; pi<pls.length; pi++){
+        var pl = pls[pi]; if(!pl) continue; if((pl.level||0)!==lvlNow) continue;
+        parts.push(['po', +(+pl.x).toFixed(3), +(+pl.z).toFixed(3), +(+pl.width||0).toFixed(3), +(+pl.depth||0).toFixed(3), +(+pl.rotation||0).toFixed(3)]);
+      }
+    } catch(e){}
+    try {
+      var rfs = Array.isArray(window.roofComponents) ? roofComponents : [];
+      for (var ri=0; ri<rfs.length; ri++){
+        var rf = rfs[ri]; if(!rf) continue; if((rf.level||0)!==lvlNow) continue;
+        parts.push(['ro', +(+rf.x).toFixed(3), +(+rf.z).toFixed(3), +(+rf.width||0).toFixed(3), +(+rf.depth||0).toFixed(3), +(+rf.rotation||0).toFixed(3), String(rf.roofType||'') ]);
+      }
+    } catch(e){}
     return JSON.stringify(parts);
   }catch(e){ return ''; }
 }
@@ -320,6 +362,17 @@ function openPlan2DModal(){
     var currentSig3D = plan2dSig3D();
     // If no draft, or draft's last3Dsig differs from current 3D, repopulate from 3D to ensure sync
     var needsPopulate = (!loaded) || (!__plan2d._last3Dsig) || (__plan2d._last3Dsig !== currentSig3D);
+    // Additionally, if a draft loaded but contains no elements while 3D has content, force populate
+    try {
+      var draftEmpty = !Array.isArray(__plan2d.elements) || __plan2d.elements.length === 0;
+      if (!needsPopulate && draftEmpty) {
+        var parts = [];
+        try { parts = JSON.parse(currentSig3D)||[]; } catch(_e) { parts = []; }
+        if (Array.isArray(parts) && parts.length > 0) needsPopulate = true;
+        // If parsing failed, err on side of repopulating to avoid empty UI
+        if (!Array.isArray(parts)) needsPopulate = true;
+      }
+    } catch(_e) {}
     if (needsPopulate) {
       populatePlan2DFromDesign();
       __plan2d._last3Dsig = plan2dSig3D();
@@ -329,6 +382,42 @@ function openPlan2DModal(){
   } catch(e) { console.warn('populatePlan2DFromDesign/loadDraft failed', e); }
   plan2dDraw();
   updatePlan2DInfo();
+  // If nothing was populated for the current floor but other floors have content, auto-switch
+  try {
+    var hasElems = Array.isArray(__plan2d.elements) && __plan2d.elements.length > 0;
+    if (!hasElems) {
+      function floorHasContent(level){
+        try {
+          // Rooms
+          for (var i=0;i<(allRooms||[]).length;i++){ var r=allRooms[i]; if(r && (r.level||0)===level) return true; }
+          // Strips
+          for (var j=0;j<(wallStrips||[]).length;j++){ var ws=wallStrips[j]; if(ws && (ws.level||0)===level) return true; }
+          // Components
+          function any(arr, field){ for (var k=0;k<(arr||[]).length;k++){ var o=arr[k]; if(o && ((o.level!=null?o.level:0)===level)) return true; } return false; }
+          if (any(pergolaComponents, 'level')) return true;
+          if (any(garageComponents, 'level')) return true;
+          if (any(balconyComponents, 'level')) return true;
+          if (any(poolComponents, 'level')) return true;
+          if (any(roofComponents, 'level')) return true;
+        } catch(e) {}
+        return false;
+      }
+      var curLvl = (typeof currentFloor==='number'? currentFloor : 0);
+      var otherLvl = (curLvl===0? 1 : 0);
+      if (!floorHasContent(curLvl) && floorHasContent(otherLvl)){
+        // Switch to the level that actually has content so the user sees something
+        currentFloor = otherLvl;
+        try { var nativeSel2=document.getElementById('levelSelect'); if(nativeSel2) nativeSel2.value=String(currentFloor); } catch(e){}
+        try {
+          var bG2 = document.getElementById('plan2d-floor-ground');
+          var bF2 = document.getElementById('plan2d-floor-first');
+          if (bG2 && bF2){ if(currentFloor===0){ bG2.classList.add('active'); bF2.classList.remove('active'); } else { bF2.classList.add('active'); bG2.classList.remove('active'); } }
+        } catch(e){}
+        try { populatePlan2DFromDesign(); plan2dDraw(); updatePlan2DInfo(); } catch(e){}
+        try { updateStatus && updateStatus('Showing floor with content'); } catch(e){}
+      }
+    }
+  } catch(e){}
   // start live sync with 3D
   try{ plan2dStartSyncLoop(); }catch(e){}
 }
@@ -1333,20 +1422,37 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
         }
         ctx.restore();
       }
-      // Draw components present on the current level
-      for (var iPg=0;iPg<pergolaComponents.length;iPg++){
-        var per=pergolaComponents[iPg]; if((per.level||0)!==lvlNowC) continue;
+      // Draw components present on the current level (guard against missing globals)
+      var pergs = Array.isArray(window.pergolaComponents) ? window.pergolaComponents : [];
+      var garages = Array.isArray(window.garageComponents) ? window.garageComponents : [];
+      var balconies = Array.isArray(window.balconyComponents) ? window.balconyComponents : [];
+      var pools = Array.isArray(window.poolComponents) ? window.poolComponents : [];
+      var roofs = Array.isArray(window.roofComponents) ? window.roofComponents : [];
+
+      for (var iPg=0;iPg<pergs.length;iPg++){
+        var per=pergs[iPg]; if(!per) continue; if((per.level||0)!==lvlNowC) continue;
         // Pergola: draw with a wall-like outline similar to other objects
         drawBox(per.x, per.z, per.width, per.depth, per.rotation||0, '#10b981', 'rgba(16,185,129,0.15)', 0.95, (per.name||'Pergola'));
       }
-      for (var iGg=0;iGg<garageComponents.length;iGg++){
-        var gar=garageComponents[iGg]; if((gar.level||0)!==lvlNowC) continue;
+      for (var iGg=0;iGg<garages.length;iGg++){
+        var gar=garages[iGg]; if(!gar) continue; if((gar.level||0)!==lvlNowC) continue;
         // Use wall-like outline color to match other room outlines
         drawBox(gar.x, gar.z, gar.width, gar.depth, gar.rotation||0, '#334155', 'rgba(245,158,11,0.15)', 0.95, (gar.name||'Garage'));
       }
-      for (var iBl=0;iBl<balconyComponents.length;iBl++){
-        var bal=balconyComponents[iBl]; if((bal.level||1)!==lvlNowC) continue;
+      for (var iBl=0;iBl<balconies.length;iBl++){
+        var bal=balconies[iBl]; if(!bal) continue; if((bal.level||1)!==lvlNowC) continue;
         drawBox(bal.x, bal.z, bal.width, bal.depth, bal.rotation||0, '#6366f1', 'rgba(99,102,241,0.18)', 0.95, (bal.name||'Balcony'));
+      }
+      // Pools (ground floor by default)
+      for (var iPl=0;iPl<pools.length;iPl++){
+        var pol=pools[iPl]; if(!pol) continue; if((pol.level||0)!==lvlNowC) continue;
+        drawBox(pol.x, pol.z, pol.width, pol.depth, pol.rotation||0, '#06b6d4', 'rgba(6,182,212,0.18)', 0.95, (pol.name||'Pool'));
+      }
+      // Roofs (draw on their assigned level; default to ground if unspecified)
+      for (var iRf=0;iRf<roofs.length;iRf++){
+        var rf=roofs[iRf]; if(!rf) continue; if((rf.level||0)!==lvlNowC) continue;
+        // Use a distinctive rose color
+        drawBox(rf.x, rf.z, rf.width, rf.depth, rf.rotation||0, '#f43f5e', 'rgba(244,63,94,0.14)', 0.90, (rf.name||'Roof'));
       }
       // 2D Room outlines and labels: draw subtle room footprint plus a small top-left label
       try {

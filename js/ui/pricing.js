@@ -5,12 +5,19 @@
   if (typeof window.PRICING === 'undefined') window.PRICING = {};
   var P = window.PRICING;
   if (typeof P.roomPerSqm === 'undefined') P.roomPerSqm = 650; // basic build shell per m²
-  if (typeof P.pergolaPerSqm === 'undefined') P.pergolaPerSqm = 500; // hardwood + plastic roof sheets
-  if (typeof P.garagePerSqm === 'undefined') P.garagePerSqm = 400; // single garage, basic finish
-  if (typeof P.poolPerSqm === 'undefined') P.poolPerSqm = 850; // in-ground, excludes equipment premium
-  if (typeof P.roofPerSqm === 'undefined') P.roofPerSqm = 120; // sheet/tiles average incl. install
-  if (typeof P.balconyPerSqm === 'undefined') P.balconyPerSqm = 450; // deck + railing avg
-  if (typeof P.stairsPerSqm === 'undefined') P.stairsPerSqm = 300; // footprint-based allowance
+  // Updated per-sqm rates derived from client totals minus a $5,000 setup cost per type
+  // Stairs: (15440-5000)/4.80 = 2175.00
+  // Pergola: (14500-5000)/9.00 = 1055.56
+  // Garage: (17040-5000)/17.60 = 684.09
+  // Pool: (16800-5000)/8.00 = 1475.00
+  // Roof: (14795-5000)/14.96 ≈ 654.80
+  // Balcony: (11688-5000)/3.75 ≈ 1783.47
+  if (typeof P.pergolaPerSqm === 'undefined') P.pergolaPerSqm = 1055.56;
+  if (typeof P.garagePerSqm === 'undefined') P.garagePerSqm = 684.09;
+  if (typeof P.poolPerSqm === 'undefined') P.poolPerSqm = 1475.00;
+  if (typeof P.roofPerSqm === 'undefined') P.roofPerSqm = 654.80;
+  if (typeof P.balconyPerSqm === 'undefined') P.balconyPerSqm = 1783.47;
+  if (typeof P.stairsPerSqm === 'undefined') P.stairsPerSqm = 2175.00; // footprint-based allowance
   // Concrete/site defaults
   if (typeof P.concreteSlabPerSqm === 'undefined') P.concreteSlabPerSqm = 120; // 100mm reinforced slab
   if (typeof P.slabThicknessM === 'undefined') P.slabThicknessM = 0.10; // meters
