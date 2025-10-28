@@ -60,6 +60,8 @@
     { label: 'UI labels', url: 'js/ui/labels.js?v=20251026-1', critical: true },
     { label: 'Room renderer', url: 'js/render/drawRoom.js?v=20251026-2', critical: true },
     { label: 'Input/events', url: 'js/input/events.js?v=20251026-1', critical: true },
+    { label: 'Plan apply', url: 'js/core/plan-apply.js?v=20251027-1', critical: true },
+    { label: 'Plan populate', url: 'js/core/plan-populate.js?v=20251027-1', critical: true },
     { label: 'App core', url: 'js/app.js?v=20251026-1', critical: true }
   ];
 

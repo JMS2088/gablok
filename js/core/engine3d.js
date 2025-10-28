@@ -601,6 +601,106 @@
   };
   if (typeof window.updateStatus === 'undefined') window.updateStatus = function(msg){ try{ var s=document.getElementById('status'); if(s) s.textContent = msg; }catch(e){} };
 
+  // Main render loop (idempotent definition)
+  if (typeof window.renderLoop === 'undefined') {
+    window.renderLoop = function renderLoop(){
+      try {
+        // Throttle inactive frames to reduce CPU
+        var now = (performance && performance.now) ? performance.now() : Date.now();
+        var last = (typeof window.__perf==='object' && window.__perf && typeof window.__perf.lastFrameTime==='number') ? window.__perf.lastFrameTime : 0;
+        var minDt = (typeof window._minFrameInterval==='number' ? window._minFrameInterval : 16);
+        if (last && (now - last) < minDt) { requestAnimationFrame(renderLoop); return; }
+        if (window.__perf) window.__perf.lastFrameTime = now;
+
+        // Ensure canvas/context ready and projection up-to-date
+        setupCanvas();
+        if (!window.canvas || !window.ctx) { requestAnimationFrame(renderLoop); return; }
+        if (typeof updateProjectionCache==='function') updateProjectionCache();
+
+        // Compute UI fade alpha based on recent camera/interaction activity
+        try {
+          var uiNow = now;
+          var lastUi = (typeof window._uiLastInteractionTime==='number') ? window._uiLastInteractionTime : 0;
+          var idleMs = Math.max(0, uiNow - lastUi);
+          var fadeStart = (typeof window.UI_FADE_GRACE_MS==='number') ? window.UI_FADE_GRACE_MS : 0;
+          var fadeDur = (typeof window.UI_FADE_INACTIVITY_MS==='number') ? window.UI_FADE_INACTIVITY_MS : 3000;
+          var a = 1.0;
+          if (idleMs > fadeStart) {
+            var t = Math.min(1, (idleMs - fadeStart) / Math.max(1, fadeDur));
+            a = 1.0 - t;
+          }
+          // Keep UI fully visible while mouse is down or a drag is active
+          if (window.mouse && (window.mouse.down || window.mouse.dragType)) a = 1.0;
+          window.__uiFadeAlpha = Math.max(0, Math.min(1, a));
+        } catch(_e) { window.__uiFadeAlpha = 1.0; }
+
+        // Clear and draw grid
+        clearCanvas();
+        drawGrid();
+
+        // Draw world content
+        if (Array.isArray(window.allRooms)) {
+          for (var i=0; i<window.allRooms.length; i++) {
+            try { drawRoom(window.allRooms[i]); } catch(_er) {}
+          }
+        }
+        // Draw other components when their renderers are (lazily) available
+        try {
+          if (window.stairsComponent && typeof drawStairs === 'function') {
+            drawStairs(window.stairsComponent);
+          }
+        } catch(_eS) {}
+        try {
+          var a;
+          a = window.pergolaComponents || []; for (var pi=0; pi<a.length; pi++){ try { if (typeof drawPergola === 'function') drawPergola(a[pi]); } catch(_eP) {} }
+          a = window.garageComponents || []; for (var gi=0; gi<a.length; gi++){ try { if (typeof drawGarage === 'function') drawGarage(a[gi]); } catch(_eG) {} }
+          a = window.poolComponents || []; for (var li=0; li<a.length; li++){ try { if (typeof drawPool === 'function') drawPool(a[li]); } catch(_eL) {} }
+          a = window.roofComponents || []; for (var ri=0; ri<a.length; ri++){ try { if (typeof drawRoof === 'function') drawRoof(a[ri]); } catch(_eR) {} }
+          a = window.balconyComponents || []; for (var bi=0; bi<a.length; bi++){ try { if (typeof drawBalcony === 'function') drawBalcony(a[bi]); } catch(_eB) {} }
+        } catch(_eArr) {}
+
+        // Overlays: snap guides, labels, measurements, height scale
+        try { if (typeof drawSnapGuides==='function') drawSnapGuides(); } catch(_e1) {}
+        try { if (typeof updateLabels==='function') updateLabels(); } catch(_e2) {}
+        try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_e3) {}
+        try { if (typeof drawWorldHeightScale==='function') drawWorldHeightScale(); } catch(_e4) {}
+
+        // Emit a one-time event after the very first successful frame so the splash can hide immediately
+        try {
+          if (!window.__firstFrameEmitted) {
+            window.__firstFrameEmitted = true;
+            window.dispatchEvent(new CustomEvent('gablok:first-render'));
+          }
+        } catch(_eEvt) {}
+
+        // Stats
+        try { if (window.__dbgGfx) { window.__dbgGfx.frames++; } } catch(_e5) {}
+
+        // Schedule next frame
+        if (typeof window.requestAnimationFrame==='function') {
+          window.animationId = requestAnimationFrame(renderLoop);
+        }
+      } catch(err) {
+        try { console.error('renderLoop failed', err); } catch(_e) {}
+        if (typeof window.requestAnimationFrame==='function') window.animationId = requestAnimationFrame(renderLoop);
+      }
+    };
+  }
+
+  // Provide a simple focus/hover dimming alpha for objects if not already defined
+  if (typeof window.getObjectUiAlpha === 'undefined') {
+    window.getObjectUiAlpha = function getObjectUiAlpha(id){
+      try {
+        var sel = window.selectedRoomId || null;
+        var hover = window.__hoverRoomId || null;
+        var focus = window.__focusRoomId || null;
+        if (!sel && !hover && !focus) return 1.0;
+        var target = sel || hover || focus;
+        return (target === id) ? 1.0 : 0.6;
+      } catch(_e) { return 1.0; }
+    };
+  }
+
   // ---- Entrypoints ----
   if (typeof window.startApp === 'undefined') {
     window.startApp = function(){
