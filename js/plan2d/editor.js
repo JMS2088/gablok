@@ -467,7 +467,7 @@ function plan2dBind(){
     window.addEventListener('resize', window.__plan2dResize);
   }
   // Tool buttons
-  var bWall=document.getElementById('plan2d-tool-wall'); if(bWall) bWall.onclick=function(){ __plan2d.tool='wall'; plan2dCursor(); };
+  var bWall=document.getElementById('plan2d-tool-wall'); if(bWall) bWall.onclick=function(){ __plan2d.tool='wall'; plan2dCursor(); try{ updateStatus('Wall tool: Shift-click to chain walls, double-click or Enter to finish, Esc to cancel. Close loops to form rooms.'); }catch(e){} };
   var bWin=document.getElementById('plan2d-tool-window'); if(bWin) bWin.onclick=function(){ __plan2d.tool='window'; plan2dCursor(); updateStatus('Window tool: click a wall to place a window, then drag the endpoints to size it.'); };
   var bDoor=document.getElementById('plan2d-tool-door'); if(bDoor) bDoor.onclick=function(){ __plan2d.tool='door'; plan2dCursor(); };
   var bSel=document.getElementById('plan2d-tool-select'); if(bSel) bSel.onclick=function(){ __plan2d.tool='select'; plan2dCursor(); };
