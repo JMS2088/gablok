@@ -75,6 +75,34 @@
             sideAxis: (handle.type.indexOf('width') === 0 ? 'x' : (handle.type.indexOf('depth') === 0 ? 'z' : null)),
             sideSign: (handle.type.endsWith('+') ? 1 : (handle.type.endsWith('-') ? -1 : 0))
           };
+          // If this is a polygonal room (has a footprint), capture the original footprint
+          // and its bounding box so we can rescale it consistently during the drag.
+          try {
+            if (Array.isArray(target.footprint) && target.footprint.length >= 3) {
+              var fp = target.footprint;
+              var bxMin = Infinity, bxMax = -Infinity, bzMin = Infinity, bzMax = -Infinity;
+              for (var fi=0; fi<fp.length; fi++) {
+                var pt = fp[fi]; if (!pt) continue;
+                if (pt.x < bxMin) bxMin = pt.x; if (pt.x > bxMax) bxMax = pt.x;
+                if (pt.z < bzMin) bzMin = pt.z; if (pt.z > bzMax) bzMax = pt.z;
+              }
+              var openSnap = [];
+              if (Array.isArray(target.openings)) {
+                for (var oi=0; oi<target.openings.length; oi++) {
+                  var op = target.openings[oi]; if (!op) continue;
+                  // Only store world-endpoint anchored openings for polygon rooms
+                  if (typeof op.x0 === 'number' && typeof op.z0 === 'number' && typeof op.x1 === 'number' && typeof op.z1 === 'number') {
+                    openSnap.push({ idx: oi, x0: op.x0, z0: op.z0, x1: op.x1, z1: op.z1, type: op.type, sillM: op.sillM, heightM: op.heightM, meta: op.meta });
+                  }
+                }
+              }
+              mouse.dragInfo.poly = {
+                origFootprint: fp.map(function(p){ return { x: p.x, z: p.z }; }),
+                box: { minX: bxMin, maxX: bxMax, minZ: bzMin, maxZ: bzMax },
+                openings: openSnap
+              };
+            }
+          } catch(_polyCapErr) {}
           mouse.down = true;
           selectedRoomId = handle.roomId;
           canvas.style.cursor = 'grabbing';
@@ -290,10 +318,46 @@
               newW = clamp(snappedW, minSize, maxSize);
             }
             target.width = newW;
-
-            // Center is midpoint between opposite face and dragged face
+            // Center is midpoint between opposite face and dragged face (rect rooms)
             target.x = mouse.dragInfo.faceOppStart.x + (newW / 2) * (sX * axisXx);
             target.z = mouse.dragInfo.faceOppStart.z + (newW / 2) * (sX * axisXz);
+            // Polygonal rooms: scale footprint along X relative to fixed side
+            try {
+              if (mouse.dragInfo.poly && Array.isArray(target.footprint) && target.footprint.length >= 3) {
+                var box = mouse.dragInfo.poly.box;
+                var oldW = Math.max(0.01, (box.maxX - box.minX));
+                var scale = newW / oldW;
+                var fixedLeft = (type === 'width+' ? box.minX : null);
+                var fixedRight = (type === 'width-' ? box.maxX : null);
+                var newFp = [];
+                for (var pi=0; pi<mouse.dragInfo.poly.origFootprint.length; pi++){
+                  var q = mouse.dragInfo.poly.origFootprint[pi];
+                  var nx;
+                  if (fixedLeft != null) {
+                    nx = fixedLeft + (q.x - fixedLeft) * scale;
+                  } else if (fixedRight != null) {
+                    nx = fixedRight - (fixedRight - q.x) * scale;
+                  } else {
+                    nx = q.x; // fallback
+                  }
+                  newFp.push({ x: nx, z: q.z });
+                }
+                // Apply footprint and recompute center from new bbox
+                target.footprint = newFp;
+                var nMinX=Infinity,nMaxX=-Infinity,nMinZ=Infinity,nMaxZ=-Infinity;
+                for (var pj=0; pj<newFp.length; pj++){ var pnt=newFp[pj]; if(!pnt) continue; if(pnt.x<nMinX) nMinX=pnt.x; if(pnt.x>nMaxX) nMaxX=pnt.x; if(pnt.z<nMinZ) nMinZ=pnt.z; if(pnt.z>nMaxZ) nMaxZ=pnt.z; }
+                target.x = (nMinX + nMaxX) / 2; target.z = (nMinZ + nMaxZ) / 2;
+                // Transform openings anchored by world endpoints along X as well
+                if (Array.isArray(target.openings) && mouse.dragInfo.poly.openings.length) {
+                  for (var ok=0; ok<mouse.dragInfo.poly.openings.length; ok++){
+                    var os = mouse.dragInfo.poly.openings[ok]; var o = target.openings[os.idx]; if(!o) continue;
+                    function mapX(x){ if (fixedLeft != null) return fixedLeft + (x - fixedLeft) * scale; if (fixedRight != null) return fixedRight - (fixedRight - x) * scale; return x; }
+                    o.x0 = mapX(os.x0); o.x1 = mapX(os.x1);
+                    // z stays same for X-resize
+                  }
+                }
+              }
+            } catch(_polyXErr) {}
             if (target.type === 'roof') target.autoFit = false; // manual resize disables auto-fit
             updateStatus('Resizing width...');
           } else if (type === 'depth+' || type === 'depth-') {
@@ -313,9 +377,44 @@
               newD = clamp(snappedD, minSize, maxSize);
             }
             target.depth = newD;
-
             target.x = mouse.dragInfo.faceOppStart.x + (newD / 2) * (sZ * axisZx);
             target.z = mouse.dragInfo.faceOppStart.z + (newD / 2) * (sZ * axisZz);
+            // Polygonal rooms: scale footprint along Z relative to fixed side
+            try {
+              if (mouse.dragInfo.poly && Array.isArray(target.footprint) && target.footprint.length >= 3) {
+                var boxZ = mouse.dragInfo.poly.box;
+                var oldD = Math.max(0.01, (boxZ.maxZ - boxZ.minZ));
+                var scaleZ = newD / oldD;
+                var fixedTop = (type === 'depth+' ? boxZ.minZ : null);   // dragging +Z keeps top fixed
+                var fixedBottom = (type === 'depth-' ? boxZ.maxZ : null); // dragging -Z keeps bottom fixed
+                var newFpZ = [];
+                for (var pi2=0; pi2<mouse.dragInfo.poly.origFootprint.length; pi2++){
+                  var q2 = mouse.dragInfo.poly.origFootprint[pi2];
+                  var nz;
+                  if (fixedTop != null) {
+                    nz = fixedTop + (q2.z - fixedTop) * scaleZ;
+                  } else if (fixedBottom != null) {
+                    nz = fixedBottom - (fixedBottom - q2.z) * scaleZ;
+                  } else {
+                    nz = q2.z;
+                  }
+                  newFpZ.push({ x: q2.x, z: nz });
+                }
+                target.footprint = newFpZ;
+                var n2MinX=Infinity,n2MaxX=-Infinity,n2MinZ=Infinity,n2MaxZ=-Infinity;
+                for (var pk=0; pk<newFpZ.length; pk++){ var p2=newFpZ[pk]; if(!p2) continue; if(p2.x<n2MinX) n2MinX=p2.x; if(p2.x>n2MaxX) n2MaxX=p2.x; if(p2.z<n2MinZ) n2MinZ=p2.z; if(p2.z>n2MaxZ) n2MaxZ=p2.z; }
+                target.x = (n2MinX + n2MaxX) / 2; target.z = (n2MinZ + n2MaxZ) / 2;
+                // Transform openings anchored by world endpoints along Z as well
+                if (Array.isArray(target.openings) && mouse.dragInfo.poly.openings.length) {
+                  for (var ok2=0; ok2<mouse.dragInfo.poly.openings.length; ok2++){
+                    var os2 = mouse.dragInfo.poly.openings[ok2]; var o2 = target.openings[os2.idx]; if(!o2) continue;
+                    function mapZ(z){ if (fixedTop != null) return fixedTop + (z - fixedTop) * scaleZ; if (fixedBottom != null) return fixedBottom - (fixedBottom - z) * scaleZ; return z; }
+                    o2.z0 = mapZ(os2.z0); o2.z1 = mapZ(os2.z1);
+                    // x stays same for Z-resize
+                  }
+                }
+              }
+            } catch(_polyZErr) {}
             if (target.type === 'roof') target.autoFit = false; // manual resize disables auto-fit
             updateStatus('Resizing depth...');
           } else if (type === 'height') {

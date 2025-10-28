@@ -552,16 +552,71 @@ function plan2dBind(){
         __plan2d.chainActive = true;
         if(!Array.isArray(__plan2d.chainPoints)) __plan2d.chainPoints = [];
         var pt = plan2dSnapPoint(p);
+        // Helper: find nearby existing wall endpoint to snap to
+        function findNearbyEndpoint(point, tol){
+          var els = __plan2d.elements||[]; var best=null; var bestD=(tol||0.12);
+          for(var ii=0; ii<els.length; ii++){
+            var w=els[ii]; if(!w||w.type!=='wall') continue;
+            var d0=Math.hypot(point.x - w.x0, point.y - w.y0);
+            if(d0<bestD){ bestD=d0; best={x:w.x0,y:w.y0}; }
+            var d1=Math.hypot(point.x - w.x1, point.y - w.y1);
+            if(d1<bestD){ bestD=d1; best={x:w.x1,y:w.y1}; }
+          }
+          return best;
+        }
+        // Helper: axis-aligned segment intersection
+        function segIntersectAA(ax,ay,bx,by,cx,cy,dx,dy){
+          var aH = Math.abs(ay-by) < 1e-6, cH = Math.abs(cy-dy) < 1e-6;
+          var min=Math.min, max=Math.max;
+          if(aH && !cH){
+            var y=ay, x=cx;
+            if(x>=min(ax,bx)-1e-6 && x<=max(ax,bx)+1e-6 && y>=min(cy,dy)-1e-6 && y<=max(cy,dy)+1e-6) return {x:x,y:y};
+          } else if(!aH && cH){
+            var y2=cy, x2=ax;
+            if(x2>=min(cx,dx)-1e-6 && x2<=max(cx,dx)+1e-6 && y2>=min(ay,by)-1e-6 && y2<=max(ay,by)+1e-6) return {x:x2,y:y2};
+          }
+          return null;
+        }
         if(__plan2d.chainPoints.length===0){
+          // Start point may snap to nearby existing wall endpoint for clean joins
+          var snapEnd = findNearbyEndpoint(pt, 0.12); if(snapEnd){ pt = {x:plan2dSnap(snapEnd.x), y:plan2dSnap(snapEnd.y)}; }
           __plan2d.chainPoints.push(pt);
         } else {
-          // If near first point, close and finalize
+          // Axis lock new segment relative to last point
+          var lastPt = __plan2d.chainPoints[__plan2d.chainPoints.length-1];
+          var dxN = pt.x - lastPt.x, dyN = pt.y - lastPt.y;
+          if(Math.abs(dxN) >= Math.abs(dyN)) pt = { x: pt.x, y: lastPt.y }; else pt = { x: lastPt.x, y: pt.y };
+          // Snap new endpoint to any nearby existing wall endpoint
+          var nearEp = findNearbyEndpoint(pt, 0.12); if(nearEp){ pt = {x:plan2dSnap(nearEp.x), y:plan2dSnap(nearEp.y)}; }
+          // If near first point, close immediately
           var p0 = __plan2d.chainPoints[0];
           if(Math.hypot(pt.x - p0.x, pt.y - p0.y) <= 0.1){
             __plan2d.chainPoints.push({x:p0.x, y:p0.y});
             plan2dFinalizeChain();
             return;
           }
+          // If the new segment touches any existing wall (including earlier chain segments), snap to the intersection and finish the chain to avoid duplicate rooms
+          var didFinalize = false;
+          {
+            var hit = null; var ax=lastPt.x, ay=lastPt.y, bx=pt.x, by=pt.y;
+            // Check against existing walls
+            var els = __plan2d.elements||[];
+            for(var wi=0; wi<els.length && !hit; wi++){
+              var w=els[wi]; if(!w||w.type!=='wall') continue;
+              var ix = segIntersectAA(ax,ay,bx,by, w.x0,w.y0,w.x1,w.y1); if(ix){ hit = ix; break; }
+            }
+            // Check against previous chain segments (not including the last point segment)
+            if(!hit && __plan2d.chainPoints.length>=2){
+              for(var ci=0; ci<__plan2d.chainPoints.length-1 && !hit; ci++){
+                var cA = __plan2d.chainPoints[ci], cB = __plan2d.chainPoints[ci+1];
+                var ix2 = segIntersectAA(ax,ay,bx,by, cA.x,cA.y,cB.x,cB.y);
+                if(ix2){ hit = ix2; break; }
+              }
+            }
+            if(hit){ pt = { x: plan2dSnap(hit.x), y: plan2dSnap(hit.y) }; __plan2d.chainPoints.push(pt); plan2dFinalizeChain(); didFinalize = true; }
+          }
+          if(didFinalize){ return; }
+          // Otherwise, extend chain normally
           __plan2d.chainPoints.push(pt);
         }
         plan2dDraw();
@@ -878,8 +933,12 @@ function plan2dBind(){
             }
           }
         }
-        // Arrow keys nudge selected element(s) by gridStep
-        var step = __plan2d.gridStep || 0.5;
+  // Arrow keys nudge selected element(s) by gridStep
+  // Modifiers: Shift = coarse (x5), Alt = fine (x0.2)
+  var baseStep = __plan2d.gridStep || 0.5;
+  var step = baseStep;
+  if(ev && ev.shiftKey) step = baseStep * 5;
+  if(ev && ev.altKey) step = baseStep * 0.2;
         var dx=0, dy=0; if(key==='ArrowLeft') dx=-step; else if(key==='ArrowRight') dx=step; else if(key==='ArrowUp') dy=step; else if(key==='ArrowDown') dy=-step;
         if(dx!==0 || dy!==0){
           var moved=false; var els=__plan2d.elements||[];

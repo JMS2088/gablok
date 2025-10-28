@@ -3,8 +3,63 @@
 // resizeHandles, selectedRoomId, currentFloor
 
 function drawRoom(room) {
-  console.log('drawRoom called for room:', room);
   try {
+    // Helpers: near-plane clipping in camera space to keep floors/outlines visible without bending
+    var kBlend = Math.max(0, Math.min(1, (typeof window.PERSPECTIVE_STRENGTH==='number'? window.PERSPECTIVE_STRENGTH:0.88)));
+    var refZ = Math.max(0.5, (camera && camera.distance) || 12);
+    var P = (typeof window.__proj==='object' && window.__proj) || null;
+    var scalePx = (P && P.scale) || 600;
+    var nearEps = 0.01;
+    function toCam(p){
+      // world -> camera space coordinates
+      if (!P) return null;
+      var rx = p.x - P.cam[0], ry = p.y - P.cam[1], rz = p.z - P.cam[2];
+      return {
+        cx: rx*P.right[0] + ry*P.right[1] + rz*P.right[2],
+        cy: rx*P.up[0]    + ry*P.up[1]    + rz*P.up[2],
+        cz: rx*P.fwd[0]   + ry*P.fwd[1]   + rz*P.fwd[2]
+      };
+    }
+    function camToScreen(v){
+      if (!v) return null;
+      var czEff = v.cz * kBlend + refZ * (1 - kBlend);
+      var s = scalePx / czEff;
+      return { x: (canvas.width/2) + (v.cx * s) + pan.x, y: (canvas.height/2) - (v.cy * s) + pan.y };
+    }
+    function clipSegmentNear(a, b){
+      if(!a||!b) return null;
+      var az=a.cz, bz=b.cz; var A=a, B=b;
+      var ina = az >= nearEps, inb = bz >= nearEps;
+      if (ina && inb) return [A,B];
+      if (!ina && !inb) return null;
+      // compute intersection t with cz=nearEps plane in camera space along segment A->B
+      var t = (nearEps - az) / ((bz - az) || 1e-9);
+      var I = { cx: A.cx + (B.cx - A.cx)*t, cy: A.cy + (B.cy - A.cy)*t, cz: nearEps };
+      if (ina) return [A, I]; else return [I, B];
+    }
+    function clipPolyNear(camPts){
+      // Sutherland–Hodgman against cz >= nearEps
+      var out = [];
+      if (!camPts || camPts.length === 0) return out;
+      var prev = camPts[camPts.length - 1]; var prevIn = prev.cz >= nearEps;
+      for (var i=0;i<camPts.length;i++){
+        var cur = camPts[i]; var curIn = cur.cz >= nearEps;
+        if (curIn){
+          if (!prevIn){
+            // entering; add intersection
+            var t = (nearEps - prev.cz)/((cur.cz - prev.cz)||1e-9);
+            out.push({ cx: prev.cx + (cur.cx - prev.cx)*t, cy: prev.cy + (cur.cy - prev.cy)*t, cz: nearEps });
+          }
+          out.push(cur);
+        } else if (prevIn){
+          // exiting; add intersection
+          var t2 = (nearEps - prev.cz)/((cur.cz - prev.cz)||1e-9);
+          out.push({ cx: prev.cx + (cur.cx - prev.cx)*t2, cy: prev.cy + (cur.cy - prev.cy)*t2, cz: nearEps });
+        }
+        prev = cur; prevIn = curIn;
+      }
+      return out;
+    }
     // Consider grouped rooms (L/U composites): if one member is selected, highlight all in the group
     var selected = false;
     try {
@@ -53,33 +108,18 @@ function drawRoom(room) {
     }
     
     if (!hasFootprint) {
-      var edges = [
-        [0,1],[1,2],[2,3],[3,0],
-        [4,5],[5,6],[6,7],[7,4],
-        [0,4],[1,5],[2,6],[3,7]
-      ];
-      ctx.beginPath();
-      for (var eIdx = 0; eIdx < edges.length; eIdx++) {
-        var e = edges[eIdx];
-        var a = projected[e[0]];
-        var b = projected[e[1]];
-        if (!a || !b) continue;
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-      }
-      ctx.stroke();
-    } else {
-      // Draw polygonal room: base (floor) fill, side outlines, and top outline
-      var topY = roomFloorY + room.height;
-      // Project base and top vertices
-      var baseProj = [], topProj = [];
-      for (var vi=0; vi<room.footprint.length; vi++){
-        var p = room.footprint[vi];
-        baseProj.push(project3D(p.x, roomFloorY, p.z));
-        topProj.push(project3D(p.x, topY, p.z));
-      }
-      // Fill base (floor) polygon similar to rectangular rooms
-      if (baseProj.every(Boolean)){
+      // Draw rectangular room with near-plane clipping for edges and floor
+      var basePts = [0,1,2,3].map(function(i){ return corners[i]; });
+      var topPts = [4,5,6,7].map(function(i){ return corners[i]; });
+      // Floor fill (base quad) clipped
+      var baseCam = basePts.map(function(p){ return toCam(p); }).filter(Boolean);
+      var baseClip = clipPolyNear(baseCam);
+      if (baseClip.length >= 3){
+        // fill
+        ctx.beginPath(); var s0 = camToScreen(baseClip[0]); if(s0){ ctx.moveTo(s0.x, s0.y); }
+        for (var bi=1; bi<baseClip.length; bi++){ var sb = camToScreen(baseClip[bi]); if(sb){ ctx.lineTo(sb.x, sb.y); } }
+        ctx.closePath();
+        // choose fill like below (currentLevel/selected already set)
         if (currentLevel) {
           ctx.fillStyle = selected ? 'rgba(0,122,204,0.18)' : 'rgba(120,120,120,0.10)';
         } else if (selected && room.level !== currentFloor) {
@@ -87,59 +127,67 @@ function drawRoom(room) {
         } else {
           ctx.fillStyle = 'rgba(180,180,180,0.10)';
         }
-        ctx.beginPath();
-        ctx.moveTo(baseProj[0].x, baseProj[0].y);
-        for (var bi=1; bi<baseProj.length; bi++) ctx.lineTo(baseProj[bi].x, baseProj[bi].y);
+        ctx.fill();
+        // outline
+        ctx.beginPath(); var so = camToScreen(baseClip[0]); if(so){ ctx.moveTo(so.x, so.y); }
+        for (var bo=1; bo<baseClip.length; bo++){ var sb2 = camToScreen(baseClip[bo]); if(sb2){ ctx.lineTo(sb2.x, sb2.y); } }
+        ctx.closePath(); ctx.stroke();
+      }
+      // Edges (12), clipped per segment
+      var edges = [ [0,1],[1,2],[2,3],[3,0], [4,5],[5,6],[6,7],[7,4], [0,4],[1,5],[2,6],[3,7] ];
+      for (var eIdx=0; eIdx<edges.length; eIdx++){
+        var e = edges[eIdx]; var a3=corners[e[0]], b3=corners[e[1]];
+        var ac = toCam(a3), bc = toCam(b3); var seg = clipSegmentNear(ac, bc); if(!seg) continue;
+        var A2 = camToScreen(seg[0]), B2 = camToScreen(seg[1]); if(!A2||!B2) continue; ctx.beginPath(); ctx.moveTo(A2.x,A2.y); ctx.lineTo(B2.x,B2.y); ctx.stroke();
+      }
+    } else {
+      // Draw polygonal room: base (floor) fill, side outlines, and top outline
+      var topY = roomFloorY + room.height;
+      // Project base and top vertices
+      var baseCam = [], topCam = [];
+      for (var vi=0; vi<room.footprint.length; vi++){
+        var p = room.footprint[vi];
+        var bc = toCam({x:p.x,y:roomFloorY,z:p.z}); var tc = toCam({x:p.x,y:topY,z:p.z});
+        if (bc) baseCam.push(bc); if (tc) topCam.push(tc);
+      }
+      // Fill base (floor) polygon with near-plane clipping
+      var baseClip = clipPolyNear(baseCam);
+      if (baseClip.length >= 3){
+        if (currentLevel) {
+          ctx.fillStyle = selected ? 'rgba(0,122,204,0.18)' : 'rgba(120,120,120,0.10)';
+        } else if (selected && room.level !== currentFloor) {
+          ctx.fillStyle = 'rgba(0,122,204,0.18)';
+        } else {
+          ctx.fillStyle = 'rgba(180,180,180,0.10)';
+        }
+        ctx.beginPath(); var b0 = camToScreen(baseClip[0]); if(b0){ ctx.moveTo(b0.x, b0.y); }
+        for (var bi=1; bi<baseClip.length; bi++){ var sb = camToScreen(baseClip[bi]); if(sb){ ctx.lineTo(sb.x, sb.y); } }
         ctx.closePath();
         ctx.fill();
         // Base outline
-        ctx.beginPath();
-        ctx.moveTo(baseProj[0].x, baseProj[0].y);
-        for (var bo=1; bo<baseProj.length; bo++) ctx.lineTo(baseProj[bo].x, baseProj[bo].y);
+        ctx.beginPath(); var b1 = camToScreen(baseClip[0]); if(b1){ ctx.moveTo(b1.x, b1.y); }
+        for (var bo=1; bo<baseClip.length; bo++){ var sb2 = camToScreen(baseClip[bo]); if(sb2){ ctx.lineTo(sb2.x, sb2.y); } }
         ctx.closePath();
         ctx.stroke();
       }
-      // Top outline
-      if (topProj.every(Boolean)){
-        ctx.beginPath();
-        ctx.moveTo(topProj[0].x, topProj[0].y);
-        for (var oi=1; oi<topProj.length; oi++) ctx.lineTo(topProj[oi].x, topProj[oi].y);
-        ctx.closePath();
-        ctx.stroke();
+      // Top outline (clipped)
+      var topClip = clipPolyNear(topCam);
+      if (topClip.length >= 2){
+        ctx.beginPath(); var t0 = camToScreen(topClip[0]); if(t0){ ctx.moveTo(t0.x, t0.y); }
+        for (var ti=1; ti<topClip.length; ti++){ var st = camToScreen(topClip[ti]); if(st){ ctx.lineTo(st.x, st.y); } }
+        ctx.closePath(); ctx.stroke();
       }
-      // Draw side edges (vertical lines along footprint vertices)
+      // Draw side edges (vertical) with clipping per segment
       for (var si=0; si<room.footprint.length; si++){
         var pt = room.footprint[si];
-        var a0 = project3D(pt.x, roomFloorY, pt.z);
-        var a1 = project3D(pt.x, topY, pt.z);
-        if (a0 && a1) { ctx.beginPath(); ctx.moveTo(a0.x, a0.y); ctx.lineTo(a1.x, a1.y); ctx.stroke(); }
+        var ac = toCam({x:pt.x,y:roomFloorY,z:pt.z});
+        var bc = toCam({x:pt.x,y:topY,z:pt.z});
+        var seg = clipSegmentNear(ac, bc); if(!seg) continue; var A = camToScreen(seg[0]), B = camToScreen(seg[1]); if(!A||!B) continue;
+        ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
       }
     }
     
-    if (!hasFootprint) {
-      var p0=projected[0], p1=projected[1], p2=projected[2], p3=projected[3];
-      if (p0 && p1 && p2 && p3) {
-        if (currentLevel) {
-          ctx.fillStyle = selected ? 'rgba(0,122,204,0.18)' : 'rgba(120,120,120,0.10)';
-          ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          ctx.lineTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.lineTo(p3.x, p3.y);
-          ctx.closePath();
-          ctx.fill();
-        } else if (selected && room.level !== currentFloor) {
-          ctx.fillStyle = 'rgba(0,122,204,0.18)';
-          ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          ctx.lineTo(p1.x, p1.y);
-          ctx.lineTo(p2.x, p2.y);
-          ctx.lineTo(p3.x, p3.y);
-          ctx.closePath();
-          ctx.fill();
-        }
-      }
-    }
+    // Rectangle case floor fill moved above during clipping
 
     try { if (typeof drawHandlesForRoom === 'function') drawHandlesForRoom(room); } catch(e) {}
 

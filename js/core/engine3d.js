@@ -130,6 +130,7 @@
 
   // ---- Projection math ----
   var __proj = { right:[1,0,0], up:[0,1,0], fwd:[0,0,1], cam:[0,0,10], scale: 600 };
+  try { window.__proj = __proj; } catch(e) {}
   // Blend between perspective (1.0) and near-orthographic (0.0). Lowering this reduces perspective foreshortening.
   if (typeof window.PERSPECTIVE_STRENGTH === 'undefined') window.PERSPECTIVE_STRENGTH = 0.88;
   if (typeof window.updateProjectionCache === 'undefined') {
@@ -156,6 +157,7 @@
       __proj.right = right; __proj.up = up; __proj.fwd = fwd; __proj.cam = cam;
       var dpr = window.devicePixelRatio || 1;
       __proj.scale = Math.max(300, (Math.min(canvas ? canvas.height : 800, canvas ? canvas.width : 1200) * 0.6)) / dpr;
+      try { window.__proj = __proj; } catch(e) {}
     };
   }
   // Focus camera on an object's center with a distance scaled to its size
@@ -182,8 +184,15 @@
       var cx = rx*__proj.right[0] + ry*__proj.right[1] + rz*__proj.right[2];
       var cy = rx*__proj.up[0]    + ry*__proj.up[1]    + rz*__proj.up[2];
       var cz = rx*__proj.fwd[0]   + ry*__proj.fwd[1]   + rz*__proj.fwd[2];
-      // Make near-plane very permissive; clamp extremely close points instead of dropping them
-      if (cz <= 1e-5) return null; // behind or at camera plane
+      // Near-plane guard: clamp very-near front points; drop points that are sufficiently behind the camera.
+      // This avoids geometric bending while still keeping extremely close points projectable.
+      if (cz <= 1e-5) {
+        if (cz > -0.5) {
+          cz = 0.01; // slightly behind: clamp forward to near plane
+        } else {
+          return null; // too far behind camera; ignore
+        }
+      }
       if (cz < 0.01) cz = 0.01;    // clamp very close points so they remain projectable
       // Reduce perspective a little by blending cz with a reference depth (camera distance)
       var k = Math.max(0, Math.min(1, window.PERSPECTIVE_STRENGTH));

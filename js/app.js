@@ -2649,8 +2649,12 @@ function plan2dBind(){
             }
           }
         }
-        // Arrow keys nudge selected element(s) by gridStep
-        var step = __plan2d.gridStep || 0.5;
+  // Arrow keys nudge selected element(s) by gridStep
+  // Modifiers: Shift = coarse (x5), Alt = fine (x0.2)
+  var baseStep = __plan2d.gridStep || 0.5;
+  var step = baseStep;
+  if(ev && ev.shiftKey) step = baseStep * 5;
+  if(ev && ev.altKey) step = baseStep * 0.2;
         var dx=0, dy=0; if(key==='ArrowLeft') dx=-step; else if(key==='ArrowRight') dx=step; else if(key==='ArrowUp') dy=step; else if(key==='ArrowDown') dy=-step;
         if(dx!==0 || dy!==0){
           var moved=false; var els=__plan2d.elements||[];
@@ -4075,7 +4079,76 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     var quiet = !!opts.quiet;
     // Which floor to apply to (0=ground, 1=first). Default to ground for backward compatibility.
     var targetLevel = (typeof opts.level === 'number') ? opts.level : 0;
-    var elemsSrc = Array.isArray(elemsSnapshot) ? elemsSnapshot : __plan2d.elements;
+  // Always operate on a deep clone so temporary role/group markings do not mutate the 2D editor state.
+  var elemsSrc = (function(){
+    try {
+      var src = Array.isArray(elemsSnapshot) ? elemsSnapshot : __plan2d.elements;
+      return JSON.parse(JSON.stringify(src));
+    } catch(e) {
+      // Fallback to direct reference if cloning fails (should be rare)
+      return Array.isArray(elemsSnapshot) ? elemsSnapshot.slice() : (__plan2d.elements||[]).slice();
+    }
+  })();
+  var __groupedRooms = [];
+    // Phase -1: Respect room groups to avoid splitting user-added rooms when walls touch.
+    // If walls carry a groupId like 'room:<id>' (created when 2D is populated from existing 3D rooms),
+    // reconstruct those rooms first and temporarily mark their walls as nonroom so they won't be
+    // reconsidered in polygon/rectangle detection below.
+    (function handleGroupedRooms(){
+      try {
+        var groupMap = Object.create(null);
+        for (var gi=0; gi<elemsSrc.length; gi++){
+          var elg = elemsSrc[gi]; if(!elg || elg.type!=='wall') continue;
+          if (typeof elg.groupId === 'string' && elg.groupId.indexOf('room:')===0){
+            if (!groupMap[elg.groupId]) groupMap[elg.groupId] = [];
+            groupMap[elg.groupId].push(gi);
+          }
+        }
+        var sgnG = (__plan2d.yFromWorldZSign||1);
+        Object.keys(groupMap).forEach(function(gid){
+          var idxs = groupMap[gid]; if(!idxs || idxs.length<4) return;
+          var minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+          for (var k=0;k<idxs.length;k++){
+            var w = elemsSrc[idxs[k]]; if(!w) continue;
+            minX = Math.min(minX, w.x0, w.x1); maxX = Math.max(maxX, w.x0, w.x1);
+            minY = Math.min(minY, w.y0, w.y1); maxY = Math.max(maxY, w.y0, w.y1);
+          }
+          if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY)) return;
+          // Map plan bbox to world rect
+          var wx=(__plan2d.centerX||0) + (minX+maxX)/2;
+          var wz=(__plan2d.centerZ||0) + sgnG*((minY+maxY)/2);
+          var wW = Math.max(0.5, quantizeMeters(maxX-minX, 2));
+          var wD = Math.max(0.5, quantizeMeters(maxY-minY, 2));
+          var roomG = createRoom(wx, wz, targetLevel);
+          roomG.width = wW; roomG.depth = wD; roomG.height = 3; roomG.name = 'Room';
+          roomG.groupId = gid;
+          // Openings: any window/door hosted on grouped walls -> map to world endpoints
+          var openingsGW = [];
+          try {
+            var idxSet = Object.create(null); for (var ii=0; ii<idxs.length; ii++){ idxSet[idxs[ii]] = true; }
+            for (var ei=0; ei<elemsSrc.length; ei++){
+              var el = elemsSrc[ei]; if(!el || (el.type!=='window' && el.type!=='door')) continue;
+              if (typeof el.host !== 'number' || !idxSet[el.host]) continue;
+              var host = elemsSrc[el.host]; if(!host || host.type!=='wall') continue;
+              var t0=Math.max(0,Math.min(1,el.t0||0)), t1=Math.max(0,Math.min(1,el.t1||0));
+              var ax = host.x0 + (host.x1-host.x0)*t0; var ay = host.y0 + (host.y1-host.y0)*t0;
+              var bx = host.x0 + (host.x1-host.x0)*t1; var by = host.y0 + (host.y1-host.y0)*t1;
+              var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgnG*ay;
+              var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgnG*by;
+              var sill = (el.type==='window') ? ((__plan2d&&__plan2d.windowSillM)||1.0) : 0;
+              var hM = (typeof el.heightM==='number') ? el.heightM : ((el.type==='door') ? ((__plan2d&&__plan2d.doorHeightM)||2.04) : ((__plan2d&&__plan2d.windowHeightM)||1.5));
+              openingsGW.push({ type: el.type, x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: (el.meta||null) });
+            }
+          } catch(_gOpen) {}
+          roomG.openings = openingsGW;
+          __groupedRooms.push(roomG);
+          // Exclude these walls from further detection by marking as nonroom temporarily
+          for (var m=0; m<idxs.length; m++){
+            var ww = elemsSrc[idxs[m]]; if(ww && ww.type==='wall') ww.wallRole = 'nonroom';
+          }
+        });
+      } catch(_ge) { /* ignore grouping errors */ }
+    })();
   // Room reconstruction should consider any wall that isn't explicitly marked as a non-room outline.
   // This way, newly drawn user walls (no role) can form rooms. Non-room component outlines (garage/pergola/balcony) are excluded.
   var walls = elemsSrc.filter(function(e){ return e && e.type==='wall' && e.wallRole !== 'nonroom'; });
@@ -4210,12 +4283,54 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     var polyRooms = [];
     if (!stripsOnly) {
       try {
-        // 1) Build snapped node set from all wall endpoints (orthogonal only, excluding non-room outlines)
+        // 0) Fast path: detect simple single loops (all nodes degree=2) and emit ONE polygon per loop.
+        // Build snapped graph over original walls to keep adjacency un-split for degree check
+        var nodesSimple = Object.create(null); var edgesSimple = []; var endsSimple = [];
+        for (var wps=0; wps<elemsSrc.length; wps++){
+          var ws = elemsSrc[wps]; if(!ws || ws.type!=='wall' || ws.wallRole==='nonroom') continue;
+          if(!approxEq(ws.y0, ws.y1, 1e-2) && !approxEq(ws.x0, ws.x1, 1e-2)) continue;
+          var axS = keyCoord(ws.x0), ayS = keyCoord(ws.y0); var bxS = keyCoord(ws.x1), byS = keyCoord(ws.y1);
+          var kAS = axS.toFixed(2)+","+ayS.toFixed(2); var kBS = bxS.toFixed(2)+","+byS.toFixed(2);
+          if(!nodesSimple[kAS]) nodesSimple[kAS] = { x:axS, y:ayS, edges:[] };
+          if(!nodesSimple[kBS]) nodesSimple[kBS] = { x:bxS, y:byS, edges:[] };
+          var eIdS = edgesSimple.length; edgesSimple.push(wps); endsSimple.push({ a:kAS, b:kBS });
+          nodesSimple[kAS].edges.push(eIdS); nodesSimple[kBS].edges.push(eIdS);
+        }
+        var visitedES = new Array(edgesSimple.length).fill(false);
+        function compWalkSimple(start){ var st=[start], E=[], N=new Set(); while(st.length){ var ei=st.pop(); if(visitedES[ei]) continue; visitedES[ei]=true; E.push(ei); var ep=endsSimple[ei]; if(!ep) continue; N.add(ep.a); N.add(ep.b); var na=nodesSimple[ep.a], nb=nodesSimple[ep.b]; if(na) for(var u=0; u<na.edges.length; u++){ var e2=na.edges[u]; if(!visitedES[e2]) st.push(e2);} if(nb) for(var v=0; v<nb.edges.length; v++){ var e3=nb.edges[v]; if(!visitedES[e3]) st.push(e3);} } return {edges:E, nodes:Array.from(N)}; }
+        var compsSimple=[]; for (var sI=0; sI<edgesSimple.length; sI++){ if(!visitedES[sI]) compsSimple.push(compWalkSimple(sI)); }
+        var usedWallIdx = Object.create(null);
+        for (var cs=0; cs<compsSimple.length; cs++){
+          var compS = compsSimple[cs]; if (compS.edges.length < 4) continue;
+          var degOK = true; for (var nn=0; nn<compS.nodes.length; nn++){ var kN=compS.nodes[nn]; var nS=nodesSimple[kN]; if(!nS || nS.edges.length!==2){ degOK=false; break; } }
+          if (!degOK) continue;
+          // Build neighbor map and trace a single polygon around the loop
+          var adjS = Object.create(null);
+          for (var eiS=0; eiS<compS.edges.length; eiS++){ var ed = compS.edges[eiS]; var ep = endsSimple[ed]; if(!adjS[ep.a]) adjS[ep.a]=[]; if(!adjS[ep.b]) adjS[ep.b]=[]; adjS[ep.a].push(ep.b); adjS[ep.b].push(ep.a); }
+          // Start from bottom-left
+          var startKeyS=null, minYS=Infinity, minXS=Infinity; for (var kk=0; kk<compS.nodes.length; kk++){ var key=compS.nodes[kk]; var n=nodesSimple[key]; if(n.y < minYS - 1e-6 || (approxEq(n.y,minYS,1e-6) && n.x < minXS - 1e-6)){ minYS=n.y; minXS=n.x; startKeyS=key; } }
+          if(!startKeyS) continue; var startN=nodesSimple[startKeyS]; var neighS=adjS[startKeyS]||[]; if(!neighS.length) continue;
+          var nextKeyS=null, bestAngS=Infinity; for (var ni=0; ni<neighS.length; ni++){ var nk=neighS[ni]; var v=nodesSimple[nk]; var ang=Math.atan2(v.y-startN.y, v.x-startN.x); if(ang < bestAngS){ bestAngS=ang; nextKeyS=nk; } }
+          var polyS=[{x:startN.x,y:startN.y}], prevKeyS=startKeyS, curKeyS=nextKeyS, guardS=0;
+          while(curKeyS && guardS++<10000){ var cur=nodesSimple[curKeyS]; polyS.push({x:cur.x,y:cur.y}); var ns=adjS[curKeyS]||[]; var nA=ns[0], nB=ns[1]; var nxt=(nA===prevKeyS? nB:nA); if(!nxt || nxt===startKeyS) break; prevKeyS=curKeyS; curKeyS=nxt; }
+          if (polyS.length >= 4) {
+            // Collect wall indices from this component
+            var wallIdxSetS = Object.create(null);
+            for (var eMark=0; eMark<compS.edges.length; eMark++){ var weIdx = edgesSimple[compS.edges[eMark]]; wallIdxSetS[weIdx] = true; usedWallIdx[weIdx] = true; }
+            var gidS = 'poly_loop_'+cs+'_'+Math.floor((performance && performance.now)? performance.now(): Date.now());
+            polyRooms.push({ poly: polyS, groupId: gidS, wallIdxSet: wallIdxSetS });
+            // Mark perimeter walls as room
+            try { Object.keys(wallIdxSetS).forEach(function(wix){ var wref=elemsSrc[+wix]; if(wref && wref.type==='wall') wref.wallRole='room'; }); } catch(_){ }
+          }
+        }
+
+        // 1) Build snapped node set from remaining walls, split at T-junctions and create half-edges
         var nodesP = Object.create(null); // key -> { x, y, out: [] }
         var endpointWalls = []; // keep original wall refs for indexing
         for (var wiP = 0; wiP < elemsSrc.length; wiP++) {
           var wP = elemsSrc[wiP];
           if (!wP || wP.type !== 'wall' || wP.wallRole === 'nonroom') continue;
+          if (usedWallIdx[wiP]) continue; // already emitted as a single polygon loop
           // only axis-aligned
           if (!approxEq(wP.y0, wP.y1, 1e-2) && !approxEq(wP.x0, wP.x1, 1e-2)) continue;
           var ax = keyCoord(wP.x0), ay = keyCoord(wP.y0);
@@ -4380,21 +4495,45 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             }
           }
         }
-        // Remove the outer face (largest area) if present
-        if (faces.length > 0) {
-          var maxArea = -Infinity, maxIndex = -1;
-          for (var fi = 0; fi < faces.length; fi++) { if (faces[fi].area > maxArea) { maxArea = faces[fi].area; maxIndex = fi; } }
-          if (maxIndex >= 0) faces.splice(maxIndex, 1);
+        // New policy: For each connected wall component, keep only the single largest bounded face
+        // (outermost room) to avoid splitting/duplicates when walls touch.
+        // Build union-find over wall indices using node adjacency from half-edges.
+        var dsuParent = Object.create(null);
+        function dsuFind(a){ a=String(a); if(dsuParent[a]==null){ dsuParent[a]=a; return a; } if(dsuParent[a]===a) return a; dsuParent[a]=dsuFind(dsuParent[a]); return dsuParent[a]; }
+        function dsuUnion(a,b){ a=dsuFind(a); b=dsuFind(b); if(a!==b) dsuParent[b]=a; }
+        // Seed DSU with walls present in halfEdges
+        for (var heI=0; heI<halfEdges.length; heI++){ var wId0=halfEdges[heI].wallIndex; if(typeof wId0==='number') dsuFind(wId0); }
+        // For each node, union all wall indices that meet at that node
+        Object.keys(nodesP).forEach(function(k){
+          var out = nodesP[k].out || []; if(out.length<=1) return;
+          var wsHere = [];
+          for(var oi=0; oi<out.length; oi++){ var wId = halfEdges[out[oi]].wallIndex; if(typeof wId==='number') wsHere.push(wId); }
+          // dedupe
+          wsHere.sort(function(a,b){return a-b;}); var uniq=[]; for(var u=0; u<wsHere.length; u++){ if(!uniq.length||uniq[uniq.length-1]!==wsHere[u]) uniq.push(wsHere[u]); }
+          for(var u1=1; u1<uniq.length; u1++){ dsuUnion(uniq[0], uniq[u1]); }
+        });
+        // Group faces by component root (use any wall from face's wall set)
+        var groups = Object.create(null);
+        for (var fci = 0; fci < faces.length; fci++){
+          var F = faces[fci]; if(!F) continue;
+          var anyWall = null; try { var keysW = Object.keys(F.wallIdxSet||{}); if(keysW.length) anyWall = +keysW[0]; } catch(_gw){}
+          if(anyWall==null || !isFinite(anyWall)) continue;
+          var root = dsuFind(anyWall);
+          if(!groups[root]) groups[root] = [];
+          groups[root].push({ idx:fci, face:F });
         }
-        // Build polyRooms from faces and mark perimeter walls as room
-        for (var fci = 0; fci < faces.length; fci++) {
-          var F = faces[fci];
-          if (!F || !Array.isArray(F.poly) || F.poly.length < 3) continue;
+        // Pick the largest-area face from each group and emit only those
+        Object.keys(groups).forEach(function(grKey){
+          var arr = groups[grKey]; if(!arr || !arr.length) return;
+          var best = arr[0];
+          for(var bi=1; bi<arr.length; bi++){ if((arr[bi].face.area||0) > (best.face.area||0)) best = arr[bi]; }
+          var F = best.face; var fci = best.idx;
+          if (!F || !Array.isArray(F.poly) || F.poly.length < 3) return;
           var gid = 'polyf_' + fci + '_' + Math.floor((performance && performance.now) ? performance.now() : Date.now());
           polyRooms.push({ poly: F.poly, groupId: gid, wallIdxSet: F.wallIdxSet });
           // mark walls used by this face as room perimeter to avoid strip duplication
           try { Object.keys(F.wallIdxSet).forEach(function (wix) { var wref = elemsSrc[+wix]; if (wref && wref.type === 'wall') wref.wallRole = 'room'; }); } catch(_m){}
-        }
+        });
       } catch(_polyAdvE) { /* best-effort; ignore on failure */ }
     }
 
@@ -4437,6 +4576,10 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
 
   // Replace only rooms on the target level; also clear standalone strips if ground floor
     allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
+  // Re-add grouped rooms (from 3D) first so they persist and aren't split by touching walls
+  if (Array.isArray(__groupedRooms) && __groupedRooms.length){
+    for (var gr=0; gr<__groupedRooms.length; gr++){ allRooms.push(__groupedRooms[gr]); }
+  }
   // We'll build interior strips and merge with existing ones for this level below
     // 2D y corresponds to world z; 2D x corresponds to world x; plan is centered at (0,0)
     // First, create polygonal rooms (single composite) from polyRooms
@@ -4482,8 +4625,31 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     }
 
     // Then, create standard rectangular rooms
+    // If a polygon room already represents an axis-aligned rectangle with the same bbox,
+    // skip creating a duplicate rectangular room here.
+    var rectLikePolyBoxes = [];
+    try {
+      for (var prb = 0; prb < polyRooms.length; prb++){
+        var PRb = polyRooms[prb]; if(!PRb || !Array.isArray(PRb.poly) || PRb.poly.length < 4) continue;
+        // check if orthogonal rectangle (4 unique corners and axis-aligned)
+        var ptsB = PRb.poly;
+        var minXB=Infinity,maxXB=-Infinity,minYB=Infinity,maxYB=-Infinity; var ortho=true;
+        for (var piB=0; piB<ptsB.length; piB++){ var pB=ptsB[piB]; if (pB.x<minXB) minXB=pB.x; if (pB.x>maxXB) maxXB=pB.x; if (pB.y<minYB) minYB=pB.y; if (pB.y>maxYB) maxYB=pB.y; }
+        // verify all points lie on one of the four rectangle lines
+        for (var piB2=0; piB2<ptsB.length; piB2++){ var q=ptsB[piB2]; var onEdge = (Math.abs(q.x-minXB)<=1e-6 || Math.abs(q.x-maxXB)<=1e-6 || Math.abs(q.y-minYB)<=1e-6 || Math.abs(q.y-maxYB)<=1e-6); if(!onEdge){ ortho=false; break; } }
+        if (!ortho) continue;
+        rectLikePolyBoxes.push({ minX:minXB, maxX:maxXB, minY:minYB, maxY:maxYB });
+      }
+    } catch(_eBox){ rectLikePolyBoxes = []; }
     for(var r=0;r<roomsFound.length;r++){
       var R=roomsFound[r];
+      // Skip rectangles that match an existing rect-like polygon box (avoid duplicates)
+      var dupRect = false;
+      for (var rb=0; rb<rectLikePolyBoxes.length; rb++){
+        var B = rectLikePolyBoxes[rb];
+        if (approxEq(B.minX, R.minX) && approxEq(B.maxX, R.maxX) && approxEq(B.minY, R.minY) && approxEq(B.maxY, R.maxY)) { dupRect = true; break; }
+      }
+      if (dupRect) continue;
       var s = (__plan2d.yFromWorldZSign||1);
   var wx=(__plan2d.centerX||0) + (R.minX+R.maxX)/2, wz=(__plan2d.centerZ||0) + s*((R.minY+R.maxY)/2); // map plan coords back to world using stored center
   var w=R.maxX-R.minX, d=R.maxY-R.minY;
@@ -4663,6 +4829,8 @@ function populatePlan2DFromDesign(){
       minX: r.x - hw, maxX: r.x + hw,
       minZ: r.z - hd, maxZ: r.z + hd,
       type: 'room',
+      roomId: r.id,
+      polyLike: Array.isArray(r.footprint) && r.footprint.length >= 3,
       openings: (Array.isArray(r.openings) ? r.openings.slice() : [])
     });
   }
@@ -4864,26 +5032,26 @@ function populatePlan2DFromDesign(){
 
   // Build wall segments around each rectangle, shifted so center is at (0,0)
   __plan2d.elements = [];
-  function addRectWalls(minX,maxX,minZ,maxZ){
+  function addRectWalls(minX,maxX,minZ,maxZ, groupId){
     var s = (__plan2d.yFromWorldZSign||1);
     var x0=minX - cx, x1=maxX - cx, y0=s*(minZ - cz), y1=s*(maxZ - cz); // map z->y with sign
-    var idxTop = __plan2d.elements.length;     __plan2d.elements.push({type:'wall', x0:x0,y0:y0, x1:x1,y1:y0, thickness:__plan2d.wallThicknessM});
-    var idxRight = __plan2d.elements.length;   __plan2d.elements.push({type:'wall', x0:x1,y0:y0, x1:x1,y1:y1, thickness:__plan2d.wallThicknessM});
-    var idxBottom = __plan2d.elements.length;  __plan2d.elements.push({type:'wall', x0:x1,y0:y1, x1:x0,y1:y1, thickness:__plan2d.wallThicknessM});
-    var idxLeft = __plan2d.elements.length;    __plan2d.elements.push({type:'wall', x0:x0,y0:y1, x1:x0,y1:y0, thickness:__plan2d.wallThicknessM});
+    var idxTop = __plan2d.elements.length;     __plan2d.elements.push({type:'wall', x0:x0,y0:y0, x1:x1,y1:y0, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
+    var idxRight = __plan2d.elements.length;   __plan2d.elements.push({type:'wall', x0:x1,y0:y0, x1:x1,y1:y1, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
+    var idxBottom = __plan2d.elements.length;  __plan2d.elements.push({type:'wall', x0:x1,y0:y1, x1:x0,y1:y1, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
+    var idxLeft = __plan2d.elements.length;    __plan2d.elements.push({type:'wall', x0:x0,y0:y1, x1:x0,y1:y0, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
     return { top: idxTop, right: idxRight, bottom: idxBottom, left: idxLeft, coords: {x0:x0,x1:x1,y0:y0,y1:y1} };
   }
-  function addRotatedRectWalls(cxW, czW, w, d, rotationDeg){
+  function addRotatedRectWalls(cxW, czW, w, d, rotationDeg, groupId){
     var s = (__plan2d.yFromWorldZSign||1);
     var hw=w/2, hd=d/2, rot=((rotationDeg||0)*Math.PI)/180;
     function rotW(px,pz){ var dx=px-cxW, dz=pz-czW; return { x: cxW + dx*Math.cos(rot) - dz*Math.sin(rot), z: czW + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
     var c1=rotW(cxW-hw, czW-hd), c2=rotW(cxW+hw, czW-hd), c3=rotW(cxW+hw, czW+hd), c4=rotW(cxW-hw, czW+hd);
     function toPlan(p){ return { x: (p.x - cx), y: s * (p.z - cz) }; }
     var p1=toPlan(c1), p2=toPlan(c2), p3=toPlan(c3), p4=toPlan(c4);
-    var i1 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p1.x,y0:p1.y, x1:p2.x,y1:p2.y, thickness:__plan2d.wallThicknessM});
-    var i2 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p2.x,y0:p2.y, x1:p3.x,y1:p3.y, thickness:__plan2d.wallThicknessM});
-    var i3 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p3.x,y0:p3.y, x1:p4.x,y1:p4.y, thickness:__plan2d.wallThicknessM});
-    var i4 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p4.x,y0:p4.y, x1:p1.x,y1:p1.y, thickness:__plan2d.wallThicknessM});
+    var i1 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p1.x,y0:p1.y, x1:p2.x,y1:p2.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
+    var i2 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p2.x,y0:p2.y, x1:p3.x,y1:p3.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
+    var i3 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p3.x,y0:p3.y, x1:p4.x,y1:p4.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
+    var i4 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p4.x,y0:p4.y, x1:p1.x,y1:p1.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
     return { top: i1, right: i2, bottom: i3, left: i4, coords: {p1:p1,p2:p2,p3:p3,p4:p4} };
   }
   function markWallRole(idxObj, role){
@@ -4902,9 +5070,9 @@ function populatePlan2DFromDesign(){
     var wallIdx;
     var hasRotation = (typeof rb.rotation==='number' && Math.abs(rb.rotation)%360>1e-6);
     if (hasRotation) {
-      wallIdx = addRotatedRectWalls(rb.cx, rb.cz, rb.w, rb.d, rb.rotation);
+      wallIdx = addRotatedRectWalls(rb.cx, rb.cz, rb.w, rb.d, rb.rotation, (rb.type==='room' && rb.roomId && !rb.polyLike ? ('room:'+rb.roomId) : null));
     } else {
-      wallIdx = addRectWalls(rb.minX, rb.maxX, rb.minZ, rb.maxZ);
+      wallIdx = addRectWalls(rb.minX, rb.maxX, rb.minZ, rb.maxZ, (rb.type==='room' && rb.roomId && !rb.polyLike ? ('room:'+rb.roomId) : null));
     }
     // Tag walls so applyPlan2DTo3D can ignore non-room walls
     markWallRole(wallIdx, (rb.type==='room' ? 'room' : 'nonroom'));
