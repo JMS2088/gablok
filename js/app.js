@@ -126,6 +126,66 @@ function loadProject() {
   }
 }
 
+// Global Reset: clear current model, drafts, and storage, then re-render
+function resetAll(){
+  try {
+    // Clear persisted project and 2D drafts
+    try { localStorage.removeItem('gablok_project'); } catch(e){}
+    try { localStorage.removeItem('gablok_plan2dDrafts_v1'); } catch(e){}
+    // Clear in-memory 2D drafts if present
+    try { if (typeof __plan2dDrafts !== 'undefined') { __plan2dDrafts = { 0:null, 1:null }; } } catch(e){}
+
+    // Reset scene data
+    allRooms = [];
+    wallStrips = [];
+    stairsComponent = null;
+    pergolaComponents = [];
+    garageComponents = [];
+    poolComponents = [];
+    roofComponents = [];
+    balconyComponents = [];
+    furnitureItems = [];
+    selectedRoomId = null;
+    selectedWallStripIndex = -1;
+    currentFloor = 0;
+
+    // Optionally reset camera/pan
+    try {
+      camera.yaw = 0.0; camera.pitch = -0.5; camera.distance = 12;
+      camera.targetX = 0; camera.targetY = 2.5; camera.targetZ = 0;
+      pan.x = 0; pan.y = 0;
+    } catch(e){}
+
+    // Hide any open modals
+    ['plan2d-modal','floorplan-modal','pricing-modal','room-palette-modal','share-modal','info-modal'].forEach(function(id){ var el=document.getElementById(id); if(el) el.style.display='none'; });
+
+    // Re-render and notify
+    renderLoop && renderLoop();
+    updateStatus && updateStatus('Reset project');
+  } catch(e){ console.warn('resetAll failed', e); }
+}
+
+// Floor switching from the main dropdown (and hidden select)
+function switchLevel(){
+  try {
+    var sel = document.getElementById('levelSelect');
+    var val = sel ? sel.value : '0';
+    // Delegate to 2D editor handler when active to keep 2D/3D in lockstep
+    if (window.__plan2d && __plan2d.active && typeof plan2dSwitchFloorInEditor==='function'){
+      var to = (val==='1') ? 1 : 0;
+      plan2dSwitchFloorInEditor(to);
+      return;
+    }
+    // Regular 3D floor switch
+    if (val==='0' || val==='1'){
+      currentFloor = (val==='1') ? 1 : 0;
+      selectedRoomId = null;
+      renderLoop && renderLoop();
+      updateStatus && updateStatus('Switched to ' + (currentFloor===0 ? 'Ground' : 'First') + ' Floor');
+    }
+  } catch(e){ /* ignore */ }
+}
+
 function exportOBJ() {
   // Minimal OBJ exporter for boxes (rooms/components)
   var lines = ['# Gablok Export'];
@@ -1291,7 +1351,16 @@ function openPlan2DModal(){
 }
 function closePlan2DModal(){
   var m=document.getElementById('plan2d-modal'); if(m) m.style.display='none';
-  try { if (__plan2d && __plan2d.active) { var lvlClose=(typeof currentFloor==='number'? currentFloor : 0); applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvlClose }); plan2dSaveDraft(lvlClose); } } catch(e){}
+  try {
+    if (__plan2d && __plan2d.active) {
+      var lvlClose=(typeof currentFloor==='number'? currentFloor : 0);
+      // Only apply if 2D has elements to avoid clearing 3D when editor wasn't ready yet
+      if (Array.isArray(__plan2d.elements) && __plan2d.elements.length > 0) {
+        applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvlClose });
+        plan2dSaveDraft(lvlClose);
+      }
+    }
+  } catch(e){}
   __plan2d.active=false;
   plan2dUnbind();
   try{ plan2dStopSyncLoop(); }catch(e){}
@@ -1302,7 +1371,9 @@ function plan2dSwitchFloorInEditor(newLevel){
   try {
     var lvlNow = (typeof currentFloor==='number' ? currentFloor : 0);
     // Apply current floor to 3D before switching
-    applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvlNow });
+    if (__plan2d && Array.isArray(__plan2d.elements) && __plan2d.elements.length > 0) {
+      applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvlNow });
+    }
     plan2dSaveDraft(lvlNow);
   } catch(e){}
   // Change floor globally so labels/rooms update

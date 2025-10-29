@@ -657,6 +657,7 @@
           a = window.poolComponents || []; for (var li=0; li<a.length; li++){ try { if (typeof drawPool === 'function') drawPool(a[li]); } catch(_eL) {} }
           a = window.roofComponents || []; for (var ri=0; ri<a.length; ri++){ try { if (typeof drawRoof === 'function') drawRoof(a[ri]); } catch(_eR) {} }
           a = window.balconyComponents || []; for (var bi=0; bi<a.length; bi++){ try { if (typeof drawBalcony === 'function') drawBalcony(a[bi]); } catch(_eB) {} }
+          a = window.furnitureItems || []; for (var fi=0; fi<a.length; fi++){ try { if (typeof drawFurniture === 'function') drawFurniture(a[fi]); } catch(_eF) {} }
         } catch(_eArr) {}
 
         // Overlays: snap guides, labels, measurements, height scale

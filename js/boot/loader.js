@@ -27,7 +27,8 @@
     balcony: 'js/render/drawBalcony.js',
     garage: 'js/render/drawGarage.js',
     pool: 'js/render/drawPool.js',
-    roof: 'js/render/drawRoof.js'
+    roof: 'js/render/drawRoof.js',
+    furniture: 'js/render/drawFurniture.js'
   };
   function ensureRenderer(kind){
     var url = RENDERER_URL[kind]; if (!url) return Promise.resolve(false);
@@ -48,6 +49,7 @@
   if (typeof window.drawGarage !== 'function') window.drawGarage = function(obj){ try{ updateStatus && updateStatus('Loading garage…'); }catch(_){} ensureRenderer('garage').then(nudgeRender); };
   if (typeof window.drawPool !== 'function') window.drawPool = function(obj){ try{ updateStatus && updateStatus('Loading pool…'); }catch(_){} ensureRenderer('pool').then(nudgeRender); };
   if (typeof window.drawRoof !== 'function') window.drawRoof = function(obj){ try{ updateStatus && updateStatus('Loading roof…'); }catch(_){} ensureRenderer('roof').then(nudgeRender); };
+  if (typeof window.drawFurniture !== 'function') window.drawFurniture = function(obj){ try{ updateStatus && updateStatus('Loading furniture…'); }catch(_){} ensureRenderer('furniture').then(nudgeRender); };
 
   // Stubs: UI entry points
   if (typeof window.openRoomPalette !== 'function') window.openRoomPalette = function(roomId){ ensurePalette().then(function(){ try{ openRoomPalette(roomId); }catch(e){} }); };
