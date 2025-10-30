@@ -327,8 +327,11 @@ function plan2dStopSyncLoop(){ if(__plan2d._syncTimer){ clearInterval(__plan2d._
 function plan2dEdited(){ plan2dScheduleApply(false); }
 
 function openPlan2DModal(){
-  var m=document.getElementById('plan2d-modal'); if(!m) return;
+  var m=document.getElementById('plan2d-page'); if(!m) return;
   m.style.display='block';
+  try { var cnv=document.getElementById('canvas'); if(cnv) cnv.style.display='none'; } catch(e){}
+  try { var l3=document.getElementById('labels-3d'); if(l3) l3.style.display='none'; } catch(e){}
+  try { var meas=document.getElementById('measurements'); if(meas) meas.style.display='none'; } catch(e){}
   __plan2d.active=true;
   // Clear any 3D selection to avoid Delete key acting on 3D while in 2D editor
   try { selectedRoomId = null; } catch(e) {}
@@ -425,19 +428,31 @@ function openPlan2DModal(){
   try{ plan2dStartSyncLoop(); }catch(e){}
 }
 function closePlan2DModal(){
-  var m=document.getElementById('plan2d-modal'); if(m) m.style.display='none';
-  try { if (__plan2d && __plan2d.active) { var lvlClose=(typeof currentFloor==='number'? currentFloor : 0); applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvlClose }); plan2dSaveDraft(lvlClose); } } catch(e){}
+  var m=document.getElementById('plan2d-page'); if(m) m.style.display='none';
+  try {
+    if (__plan2d && __plan2d.active) {
+      var lvlClose=(typeof currentFloor==='number'? currentFloor : 0);
+      // Apply in non-destructive mode on close to avoid wiping 3D when 2D has no walls
+      if (Array.isArray(__plan2d.elements) && __plan2d.elements.length > 0) {
+        applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvlClose, nonDestructive:true });
+        plan2dSaveDraft(lvlClose);
+      }
+    }
+  } catch(e){}
   __plan2d.active=false;
   plan2dUnbind();
   try{ plan2dStopSyncLoop(); }catch(e){}
+  try { var cnv=document.getElementById('canvas'); if(cnv) cnv.style.display='block'; } catch(e){}
+  try { var l3=document.getElementById('labels-3d'); if(l3) l3.style.display='block'; } catch(e){}
+  try { var meas=document.getElementById('measurements'); if(meas) meas.style.display='block'; } catch(e){}
 }
 
 // Apply current floor and switch floors inside the 2D editor, keeping 3D in sync
 function plan2dSwitchFloorInEditor(newLevel){
   try {
     var lvlNow = (typeof currentFloor==='number' ? currentFloor : 0);
-    // Apply current floor to 3D before switching
-    applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvlNow });
+    // Apply current floor to 3D before switching; non-destructive avoids clearing when no walls exist
+    applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvlNow, nonDestructive:true });
     plan2dSaveDraft(lvlNow);
   } catch(e){}
   // Change floor globally so labels/rooms update

@@ -7,6 +7,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     var stripsOnly = !!opts.stripsOnly;
     var allowRooms = !!opts.allowRooms;
     var quiet = !!opts.quiet;
+    var nonDestructive = !!opts.nonDestructive; // when true, don't clear 3D rooms if there are no room walls in 2D (e.g., during view toggles)
     // Which floor to apply to (0=ground, 1=first). Default to ground for backward compatibility.
     var targetLevel = (typeof opts.level === 'number') ? opts.level : 0;
   // Always operate on a deep clone so temporary role/group markings do not mutate the 2D editor state.
@@ -83,7 +84,12 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   // This way, newly drawn user walls (no role) can form rooms. Non-room component outlines (garage/pergola/balcony) are excluded.
   var walls = elemsSrc.filter(function(e){ return e && e.type==='wall' && e.wallRole !== 'nonroom'; });
     if(walls.length===0){
-      // No walls -> clear rooms on target level in 3D so it reflects 2D state
+      // No room walls in 2D. In non-destructive mode (e.g., on modal close/floor toggle), do not clear 3D state.
+      if (nonDestructive) {
+        if(!quiet) try { updateStatus('Skipped apply: no room walls on current floor'); } catch(e) {}
+        return;
+      }
+      // Destructive mode: reflect 2D state by clearing rooms on the target level
       allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
       // Also clear any standalone strips for this level and rebuild below if needed
       wallStrips = wallStrips.filter(function(ws){ return (ws.level||0)!==targetLevel ? true : false; });
