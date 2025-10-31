@@ -307,16 +307,28 @@
 <!-- 2D Floor Plan Editor Modal -->
 <div id="plan2d-page" style="display:none; position:fixed; inset:0; z-index:2;">
 	<div id="plan2d-content" style="position:absolute; inset:0; width: 100%; height: 100vh; background:repeating-linear-gradient(0deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px), repeating-linear-gradient(90deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px); display:flex; flex-direction:column; overflow:hidden;">
-	<div style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:transparent; border-bottom:none;">
-			<strong style="font-size:15px; letter-spacing:0.5px;">2D Floor Plan Editor</strong>
+		<div id="plan2d-header" style="display:flex; align-items:center; gap:10px; padding:10px 14px; background:transparent; border-bottom:none;">
 			<div style="flex:1; display:flex; justify-content:center;">
-				<div class="plan2d-floor-toggle" role="group" aria-label="Switch Floor">
-					<button id="plan2d-floor-ground" type="button" title="Switch to Ground Floor">Ground</button>
-					<button id="plan2d-floor-first" type="button" title="Switch to First Floor">First</button>
+				<div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+					<div class="plan2d-floor-toggle" role="group" aria-label="Switch Floor">
+						<button id="plan2d-floor-ground" type="button" title="Switch to Ground Floor">Ground</button>
+						<button id="plan2d-floor-first" type="button" title="Switch to First Floor">First</button>
+					</div>
+					<div id="plan2d-compass" aria-label="North" title="North" style="width:28px; height:28px; border:1px solid #cbd5e1; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.25); user-select:none;">
+						<svg width="12" height="12" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+							<polygon points="12,3 16,11 12,9 8,11" fill="#e2e8f0"/>
+							<circle cx="12" cy="12" r="2" fill="#94a3b8"/>
+						</svg>
+					</div>
 				</div>
 			</div>
-			<div style="display:flex; gap:6px;">
-				<button id="plan2d-tool-wall" class="secondary" title="Draw Walls (300mm thick)">Wall</button>
+			<div id="plan2d-toolbar-right" style="display:flex; gap:6px; align-items:flex-start;">
+				<div id="plan2d-wall-group" style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+					<button id="plan2d-tool-wall" class="secondary" title="Draw Walls (300mm thick)">Wall</button>
+					<div style="font-size:11px; color:#ffffff; line-height:1;">
+						<span>Scale: </span><span id="plan2d-scale">1:100</span>
+					</div>
+				</div>
 				<button id="plan2d-tool-window" class="secondary" title="Draw Windows (thin line)">Window</button>
 				<button id="plan2d-tool-door" class="secondary" title="Draw Doors">Door</button>
 				<button id="plan2d-tool-select" class="secondary" title="Select elements to edit/delete">Select</button>
@@ -330,24 +342,8 @@
 				<canvas id="plan2d-canvas" style="position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair; z-index:1; background:repeating-linear-gradient(0deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px), repeating-linear-gradient(90deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px);"></canvas>
 				<canvas id="plan2d-overlay" style="position:absolute; inset:0; pointer-events:none; z-index:2;"></canvas>
 				<canvas id="labels-2d" style="position:absolute; inset:0; pointer-events:none; z-index:3;"></canvas>
-			</div>
-			<div style="width:300px; border-left:none; background:transparent; display:flex; flex-direction:column; padding:12px; gap:12px;">
-						<div style="font-size:12px; color:#334155; line-height:1.4;">
-							<strong>Instructions (Drag Mode)</strong><br>
-							1. Select Wall then click and drag to draw a wall (snaps orthogonally).<br>
-							2. Release mouse to finish segment; repeat for more walls.<br>
-							3. Switch to Window to drag thin window lines along walls.<br>
-							4. Erase tool: hover (highlight red) then click to remove a segment.<br>
-							5. Clear resets everything; Export/Import saves or restores JSON.<br>
-						</div>
-				<div style="font-size:12px; color:#475569;">
-					Scale: <span id="plan2d-scale">1:100</span>
-				</div>
-				<div style="font-size:12px; color:#475569;">
-					Elements: <span id="plan2d-count">0</span>
-				</div>
-				<div style="margin-top:auto; display:flex; flex-direction:column; gap:8px;">
-					<button id="plan2d-delete-selected" class="secondary" title="Delete selected element">Delete Selected</button>
+				<!-- Floating side overlay for Apply/Import/Export (frees full canvas width) -->
+				<div id="plan2d-side-overlay" style="position:absolute; right:16px; top:72px; z-index:4; display:flex; flex-direction:column; gap:8px; background:rgba(15,23,42,0.85); border:1px solid rgba(148,163,184,0.35); border-radius:10px; padding:10px; backdrop-filter: blur(2px);">
 					<button id="plan2d-apply-3d" title="Apply this floor plan to the 3D design">Apply to 3D</button>
 					<button id="plan2d-export" title="Export plan JSON">Export JSON</button>
 					<button id="plan2d-import" class="secondary" title="Import plan JSON">Import JSON</button>

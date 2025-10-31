@@ -1305,6 +1305,43 @@ function openPlan2DModal(){
   try { var cnv=document.getElementById('canvas'); if(cnv) cnv.style.display='none'; } catch(e){}
   try { var l3=document.getElementById('labels-3d'); if(l3) l3.style.display='none'; } catch(e){}
   try { var meas=document.getElementById('measurements'); if(meas) meas.style.display='none'; } catch(e){}
+  // Pin the 2D toolbar to the right edge and align its vertical position with the main navigation's top
+  try {
+    function __align2DToolbarRight(){
+      try{
+        var tb=document.getElementById('plan2d-toolbar-right'); var nav=document.getElementById('controls');
+        if(!tb || !nav) return;
+        // Find the first actionable control inside the left nav (button or dropdown-button)
+        var ref = nav.querySelector('button, .dropdown-button');
+        var rr = (ref && typeof ref.getBoundingClientRect==='function') ? ref.getBoundingClientRect() : null;
+        var nr = nav.getBoundingClientRect();
+        var topPx = rr ? rr.top : nr.top; // align to buttons' top, not the nav container background
+        tb.style.position='fixed';
+        tb.style.right = '20px'; // mirror main UI margin
+        tb.style.top = Math.max(0, Math.round(topPx)) + 'px';
+        tb.style.zIndex = '60';
+      }catch(_e){}
+    }
+    window.__plan2dAlignToolbarRight = __align2DToolbarRight;
+    __align2DToolbarRight();
+    window.addEventListener('resize', window.__plan2dAlignToolbarRight);
+  } catch(e){}
+  // Align the 2D header center with the main navigation by mirroring left/right padding
+  try {
+    function __align2DHeader(){
+      try{
+        var header=document.getElementById('plan2d-header'); var nav=document.getElementById('controls');
+        if(!header || !nav) return;
+        var r=nav.getBoundingClientRect();
+        var mirroredPad = Math.max(0, Math.round(r.left + r.width + 20)); // nav left + width + gap
+        header.style.paddingLeft = mirroredPad + 'px';
+        header.style.paddingRight = mirroredPad + 'px';
+      }catch(_e){}
+    }
+    window.__plan2dAlignHeader = __align2DHeader;
+    __align2DHeader();
+    window.addEventListener('resize', window.__plan2dAlignHeader);
+  } catch(e){}
   __plan2d.active=true;
   // Clear any 3D selection to avoid Delete key acting on 3D while in 2D editor
   try { selectedRoomId = null; } catch(e) {}
@@ -1373,6 +1410,16 @@ function closePlan2DModal(){
   try { var cnv=document.getElementById('canvas'); if(cnv) cnv.style.display='block'; } catch(e){}
   try { var l3=document.getElementById('labels-3d'); if(l3) l3.style.display='block'; } catch(e){}
   try { var meas=document.getElementById('measurements'); if(meas) meas.style.display='block'; } catch(e){}
+  // Cleanup header alignment
+  try {
+    if(window.__plan2dAlignHeader){ window.removeEventListener('resize', window.__plan2dAlignHeader); delete window.__plan2dAlignHeader; }
+    var header=document.getElementById('plan2d-header'); if(header){ header.style.paddingLeft=''; header.style.paddingRight=''; }
+  } catch(e){}
+  // Cleanup toolbar right pinning
+  try {
+    if(window.__plan2dAlignToolbarRight){ window.removeEventListener('resize', window.__plan2dAlignToolbarRight); delete window.__plan2dAlignToolbarRight; }
+    var tb=document.getElementById('plan2d-toolbar-right'); if(tb){ tb.style.position=''; tb.style.right=''; tb.style.top=''; tb.style.zIndex=''; }
+  } catch(e){}
 }
 
 // Apply current floor and switch floors inside the 2D editor, keeping 3D in sync
