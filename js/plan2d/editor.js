@@ -436,6 +436,13 @@ function openPlan2DModal(){
   } catch(e) { console.warn('populatePlan2DFromDesign/loadDraft failed', e); }
   plan2dDraw();
   updatePlan2DInfo();
+  // Ensure 3D reflects the loaded 2D draft immediately on open (non-destructive)
+  try {
+    var lvlApplied = (typeof currentFloor==='number' ? currentFloor : 0);
+    if (Array.isArray(__plan2d.elements) && __plan2d.elements.length > 0) {
+      applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvlApplied, nonDestructive:true });
+    }
+  } catch(_eApplyOpen) {}
   // Center and fit view to current content on open if user hasn't panned/zoomed
   try {
     var hasElemsNow = Array.isArray(__plan2d.elements) && __plan2d.elements.length>0;
@@ -943,6 +950,18 @@ function plan2dBind(){
           // Ensure ordering
           if(t0 > t1){ var tmp=t0; t0=t1; t1=tmp; }
           var door = { type:'door', host:hostIdx, t0:t0, t1:t1, widthM: __plan2d.doorWidthM, heightM: __plan2d.doorHeightM, thickness: wall.thickness || __plan2d.wallThicknessM, meta:{ hinge:'t0', swing:'in' } };
+          // Ensure door has a minimal default span on single-click (no drag)
+          try {
+            if (Math.abs(door.t1 - door.t0) < 1e-6) {
+              var wdx = wall.x1 - wall.x0, wdy = wall.y1 - wall.y0; var wLen = Math.hypot(wdx, wdy) || 1;
+              var defW = (__plan2d.doorWidthM || 0.9);
+              var dt = Math.max(0.01, defW / wLen);
+              var mid = door.t0;
+              door.t0 = Math.max(0, Math.min(1, mid - dt/2));
+              door.t1 = Math.max(0, Math.min(1, mid + dt/2));
+              if (door.t1 <= door.t0 + 1e-6) { door.t1 = Math.min(1, door.t0 + 0.02); }
+            }
+          } catch(_eInitDoor) {}
           __plan2d.elements.push(door);
           plan2dSetSelection(__plan2d.elements.length - 1);
           plan2dDraw(); updatePlan2DInfo(); plan2dEdited();
@@ -975,6 +994,16 @@ function plan2dBind(){
             }catch(_e){}
           })();
           var win = { type:'window', host:widx, t0:t, t1:t, thickness: hostW.thickness || __plan2d.wallThicknessM, sillM:(__plan2d.windowSillM||1.0), heightM:(__plan2d.windowHeightM||1.5) };
+          // Ensure a visible default span if user single-clicks without dragging
+          try {
+            var wdx = hostW.x1 - hostW.x0, wdy = hostW.y1 - hostW.y0; var wLen = Math.hypot(wdx, wdy) || 1;
+            var defW = (__plan2d.windowDefaultWidthM || 1.2);
+            var dt = Math.max(0.01, defW / wLen);
+            var t0d = Math.max(0, Math.min(1, t - dt/2));
+            var t1d = Math.max(0, Math.min(1, t + dt/2));
+            if (t1d <= t0d + 1e-6) { t1d = Math.min(1, t0d + 0.02); }
+            win.t0 = t0d; win.t1 = t1d;
+          } catch(_eInitWin) {}
           __plan2d.elements.push(win);
           plan2dSetSelection(__plan2d.elements.length - 1);
           __plan2d.dragWindow = { index: __plan2d.selectedIndex, end:'t1' };

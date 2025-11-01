@@ -1,3 +1,43 @@
+/**
+ * @file engine3d.js
+ * @description Core 3D rendering engine with orbit camera, projection, and scene management.
+ * 
+ * **Responsibilities:**
+ * - Canvas initialization and render loop coordination
+ * - Orbit camera with mouse/touch pan, zoom, rotation
+ * - 3D→2D projection (simple orthographic-like projection)
+ * - Grid rendering (10m × 10m with 0.5m minor lines)
+ * - Base scene state (camera, rooms, wall strips, components)
+ * - Startup orchestration (apply 2D drafts, create default room, begin render loop)
+ * - Wall strip rendering (including window/door opening overlays)
+ * - Global helper functions (quantizeMeters, formatMeters, updateStatus, etc.)
+ * 
+ * **Global Exports:**
+ * - `camera` - {yaw, pitch, distance, targetX/Y/Z, fov, aspect}
+ * - `allRooms` - Array of room objects
+ * - `wallStrips` - Array of interior wall strip objects
+ * - `stairsComponent`, `pergolaComponents`, `garageComponents`, etc.
+ * - `selectedRoomId`, `selectedWallStripIndex`, `currentFloor`
+ * - `renderLoop()` - Main render loop (requestAnimationFrame)
+ * - `startApp()` - Bootstrap entry point called after DOM ready
+ * - `project3D(x, y, z)` - Convert 3D world coords to 2D canvas coords
+ * - `quantizeMeters(value, precision)` - Round to 0.5m increments
+ * - `formatMeters(value)` - Format as "X.Xm"
+ * - `updateStatus(message)` - Update status bar text
+ * 
+ * **Dependencies:**
+ * - None (standalone, loaded first by bootstrap)
+ * - Expects `applyPlan2DTo3D()` to be defined by plan-apply.js for startup auto-apply
+ * 
+ * **Design Patterns:**
+ * - IIFE to avoid polluting global scope while selectively exporting key symbols
+ * - Idempotent initialization (checks `window.camera` before defining)
+ * - Defensive coding with try-catch on all major paths
+ * 
+ * @version 2.0 (Post-Phase-1-Refactoring)
+ * @since 2024
+ */
+
 // Core 3D engine bootstrap: orbit camera, projection, grid, base room/state.
 // Idempotent: defines globals only if missing, so app.js can extend safely.
 (function(){
@@ -446,7 +486,74 @@
     return null;
   };
   if (typeof window.hitTestWallStrips === 'undefined') window.hitTestWallStrips = function(){ return -1; };
-  if (typeof window.drawWallStrip === 'undefined') window.drawWallStrip = function(){};
+  if (typeof window.drawWallStrip === 'undefined') window.drawWallStrip = function(ws){
+    try {
+      if (!ws) return;
+      var x0=ws.x0, z0=ws.z0, x1=ws.x1, z1=ws.z1;
+      var thick = Math.max(0.02, ws.thickness||0.3);
+      var h = Math.max(0.1, ws.height||3.0);
+      var baseY = (typeof ws.baseY==='number') ? ws.baseY : ((ws.level||0)*3.5);
+      var dx = x1-x0, dz = z1-z0; var len = Math.hypot(dx,dz)||1; var nx = -dz/len, nz = dx/len; // left normal
+      var hw = thick/2;
+      // Base corners (counter-clockwise)
+      var A = {x:x0+nx*hw, y:baseY, z:z0+nz*hw};
+      var B = {x:x1+nx*hw, y:baseY, z:z1+nz*hw};
+      var C = {x:x1-nx*hw, y:baseY, z:z1-nz*hw};
+      var D = {x:x0-nx*hw, y:baseY, z:z0-nz*hw};
+      var At = {x:A.x, y:baseY+h, z:A.z};
+      var Bt = {x:B.x, y:baseY+h, z:B.z};
+      var Ct = {x:C.x, y:baseY+h, z:C.z};
+      var Dt = {x:D.x, y:baseY+h, z:D.z};
+      // Project
+      var pA=project3D(A.x,A.y,A.z), pB=project3D(B.x,B.y,B.z), pC=project3D(C.x,C.y,C.z), pD=project3D(D.x,D.y,D.z);
+      var pAt=project3D(At.x,At.y,At.z), pBt=project3D(Bt.x,Bt.y,Bt.z), pCt=project3D(Ct.x,Ct.y,Ct.z), pDt=project3D(Dt.x,Dt.y,Dt.z);
+      if (!pA||!pB||!pC||!pD||!pAt||!pBt||!pCt||!pDt) return;
+      ctx.save();
+      var onLevel = (ws.level||0) === (currentFloor||0);
+      ctx.strokeStyle = onLevel ? '#64748b' : 'rgba(148,163,184,0.6)';
+      ctx.lineWidth = onLevel ? 3 : 1.6;
+      // Vertical edges
+      ctx.beginPath(); ctx.moveTo(pA.x,pA.y); ctx.lineTo(pAt.x,pAt.y); ctx.moveTo(pB.x,pB.y); ctx.lineTo(pBt.x,pBt.y); ctx.moveTo(pC.x,pC.y); ctx.lineTo(pCt.x,pCt.y); ctx.moveTo(pD.x,pD.y); ctx.lineTo(pDt.x,pDt.y); ctx.stroke();
+      // Top rectangle
+      ctx.beginPath(); ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); ctx.closePath(); ctx.stroke();
+      // Base rectangle
+      ctx.beginPath(); ctx.moveTo(pA.x,pA.y); ctx.lineTo(pB.x,pB.y); ctx.lineTo(pC.x,pC.y); ctx.lineTo(pD.x,pD.y); ctx.closePath(); ctx.stroke();
+      // Draw any door/window overlays attached to this wall strip (centerline-based)
+      try {
+        var opens = Array.isArray(ws.openings) ? ws.openings : [];
+        for (var oi=0; oi<opens.length; oi++){
+          var op = opens[oi]; if(!op) continue;
+          var sill = (op.type==='window') ? ((typeof op.sillM==='number') ? op.sillM : 1.0) : 0;
+          var oH = (typeof op.heightM==='number') ? op.heightM : ((op.type==='door') ? 2.04 : 1.5);
+          var y0 = baseY + sill, y1 = y0 + oH;
+          // Slightly offset toward the strip's left face to avoid z-fighting
+          var eps = 0.001;
+          var x0o = (op.x0!=null? op.x0 : x0), z0o = (op.z0!=null? op.z0 : z0);
+          var x1o = (op.x1!=null? op.x1 : x1), z1o = (op.z1!=null? op.z1 : z1);
+          // Shift both endpoints outward a hair along the normal
+          var sx0 = x0o + nx*eps, sz0 = z0o + nz*eps;
+          var sx1 = x1o + nx*eps, sz1 = z1o + nz*eps;
+          var sA = project3D(sx0, y0, sz0);
+          var sB = project3D(sx1, y0, sz1);
+          var sC = project3D(sx1, y1, sz1);
+          var sD = project3D(sx0, y1, sz0);
+          if (sA && sB && sC && sD){
+            ctx.save();
+            var col = (op.type==='door') ? '#22c55e' : '#38bdf8';
+            ctx.strokeStyle = onLevel ? col : 'rgba(148,163,184,0.8)';
+            ctx.lineWidth = onLevel ? 3 : 1.8;
+            ctx.beginPath();
+            ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y);
+            ctx.lineTo(sC.x, sC.y); ctx.lineTo(sD.x, sD.y);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+      } catch(__eOpenWS) { /* ignore strip opening draw errors */ }
+      ctx.restore();
+    } catch(e) {}
+  };
   if (typeof window.dedupeAllEntities === 'undefined') window.dedupeAllEntities = function(){};
   // Minimal DOM labeler for rooms (provided by ui/labels.js). Guard to avoid duplication.
   if (typeof window.updateLabels === 'undefined') {
@@ -670,6 +777,13 @@
             try { drawRoom(window.allRooms[i]); } catch(_er) {}
           }
         }
+        // Draw interior wall strips (extruded 2D walls)
+        try {
+          var __ws = window.wallStrips || [];
+          for (var __wsi=0; __wsi<__ws.length; __wsi++){
+            try { if (typeof drawWallStrip==='function') drawWallStrip(__ws[__wsi]); } catch(__eWs) {}
+          }
+        } catch(__eWSAll) {}
         // Draw other components when their renderers are (lazily) available
         try {
           if (window.stairsComponent && typeof drawStairs === 'function') {
@@ -729,6 +843,45 @@
   }
 
   // ---- Entrypoints ----
+  // Startup helper: if 2D floorplan drafts exist in localStorage, apply them to 3D
+  if (typeof window.__apply2dDraftsAtStartup === 'undefined') {
+    window.__apply2dDraftsAtStartup = function __apply2dDraftsAtStartup(){
+      try {
+        if (typeof applyPlan2DTo3D !== 'function') return false; // 2D→3D mapper not available yet
+        var raw = null; try { raw = localStorage.getItem('gablok_plan2dDrafts_v1'); } catch(_e) {}
+        if (!raw) return false;
+        var data = null; try { data = JSON.parse(raw); } catch(_e2) { data = null; }
+        if (!data || (typeof data !== 'object')) return false;
+
+        if (typeof window.__plan2d !== 'object' || !window.__plan2d) {
+          window.__plan2d = { centerX:0, centerZ:0, yFromWorldZSign:1, elements:[], scale:50 };
+        }
+        var applied = false;
+        var levels = ['0','1'];
+        for (var li=0; li<levels.length; li++){
+          var k = levels[li]; var lvl = (k==='1'? 1 : 0);
+          var d = data[k]; if (!d || !Array.isArray(d.elements) || d.elements.length === 0) continue;
+          try {
+            // Provide minimal __plan2d context required by applyPlan2DTo3D for world mapping
+            __plan2d.centerX = (typeof d.centerX === 'number' && isFinite(d.centerX)) ? d.centerX : 0;
+            __plan2d.centerZ = (typeof d.centerZ === 'number' && isFinite(d.centerZ)) ? d.centerZ : 0;
+            __plan2d.yFromWorldZSign = (d && (d.yFromWorldZSign === -1 || d.yFromWorldZSign === 1)) ? d.yFromWorldZSign : 1;
+            if (typeof d.scale === 'number' && isFinite(d.scale)) __plan2d.scale = d.scale;
+          } catch(_ctx) {}
+          try {
+            applyPlan2DTo3D(d.elements, { allowRooms:true, quiet:true, level: lvl, nonDestructive:true });
+            applied = true;
+          } catch(_ap) { /* ignore this level */ }
+        }
+        if (applied) {
+          try { selectedRoomId = null; } catch(_eS) {}
+          try { updateStatus('Applied saved 2D drafts to 3D'); } catch(_eU) {}
+          try { if (typeof renderLoop === 'function') renderLoop(); } catch(_eR) {}
+        }
+        return applied;
+      } catch(e) { return false; }
+    };
+  }
   if (typeof window.startApp === 'undefined') {
     window.startApp = function(){
       try { updateStatus('startApp: init…'); } catch(_e) {}
@@ -737,7 +890,9 @@
         var dims = (canvas ? (canvas.width + 'x' + canvas.height) : 'no-canvas');
         updateStatus('startApp: canvas ' + dims + ', ctx ' + (!!ctx));
       } catch(_e) {}
-      try{ createInitialRoom(); }catch(e){}
+      // If drafts exist, apply them first so we don't create a placeholder room unnecessarily
+      var hadDrafts = false; try { hadDrafts = __apply2dDraftsAtStartup(); } catch(_eAD) { hadDrafts = false; }
+      try{ if (!hadDrafts && (!Array.isArray(allRooms) || allRooms.length === 0)) createInitialRoom(); }catch(e){}
       try{ if(typeof setupEvents==='function') setupEvents(); }catch(e){}
       try{ if(typeof fitView==='function') fitView(); }catch(e){}
       // Smoothly animate the camera into position on first load

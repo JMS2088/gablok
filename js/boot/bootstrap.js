@@ -56,6 +56,8 @@
   // Keep boot minimal: only hard requirements to render grid + a room and accept input.
   var modules = [
     { label: 'Core engine', url: 'js/core/engine3d.js?v=20251026-1', critical: true },
+    { label: 'Project mgmt', url: 'js/core/project.js?v=20251128-1', critical: true },
+    { label: 'Import/Export', url: 'js/io/importExport.js?v=20251128-1', critical: true },
     { label: 'Loader', url: 'js/boot/loader.js?v=20251026-1', critical: true },
     { label: 'UI labels', url: 'js/ui/labels.js?v=20251026-1', critical: true },
     { label: 'Room renderer', url: 'js/render/drawRoom.js?v=20251026-2', critical: true },

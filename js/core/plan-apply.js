@@ -1,3 +1,54 @@
+/**
+ * @file plan-apply.js
+ * @description 2D→3D mapping engine: converts 2D floor plan elements to 3D rooms and wall strips.
+ * 
+ * **Responsibilities:**
+ * - Parse 2D walls/windows/doors into 3D room shells (rectangles and polygons)
+ * - Detect closed rectangular loops with perimeter coverage validation
+ * - Detect non-rectangular polygon rooms via graph traversal
+ * - Build interior wall strips for walls not part of room perimeters
+ * - Map openings (windows/doors) to room faces and wall strips
+ * - Handle per-floor application (ground/first)
+ * - Emit apply summaries for observability (counts of rooms/strips/openings)
+ * - Non-destructive mode (preserve 3D when 2D is empty, for modal toggles)
+ * 
+ * **Core Function:**
+ * `applyPlan2DTo3D(elemsSnapshot, opts)` - Main entry point
+ * 
+ * **Parameters:**
+ * @param {Array} elemsSnapshot - Optional snapshot of 2D elements; defaults to __plan2d.elements
+ * @param {Object} opts - Options object:
+ *   - level: Floor level (0=ground, 1=first)
+ *   - stripsOnly: Skip room detection, extrude all as strips
+ *   - allowRooms: Enable room detection (default true)
+ *   - nonDestructive: Don't clear 3D rooms if 2D is empty
+ *   - quiet: Suppress status messages
+ * 
+ * **Global Dependencies:**
+ * - `__plan2d` (from plan2d/editor.js): centerX, centerZ, yFromWorldZSign
+ * - `allRooms`, `wallStrips` (from engine3d.js): Scene state arrays
+ * - `plan2dBuildWallSubsegments()` (from plan2d/editor.js or app.js): Wall segment splitting
+ * - `createRoom()` (from app.js or roomPalette.js): Room factory
+ * - `quantizeMeters()`, `saveProjectSilently()`, `renderLoop()` (from engine3d.js)
+ * 
+ * **Algorithm Overview:**
+ * 1. Respect room groups (walls with groupId='room:xxx') to preserve user-defined rooms
+ * 2. Detect rectangular rooms via node graph and span coverage
+ * 3. Detect polygon rooms via connected component analysis and orientation
+ * 4. Extrude remaining walls as interior strips
+ * 5. Attach openings to room faces (via edge matching) and strips (via host index)
+ * 6. Deduplicate wall strips by geometry (order-insensitive) while preserving openings
+ * 
+ * **Tolerances:**
+ * - Wall endpoint matching: 3cm (TOL = 0.03m)
+ * - Orthogonality check: 3cm deviation allowed
+ * - Opening span expansion: Auto-expand zero-width openings to default widths
+ * 
+ * @exports applyPlan2DTo3D
+ * @version 2.0 (Post-Phase-1-Refactoring)
+ * @since 2024
+ */
+
 "use strict";
 // Apply 2D plan edits back to 3D: rebuild rooms/strips from 2D walls and openings
 // Extracted from app.js for modularity; loaded by bootstrap before app core.
@@ -25,8 +76,20 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       var src = Array.isArray(elemsSnapshot) ? elemsSnapshot : __plan2d.elements;
       return JSON.parse(JSON.stringify(src));
     } catch(e) {
-      // Fallback to direct reference if cloning fails (should be rare)
-      return Array.isArray(elemsSnapshot) ? elemsSnapshot.slice() : (__plan2d.elements||[]).slice();
+      // Fallback: manual deep clone of array of objects to avoid mutating originals
+      var src2 = Array.isArray(elemsSnapshot) ? elemsSnapshot : (__plan2d.elements||[]);
+      var cloned = [];
+      for (var i = 0; i < src2.length; i++) {
+        if (!src2[i]) { cloned.push(src2[i]); continue; }
+        var obj = {};
+        for (var key in src2[i]) {
+          if (src2[i].hasOwnProperty(key)) {
+            obj[key] = src2[i][key];
+          }
+        }
+        cloned.push(obj);
+      }
+      return cloned;
     }
   })();
   var __groupedRooms = [];
@@ -71,6 +134,18 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
               if (typeof el.host !== 'number' || !idxSet[el.host]) continue;
               var host = elemsSrc[el.host]; if(!host || host.type!=='wall') continue;
               var t0=Math.max(0,Math.min(1,el.t0||0)), t1=Math.max(0,Math.min(1,el.t1||0));
+              // Normalize zero-width openings: expand to a minimal default span so they render
+              try {
+                if (Math.abs(t1 - t0) < 1e-6) {
+                  var wdxN = host.x1 - host.x0, wdyN = host.y1 - host.y0; var wLenN = Math.hypot(wdxN, wdyN) || 1;
+                  var defWn = (el.type==='door') ? ((__plan2d&&__plan2d.doorWidthM)||0.9) : ((__plan2d&&__plan2d.windowDefaultWidthM)||1.2);
+                  var dtn = Math.max(0.01, defWn / wLenN);
+                  var midn = t0;
+                  t0 = Math.max(0, Math.min(1, midn - dtn/2));
+                  t1 = Math.max(0, Math.min(1, midn + dtn/2));
+                  if (t1 <= t0 + 1e-6) t1 = Math.min(1, t0 + 0.02);
+                }
+              } catch(_eZeroOpenG) {}
               var ax = host.x0 + (host.x1-host.x0)*t0; var ay = host.y0 + (host.y1-host.y0)*t0;
               var bx = host.x0 + (host.x1-host.x0)*t1; var by = host.y0 + (host.y1-host.y0)*t1;
               var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgnG*ay;
@@ -111,6 +186,54 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   function approxEq(a,b,eps){ return Math.abs(a-b) < (eps||TOL); }
   var TOL=0.03; // 3 cm forgiving tolerance for detection (used across passes)
     function keyCoord(v){ return Math.round(v / TOL) * TOL; }
+
+    // Deduplicate wall strips by geometry (order-insensitive) and merge openings arrays
+    function _dedupeStripsByGeom(arr){
+      try {
+        if (!Array.isArray(arr) || arr.length===0) return [];
+        var map = Object.create(null);
+        function kf(x){ return Math.round((+x||0) * 1000) / 1000; } // 1mm granularity
+        for (var i=0;i<arr.length;i++){
+          var s = arr[i]; if(!s) continue;
+          var a0 = { x:kf(s.x0), z:kf(s.z0) }, a1 = { x:kf(s.x1), z:kf(s.z1) };
+          // Build key independent of direction
+          var kA = a0.x+','+a0.z, kB = a1.x+','+a1.z; var k = (kA < kB) ? (kA+'|'+kB) : (kB+'|'+kA);
+          var bucket = map[k];
+          if (!bucket) {
+            // Shallow clone to avoid mutating original; preserve openings if present
+            var base = {
+              x0: s.x0, z0: s.z0, x1: s.x1, z1: s.z1,
+              thickness: s.thickness, height: s.height,
+              baseY: s.baseY, level: s.level,
+              openings: Array.isArray(s.openings) ? s.openings.slice() : undefined
+            };
+            map[k] = base;
+          } else {
+            // Merge openings
+            var dst = bucket;
+            var srcOps = Array.isArray(s.openings) ? s.openings : [];
+            if (srcOps.length){
+              if (!Array.isArray(dst.openings)) dst.openings = [];
+              // Deduplicate by type + endpoints + sill/height rounded
+              var seen = Object.create(null);
+              for (var j=0;j<dst.openings.length;j++){
+                var o=dst.openings[j]; var kk = [o.type, kf(o.x0), kf(o.z0), kf(o.x1), kf(o.z1), kf(o.sillM||0), kf(o.heightM||0)].join('|');
+                seen[kk] = true;
+              }
+              for (var m=0;m<srcOps.length;m++){
+                var p=srcOps[m]; var kk2 = [p.type, kf(p.x0), kf(p.z0), kf(p.x1), kf(p.z1), kf(p.sillM||0), kf(p.heightM||0)].join('|');
+                if (!seen[kk2]) { dst.openings.push(p); seen[kk2] = true; }
+              }
+            }
+            // Prefer the larger thickness/height if different (best-effort)
+            try { if (isFinite(s.thickness) && (!isFinite(dst.thickness) || s.thickness > dst.thickness)) dst.thickness = s.thickness; } catch(_eT) {}
+            try { if (isFinite(s.height) && (!isFinite(dst.height) || s.height > dst.height)) dst.height = s.height; } catch(_eH) {}
+          }
+        }
+        // Return stable order
+        return Object.keys(map).map(function(key){ return map[key]; });
+      } catch(e){ return Array.isArray(arr) ? arr.slice() : []; }
+    }
 
     // Pass 0: Stitch connected orthogonal walls into rectangular loops (handles 5-6 segment rectangles)
     // This is more permissive than span pairing and bridges tiny endpoint gaps; marks perimeter walls as room walls.
@@ -467,12 +590,42 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       // Build strip representation for this level
       var sgn = (__plan2d.yFromWorldZSign||1);
       var strips = [];
+      var __attachedOpenings = Object.create(null);
+      function openingsForWall(hostIdx){
+        var outs = [];
+        for (var ei=0; ei<elemsSrc.length; ei++){
+          var el = elemsSrc[ei]; if(!el || (el.type!=='window' && el.type!=='door')) continue;
+          if (typeof el.host !== 'number' || el.host !== hostIdx) continue;
+          var host = elemsSrc[hostIdx]; if(!host || host.type!=='wall') continue;
+          var t0=Math.max(0,Math.min(1,el.t0||0)), t1=Math.max(0,Math.min(1,el.t1||0)); if(t1<t0){ var tt=t0; t0=t1; t1=tt; }
+          // Normalize zero-width openings to a minimal default span
+          try {
+            if (Math.abs(t1 - t0) < 1e-6) {
+              var wdxS = host.x1 - host.x0, wdyS = host.y1 - host.y0; var wLenS = Math.hypot(wdxS, wdyS) || 1;
+              var defWs = (el.type==='door') ? ((__plan2d&&__plan2d.doorWidthM)||0.9) : ((__plan2d&&__plan2d.windowDefaultWidthM)||1.2);
+              var dts = Math.max(0.01, defWs / wLenS);
+              var mids = t0;
+              t0 = Math.max(0, Math.min(1, mids - dts/2));
+              t1 = Math.max(0, Math.min(1, mids + dts/2));
+              if (t1 <= t0 + 1e-6) t1 = Math.min(1, t0 + 0.02);
+            }
+          } catch(_eZeroOpenS) {}
+          var ax = host.x0 + (host.x1-host.x0)*t0; var ay = host.y0 + (host.y1-host.y0)*t0;
+          var bx = host.x0 + (host.x1-host.x0)*t1; var by = host.y0 + (host.y1-host.y0)*t1;
+          var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgn*ay;
+          var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgn*by;
+          var sill = (el.type==='window') ? ((typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0)) : 0;
+          var hM = (typeof el.heightM==='number') ? el.heightM : ((el.type==='door') ? ((__plan2d&&__plan2d.doorHeightM)||2.04) : ((__plan2d&&__plan2d.windowHeightM)||1.5));
+          outs.push({ type: el.type, x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: (el.meta||null) });
+        }
+        return outs;
+      }
       for(var wi=0; wi<elemsSrc.length; wi++){
         var e = elemsSrc[wi]; if(!e || e.type!=='wall') continue;
         var subs = plan2dBuildWallSubsegments(elemsSrc, wi) || [];
         for(var si=0; si<subs.length; si++){
           var sg = subs[si];
-          strips.push({
+          var rec = {
             x0: (__plan2d.centerX||0) + sg.ax,
             z0: (__plan2d.centerZ||0) + sgn*sg.ay,
             x1: (__plan2d.centerX||0) + sg.bx,
@@ -481,7 +634,13 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             height: (__plan2d.wallHeightM||3.0),
             baseY: (targetLevel||0) * 3.5,
             level: (targetLevel||0)
-          });
+          };
+          // Attach this wall's openings to the first subsegment only to avoid duplicates
+          if (!__attachedOpenings[wi]) {
+            rec.openings = openingsForWall(wi);
+            __attachedOpenings[wi] = true;
+          }
+          strips.push(rec);
         }
       }
   // Merge new strips with existing strips on this level and dedupe
@@ -520,6 +679,18 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
               if(typeof rec.host==='number'){
                 var host = elemsSrc[rec.host]; if(!host || host.type!=='wall') continue;
                 var t0=Math.max(0,Math.min(1,rec.t0||0)), t1=Math.max(0,Math.min(1,rec.t1||0));
+                // Normalize zero-width openings in fallback path
+                try {
+                  if (Math.abs(t1 - t0) < 1e-6) {
+                    var wdxF = host.x1 - host.x0, wdyF = host.y1 - host.y0; var wLenF = Math.hypot(wdxF, wdyF) || 1;
+                    var defWf = (rec.type==='door') ? ((__plan2d&&__plan2d.doorWidthM)||0.9) : ((__plan2d&&__plan2d.windowDefaultWidthM)||1.2);
+                    var dtf = Math.max(0.01, defWf / wLenF);
+                    var midf = t0;
+                    t0 = Math.max(0, Math.min(1, midf - dtf/2));
+                    t1 = Math.max(0, Math.min(1, midf + dtf/2));
+                    if (t1 <= t0 + 1e-6) t1 = Math.min(1, t0 + 0.02);
+                  }
+                } catch(_eZeroOpenF) {}
                 ax = host.x0 + (host.x1-host.x0)*t0; ay = host.y0 + (host.y1-host.y0)*t0;
                 bx = host.x0 + (host.x1-host.x0)*t1; by = host.y0 + (host.y1-host.y0)*t1;
               } else {
@@ -900,6 +1071,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   try {
     var sgn2 = (__plan2d.yFromWorldZSign||1);
     var strips2 = [];
+    var __attachedOpenings2 = Object.create(null);
     for (var wi2=0; wi2<elemsSrc.length; wi2++){
       var ew = elemsSrc[wi2]; if(!ew || ew.type!=='wall') continue;
       // Skip only explicit non-room component outlines; extrude all user walls (both perimeter and interior)
@@ -907,7 +1079,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       var subs2 = plan2dBuildWallSubsegments(elemsSrc, wi2) || [];
       for (var sj2=0; sj2<subs2.length; sj2++){
         var sg2 = subs2[sj2];
-        strips2.push({
+        var rec2 = {
           x0: (__plan2d.centerX||0) + sg2.ax,
           z0: (__plan2d.centerZ||0) + sgn2*sg2.ay,
           x1: (__plan2d.centerX||0) + sg2.bx,
@@ -916,7 +1088,29 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           height: (__plan2d.wallHeightM||3.0),
           baseY: (targetLevel||0) * 3.5,
           level: (targetLevel||0)
-        });
+        };
+        if (!__attachedOpenings2[wi2]) {
+          // Reuse openingsForWall from above scope
+          try { rec2.openings = (function(){
+            var outs=[];
+            for (var ei=0; ei<elemsSrc.length; ei++){
+              var el = elemsSrc[ei]; if(!el || (el.type!=='window' && el.type!=='door')) continue;
+              if (typeof el.host !== 'number' || el.host !== wi2) continue;
+              var host = elemsSrc[wi2]; if(!host || host.type!=='wall') continue;
+              var t0=Math.max(0,Math.min(1,el.t0||0)), t1=Math.max(0,Math.min(1,el.t1||0)); if(t1<t0){ var tt=t0; t0=t1; t1=tt; }
+              var ax = host.x0 + (host.x1-host.x0)*t0; var ay = host.y0 + (host.y1-host.y0)*t0;
+              var bx = host.x0 + (host.x1-host.x0)*t1; var by = host.y0 + (host.y1-host.y0)*t1;
+              var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgn2*ay;
+              var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgn2*by;
+              var sill = (el.type==='window') ? ((typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0)) : 0;
+              var hM = (typeof el.heightM==='number') ? el.heightM : ((el.type==='door') ? ((__plan2d&&__plan2d.doorHeightM)||2.04) : ((__plan2d&&__plan2d.windowHeightM)||1.5));
+              outs.push({ type: el.type, x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: (el.meta||null) });
+            }
+            return outs;
+          })(); } catch(_eOpenStrip) {}
+          __attachedOpenings2[wi2] = true;
+        }
+        strips2.push(rec2);
       }
     }
   // Append interior strips for this level, merged with existing same-level strips, and dedupe
@@ -927,7 +1121,15 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   selectedWallStripIndex = -1;
   } catch(e){ /* interior strips non-fatal */ }
 
-  saveProjectSilently(); if(!Array.isArray(elemsSnapshot)) { selectedRoomId=null; } renderLoop(); if(!quiet && !Array.isArray(elemsSnapshot)) updateStatus((roomsFound.length||polyRooms.length)? 'Applied 2D plan to 3D (rooms + openings)' : 'No closed rooms found (auto-snap enabled)');
-  try { __emitApplySummary({ action: 'rooms-applied', roomsRect: roomsFound.length||0, roomsPoly: polyRooms.length||0, strips: (Array.isArray(merged2)? merged2.length : 0) }); } catch(_f) {}
+  // Compute a quick openings count for this level for diagnostics/UX
+  var openingsCountLevel = 0;
+  try {
+    for (var oiA=0; oiA<allRooms.length; oiA++){
+      var rrA = allRooms[oiA]; if(!rrA || (rrA.level||0)!==targetLevel) continue;
+      if (Array.isArray(rrA.openings)) openingsCountLevel += rrA.openings.length;
+    }
+  } catch(_eCount) { openingsCountLevel = 0; }
+  saveProjectSilently(); if(!Array.isArray(elemsSnapshot)) { selectedRoomId=null; } renderLoop(); if(!quiet && !Array.isArray(elemsSnapshot)) updateStatus((roomsFound.length||polyRooms.length)? ('Applied 2D plan to 3D (rooms + openings: '+ openingsCountLevel +')') : 'No closed rooms found (auto-snap enabled)');
+  try { __emitApplySummary({ action: 'rooms-applied', roomsRect: roomsFound.length||0, roomsPoly: polyRooms.length||0, strips: (Array.isArray(merged2)? merged2.length : 0), openings: openingsCountLevel }); } catch(_f) {}
   } catch(e){ console.error('applyPlan2DTo3D failed', e); updateStatus('Apply to 3D failed'); }
 }
