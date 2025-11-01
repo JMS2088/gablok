@@ -12,10 +12,11 @@
     var text = el('div', { id:'loading-text' }, ['Loading…']);
     // Per-module list wrapper (optional)
     var listWrap = el('div', { id:'loading-list', style:{ marginTop:'10px', display:'flex', flexDirection:'column', gap:'6px' } }, []);
-    var title = el('div', { id:'loading-title', style:{ textAlign:'center', fontWeight:'700', fontSize:'22px', letterSpacing:'0.8px' } }, ['Gablok']);
+    var title = el('div', { id:'loading-title', style:{ textAlign:'center', fontWeight:'700', fontSize:'32px', letterSpacing:'1px' } }, ['Gablok']);
+    var subtitle = el('div', { id:'loading-subtitle' }, ['3D Home Configurator']);
     var btn = el('button', { id:'loading-continue', style:{ display:'none', marginTop:'10px', alignSelf:'center', padding:'6px 12px', border:'1px solid #30363d', borderRadius:'8px', background:'#0f172a', color:'#cbd5e1', cursor:'pointer' } }, ['Continue']);
     btn.addEventListener('click', function(){ try{ var r=__splash.continueResolve; __splash.continueResolve=null; btn.style.display='none'; if(r) r(true); }catch(e){} });
-    var card = el('div', { id:'loading-card' }, [ title, bar, text, listWrap, btn ]);
+    var card = el('div', { id:'loading-card' }, [ title, subtitle, bar, text, listWrap, btn ]);
     var root = el('div', { id:'loading-overlay' }, [ card ]);
     document.body.appendChild(root);
     return root;

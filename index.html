@@ -6,14 +6,126 @@
 <title>3D Home Configurator with Pricing</title>
 <link rel="stylesheet" href="css/styles.css?v=20251016-1">
 <style>
-/* Loading splash overlay (lightweight, isolated) */
-#loading-overlay{ position:fixed; inset:0; background:#0d1117; color:#c9d1d9; display:flex; align-items:center; justify-content:center; z-index:10000; transition:opacity .35s ease; }
-#loading-overlay.hide{ opacity:0; pointer-events:none; }
-#loading-card{ width:min(520px, 90vw); padding:24px 20px; background:#161b22; border:1px solid #30363d; border-radius:8px; box-shadow:0 8px 30px rgba(0,0,0,.45); }
-#loading-title{ font-size:18px; font-weight:600; margin-bottom:14px; letter-spacing:.3px; }
-#loading-bar{ width:100%; height:10px; background:#21262d; border-radius:6px; overflow:hidden; border:1px solid #30363d; }
-#loading-bar-inner{ height:100%; width:0%; background:linear-gradient(90deg, #238636, #28a745); transition:width .25s ease; }
-#loading-text{ margin-top:10px; font-size:13px; color:#8b949e; }
+/* Loading splash overlay with elegant animations */
+#loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #0a0e1a 0%, #1a1f35 100%);
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  transition: opacity 0.8s ease;
+  animation: fadeIn 0.6s ease;
+}
+#loading-overlay.hide {
+  opacity: 0;
+  pointer-events: none;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+#loading-card {
+  width: min(520px, 90vw);
+  padding: 40px 32px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 100px rgba(0, 122, 204, 0.1);
+  animation: slideUp 0.8s ease;
+}
+#loading-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: 1px;
+  text-align: center;
+  background: linear-gradient(135deg, #60a5fa, #3b82f6, #2563eb);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s ease infinite;
+}
+#loading-subtitle {
+  font-size: 14px;
+  color: #94a3b8;
+  text-align: center;
+  margin-bottom: 32px;
+  font-weight: 400;
+}
+#loading-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+}
+#loading-bar-inner {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa, #3b82f6);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 999px;
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+}
+#loading-text {
+  margin-top: 16px;
+  font-size: 13px;
+  color: #cbd5e1;
+  text-align: center;
+  animation: pulse 2s ease infinite;
+}
+#loading-list {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#loading-continue {
+  display: none;
+  margin-top: 24px;
+  align-self: center;
+  padding: 10px 24px;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #60a5fa;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+#loading-continue:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #60a5fa;
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+  transform: translateY(-2px);
+}
 </style>
 </head>
 <body>
@@ -52,7 +164,7 @@
 		<option value="pool">+ Pool</option>
 		<option value="balcony">+ Balcony</option>
 	</select>
-	<button class="secondary" onclick="resetAll()">Reset</button>
+	<button class="secondary" onclick="showResetConfirmation()">Reset</button>
 	<button class="secondary" onclick="showPricing()" title="Show pricing">💰 Price</button>
 	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor">📐 Floor Plan</button>
 	<div id="actionsDropdown" class="dropdown" aria-label="Main Menu">
@@ -365,5 +477,80 @@
 </div>
 </div>
 
+<!-- Reset Confirmation Modal -->
+<div id="reset-confirmation-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:20000; align-items:center; justify-content:center;">
+	<div style="background:#ffffff; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,0.4); max-width:440px; width:90%; padding:32px 28px; animation:slideUp 0.3s ease;">
+		<div style="text-align:center; margin-bottom:24px;">
+			<div style="width:64px; height:64px; margin:0 auto 16px; background:linear-gradient(135deg, #ef4444, #dc2626); border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 20px rgba(239,68,68,0.3);">
+				<svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+			</div>
+			<h2 style="font-size:24px; font-weight:700; color:#111827; margin-bottom:8px;">Reset Everything?</h2>
+			<p style="font-size:15px; color:#6b7280; line-height:1.6;">This will permanently delete all your work including rooms, furniture, and settings. This action cannot be undone.</p>
+		</div>
+		<div style="display:flex; gap:12px;">
+			<button id="reset-cancel-btn" class="secondary" style="flex:1; padding:12px; font-size:15px; font-weight:600;">Cancel</button>
+			<button id="reset-confirm-btn" style="flex:1; padding:12px; font-size:15px; font-weight:600; background:#ef4444; border:none; color:#ffffff; border-radius:8px; cursor:pointer; transition:all 0.2s;">Yes, Reset Everything</button>
+		</div>
+	</div>
+</div>
+
+<script>
+// Reset confirmation dialog
+function showResetConfirmation() {
+	const modal = document.getElementById('reset-confirmation-modal');
+	if (modal) {
+		modal.style.display = 'flex';
+		modal.classList.remove('hidden');
+	}
+}
+
+function hideResetConfirmation() {
+	const modal = document.getElementById('reset-confirmation-modal');
+	if (modal) {
+		modal.style.display = 'none';
+		modal.classList.add('hidden');
+	}
+}
+
+function confirmReset() {
+	// Call the existing resetAll function
+	if (typeof resetAll === 'function') {
+		resetAll();
+	}
+	// Refresh the page to fully clear everything
+	setTimeout(() => {
+		location.reload();
+	}, 100);
+}
+
+// Wire up modal buttons
+document.addEventListener('DOMContentLoaded', () => {
+	const cancelBtn = document.getElementById('reset-cancel-btn');
+	const confirmBtn = document.getElementById('reset-confirm-btn');
+	const modal = document.getElementById('reset-confirmation-modal');
+	
+	if (cancelBtn) {
+		cancelBtn.addEventListener('click', hideResetConfirmation);
+	}
+	
+	if (confirmBtn) {
+		confirmBtn.addEventListener('click', confirmReset);
+	}
+	
+	// Close modal when clicking backdrop
+	if (modal) {
+		modal.addEventListener('click', (e) => {
+			if (e.target === modal) {
+				hideResetConfirmation();
+			}
+		});
+	}
+});
+</script>
+
 </body>
 </html>
+
+

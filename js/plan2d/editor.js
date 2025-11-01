@@ -230,6 +230,12 @@ function plan2dGetElementsSnapshot(){
   return snap;
 }
 function plan2dScheduleApply(now){
+  // Don't auto-apply if we're dragging a room in 3D
+  if (window.__dragging3DRoom) {
+    console.log('🚫 plan2dScheduleApply BLOCKED during 3D drag');
+    return;
+  }
+  
   if(__plan2d._applyTimer){ clearTimeout(__plan2d._applyTimer); __plan2d._applyTimer=null; }
   // Live updates: apply as wall strips only (no rooms) to avoid creating extra rooms while drawing
   var run=function(){

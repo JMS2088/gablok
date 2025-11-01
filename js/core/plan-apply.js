@@ -150,9 +150,20 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
               var bx = host.x0 + (host.x1-host.x0)*t1; var by = host.y0 + (host.y1-host.y0)*t1;
               var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgnG*ay;
               var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgnG*by;
-              var sill = (el.type==='window') ? ((__plan2d&&__plan2d.windowSillM)||1.0) : 0;
+              var sill = (el.type==='window') ? ((typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0)) : 0;
               var hM = (typeof el.heightM==='number') ? el.heightM : ((el.type==='door') ? ((__plan2d&&__plan2d.doorHeightM)||2.04) : ((__plan2d&&__plan2d.windowHeightM)||1.5));
-              openingsGW.push({ type: el.type, x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: (el.meta||null) });
+              // Determine edge from host wall orientation using average coordinates
+              var hostAvgX = (host.x0 + host.x1) / 2;
+              var hostAvgY = (host.y0 + host.y1) / 2;
+              var hostDx = Math.abs(host.x1 - host.x0);
+              var hostDy = Math.abs(host.y1 - host.y0);
+              var edgeTag = null;
+              if (hostDx > hostDy) {
+                edgeTag = (hostAvgY < 0) ? 'top' : 'bottom';
+              } else {
+                edgeTag = (hostAvgX < 0) ? 'left' : 'right';
+              }
+              openingsGW.push({ type: el.type, x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: (el.meta||null), edge: edgeTag });
             }
           } catch(_gOpen) {}
           roomG.openings = openingsGW;
@@ -167,24 +178,46 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   // Room reconstruction should consider any wall that isn't explicitly marked as a non-room outline.
   // This way, newly drawn user walls (no role) can form rooms. Non-room component outlines (garage/pergola/balcony) are excluded.
   var walls = elemsSrc.filter(function(e){ return e && e.type==='wall' && e.wallRole !== 'nonroom'; });
+  
   if(walls.length===0){
-      // No room walls in 2D. In non-destructive mode (e.g., on modal close/floor toggle), do not clear 3D state.
+      // If we have grouped rooms, we need to update them with new openings (even in nonDestructive mode)
+      if (Array.isArray(__groupedRooms) && __groupedRooms.length > 0) {
+        if (typeof console !== 'undefined' && console.log) {
+          console.log('[DEBUG applyPlan2DTo3D] No detectable walls but updating', __groupedRooms.length, 'grouped rooms');
+        }
+        // Remove old rooms on target level and replace with updated grouped rooms
+        allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
+        for (var gr=0; gr<__groupedRooms.length; gr++){ 
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[DEBUG applyPlan2DTo3D] Adding grouped room', __groupedRooms[gr].id, 'with', (__groupedRooms[gr].openings||[]).length, 'openings');
+          }
+          allRooms.push(__groupedRooms[gr]); 
+        }
+        saveProjectSilently(); renderLoop();
+        if(!quiet) updateStatus('Updated grouped rooms with openings');
+        __emitApplySummary({ action: 'updated-grouped-rooms', roomsRect: 0, roomsPoly: 0, strips: 0 });
+        return;
+      }
+      // No grouped rooms: handle as before
+      // In non-destructive mode (e.g., on modal close/floor toggle), do not clear 3D state.
       if (nonDestructive) {
         if(!quiet) try { updateStatus('Skipped apply: no room walls on current floor'); } catch(e) {}
         __emitApplySummary({ action: 'skip-no-walls', roomsRect: 0, roomsPoly: 0, strips: 0 });
         return;
+      } else {
+        // Destructive mode: reflect 2D state by clearing rooms on the target level
+        allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
+        // Also clear any standalone strips for this level and rebuild below if needed
+        wallStrips = wallStrips.filter(function(ws){ return (ws.level||0)!==targetLevel ? true : false; });
+        saveProjectSilently(); selectedRoomId=null; renderLoop();
+        if(!quiet) updateStatus('Cleared ' + (targetLevel===0?'ground':'first') + ' floor 3D rooms (no walls in 2D)');
+        __emitApplySummary({ action: 'cleared-no-walls', roomsRect: 0, roomsPoly: 0, strips: 0 });
+        return;
       }
-      // Destructive mode: reflect 2D state by clearing rooms on the target level
-      allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
-      // Also clear any standalone strips for this level and rebuild below if needed
-      wallStrips = wallStrips.filter(function(ws){ return (ws.level||0)!==targetLevel ? true : false; });
-      saveProjectSilently(); selectedRoomId=null; renderLoop();
-      if(!quiet) updateStatus('Cleared ' + (targetLevel===0?'ground':'first') + ' floor 3D rooms (no walls in 2D)');
-      __emitApplySummary({ action: 'cleared-no-walls', roomsRect: 0, roomsPoly: 0, strips: 0 });
-      return;
     }
   function approxEq(a,b,eps){ return Math.abs(a-b) < (eps||TOL); }
   var TOL=0.03; // 3 cm forgiving tolerance for detection (used across passes)
+  var OPENING_TOL=0.05; // 5 cm tolerance for matching openings to room edges (slightly more forgiving)
     function keyCoord(v){ return Math.round(v / TOL) * TOL; }
 
     // Deduplicate wall strips by geometry (order-insensitive) and merge openings arrays
@@ -748,7 +781,15 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
   // Re-add grouped rooms (from 3D) first so they persist and aren't split by touching walls
   if (Array.isArray(__groupedRooms) && __groupedRooms.length){
-    for (var gr=0; gr<__groupedRooms.length; gr++){ allRooms.push(__groupedRooms[gr]); }
+    if (typeof console !== 'undefined' && console.log) {
+      console.log('[DEBUG applyPlan2DTo3D] Re-adding', __groupedRooms.length, 'grouped rooms to allRooms');
+    }
+    for (var gr=0; gr<__groupedRooms.length; gr++){ 
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[DEBUG applyPlan2DTo3D] Adding grouped room', __groupedRooms[gr].id, 'with', (__groupedRooms[gr].openings||[]).length, 'openings');
+      }
+      allRooms.push(__groupedRooms[gr]); 
+    }
   }
   // We'll build interior strips and merge with existing ones for this level below
     // 2D y corresponds to world z; 2D x corresponds to world x; plan is centered at (0,0)
@@ -802,7 +843,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             var axf = (typeof el.x0==='number'? el.x0 : NaN), ayf = (typeof el.y0==='number'? el.y0 : NaN);
             var bxf = (typeof el.x1==='number'? el.x1 : NaN), byf = (typeof el.y1==='number'? el.y1 : NaN);
             if(!isFinite(axf)||!isFinite(ayf)||!isFinite(bxf)||!isFinite(byf)) continue;
-            var edgeFound=-1, s0=0, s1=0; var tol = Math.max(0.03, TOL);
+            var edgeFound=-1, s0=0, s1=0; var tol = OPENING_TOL;
             for (var ei2=0; ei2<polyPts.length; ei2++){
               var pa=polyPts[ei2], pb=polyPts[(ei2+1)%polyPts.length]; if(!pa||!pb) continue;
               var h0=projSeg(axf,ayf,pa.x,pa.y,pb.x,pb.y); var h1=projSeg(bxf,byf,pa.x,pa.y,pb.x,pb.y);
@@ -882,6 +923,12 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         }
       } catch(_eOpen) {}
       roomPoly.openings = openingsW;
+      
+      // DEBUG: Log polygon room openings
+      if (typeof console !== 'undefined' && console.log) {
+        console.log('[DEBUG applyPlan2DTo3D] Poly room created with ' + openingsW.length + ' openings:', roomPoly);
+      }
+      
       allRooms.push(roomPoly);
     }
 
@@ -945,8 +992,17 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           // Top side (world minZ). In plan, it's y=R.minY when s=1, else y=R.maxY when s=-1.
           var topY = (s===1 ? R.minY : R.maxY);
           var botY = (s===1 ? R.maxY : R.minY);
+          
+          // DEBUG: Log opening classification attempt
+          if (typeof console !== 'undefined' && console.log && el.type === 'window') {
+            console.log('[DEBUG] Classifying window at (' + ax + ',' + ay + ') to (' + bx + ',' + by + ')');
+            console.log('[DEBUG] Room bounds: minX=' + R.minX + ', maxX=' + R.maxX + ', minY=' + R.minY + ', maxY=' + R.maxY);
+            console.log('[DEBUG] topY=' + topY + ', botY=' + botY + ', OPENING_TOL=' + OPENING_TOL);
+            console.log('[DEBUG] Distance from topY: ' + Math.abs(ay - topY) + ', from botY: ' + Math.abs(ay - botY));
+          }
+          
           // Horizontal spans along X
-          if(Math.abs(ay - topY) <= TOL && Math.abs(by - topY) <= TOL){
+          if(Math.abs(ay - topY) <= OPENING_TOL && Math.abs(by - topY) <= OPENING_TOL){
             var sx = Math.max(R.minX, Math.min(R.maxX, Math.min(ax,bx)));
             var ex = Math.max(R.minX, Math.min(R.maxX, Math.max(ax,bx)));
             var q0 = quantizeMeters(sx - R.minX, 2);
@@ -966,7 +1022,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             }
           }
           // Bottom side (world maxZ) => plan y=botY
-          if(!added && Math.abs(ay - botY) <= TOL && Math.abs(by - botY) <= TOL){
+          if(!added && Math.abs(ay - botY) <= OPENING_TOL && Math.abs(by - botY) <= OPENING_TOL){
             var s2 = Math.max(R.minX, Math.min(R.maxX, Math.min(ax,bx)));
             var e2 = Math.max(R.minX, Math.min(R.maxX, Math.max(ax,bx)));
             var q02 = quantizeMeters(s2 - R.minX, 2);
@@ -986,7 +1042,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             }
           }
           // Left side (minX at x=R.minX), vertical span along Y
-          if(!added && Math.abs(ax - R.minX) <= TOL && Math.abs(bx - R.minX) <= TOL){
+          if(!added && Math.abs(ax - R.minX) <= OPENING_TOL && Math.abs(bx - R.minX) <= OPENING_TOL){
             var sv = Math.max(R.minY, Math.min(R.maxY, Math.min(ay,by)));
             var ev = Math.max(R.minY, Math.min(R.maxY, Math.max(ay,by)));
             var q03 = quantizeMeters(sv - R.minY, 2);
@@ -1006,7 +1062,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             }
           }
           // Right side (maxX at x=R.maxX)
-          if(!added && Math.abs(ax - R.maxX) <= TOL && Math.abs(bx - R.maxX) <= TOL){
+          if(!added && Math.abs(ax - R.maxX) <= OPENING_TOL && Math.abs(bx - R.maxX) <= OPENING_TOL){
             var sv2 = Math.max(R.minY, Math.min(R.maxY, Math.min(ay,by)));
             var ev2 = Math.max(R.minY, Math.min(R.maxY, Math.max(ay,by)));
             var q04 = quantizeMeters(sv2 - R.minY, 2);
@@ -1040,7 +1096,10 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           });
         });
         room.openings = openings;
-      } catch(e){ room.openings = []; }
+      } catch(e){ 
+        console.error('[ERROR] Failed to add openings to room:', e);
+        room.openings = []; 
+      }
       allRooms.push(room);
     }
 

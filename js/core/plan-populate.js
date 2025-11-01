@@ -215,6 +215,54 @@ function populatePlan2DFromDesign(){
   if (__freezeScale) { newScale = __plan2d.scale || newScale; }
   if (isFinite(newScale) && newScale>0) __plan2d.scale = newScale;
 
+  // Preserve existing windows/doors before clearing elements so they survive room resizing
+  var preservedOpenings = [];
+  try {
+    if (Array.isArray(__plan2d.elements)) {
+      for (var i = 0; i < __plan2d.elements.length; i++) {
+        var el = __plan2d.elements[i];
+        if (!el || (el.type !== 'window' && el.type !== 'door')) continue;
+        if (typeof el.host !== 'number' || el.host < 0 || el.host >= __plan2d.elements.length) continue;
+        var hostWall = __plan2d.elements[el.host];
+        if (!hostWall || hostWall.type !== 'wall') continue;
+        // Compute world coordinates of opening endpoints
+        var t0 = (typeof el.t0 === 'number') ? el.t0 : 0;
+        var t1 = (typeof el.t1 === 'number') ? el.t1 : 1;
+        var wx0 = hostWall.x0 + t0 * (hostWall.x1 - hostWall.x0);
+        var wy0 = hostWall.y0 + t0 * (hostWall.y1 - hostWall.y0);
+        var wx1 = hostWall.x0 + t1 * (hostWall.x1 - hostWall.x0);
+        var wy1 = hostWall.y0 + t1 * (hostWall.y1 - hostWall.y0);
+        
+        // Determine which edge this wall belongs to (top/bottom/left/right)
+        var wallEdge = null;
+        var wallDx = Math.abs(hostWall.x1 - hostWall.x0);
+        var wallDy = Math.abs(hostWall.y1 - hostWall.y0);
+        var avgX = (hostWall.x0 + hostWall.x1) / 2;
+        var avgY = (hostWall.y0 + hostWall.y1) / 2;
+        
+        if (wallDx > wallDy) {
+          // Horizontal wall (top or bottom)
+          // Top walls have smaller (more negative) Y values, bottom walls have larger Y values
+          wallEdge = (avgY < 0) ? 'top' : 'bottom';
+        } else {
+          // Vertical wall (left or right)
+          // Left walls have smaller (more negative) X values, right walls have larger X values
+          wallEdge = (avgX < 0) ? 'left' : 'right';
+        }
+        
+        // Store opening with its world coords and properties
+        preservedOpenings.push({
+          type: el.type,
+          wx0: wx0, wy0: wy0, wx1: wx1, wy1: wy1,
+          sillM: el.sillM, heightM: el.heightM, widthM: el.widthM,
+          thickness: el.thickness, meta: el.meta,
+          groupId: hostWall.groupId, // Track which room this opening belonged to
+          edge: wallEdge // Track which edge (top/bottom/left/right)
+        });
+      }
+    }
+  } catch(e) { /* preserve openings failed - non-critical */ }
+
   // Build wall segments around each rectangle, shifted so center is at (0,0)
   __plan2d.elements = [];
   function addRectWalls(minX,maxX,minZ,maxZ, groupId){
@@ -266,9 +314,56 @@ function populatePlan2DFromDesign(){
       var s = (__plan2d.yFromWorldZSign||1);
       var minX = rb.minX - cx, maxX = rb.maxX - cx, minY = s*(rb.minZ - cz), maxY = s*(rb.maxZ - cz); // shifted with sign
       for(var oi=0; oi<rb.openings.length; oi++){
-        var op = rb.openings[oi]; if(!op || (op.type!=='window' && op.type!=='door')) continue;
+        var op = rb.openings[oi];
+        if(!op || (op.type!=='window' && op.type!=='door')) continue;
         var hostIdx = -1; var p0={x:0,y:0}, p1={x:0,y:0};
-        if(op.edge==='minZ'){ // world top (North)
+        
+        // Check if opening has world coordinates (x0/z0/x1/z1) instead of edge-based (edge/startM/endM)
+        if (typeof op.x0 === 'number' && typeof op.z0 === 'number' && typeof op.x1 === 'number' && typeof op.z1 === 'number') {
+          // Convert world coordinates to plan coordinates
+          var wx0 = op.x0 - cx;
+          var wz0 = s * (op.z0 - cz);
+          var wx1 = op.x1 - cx;
+          var wz1 = s * (op.z1 - cz);
+          p0 = {x: wx0, y: wz0};
+          p1 = {x: wx1, y: wz1};
+          
+          // Find which wall this opening is closest to
+          var bestDist = Infinity;
+          var walls = [
+            {idx: wallIdx.top, type: 'top'},
+            {idx: wallIdx.bottom, type: 'bottom'},
+            {idx: wallIdx.left, type: 'left'},
+            {idx: wallIdx.right, type: 'right'}
+          ];
+          
+          // If opening has edge tag, filter walls to only consider matching edge
+          if (op.edge) {
+            walls = walls.filter(function(w) { return w.type === op.edge; });
+          }
+          
+          for (var wi = 0; wi < walls.length; wi++) {
+            var wInfo = walls[wi];
+            var wallEl = __plan2d.elements[wInfo.idx];
+            if (!wallEl) continue;
+            // Calculate distance from opening midpoint to wall
+            var midX = (p0.x + p1.x) / 2;
+            var midY = (p0.y + p1.y) / 2;
+            var wallLen = Math.hypot(wallEl.x1 - wallEl.x0, wallEl.y1 - wallEl.y0);
+            if (wallLen < 0.01) continue;
+            var dx = wallEl.x1 - wallEl.x0, dy = wallEl.y1 - wallEl.y0;
+            var t = Math.max(0, Math.min(1, ((midX - wallEl.x0) * dx + (midY - wallEl.y0) * dy) / (wallLen * wallLen)));
+            var closestX = wallEl.x0 + t * dx;
+            var closestY = wallEl.y0 + t * dy;
+            var dist = Math.hypot(midX - closestX, midY - closestY);
+            if (dist < bestDist) {
+              bestDist = dist;
+              hostIdx = wInfo.idx;
+            }
+          }
+        } else if (op.edge) {
+          // Edge-based opening (original format)
+          if(op.edge==='minZ'){ // world top (North)
           hostIdx = (s===1 ? wallIdx.top : wallIdx.bottom);
           p0.x = minX + (op.startM||0); p1.x = minX + (op.endM||0);
           p0.y = p1.y = (s===1 ? minY : maxY);
@@ -285,13 +380,20 @@ function populatePlan2DFromDesign(){
           p0.y = minY + (op.startM||0); p1.y = minY + (op.endM||0);
           p0.x = p1.x = maxX;
         }
+        } // end of edge-based opening handling
+        
         if(hostIdx>=0){
           var wallEl = __plan2d.elements[hostIdx];
           // Compute param t via projection to ensure correct orientation
           var t0 = plan2dProjectParamOnWall(p0, wallEl);
           var t1 = plan2dProjectParamOnWall(p1, wallEl);
           if(op.type==='window'){
-            __plan2d.elements.push({ type:'window', host:hostIdx, t0:t0, t1:t1, thickness: (wallEl.thickness||__plan2d.wallThicknessM) });
+            var winEl = { type:'window', host:hostIdx, t0:t0, t1:t1, thickness: (wallEl.thickness||__plan2d.wallThicknessM) };
+            // Preserve custom sillM and heightM from original opening
+            if(typeof op.sillM === 'number') winEl.sillM = op.sillM;
+            if(typeof op.heightM === 'number') winEl.heightM = op.heightM;
+            if(op.meta) winEl.meta = op.meta;
+            __plan2d.elements.push(winEl);
           } else if(op.type==='door'){
             var widthM = Math.hypot(p1.x-p0.x, p1.y-p0.y);
             __plan2d.elements.push({ type:'door', host:hostIdx, t0:t0, t1:t1, widthM: widthM, heightM: (typeof op.heightM==='number'? op.heightM : (__plan2d.doorHeightM||2.04)), thickness: (wallEl.thickness||__plan2d.wallThicknessM), meta: (op.meta||{ hinge:'t0', swing:'in' }) });
@@ -320,5 +422,82 @@ function populatePlan2DFromDesign(){
       __plan2d.elements.push(eWall);
     }
   } catch(e) { /* non-fatal */ }
+
+  // Reattach preserved openings to nearest matching walls
+  try {
+    if (preservedOpenings.length > 0) {
+      for (var poi = 0; poi < preservedOpenings.length; poi++) {
+        var po = preservedOpenings[poi];
+        var bestWallIdx = -1, bestDist = Infinity;
+        // Find closest wall that matches the opening's original groupId (room) AND edge
+        for (var wi = 0; wi < __plan2d.elements.length; wi++) {
+          var w = __plan2d.elements[wi];
+          if (!w || w.type !== 'wall') continue;
+          
+          // MUST match same room group
+          if (po.groupId && w.groupId !== po.groupId) continue;
+          
+          // Determine this wall's edge
+          var wDx = Math.abs(w.x1 - w.x0);
+          var wDy = Math.abs(w.y1 - w.y0);
+          var wAvgX = (w.x0 + w.x1) / 2;
+          var wAvgY = (w.y0 + w.y1) / 2;
+          var wEdge = null;
+          
+          if (wDx > wDy) {
+            // Horizontal wall (top or bottom)
+            wEdge = (wAvgY < 0) ? 'top' : 'bottom';
+          } else {
+            // Vertical wall (left or right)
+            wEdge = (wAvgX < 0) ? 'left' : 'right';
+          }
+          
+          // MUST match same edge to prevent jumping to adjacent walls
+          if (po.edge && wEdge !== po.edge) continue;
+          
+          // Calculate distance from opening midpoint to wall
+          var midX = (po.wx0 + po.wx1) / 2;
+          var midY = (po.wy0 + po.wy1) / 2;
+          var wallLen = Math.hypot(w.x1 - w.x0, w.y1 - w.y0);
+          if (wallLen < 0.01) continue; // Skip degenerate walls
+          // Project midpoint onto wall to find closest point
+          var dx = w.x1 - w.x0, dy = w.y1 - w.y0;
+          var t = Math.max(0, Math.min(1, ((midX - w.x0) * dx + (midY - w.y0) * dy) / (wallLen * wallLen)));
+          var closestX = w.x0 + t * dx;
+          var closestY = w.y0 + t * dy;
+          var dist = Math.hypot(midX - closestX, midY - closestY);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestWallIdx = wi;
+          }
+        }
+        // Only reattach if wall is close enough (within 0.5m tolerance)
+        if (bestWallIdx >= 0 && bestDist < 0.5) {
+          var bestWall = __plan2d.elements[bestWallIdx];
+          // Project opening endpoints onto new wall to get t0/t1
+          var newT0 = plan2dProjectParamOnWall({x: po.wx0, y: po.wy0}, bestWall);
+          var newT1 = plan2dProjectParamOnWall({x: po.wx1, y: po.wy1}, bestWall);
+          // Create new opening element
+          if (po.type === 'window') {
+            var winEl = { type: 'window', host: bestWallIdx, t0: newT0, t1: newT1, thickness: (po.thickness || bestWall.thickness || __plan2d.wallThicknessM) };
+            if (typeof po.sillM === 'number') winEl.sillM = po.sillM;
+            if (typeof po.heightM === 'number') winEl.heightM = po.heightM;
+            if (po.meta) winEl.meta = po.meta;
+            __plan2d.elements.push(winEl);
+          } else if (po.type === 'door') {
+            __plan2d.elements.push({ 
+              type: 'door', host: bestWallIdx, t0: newT0, t1: newT1, 
+              widthM: (po.widthM || 0.9), 
+              heightM: (typeof po.heightM === 'number' ? po.heightM : (__plan2d.doorHeightM || 2.04)), 
+              thickness: (po.thickness || bestWall.thickness || __plan2d.wallThicknessM), 
+              meta: (po.meta || { hinge: 't0', swing: 'in' }) 
+            });
+          }
+        }
+      }
+    }
+  } catch(e) { /* reattach openings failed - non-critical */ }
+
   return true;
 }
+

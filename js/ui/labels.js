@@ -74,8 +74,8 @@
           var sumW = 0; for (var sw=0; sw<stepsCount; sw++) sumW += stepWeights[sw];
           var perStepDepth = new Array(stepsCount);
           for (var ps=0; ps<stepsCount; ps++) perStepDepth[ps] = (sumW > 0 ? ((obj.depth||1) * stepWeights[ps] / sumW) : ((obj.depth||1) / stepsCount));
-          // Target the 8th step (index 7); clamp within range
-          var targetIdx = Math.max(0, Math.min(stepsCount-1, 7));
+          // Target the middle of the stairs (around step 9-10 for 19 steps)
+          var targetIdx = Math.max(0, Math.min(stepsCount-1, Math.floor(stepsCount / 2)));
           var cum = 0; for (var i=0;i<targetIdx;i++) cum += perStepDepth[i];
           var localZ = - (obj.depth||1)/2 + cum + perStepDepth[targetIdx] * 0.5;
           var rot = ((obj.rotation||0) * Math.PI) / 180;

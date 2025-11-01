@@ -71,10 +71,32 @@
             originalDepth: target.depth,
             originalRoomX: target.x,
             originalRoomZ: target.z,
+            oldWidth: target.width,  // for opening scaling
+            oldDepth: target.depth,  // for opening scaling
+            roomId: handle.roomId,   // for 2D sync on mouseup
             // Store side axis and sign so we know which face is being dragged
             sideAxis: (handle.type.indexOf('width') === 0 ? 'x' : (handle.type.indexOf('depth') === 0 ? 'z' : null)),
             sideSign: (handle.type.endsWith('+') ? 1 : (handle.type.endsWith('-') ? -1 : 0))
           };
+          
+          // Set global flag to prevent 2D->3D auto-apply during 3D drag
+          window.__dragging3DRoom = true;
+          console.log('🟢 START 3D DRAG - Flag set:', window.__dragging3DRoom, 'Room:', target.name || target.id);
+          
+          // Capture original opening positions for rectangular rooms (before poly check)
+          var rectOpenSnap = [];
+          if (Array.isArray(target.openings) && target.openings.length > 0) {
+            for (var roi=0; roi<target.openings.length; roi++) {
+              var rop = target.openings[roi]; if (!rop) continue;
+              if (typeof rop.x0 === 'number' && typeof rop.z0 === 'number' && typeof rop.x1 === 'number' && typeof rop.z1 === 'number') {
+                rectOpenSnap.push({ idx: roi, x0: rop.x0, z0: rop.z0, x1: rop.x1, z1: rop.z1, type: rop.type, sillM: rop.sillM, heightM: rop.heightM, meta: rop.meta, edge: rop.edge });
+              }
+            }
+          }
+          if (rectOpenSnap.length > 0) {
+            mouse.dragInfo.rectOpenings = rectOpenSnap;
+          }
+          
           // If this is a polygonal room (has a footprint), capture the original footprint
           // and its bounding box so we can rescale it consistently during the drag.
           try {
@@ -319,8 +341,42 @@
             }
             target.width = newW;
             // Center is midpoint between opposite face and dragged face (rect rooms)
-            target.x = mouse.dragInfo.faceOppStart.x + (newW / 2) * (sX * axisXx);
-            target.z = mouse.dragInfo.faceOppStart.z + (newW / 2) * (sX * axisXz);
+            var newCenterX = mouse.dragInfo.faceOppStart.x + (newW / 2) * (sX * axisXx);
+            var newCenterZ = mouse.dragInfo.faceOppStart.z + (newW / 2) * (sX * axisXz);
+            
+            // Calculate old wall positions in world space (from previous frame)
+            var oldCenterX = target.x;
+            var oldCenterZ = target.z;
+            var oldHalfW = target.width / 2; // Use current width, not original
+            
+            // Calculate movement delta for THIS frame only
+            var deltaCenterX = newCenterX - oldCenterX;
+            var deltaCenterZ = newCenterZ - oldCenterZ;
+            
+            target.x = newCenterX;
+            target.z = newCenterZ;
+            
+            // Rectangular rooms: move openings by frame delta
+            if (!mouse.dragInfo.poly && Array.isArray(target.openings) && target.openings.length > 0 && (deltaCenterX !== 0 || deltaCenterZ !== 0)) {
+              try {
+                console.log('🔵 WIDTH DRAG: Moving', target.openings.length, 'openings by delta:', deltaCenterX.toFixed(3), deltaCenterZ.toFixed(3));
+                // Simply move all openings by the amount the room moved this frame
+                for (var oi = 0; oi < target.openings.length; oi++) {
+                  var op = target.openings[oi];
+                  if (!op || typeof op.x0 !== 'number') continue;
+                  
+                  console.log('  Before:', op.type, 'x0:', op.x0.toFixed(2), 'z0:', op.z0.toFixed(2), 'x1:', op.x1.toFixed(2), 'z1:', op.z1.toFixed(2), 'edge:', op.edge);
+                  op.x0 += deltaCenterX;
+                  op.z0 += deltaCenterZ;
+                  op.x1 += deltaCenterX;
+                  op.z1 += deltaCenterZ;
+                  console.log('  After:', op.type, 'x0:', op.x0.toFixed(2), 'z0:', op.z0.toFixed(2), 'x1:', op.x1.toFixed(2), 'z1:', op.z1.toFixed(2));
+                }
+              } catch(_rectWidthErr) {
+                console.warn('Failed to move rect room openings on width change:', _rectWidthErr);
+              }
+            }
+            
             // Polygonal rooms: scale footprint along X relative to fixed side
             try {
               if (mouse.dragInfo.poly && Array.isArray(target.footprint) && target.footprint.length >= 3) {
@@ -351,8 +407,14 @@
                 if (Array.isArray(target.openings) && mouse.dragInfo.poly.openings.length) {
                   for (var ok=0; ok<mouse.dragInfo.poly.openings.length; ok++){
                     var os = mouse.dragInfo.poly.openings[ok]; var o = target.openings[os.idx]; if(!o) continue;
+                    // Scale center position but maintain opening width
+                    var origCenterX = (os.x0 + os.x1) / 2;
+                    var origDx = os.x1 - os.x0;
+                    var halfOrigDx = origDx / 2;
                     function mapX(x){ if (fixedLeft != null) return fixedLeft + (x - fixedLeft) * scale; if (fixedRight != null) return fixedRight - (fixedRight - x) * scale; return x; }
-                    o.x0 = mapX(os.x0); o.x1 = mapX(os.x1);
+                    var newCenterX = mapX(origCenterX);
+                    o.x0 = newCenterX - halfOrigDx;
+                    o.x1 = newCenterX + halfOrigDx;
                     // z stays same for X-resize
                   }
                 }
@@ -377,8 +439,39 @@
               newD = clamp(snappedD, minSize, maxSize);
             }
             target.depth = newD;
-            target.x = mouse.dragInfo.faceOppStart.x + (newD / 2) * (sZ * axisZx);
-            target.z = mouse.dragInfo.faceOppStart.z + (newD / 2) * (sZ * axisZz);
+            var newCenterXD = mouse.dragInfo.faceOppStart.x + (newD / 2) * (sZ * axisZx);
+            var newCenterZD = mouse.dragInfo.faceOppStart.z + (newD / 2) * (sZ * axisZz);
+            
+            // Calculate old wall positions in world space (from previous frame)
+            var oldCenterXD = target.x;
+            var oldCenterZD = target.z;
+            var oldHalfD = target.depth / 2; // Use current depth, not original
+            
+            // Calculate movement delta for THIS frame only
+            var deltaCenterXD = newCenterXD - oldCenterXD;
+            var deltaCenterZD = newCenterZD - oldCenterZD;
+            
+            target.x = newCenterXD;
+            target.z = newCenterZD;
+            
+            // Rectangular rooms: move openings by frame delta
+            if (!mouse.dragInfo.poly && Array.isArray(target.openings) && target.openings.length > 0 && (deltaCenterXD !== 0 || deltaCenterZD !== 0)) {
+              try {
+                // Simply move all openings by the amount the room moved this frame
+                for (var oiD = 0; oiD < target.openings.length; oiD++) {
+                  var opD = target.openings[oiD];
+                  if (!opD || typeof opD.x0 !== 'number') continue;
+                  
+                  opD.x0 += deltaCenterXD;
+                  opD.z0 += deltaCenterZD;
+                  opD.x1 += deltaCenterXD;
+                  opD.z1 += deltaCenterZD;
+                }
+              } catch(_rectDepthErr) {
+                console.warn('Failed to move rect room openings on depth change:', _rectDepthErr);
+              }
+            }
+            
             // Polygonal rooms: scale footprint along Z relative to fixed side
             try {
               if (mouse.dragInfo.poly && Array.isArray(target.footprint) && target.footprint.length >= 3) {
@@ -408,8 +501,14 @@
                 if (Array.isArray(target.openings) && mouse.dragInfo.poly.openings.length) {
                   for (var ok2=0; ok2<mouse.dragInfo.poly.openings.length; ok2++){
                     var os2 = mouse.dragInfo.poly.openings[ok2]; var o2 = target.openings[os2.idx]; if(!o2) continue;
+                    // Scale center position but maintain opening width
+                    var origCenterZ = (os2.z0 + os2.z1) / 2;
+                    var origDz = os2.z1 - os2.z0;
+                    var halfOrigDz = origDz / 2;
                     function mapZ(z){ if (fixedTop != null) return fixedTop + (z - fixedTop) * scaleZ; if (fixedBottom != null) return fixedBottom - (fixedBottom - z) * scaleZ; return z; }
-                    o2.z0 = mapZ(os2.z0); o2.z1 = mapZ(os2.z1);
+                    var newCenterZ = mapZ(origCenterZ);
+                    o2.z0 = newCenterZ - halfOrigDz;
+                    o2.z1 = newCenterZ + halfOrigDz;
                     // x stays same for Z-resize
                   }
                 }
@@ -443,6 +542,30 @@
     });
     
     document.addEventListener('mouseup', function() {
+      // Clear the 3D drag flag
+      window.__dragging3DRoom = false;
+      console.log('🔴 END 3D DRAG - Flag cleared:', window.__dragging3DRoom);
+      
+      // If we just finished resizing a room, sync to 2D and save
+      if (mouse.dragType === 'handle' && mouse.dragInfo && mouse.dragInfo.roomId) {
+        try {
+          // Sync 3D changes to 2D plan
+          if (typeof populatePlan2DFromDesign === 'function' && window.__plan2d && __plan2d.active) {
+            populatePlan2DFromDesign();
+            if (typeof plan2dDraw === 'function') {
+              plan2dDraw();
+            }
+          }
+          // Save the project
+          if (typeof saveProjectSilently === 'function') {
+            saveProjectSilently();
+          }
+          updateStatus('Room resized');
+        } catch(e) {
+          console.error('Failed to sync 2D after resize:', e);
+        }
+      }
+      
       currentSnapGuides = [];
       mouse.down = false;
       mouse.dragType = null;
