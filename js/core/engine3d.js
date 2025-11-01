@@ -112,6 +112,32 @@
   if (typeof window.__perf === 'undefined') window.__perf = { lastCamera:{ yaw:0,pitch:0,targetX:0,targetZ:0,distance:0,floor:0,sel:null }, lastFrameTime:0, frameMs:0, frames:0, lastFpsSample:0, fps:0 };
   if (typeof window.dbg === 'undefined') window.dbg = function(){};
 
+  // ---- Units & formatting helpers (globals used across modules) ----
+  // Quantize a meter value to a fixed number of decimals (e.g., 2 => centimeters)
+  if (typeof window.quantizeMeters === 'undefined') {
+    window.quantizeMeters = function quantizeMeters(n, decimals){
+      try {
+        var x = (+n) || 0;
+        var d = (decimals|0); if (d < 0) d = 0; if (d > 6) d = 6;
+        var f = Math.pow(10, d);
+        // Add a tiny epsilon to stabilize rounding around .005 boundaries
+        return Math.round((x + 1e-9) * f) / f;
+      } catch(e) { return n; }
+    };
+  }
+  // Format a meter value smartly (>=10m: 1 decimal, else 2); override via opts.decimals
+  if (typeof window.formatMeters === 'undefined') {
+    window.formatMeters = function formatMeters(n, opts){
+      if (!isFinite(n)) return '—';
+      var v = (+n) || 0;
+      var decimals = (opts && typeof opts.decimals === 'number') ? (opts.decimals|0) : (Math.abs(v) >= 10 ? 1 : 2);
+      if (decimals < 0) decimals = 0; if (decimals > 6) decimals = 6;
+      var q = (typeof window.quantizeMeters === 'function') ? window.quantizeMeters(v, decimals) : v;
+      // Ensure fixed decimals for consistent label sizing
+      try { return q.toFixed(decimals); } catch(e) { return String(q); }
+    };
+  }
+
   // ---- Canvas setup ----
   if (typeof window.setupCanvas === 'undefined') {
     window.setupCanvas = function setupCanvas(){

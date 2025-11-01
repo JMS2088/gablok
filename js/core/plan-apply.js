@@ -10,6 +10,15 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     var nonDestructive = !!opts.nonDestructive; // when true, don't clear 3D rooms if there are no room walls in 2D (e.g., during view toggles)
     // Which floor to apply to (0=ground, 1=first). Default to ground for backward compatibility.
     var targetLevel = (typeof opts.level === 'number') ? opts.level : 0;
+    // Debug/telemetry helper: emit a summary event so UI or tests can observe what was applied
+    function __emitApplySummary(summary){
+      try {
+        var det = Object.assign({ level: targetLevel, nonDestructive: !!nonDestructive, timestamp: Date.now() }, summary||{});
+        window.__lastApplySummary = det;
+        try { window.dispatchEvent(new CustomEvent('gablok:apply-summary', { detail: det })); } catch(_d) {}
+        try { if (console && console.debug) console.debug('[applyPlan2DTo3D]', det); } catch(_c) {}
+      } catch(_e) {}
+    }
   // Always operate on a deep clone so temporary role/group markings do not mutate the 2D editor state.
   var elemsSrc = (function(){
     try {
@@ -83,10 +92,11 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   // Room reconstruction should consider any wall that isn't explicitly marked as a non-room outline.
   // This way, newly drawn user walls (no role) can form rooms. Non-room component outlines (garage/pergola/balcony) are excluded.
   var walls = elemsSrc.filter(function(e){ return e && e.type==='wall' && e.wallRole !== 'nonroom'; });
-    if(walls.length===0){
+  if(walls.length===0){
       // No room walls in 2D. In non-destructive mode (e.g., on modal close/floor toggle), do not clear 3D state.
       if (nonDestructive) {
         if(!quiet) try { updateStatus('Skipped apply: no room walls on current floor'); } catch(e) {}
+        __emitApplySummary({ action: 'skip-no-walls', roomsRect: 0, roomsPoly: 0, strips: 0 });
         return;
       }
       // Destructive mode: reflect 2D state by clearing rooms on the target level
@@ -95,6 +105,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       wallStrips = wallStrips.filter(function(ws){ return (ws.level||0)!==targetLevel ? true : false; });
       saveProjectSilently(); selectedRoomId=null; renderLoop();
       if(!quiet) updateStatus('Cleared ' + (targetLevel===0?'ground':'first') + ' floor 3D rooms (no walls in 2D)');
+      __emitApplySummary({ action: 'cleared-no-walls', roomsRect: 0, roomsPoly: 0, strips: 0 });
       return;
     }
   function approxEq(a,b,eps){ return Math.abs(a-b) < (eps||TOL); }
@@ -555,6 +566,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         saveProjectSilently(); renderLoop();
       }
       if(!quiet) updateStatus(nonDestructive && !stripsOnly ? 'Kept existing rooms; updated wall strips' : 'Applied 2D plan to 3D (standalone walls)');
+      try { __emitApplySummary({ action: 'strips-only', roomsRect: 0, roomsPoly: 0, strips: (Array.isArray(merged)? merged.length : (Array.isArray(strips)? strips.length: 0)) }); } catch(_s) {}
       return;
     }
 
@@ -916,5 +928,6 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   } catch(e){ /* interior strips non-fatal */ }
 
   saveProjectSilently(); if(!Array.isArray(elemsSnapshot)) { selectedRoomId=null; } renderLoop(); if(!quiet && !Array.isArray(elemsSnapshot)) updateStatus((roomsFound.length||polyRooms.length)? 'Applied 2D plan to 3D (rooms + openings)' : 'No closed rooms found (auto-snap enabled)');
+  try { __emitApplySummary({ action: 'rooms-applied', roomsRect: roomsFound.length||0, roomsPoly: polyRooms.length||0, strips: (Array.isArray(merged2)? merged2.length : 0) }); } catch(_f) {}
   } catch(e){ console.error('applyPlan2DTo3D failed', e); updateStatus('Apply to 3D failed'); }
 }
