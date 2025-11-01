@@ -542,13 +542,10 @@
     });
     
     document.addEventListener('mouseup', function() {
-      // Clear the 3D drag flag
-      window.__dragging3DRoom = false;
-      console.log('🔴 END 3D DRAG - Flag cleared:', window.__dragging3DRoom);
-      
       // If we just finished resizing a room, sync to 2D and save
       if (mouse.dragType === 'handle' && mouse.dragInfo && mouse.dragInfo.roomId) {
         try {
+          console.log('🔄 SYNCING 3D -> 2D (flag still true to block feedback)');
           // Sync 3D changes to 2D plan
           if (typeof populatePlan2DFromDesign === 'function' && window.__plan2d && __plan2d.active) {
             populatePlan2DFromDesign();
@@ -565,6 +562,10 @@
           console.error('Failed to sync 2D after resize:', e);
         }
       }
+      
+      // Clear the 3D drag flag AFTER sync is complete to prevent 2D->3D feedback
+      window.__dragging3DRoom = false;
+      console.log('🔴 END 3D DRAG - Flag cleared:', window.__dragging3DRoom);
       
       currentSnapGuides = [];
       mouse.down = false;

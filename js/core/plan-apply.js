@@ -53,6 +53,12 @@
 // Apply 2D plan edits back to 3D: rebuild rooms/strips from 2D walls and openings
 // Extracted from app.js for modularity; loaded by bootstrap before app core.
 function applyPlan2DTo3D(elemsSnapshot, opts){
+  // Don't apply 2D to 3D if we're in the middle of a 3D drag
+  if (window.__dragging3DRoom) {
+    console.log('🚫 applyPlan2DTo3D BLOCKED during 3D drag');
+    return;
+  }
+  
   try {
     opts = opts || {};
     var stripsOnly = !!opts.stripsOnly;
