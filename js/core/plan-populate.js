@@ -85,15 +85,17 @@ function populatePlan2DFromDesign(){
       var cx0 = (isFinite(sMinX) && isFinite(sMaxX)) ? (sMinX + sMaxX) / 2 : 0;
       var cz0 = (isFinite(sMinZ) && isFinite(sMaxZ)) ? (sMinZ + sMaxZ) / 2 : 0;
       __plan2d.centerX = cx0; __plan2d.centerZ = cz0;
-      var c0 = document.getElementById('plan2d-canvas'); if(!c0) return false;
-      var spanX0 = Math.max(0.5, (sMaxX - sMinX));
-      var spanZ0 = Math.max(0.5, (sMaxZ - sMinZ));
-      var pad0 = 0.15;
-      var fitWm0 = spanX0 * (1 + pad0), fitHm0 = spanZ0 * (1 + pad0);
-      var scaleX0 = (c0.width>0) ? (c0.width/(fitWm0||1)) : (__plan2d.scale||50);
-      var scaleY0 = (c0.height>0) ? (c0.height/(fitHm0||1)) : (__plan2d.scale||50);
-      var newScale0 = Math.max(10, Math.min(140, Math.floor(Math.min(scaleX0, scaleY0))));
-      if (isFinite(newScale0) && newScale0>0) __plan2d.scale = newScale0;
+      var c0 = document.getElementById('plan2d-canvas');
+      if (c0) {
+        var spanX0 = Math.max(0.5, (sMaxX - sMinX));
+        var spanZ0 = Math.max(0.5, (sMaxZ - sMinZ));
+        var pad0 = 0.15;
+        var fitWm0 = spanX0 * (1 + pad0), fitHm0 = spanZ0 * (1 + pad0);
+        var scaleX0 = (c0.width>0) ? (c0.width/(fitWm0||1)) : (__plan2d.scale||50);
+        var scaleY0 = (c0.height>0) ? (c0.height/(fitHm0||1)) : (__plan2d.scale||50);
+        var newScale0 = Math.max(10, Math.min(140, Math.floor(Math.min(scaleX0, scaleY0))));
+        if (isFinite(newScale0) && newScale0>0) __plan2d.scale = newScale0;
+      }
       // Populate 2D elements as free-standing walls from strips
       __plan2d.elements = [];
       var sgn0 = (__plan2d.yFromWorldZSign||1);
@@ -203,17 +205,23 @@ function populatePlan2DFromDesign(){
   } catch(e) {}
   // Persist center so overlays and helpers can map world->plan consistently
   __plan2d.centerX = cx; __plan2d.centerZ = cz;
+  if (typeof console !== 'undefined' && console.log) {
+    console.log('📍 Plan center calculated: cx =', cx.toFixed(2), 'cz =', cz.toFixed(2));
+  }
 
-  // Fit scale to canvas with margins
+  // Fit scale to canvas with margins (only if canvas exists)
   var c=document.getElementById('plan2d-canvas');
-  if (!c) return false;
-  var pad = 0.15; // 15% margin
-  var fitWm = spanX*(1+pad), fitHm = spanZ*(1+pad);
-  var scaleX = (c.width>0) ? (c.width/(fitWm||1)) : __plan2d.scale;
-  var scaleY = (c.height>0) ? (c.height/(fitHm||1)) : __plan2d.scale;
-  var newScale = Math.max(10, Math.min(140, Math.floor(Math.min(scaleX, scaleY)))); // clamp sensible range
-  if (__freezeScale) { newScale = __plan2d.scale || newScale; }
-  if (isFinite(newScale) && newScale>0) __plan2d.scale = newScale;
+  if (c) {
+    var pad = 0.15; // 15% margin
+    var fitWm = spanX*(1+pad), fitHm = spanZ*(1+pad);
+    var scaleX = (c.width>0) ? (c.width/(fitWm||1)) : __plan2d.scale;
+    var scaleY = (c.height>0) ? (c.height/(fitHm||1)) : __plan2d.scale;
+    var newScale = Math.max(10, Math.min(140, Math.floor(Math.min(scaleX, scaleY)))); // clamp sensible range
+    if (__freezeScale) { newScale = __plan2d.scale || newScale; }
+    if (isFinite(newScale) && newScale>0) __plan2d.scale = newScale;
+  }
+  // Note: We continue even if canvas doesn't exist, to ensure __plan2d.elements is updated
+  // This is critical for keeping 2D plan in sync with 3D changes when editor is not visible
 
   // Preserve existing windows/doors before clearing elements so they survive room resizing
   var preservedOpenings = [];
@@ -316,6 +324,7 @@ function populatePlan2DFromDesign(){
       for(var oi=0; oi<rb.openings.length; oi++){
         var op = rb.openings[oi];
         if(!op || (op.type!=='window' && op.type!=='door')) continue;
+        console.log('  [plan-populate] Processing opening:', op.type, 'with coords x0:', op.x0, 'z0:', op.z0, 'x1:', op.x1, 'z1:', op.z1, 'manuallyPositioned:', op.__manuallyPositioned);
         var hostIdx = -1; var p0={x:0,y:0}, p1={x:0,y:0};
         
         // Check if opening has world coordinates (x0/z0/x1/z1) instead of edge-based (edge/startM/endM)
@@ -499,5 +508,33 @@ function populatePlan2DFromDesign(){
   } catch(e) { /* reattach openings failed - non-critical */ }
 
   return true;
+}
+
+// Convenience helper: populate __plan2d from current 3D and return a self-contained snapshot
+// Snapshot contains elements plus the exact coordinate context (center/sign/scale) used to build them
+function populatePlan2DFromDesignSnapshot(){
+  var ok = false;
+  try { ok = !!populatePlan2DFromDesign(); } catch(_e) { ok = false; }
+  try {
+    var snap = {
+      ok: !!ok,
+      centerX: (typeof __plan2d.centerX === 'number' && isFinite(__plan2d.centerX)) ? __plan2d.centerX : 0,
+      centerZ: (typeof __plan2d.centerZ === 'number' && isFinite(__plan2d.centerZ)) ? __plan2d.centerZ : 0,
+      yFromWorldZSign: (__plan2d && (__plan2d.yFromWorldZSign === -1 || __plan2d.yFromWorldZSign === 1)) ? __plan2d.yFromWorldZSign : 1,
+      scale: (typeof __plan2d.scale === 'number' && isFinite(__plan2d.scale)) ? __plan2d.scale : undefined,
+      elements: []
+    };
+    if (Array.isArray(__plan2d.elements)) {
+      // Deep clone to decouple from live editor state
+      try { snap.elements = JSON.parse(JSON.stringify(__plan2d.elements)); }
+      catch(_eJ){
+        var out=[]; for (var i=0;i<__plan2d.elements.length;i++){ var el=__plan2d.elements[i]; out.push(el? Object.assign({}, el): el); }
+        snap.elements = out;
+      }
+    }
+    return snap;
+  } catch(e) {
+    return { ok:false, centerX:0, centerZ:0, yFromWorldZSign:1, elements:[] };
+  }
 }
 

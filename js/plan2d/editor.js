@@ -239,6 +239,11 @@ function plan2dScheduleApply(now){
   if(__plan2d._applyTimer){ clearTimeout(__plan2d._applyTimer); __plan2d._applyTimer=null; }
   // Live updates: apply as wall strips only (no rooms) to avoid creating extra rooms while drawing
   var run=function(){
+    // Double-check the flag hasn't been set since we scheduled this
+    if (window.__dragging3DRoom) {
+      console.log('🚫 plan2dScheduleApply run() BLOCKED - drag still in progress');
+      return;
+    }
     try{
       __plan2d.syncInProgress=true;
       // Apply live edits level-aware

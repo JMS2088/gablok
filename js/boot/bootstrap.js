@@ -61,15 +61,16 @@
     { label: 'Loader', url: 'js/boot/loader.js?v=20251026-1', critical: true },
     { label: 'UI labels', url: 'js/ui/labels.js?v=20251026-1', critical: true },
     { label: 'Room renderer', url: 'js/render/drawRoom.js?v=20251026-2', critical: true },
-    { label: 'Input/events', url: 'js/input/events.js?v=20251026-1', critical: true },
-    { label: 'Plan apply', url: 'js/core/plan-apply.js?v=20251027-1', critical: true },
-    { label: 'Plan populate', url: 'js/core/plan-populate.js?v=20251027-1', critical: true },
+  'js/input/events.js?v=20251101-6',
+  { label: 'Plan apply', url: 'js/core/plan-apply.js?v=20251101-7', critical: true },
+  { label: 'Plan populate', url: 'js/core/plan-populate.js?v=20251101-4', critical: true },
+    { label: 'Plan 2D editor', url: 'js/plan2d/editor.js?v=20251101-1', critical: true },
     { label: 'App core', url: 'js/app.js?v=20251026-1', critical: true }
   ];
 
   try {
-    // Prepare splash list and total
-    var labels = modules.map(function(m){ return m.label; });
+    // Prepare splash list and total (support string entries as URLs)
+    var labels = modules.map(function(m){ return (typeof m === 'string') ? m : m.label; });
     if (typeof window.__splashExpect==='function') window.__splashExpect(labels);
     if (typeof window.__splashSetTotal==='function') window.__splashSetTotal(labels.length);
   } catch(e){}
@@ -84,7 +85,9 @@
 
     var trace = [];
     for (var i=0;i<modules.length;i++){
-      var m = modules[i]; var tries = 0; var maxTries = m.critical ? 2 : 1;
+      var m = modules[i];
+      if (typeof m === 'string') { m = { label: m, url: m, critical: false }; }
+      var tries = 0; var maxTries = m.critical ? 2 : 1;
       var ok = false; var errLast = null; var t0, t1;
       while (tries < maxTries && !ok){
         try {

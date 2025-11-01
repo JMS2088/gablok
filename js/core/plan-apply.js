@@ -55,9 +55,10 @@
 function applyPlan2DTo3D(elemsSnapshot, opts){
   // Don't apply 2D to 3D if we're in the middle of a 3D drag
   if (window.__dragging3DRoom) {
-    console.log('🚫 applyPlan2DTo3D BLOCKED during 3D drag');
+    console.log('🚫 applyPlan2DTo3D BLOCKED during 3D drag (flag is true)');
     return;
   }
+  console.log('🔄 applyPlan2DTo3D RUNNING (flag is false or undefined)');
   
   try {
     opts = opts || {};
@@ -76,27 +77,25 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         try { if (console && console.debug) console.debug('[applyPlan2DTo3D]', det); } catch(_c) {}
       } catch(_e) {}
     }
+  // Build a stable plan context; default to live __plan2d but allow a snapshot object
+  var __ctx = {
+    centerX: (typeof __plan2d!== 'undefined' && __plan2d && isFinite(__plan2d.centerX)) ? __plan2d.centerX : 0,
+    centerZ: (typeof __plan2d!== 'undefined' && __plan2d && isFinite(__plan2d.centerZ)) ? __plan2d.centerZ : 0,
+    ySign: (typeof __plan2d!== 'undefined' && __plan2d && (__plan2d.yFromWorldZSign===-1 || __plan2d.yFromWorldZSign===1)) ? __plan2d.yFromWorldZSign : 1,
+    scale: (typeof __plan2d!== 'undefined' && __plan2d && isFinite(__plan2d.scale)) ? __plan2d.scale : undefined
+  };
+  var __hasSnapshotObj = (elemsSnapshot && typeof elemsSnapshot === 'object' && Array.isArray(elemsSnapshot.elements));
+  if (__hasSnapshotObj) {
+    if (isFinite(elemsSnapshot.centerX)) __ctx.centerX = elemsSnapshot.centerX;
+    if (isFinite(elemsSnapshot.centerZ)) __ctx.centerZ = elemsSnapshot.centerZ;
+    if (elemsSnapshot.yFromWorldZSign === -1 || elemsSnapshot.yFromWorldZSign === 1) __ctx.ySign = elemsSnapshot.yFromWorldZSign;
+    if (isFinite(elemsSnapshot.scale)) __ctx.scale = elemsSnapshot.scale;
+  }
   // Always operate on a deep clone so temporary role/group markings do not mutate the 2D editor state.
   var elemsSrc = (function(){
-    try {
-      var src = Array.isArray(elemsSnapshot) ? elemsSnapshot : __plan2d.elements;
-      return JSON.parse(JSON.stringify(src));
-    } catch(e) {
-      // Fallback: manual deep clone of array of objects to avoid mutating originals
-      var src2 = Array.isArray(elemsSnapshot) ? elemsSnapshot : (__plan2d.elements||[]);
-      var cloned = [];
-      for (var i = 0; i < src2.length; i++) {
-        if (!src2[i]) { cloned.push(src2[i]); continue; }
-        var obj = {};
-        for (var key in src2[i]) {
-          if (src2[i].hasOwnProperty(key)) {
-            obj[key] = src2[i][key];
-          }
-        }
-        cloned.push(obj);
-      }
-      return cloned;
-    }
+    var base = __hasSnapshotObj ? elemsSnapshot.elements : (Array.isArray(elemsSnapshot) ? elemsSnapshot : (__plan2d.elements||[]));
+    try { return JSON.parse(JSON.stringify(base)); }
+    catch(_e){ var cloned=[]; for (var i=0;i<base.length;i++){ var el=base[i]; cloned.push(el? Object.assign({}, el): el); } return cloned; }
   })();
   var __groupedRooms = [];
     // Phase -1: Respect room groups to avoid splitting user-added rooms when walls touch.
@@ -113,7 +112,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             groupMap[elg.groupId].push(gi);
           }
         }
-        var sgnG = (__plan2d.yFromWorldZSign||1);
+  var sgnG = (__ctx.ySign||1);
         Object.keys(groupMap).forEach(function(gid){
           var idxs = groupMap[gid]; if(!idxs || idxs.length<4) return;
           var minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
@@ -124,8 +123,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           }
           if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY)) return;
           // Map plan bbox to world rect
-          var wx=(__plan2d.centerX||0) + (minX+maxX)/2;
-          var wz=(__plan2d.centerZ||0) + sgnG*((minY+maxY)/2);
+          var wx=(__ctx.centerX||0) + (minX+maxX)/2;
+          var wz=(__ctx.centerZ||0) + sgnG*((minY+maxY)/2);
           var wW = Math.max(0.5, quantizeMeters(maxX-minX, 2));
           var wD = Math.max(0.5, quantizeMeters(maxY-minY, 2));
           var roomG = createRoom(wx, wz, targetLevel);
@@ -154,8 +153,9 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
               } catch(_eZeroOpenG) {}
               var ax = host.x0 + (host.x1-host.x0)*t0; var ay = host.y0 + (host.y1-host.y0)*t0;
               var bx = host.x0 + (host.x1-host.x0)*t1; var by = host.y0 + (host.y1-host.y0)*t1;
-              var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgnG*ay;
-              var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgnG*by;
+              var wx0 = (__ctx.centerX||0) + ax; var wz0 = (__ctx.centerZ||0) + sgnG*ay;
+              var wx1 = (__ctx.centerX||0) + bx; var wz1 = (__ctx.centerZ||0) + sgnG*by;
+              if (typeof console !== 'undefined' && console.log) { console.log('🔍 Converting plan->world: center=(' + ((__ctx.centerX||0).toFixed(2)) + ',' + ((__ctx.centerZ||0).toFixed(2)) + ') plan=(' + ax.toFixed(2) + ',' + ay.toFixed(2) + ') world=(' + wx0.toFixed(2) + ',' + wz0.toFixed(2) + ')'); }
               var sill = (el.type==='window') ? ((typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0)) : 0;
               var hM = (typeof el.heightM==='number') ? el.heightM : ((el.type==='door') ? ((__plan2d&&__plan2d.doorHeightM)||2.04) : ((__plan2d&&__plan2d.windowHeightM)||1.5));
               // Determine edge from host wall orientation using average coordinates
@@ -170,6 +170,9 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
                 edgeTag = (hostAvgX < 0) ? 'left' : 'right';
               }
               openingsGW.push({ type: el.type, x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: (el.meta||null), edge: edgeTag });
+              if (typeof console !== 'undefined' && console.log) {
+                console.log('🔨 Building opening from 2D plan:', el.type, 'x0:', wx0.toFixed(2), 'z0:', wz0.toFixed(2), 'x1:', wx1.toFixed(2), 'z1:', wz1.toFixed(2), 'host wall:', 'x0:', host.x0.toFixed(2), 'y0:', host.y0.toFixed(2), 'x1:', host.x1.toFixed(2), 'y1:', host.y1.toFixed(2));
+              }
             }
           } catch(_gOpen) {}
           roomG.openings = openingsGW;
@@ -191,13 +194,81 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         if (typeof console !== 'undefined' && console.log) {
           console.log('[DEBUG applyPlan2DTo3D] No detectable walls but updating', __groupedRooms.length, 'grouped rooms');
         }
+        // Collect previous openings before removing rooms so we can reuse them
+        var prevOpeningsNoWalls = [];
+        allRooms.forEach(function(r){
+          if ((r.level||0) === targetLevel && Array.isArray(r.openings)){
+            r.openings.forEach(function(op){ if(op) prevOpeningsNoWalls.push(op); });
+          }
+        });
+        if (typeof console !== 'undefined' && console.log && prevOpeningsNoWalls.length > 0) {
+          console.log('💾 [No-walls path] Collected', prevOpeningsNoWalls.length, 'previous openings from target level before rebuild');
+        }
         // Remove old rooms on target level and replace with updated grouped rooms
         allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
-        for (var gr=0; gr<__groupedRooms.length; gr++){ 
+        for (var gr=0; gr<__groupedRooms.length; gr++){
+          var grpNoWalls = __groupedRooms[gr];
           if (typeof console !== 'undefined' && console.log) {
-            console.log('[DEBUG applyPlan2DTo3D] Adding grouped room', __groupedRooms[gr].id, 'with', (__groupedRooms[gr].openings||[]).length, 'openings');
+            console.log('[DEBUG applyPlan2DTo3D] Adding grouped room', grpNoWalls.id, 'with', (grpNoWalls.openings||[]).length, 'openings');
           }
-          allRooms.push(__groupedRooms[gr]); 
+          // Try to reuse existing opening objects, especially those marked as manually positioned
+          var newOpeningsArrNoWalls = [];
+          try {
+            var gOpenNoWalls = Array.isArray(grpNoWalls.openings) ? grpNoWalls.openings.slice() : [];
+            for (var oi=0; oi<gOpenNoWalls.length; oi++){
+              var gwNoWalls = gOpenNoWalls[oi]; if(!gwNoWalls) continue;
+              var reusedNoWalls = null;
+              var gxNoWalls = (typeof gwNoWalls.x0==='number' && typeof gwNoWalls.x1==='number') ? ((gwNoWalls.x0+gwNoWalls.x1)/2) : (gwNoWalls.x0||0);
+              var gzNoWalls = (typeof gwNoWalls.z0==='number' && typeof gwNoWalls.z1==='number') ? ((gwNoWalls.z0+gwNoWalls.z1)/2) : (gwNoWalls.z0||0);
+              
+              // First try to find manually positioned openings (exact match preferred)
+              for (var pi=0; pi<prevOpeningsNoWalls.length; pi++){
+                var popNoWalls = prevOpeningsNoWalls[pi]; if(!popNoWalls) continue;
+                if (popNoWalls.type !== gwNoWalls.type) continue;
+                
+                // DEBUG: Check if manual flag exists
+                if (typeof console !== 'undefined' && console.log && popNoWalls.__manuallyPositioned) {
+                  console.log('🔍 Found manually positioned opening:', popNoWalls.type, 'flag:', popNoWalls.__manuallyPositioned);
+                }
+                
+                // If this opening was manually positioned, prefer it strongly (use larger tolerance)
+                var tolerance = popNoWalls.__manuallyPositioned ? 2.0 : 0.25; // 2m vs 25cm
+                
+                var pxNoWalls = (typeof popNoWalls.x0==='number' && typeof popNoWalls.x1==='number') ? ((popNoWalls.x0+popNoWalls.x1)/2) : (popNoWalls.x0||0);
+                var pzNoWalls = (typeof popNoWalls.z0==='number' && typeof popNoWalls.z1==='number') ? ((popNoWalls.z0+popNoWalls.z1)/2) : (popNoWalls.z0||0);
+                var dxNoWalls = pxNoWalls - gxNoWalls, dzNoWalls = pzNoWalls - gzNoWalls;
+                if ((dxNoWalls*dxNoWalls + dzNoWalls*dzNoWalls) <= tolerance*tolerance) {
+                  reusedNoWalls = prevOpeningsNoWalls.splice(pi,1)[0]; break;
+                }
+              }
+              
+              if (reusedNoWalls){
+                // DEBUG: Show flag state
+                if (typeof console !== 'undefined' && console.log) {
+                  console.log('🔍 Reused opening flag check:', reusedNoWalls.type, '__manuallyPositioned:', reusedNoWalls.__manuallyPositioned);
+                }
+                // If manually positioned, keep existing coords; otherwise update to new plan coords
+                if (!reusedNoWalls.__manuallyPositioned) {
+                  try { reusedNoWalls.x0 = gwNoWalls.x0; reusedNoWalls.z0 = gwNoWalls.z0; reusedNoWalls.x1 = gwNoWalls.x1; reusedNoWalls.z1 = gwNoWalls.z1; reusedNoWalls.edge = gwNoWalls.edge || reusedNoWalls.edge; reusedNoWalls.sillM = ('sillM' in gwNoWalls) ? gwNoWalls.sillM : reusedNoWalls.sillM; reusedNoWalls.heightM = ('heightM' in gwNoWalls) ? gwNoWalls.heightM : reusedNoWalls.heightM; reusedNoWalls.meta = ('meta' in gwNoWalls) ? gwNoWalls.meta : reusedNoWalls.meta; } catch(_u){}
+                  if (typeof console !== 'undefined' && console.log) {
+                    console.log('♻️ REUSED opening:', reusedNoWalls.type, 'updated coords x0:', reusedNoWalls.x0.toFixed(2), 'z0:', reusedNoWalls.z0.toFixed(2), 'x1:', reusedNoWalls.x1.toFixed(2), 'z1:', reusedNoWalls.z1.toFixed(2));
+                  }
+                } else {
+                  if (typeof console !== 'undefined' && console.log) {
+                    console.log('🔒 PRESERVED manual opening:', reusedNoWalls.type, 'keeping coords x0:', reusedNoWalls.x0.toFixed(2), 'z0:', reusedNoWalls.z0.toFixed(2), 'x1:', reusedNoWalls.x1.toFixed(2), 'z1:', reusedNoWalls.z1.toFixed(2));
+                  }
+                }
+                newOpeningsArrNoWalls.push(reusedNoWalls);
+              } else {
+                if (typeof console !== 'undefined' && console.log) {
+                  console.log('🆕 NEW opening:', gwNoWalls.type, 'coords x0:', gwNoWalls.x0.toFixed(2), 'z0:', gwNoWalls.z0.toFixed(2), 'x1:', gwNoWalls.x1.toFixed(2), 'z1:', gwNoWalls.z1.toFixed(2));
+                }
+                newOpeningsArrNoWalls.push(gwNoWalls);
+              }
+            }
+          } catch(_rgNoWalls) { /* ignore reuse errors */ }
+          grpNoWalls.openings = newOpeningsArrNoWalls;
+          allRooms.push(grpNoWalls);
         }
         saveProjectSilently(); renderLoop();
         if(!quiet) updateStatus('Updated grouped rooms with openings');
@@ -627,7 +698,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
       }
       // Build strip representation for this level
-      var sgn = (__plan2d.yFromWorldZSign||1);
+  var sgn = (__ctx.ySign||1);
       var strips = [];
       var __attachedOpenings = Object.create(null);
       function openingsForWall(hostIdx){
@@ -651,8 +722,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           } catch(_eZeroOpenS) {}
           var ax = host.x0 + (host.x1-host.x0)*t0; var ay = host.y0 + (host.y1-host.y0)*t0;
           var bx = host.x0 + (host.x1-host.x0)*t1; var by = host.y0 + (host.y1-host.y0)*t1;
-          var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgn*ay;
-          var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgn*by;
+          var wx0 = (__ctx.centerX||0) + ax; var wz0 = (__ctx.centerZ||0) + sgn*ay;
+          var wx1 = (__ctx.centerX||0) + bx; var wz1 = (__ctx.centerZ||0) + sgn*by;
           var sill = (el.type==='window') ? ((typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0)) : 0;
           var hM = (typeof el.heightM==='number') ? el.heightM : ((el.type==='door') ? ((__plan2d&&__plan2d.doorHeightM)||2.04) : ((__plan2d&&__plan2d.windowHeightM)||1.5));
           outs.push({ type: el.type, x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: (el.meta||null) });
@@ -665,10 +736,10 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         for(var si=0; si<subs.length; si++){
           var sg = subs[si];
           var rec = {
-            x0: (__plan2d.centerX||0) + sg.ax,
-            z0: (__plan2d.centerZ||0) + sgn*sg.ay,
-            x1: (__plan2d.centerX||0) + sg.bx,
-            z1: (__plan2d.centerZ||0) + sgn*sg.by,
+            x0: (__ctx.centerX||0) + sg.ax,
+            z0: (__ctx.centerZ||0) + sgn*sg.ay,
+            x1: (__ctx.centerX||0) + sg.bx,
+            z1: (__ctx.centerZ||0) + sgn*sg.by,
             thickness: (e.thickness||__plan2d.wallThicknessM||0.3),
             height: (__plan2d.wallHeightM||3.0),
             baseY: (targetLevel||0) * 3.5,
@@ -691,7 +762,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       // Fallback: in nonDestructive mode with no rooms detected, refresh openings on existing rectangular rooms
       if (nonDestructive && !stripsOnly) {
         try {
-          var sgnW = (__plan2d.yFromWorldZSign||1);
+          var sgnW = (__ctx.ySign||1);
           // Collect 2D openings (windows/doors)
           var openings2D = [];
           for (var oi=0; oi<elemsSrc.length; oi++){
@@ -708,8 +779,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             var minZ = (room.z||0) - (room.depth||0)/2;
             var maxZ = (room.z||0) + (room.depth||0)/2;
             // Map world rectangle back to plan space for classification
-            var R = { minX: minX - (__plan2d.centerX||0), maxX: maxX - (__plan2d.centerX||0) };
-            var minYp = (minZ - (__plan2d.centerZ||0)) * sgnW; var maxYp = (maxZ - (__plan2d.centerZ||0)) * sgnW;
+            var R = { minX: minX - (__ctx.centerX||0), maxX: maxX - (__ctx.centerX||0) };
+            var minYp = (minZ - (__ctx.centerZ||0)) * sgnW; var maxYp = (maxZ - (__ctx.centerZ||0)) * sgnW;
             R.minY = Math.min(minYp, maxYp); R.maxY = Math.max(minYp, maxYp);
             var openingsOut = [];
             var winByEdge = { minZ:Object.create(null), maxZ:Object.create(null), minX:Object.create(null), maxX:Object.create(null) }; // edge -> profileKey -> [[s,e],...]
@@ -784,17 +855,66 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   if(!allowRooms){ return; }
 
   // Replace rooms on the target level for any rebuild when walls exist to avoid duplicates in live applies
+  // But first collect previous openings on this level so we can try to reuse objects moved by 3D interactions
+  var prevOpenings = [];
+  allRooms.forEach(function(r){
+    if ((r.level||0) === targetLevel && Array.isArray(r.openings)){
+      r.openings.forEach(function(op){ if(op) prevOpenings.push(op); });
+    }
+  });
+  if (typeof console !== 'undefined' && console.log && prevOpenings.length > 0) {
+    console.log('💾 Collected', prevOpenings.length, 'previous openings from target level before rebuild');
+  }
+  // Remove existing rooms on this level (we will re-add grouped rooms below)
   allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
   // Re-add grouped rooms (from 3D) first so they persist and aren't split by touching walls
   if (Array.isArray(__groupedRooms) && __groupedRooms.length){
     if (typeof console !== 'undefined' && console.log) {
-      console.log('[DEBUG applyPlan2DTo3D] Re-adding', __groupedRooms.length, 'grouped rooms to allRooms');
+      console.log('[DEBUG applyPlan2DTo3D] Re-adding', __groupedRooms.length, 'grouped rooms to allRooms (attempting to reuse openings)');
     }
-    for (var gr=0; gr<__groupedRooms.length; gr++){ 
+    for (var gr=0; gr<__groupedRooms.length; gr++){
+      var grp = __groupedRooms[gr];
       if (typeof console !== 'undefined' && console.log) {
-        console.log('[DEBUG applyPlan2DTo3D] Adding grouped room', __groupedRooms[gr].id, 'with', (__groupedRooms[gr].openings||[]).length, 'openings');
+        console.log('[DEBUG applyPlan2DTo3D] Adding grouped room', grp.id, 'with', (grp.openings||[]).length, 'openings');
       }
-      allRooms.push(__groupedRooms[gr]); 
+      // For each opening produced by the grouped room, try to find a nearby existing opening of same type
+      var newOpeningsArr = [];
+      try {
+        var gOpen = Array.isArray(grp.openings) ? grp.openings.slice() : [];
+        for (var oi=0; oi<gOpen.length; oi++){
+          var gw = gOpen[oi]; if(!gw) continue;
+          var reused = null;
+          // Match by type and proximity of center point
+          var gx = (typeof gw.x0==='number' && typeof gw.x1==='number') ? ((gw.x0+gw.x1)/2) : (gw.x0||0);
+          var gz = (typeof gw.z0==='number' && typeof gw.z1==='number') ? ((gw.z0+gw.z1)/2) : (gw.z0||0);
+          for (var pi=0; pi<prevOpenings.length; pi++){
+            var pop = prevOpenings[pi]; if(!pop) continue;
+            if (pop.type !== gw.type) continue;
+            var px = (typeof pop.x0==='number' && typeof pop.x1==='number') ? ((pop.x0+pop.x1)/2) : (pop.x0||0);
+            var pz = (typeof pop.z0==='number' && typeof pop.z1==='number') ? ((pop.z0+pop.z1)/2) : (pop.z0||0);
+            var dx = px - gx, dz = pz - gz;
+            if ((dx*dx + dz*dz) <= 0.25*0.25) { // within 25cm
+              reused = prevOpenings.splice(pi,1)[0]; break;
+            }
+          }
+          if (reused){
+            // update coordinates on the reused object so renderer uses new position
+            try { reused.x0 = gw.x0; reused.z0 = gw.z0; reused.x1 = gw.x1; reused.z1 = gw.z1; reused.edge = gw.edge || reused.edge; reused.sillM = ('sillM' in gw) ? gw.sillM : reused.sillM; reused.heightM = ('heightM' in gw) ? gw.heightM : reused.heightM; reused.meta = ('meta' in gw) ? gw.meta : reused.meta; } catch(_u){}
+            if (typeof console !== 'undefined' && console.log) {
+              console.log('♻️ REUSED opening:', reused.type, 'updated coords x0:', reused.x0.toFixed(2), 'z0:', reused.z0.toFixed(2), 'x1:', reused.x1.toFixed(2), 'z1:', reused.z1.toFixed(2));
+            }
+            newOpeningsArr.push(reused);
+          } else {
+            // No reusable opening found - use the newly generated opening object
+            if (typeof console !== 'undefined' && console.log) {
+              console.log('🆕 NEW opening:', gw.type, 'coords x0:', gw.x0.toFixed(2), 'z0:', gw.z0.toFixed(2), 'x1:', gw.x1.toFixed(2), 'z1:', gw.z1.toFixed(2));
+            }
+            newOpeningsArr.push(gw);
+          }
+        }
+      } catch(_rg) { /* ignore reuse errors */ }
+      grp.openings = newOpeningsArr;
+      allRooms.push(grp);
     }
   }
   // We'll build interior strips and merge with existing ones for this level below
@@ -802,12 +922,12 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     // First, create polygonal rooms (single composite) from polyRooms
     for (var pr=0; pr<polyRooms.length; pr++){
       var PR = polyRooms[pr]; if(!PR || !Array.isArray(PR.poly) || PR.poly.length<3) continue;
-      var sgnp = (__plan2d.yFromWorldZSign||1);
+  var sgnp = (__ctx.ySign||1);
       // Map plan polygon to world footprint
       var worldPts = [];
       var minWX=Infinity, maxWX=-Infinity, minWZ=Infinity, maxWZ=-Infinity;
       for (var pi=0; pi<PR.poly.length; pi++){
-        var pp = PR.poly[pi]; var wx = (__plan2d.centerX||0) + pp.x; var wz = (__plan2d.centerZ||0) + sgnp*pp.y;
+  var pp = PR.poly[pi]; var wx = (__ctx.centerX||0) + pp.x; var wz = (__ctx.centerZ||0) + sgnp*pp.y;
         worldPts.push({ x: wx, z: wz });
         if (wx<minWX) minWX=wx; if (wx>maxWX) maxWX=wx; if (wz<minWZ) minWZ=wz; if (wz>maxWZ) maxWZ=wz;
       }
@@ -882,8 +1002,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
               var s0=spans[si][0], s1=spans[si][1];
               var ax = host.x0 + (host.x1-host.x0)*s0; var ay = host.y0 + (host.y1-host.y0)*s0;
               var bx = host.x0 + (host.x1-host.x0)*s1; var by = host.y0 + (host.y1-host.y0)*s1;
-              var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgnp*ay;
-              var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgnp*by;
+              var wx0 = (__ctx.centerX||0) + ax; var wz0 = (__ctx.centerZ||0) + sgnp*ay;
+              var wx1 = (__ctx.centerX||0) + bx; var wz1 = (__ctx.centerZ||0) + sgnp*by;
               openingsW.push({ type:'window', x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: null });
             }
           });

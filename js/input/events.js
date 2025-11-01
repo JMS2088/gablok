@@ -200,6 +200,24 @@
             id: object.id,
             type: object.type
           });
+          
+          // Calculate delta movement for this frame
+          var deltaX = snap.x - object.x;
+          var deltaZ = snap.z - object.z;
+          
+          // Move openings (doors/windows) with the room
+          if (Array.isArray(object.openings) && object.openings.length > 0 && (deltaX !== 0 || deltaZ !== 0)) {
+            for (var oi = 0; oi < object.openings.length; oi++) {
+              var op = object.openings[oi];
+              if (!op || typeof op.x0 !== 'number') continue;
+              op.x0 += deltaX;
+              op.z0 += deltaZ;
+              op.x1 += deltaX;
+              op.z1 += deltaZ;
+              op.__manuallyPositioned = true;
+            }
+          }
+          
           object.x = snap.x;
           object.z = snap.z;
           currentSnapGuides = snap.guides;
@@ -339,38 +357,66 @@
             if (Math.abs(newW - snappedW) <= HANDLE_SNAP_TOLERANCE) {
               newW = clamp(snappedW, minSize, maxSize);
             }
-            target.width = newW;
-            // Center is midpoint between opposite face and dragged face (rect rooms)
+            // Capture previous frame state BEFORE mutating target for correct deltas
+            var prevCenterX = target.x;
+            var prevCenterZ = target.z;
+            var prevW = target.width;
+            var prevHalfW = prevW / 2;
+
+            // Compute new center from fixed opposite face and new width
             var newCenterX = mouse.dragInfo.faceOppStart.x + (newW / 2) * (sX * axisXx);
             var newCenterZ = mouse.dragInfo.faceOppStart.z + (newW / 2) * (sX * axisXz);
-            
-            // Calculate old wall positions in world space (from previous frame)
-            var oldCenterX = target.x;
-            var oldCenterZ = target.z;
-            var oldHalfW = target.width / 2; // Use current width, not original
-            
-            // Calculate movement delta for THIS frame only
-            var deltaCenterX = newCenterX - oldCenterX;
-            var deltaCenterZ = newCenterZ - oldCenterZ;
-            
+
+            // Per-frame center delta
+            var deltaCenterX = newCenterX - prevCenterX;
+            var deltaCenterZ = newCenterZ - prevCenterZ;
+
+            // Update size and center
+            target.width = newW;
             target.x = newCenterX;
             target.z = newCenterZ;
             
-            // Rectangular rooms: move openings by frame delta
+            // Rectangular rooms: move openings with correct wall coupling
             if (!mouse.dragInfo.poly && Array.isArray(target.openings) && target.openings.length > 0 && (deltaCenterX !== 0 || deltaCenterZ !== 0)) {
               try {
-                console.log('🔵 WIDTH DRAG: Moving', target.openings.length, 'openings by delta:', deltaCenterX.toFixed(3), deltaCenterZ.toFixed(3));
-                // Simply move all openings by the amount the room moved this frame
+                // Movement vectors in world space
+                var centerShift = { dx: deltaCenterX, dz: deltaCenterZ };
+                // Dragged face moves by twice the center shift along width axis
+                var draggedFaceShift = { dx: 2*deltaCenterX, dz: 2*deltaCenterZ };
+                // Determine which edge name is being dragged/opposite for rectangular rooms
+                var draggedEdge = (sX === 1 ? 'right' : 'left');
+                var oppositeEdge = (sX === 1 ? 'left' : 'right');
+                // Helper to classify edge if not present by projecting midpoint into local axes
+                function classifyEdge(op){
+                  function normEdge(e){ if(!e) return e; if(e==='minX') return 'left'; if(e==='maxX') return 'right'; if(e==='minZ') return 'top'; if(e==='maxZ') return 'bottom'; return e; }
+                  if (op && typeof op.edge === 'string') return normEdge(op.edge);
+                  try {
+                    var mx = ((op.x0||0)+(op.x1||0))/2;
+                    var mz = ((op.z0||0)+(op.z1||0))/2;
+                    // Local coordinates relative to previous center
+                    var relX = (mx - prevCenterX) * axisXx + (mz - prevCenterZ) * axisXz; // along local +X
+                    var relZ = (mx - prevCenterX) * axisZx + (mz - prevCenterZ) * axisZz; // along local +Z
+                    var tol = Math.max(0.12, prevW*0.02);
+                    if (Math.abs(relX - (+prevHalfW)) <= tol) return 'right';
+                    if (Math.abs(relX - (-prevHalfW)) <= tol) return 'left';
+                    // Use sign of relZ to disambiguate top/bottom
+                    // relZ > 0 means near local +Z (world maxZ) -> 'bottom'; relZ < 0 -> 'top'
+                    return (relZ >= 0 ? 'bottom' : 'top');
+                  } catch(_ce) { return null; }
+                }
                 for (var oi = 0; oi < target.openings.length; oi++) {
-                  var op = target.openings[oi];
-                  if (!op || typeof op.x0 !== 'number') continue;
-                  
-                  console.log('  Before:', op.type, 'x0:', op.x0.toFixed(2), 'z0:', op.z0.toFixed(2), 'x1:', op.x1.toFixed(2), 'z1:', op.z1.toFixed(2), 'edge:', op.edge);
-                  op.x0 += deltaCenterX;
-                  op.z0 += deltaCenterZ;
-                  op.x1 += deltaCenterX;
-                  op.z1 += deltaCenterZ;
-                  console.log('  After:', op.type, 'x0:', op.x0.toFixed(2), 'z0:', op.z0.toFixed(2), 'x1:', op.x1.toFixed(2), 'z1:', op.z1.toFixed(2));
+                  var op = target.openings[oi]; if (!op || typeof op.x0 !== 'number') continue;
+                  var edge = classifyEdge(op);
+                  var d = null;
+                  if (edge === draggedEdge) {
+                    d = draggedFaceShift; // move fully with the dragged wall
+                  } else if (edge === oppositeEdge) {
+                    d = { dx: 0, dz: 0 }; // opposite wall stays put
+                  } else {
+                    d = centerShift; // perpendicular walls follow center shift
+                  }
+                  op.x0 += d.dx; op.z0 += d.dz; op.x1 += d.dx; op.z1 += d.dz;
+                  op.__manuallyPositioned = true;
                 }
               } catch(_rectWidthErr) {
                 console.warn('Failed to move rect room openings on width change:', _rectWidthErr);
@@ -438,34 +484,54 @@
             if (Math.abs(newD - snappedD) <= HANDLE_SNAP_TOLERANCE) {
               newD = clamp(snappedD, minSize, maxSize);
             }
-            target.depth = newD;
+            // Capture previous frame state BEFORE mutating target for correct deltas
+            var prevCenterXD = target.x;
+            var prevCenterZD = target.z;
+            var prevD = target.depth;
+            var prevHalfD = prevD / 2;
+
             var newCenterXD = mouse.dragInfo.faceOppStart.x + (newD / 2) * (sZ * axisZx);
             var newCenterZD = mouse.dragInfo.faceOppStart.z + (newD / 2) * (sZ * axisZz);
-            
-            // Calculate old wall positions in world space (from previous frame)
-            var oldCenterXD = target.x;
-            var oldCenterZD = target.z;
-            var oldHalfD = target.depth / 2; // Use current depth, not original
-            
-            // Calculate movement delta for THIS frame only
-            var deltaCenterXD = newCenterXD - oldCenterXD;
-            var deltaCenterZD = newCenterZD - oldCenterZD;
-            
+
+            var deltaCenterXD = newCenterXD - prevCenterXD;
+            var deltaCenterZD = newCenterZD - prevCenterZD;
+
+            target.depth = newD;
             target.x = newCenterXD;
             target.z = newCenterZD;
             
-            // Rectangular rooms: move openings by frame delta
+            // Rectangular rooms: move openings with correct wall coupling
             if (!mouse.dragInfo.poly && Array.isArray(target.openings) && target.openings.length > 0 && (deltaCenterXD !== 0 || deltaCenterZD !== 0)) {
               try {
-                // Simply move all openings by the amount the room moved this frame
+                var centerShiftD = { dx: deltaCenterXD, dz: deltaCenterZD };
+                var draggedFaceShiftD = { dx: 2*deltaCenterXD, dz: 2*deltaCenterZD };
+                // For depth drag: +Z handle (depth+) moves the bottom (maxZ) wall; -Z moves the top (minZ)
+                var draggedEdgeD = (sZ === 1 ? 'bottom' : 'top');
+                var oppositeEdgeD = (sZ === 1 ? 'top' : 'bottom');
+                function classifyEdgeD(op){
+                  function normEdge(e){ if(!e) return e; if(e==='minX') return 'left'; if(e==='maxX') return 'right'; if(e==='minZ') return 'top'; if(e==='maxZ') return 'bottom'; return e; }
+                  if (op && typeof op.edge === 'string') return normEdge(op.edge);
+                  try {
+                    var mx = ((op.x0||0)+(op.x1||0))/2;
+                    var mz = ((op.z0||0)+(op.z1||0))/2;
+                    var relX = (mx - prevCenterXD) * axisXx + (mz - prevCenterZD) * axisXz; // along local +X
+                    var relZ = (mx - prevCenterXD) * axisZx + (mz - prevCenterZD) * axisZz; // along local +Z
+                    var tol = Math.max(0.12, prevD*0.02);
+                    // relZ ~ +halfD -> bottom (maxZ); relZ ~ -halfD -> top (minZ)
+                    if (Math.abs(relZ - (+prevHalfD)) <= tol) return 'bottom';
+                    if (Math.abs(relZ - (-prevHalfD)) <= tol) return 'top';
+                    return (relX >= 0 ? 'right' : 'left');
+                  } catch(_ced) { return null; }
+                }
                 for (var oiD = 0; oiD < target.openings.length; oiD++) {
-                  var opD = target.openings[oiD];
-                  if (!opD || typeof opD.x0 !== 'number') continue;
-                  
-                  opD.x0 += deltaCenterXD;
-                  opD.z0 += deltaCenterZD;
-                  opD.x1 += deltaCenterXD;
-                  opD.z1 += deltaCenterZD;
+                  var opD = target.openings[oiD]; if (!opD || typeof opD.x0 !== 'number') continue;
+                  var edgeD = classifyEdgeD(opD);
+                  var d2 = null;
+                  if (edgeD === draggedEdgeD) d2 = draggedFaceShiftD;
+                  else if (edgeD === oppositeEdgeD) d2 = { dx: 0, dz: 0 };
+                  else d2 = centerShiftD;
+                  opD.x0 += d2.dx; opD.z0 += d2.dz; opD.x1 += d2.dx; opD.z1 += d2.dz;
+                  opD.__manuallyPositioned = true;
                 }
               } catch(_rectDepthErr) {
                 console.warn('Failed to move rect room openings on depth change:', _rectDepthErr);
@@ -542,14 +608,54 @@
     });
     
     document.addEventListener('mouseup', function() {
-      // If we just finished resizing a room, sync to 2D and save
-      if (mouse.dragType === 'handle' && mouse.dragInfo && mouse.dragInfo.roomId) {
+      // If we just finished resizing OR moving a room, sync to 2D and save
+      if ((mouse.dragType === 'handle' || mouse.dragType === 'room' || mouse.dragType === 'balcony') && mouse.dragInfo && mouse.dragInfo.roomId) {
         try {
           console.log('🔄 SYNCING 3D -> 2D (flag still true to block feedback)');
-          // Sync 3D changes to 2D plan
-          if (typeof populatePlan2DFromDesign === 'function' && window.__plan2d && __plan2d.active) {
-            populatePlan2DFromDesign();
-            if (typeof plan2dDraw === 'function') {
+          // Sync 3D changes to 2D plan (ALWAYS sync, even if 2D plan is not visible,
+          // to ensure openings stay in correct positions when applyPlan2DTo3D is called later)
+          if (typeof populatePlan2DFromDesign === 'function' && window.__plan2d) {
+            var result = populatePlan2DFromDesign();
+            console.log('✅ populatePlan2DFromDesign() returned:', result, '__plan2d.elements.length:', (__plan2d && __plan2d.elements) ? __plan2d.elements.length : 0);
+            // Build a consistent snapshot of elements + center/sign/scale for apply
+            var snap = null;
+            try {
+              if (typeof populatePlan2DFromDesignSnapshot === 'function') {
+                snap = populatePlan2DFromDesignSnapshot();
+              }
+            } catch(_snapErr) { snap = null; }
+            if (!snap) {
+              snap = {
+                elements: (__plan2d && Array.isArray(__plan2d.elements)) ? __plan2d.elements : [],
+                centerX: (__plan2d && isFinite(__plan2d.centerX)) ? __plan2d.centerX : 0,
+                centerZ: (__plan2d && isFinite(__plan2d.centerZ)) ? __plan2d.centerZ : 0,
+                yFromWorldZSign: (__plan2d && (__plan2d.yFromWorldZSign===-1||__plan2d.yFromWorldZSign===1)) ? __plan2d.yFromWorldZSign : 1,
+                scale: (__plan2d && isFinite(__plan2d.scale)) ? __plan2d.scale : undefined
+              };
+            }
+            
+            // Clear the __manuallyPositioned flag from all openings after sync
+            // This allows future applyPlan2DTo3D calls to update coordinates normally
+            var target = mouse.dragInfo.room || findObjectById(mouse.dragInfo.roomId);
+            if (target && Array.isArray(target.openings)) {
+              for (var i = 0; i < target.openings.length; i++) {
+                if (target.openings[i] && target.openings[i].__manuallyPositioned) {
+                  delete target.openings[i].__manuallyPositioned;
+                  console.log('🧹 Cleared __manuallyPositioned flag from:', target.openings[i].type);
+                }
+              }
+            }
+            
+            // IMMEDIATELY rebuild 3D from the fresh 2D plan to apply the new center and coordinates
+            // This ensures openings get updated with the correct positions before any other code runs
+            if (typeof applyPlan2DTo3D === 'function') {
+              console.log('🔧 Rebuilding 3D from fresh 2D plan after drag');
+              var lvl = (typeof currentFloor==='number' ? currentFloor : 0);
+              applyPlan2DTo3D(snap, { allowRooms:true, quiet:true, level: lvl, nonDestructive:true });
+            }
+            
+            // Only redraw if the 2D plan is actually visible
+            if (__plan2d.active && typeof plan2dDraw === 'function') {
               plan2dDraw();
             }
           }
@@ -563,9 +669,12 @@
         }
       }
       
-      // Clear the 3D drag flag AFTER sync is complete to prevent 2D->3D feedback
-      window.__dragging3DRoom = false;
-      console.log('🔴 END 3D DRAG - Flag cleared:', window.__dragging3DRoom);
+      // Clear the 3D drag flag AFTER plan2dScheduleApply's 150ms timer expires
+      // This prevents applyPlan2DTo3D from rebuilding rooms immediately after drag
+      setTimeout(function() {
+        window.__dragging3DRoom = false;
+        console.log('🔴 END 3D DRAG - Flag cleared after 200ms:', window.__dragging3DRoom);
+      }, 200);
       
       currentSnapGuides = [];
       mouse.down = false;
