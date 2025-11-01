@@ -333,6 +333,9 @@
 				<button id="plan2d-tool-door" class="secondary" title="Draw Doors">Door</button>
 				<button id="plan2d-tool-select" class="secondary" title="Select elements to edit/delete">Select</button>
 				<button id="plan2d-tool-erase" class="secondary" title="Erase elements">Erase</button>
+				<!-- View utilities: fit and flip orientation -->
+				<button id="plan2d-fit" class="secondary" title="Fit view to current 2D content">Fit</button>
+				<button id="plan2d-flip-y" class="secondary" title="Flip vertical to mirror 3D orientation">Flip Y</button>
 				<button id="plan2d-clear" class="secondary" title="Clear drawing">Clear</button>
 				<button id="plan2d-close" class="secondary" title="Close">✕</button>
 			</div>
@@ -348,6 +351,13 @@
 					<button id="plan2d-export" title="Export plan JSON">Export JSON</button>
 					<button id="plan2d-import" class="secondary" title="Import plan JSON">Import JSON</button>
 					<input type="file" id="plan2d-import-file" accept="application/json" style="display:none;">
+					<div id="plan2d-window-type" style="display:none; margin-top:4px;">
+						<label for="plan2d-window-type-select" style="display:block; font-size:11px; color:#e2e8f0; margin-bottom:4px;">Window type</label>
+						<select id="plan2d-window-type-select" style="width:100%; font-size:12px; padding:4px 6px; border-radius:6px; border:1px solid #94a3b8; background:#0b1020; color:#e2e8f0;">
+							<option value="standard">Standard (sill 1.0m, height 1.5m)</option>
+							<option value="full">Full height (floor to ceiling)</option>
+						</select>
+					</div>
 				</div>
 			</div>
 		</div>

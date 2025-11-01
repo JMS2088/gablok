@@ -448,8 +448,9 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
 
   if((roomsFound.length===0 && polyRooms.length===0) || stripsOnly){
       // Walls present but no closed rectangles: extrude standalone wall strips from 2D
-      // In non-destructive mode, keep existing rooms; otherwise reflect 2D state by clearing rooms on target level
-      if (!nonDestructive) {
+      // Respect nonDestructive: if true and we're not in explicit stripsOnly mode, do NOT clear existing rooms
+      if (!nonDestructive || stripsOnly) {
+        // Clear rooms on this level for rebuild (legacy behavior)
         allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
       }
       // Build strip representation for this level
@@ -478,17 +479,90 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   var merged = _dedupeStripsByGeom(existingLvl.concat(strips));
   wallStrips = keepOther.concat(merged);
   saveProjectSilently(); selectedRoomId=null; selectedWallStripIndex = -1; renderLoop();
-      if(!quiet) updateStatus('Applied 2D plan to 3D (standalone walls)');
+      // Fallback: in nonDestructive mode with no rooms detected, refresh openings on existing rectangular rooms
+      if (nonDestructive && !stripsOnly) {
+        try {
+          var sgnW = (__plan2d.yFromWorldZSign||1);
+          // Collect 2D openings (windows/doors)
+          var openings2D = [];
+          for (var oi=0; oi<elemsSrc.length; oi++){
+            var oe = elemsSrc[oi]; if(!oe || (oe.type!=='window' && oe.type!=='door')) continue;
+            openings2D.push({ idx: oi, el: oe });
+          }
+          function mergeIntervalsFallback(arr){ if(!arr||!arr.length) return []; arr.sort(function(A,B){ return A[0]-B[0]; }); var out=[]; for(var i=0;i<arr.length;i++){ var a=arr[i]; if(!out.length) out.push([a[0],a[1]]); else { var last=out[out.length-1]; if(a[0] <= last[1] + 1e-6){ last[1] = Math.max(last[1], a[1]); } else { out.push([a[0],a[1]]); } } } return out; }
+          for (var ri=0; ri<allRooms.length; ri++){
+            var room = allRooms[ri]; if(!room || (room.level||0)!==targetLevel) continue;
+            // Skip polygon rooms in this minimal fallback (keep their openings unchanged)
+            if (Array.isArray(room.footprint) && room.footprint.length>=3) continue;
+            var minX = (room.x||0) - (room.width||0)/2;
+            var maxX = (room.x||0) + (room.width||0)/2;
+            var minZ = (room.z||0) - (room.depth||0)/2;
+            var maxZ = (room.z||0) + (room.depth||0)/2;
+            // Map world rectangle back to plan space for classification
+            var R = { minX: minX - (__plan2d.centerX||0), maxX: maxX - (__plan2d.centerX||0) };
+            var minYp = (minZ - (__plan2d.centerZ||0)) * sgnW; var maxYp = (maxZ - (__plan2d.centerZ||0)) * sgnW;
+            R.minY = Math.min(minYp, maxYp); R.maxY = Math.max(minYp, maxYp);
+            var openingsOut = [];
+            var winByEdge = { minZ:Object.create(null), maxZ:Object.create(null), minX:Object.create(null), maxX:Object.create(null) }; // edge -> profileKey -> [[s,e],...]
+            for (var ok=0; ok<openings2D.length; ok++){
+              var rec = openings2D[ok].el; var ax,ay,bx,by; var isDoor = (rec.type==='door');
+              if(typeof rec.host==='number'){
+                var host = elemsSrc[rec.host]; if(!host || host.type!=='wall') continue;
+                var t0=Math.max(0,Math.min(1,rec.t0||0)), t1=Math.max(0,Math.min(1,rec.t1||0));
+                ax = host.x0 + (host.x1-host.x0)*t0; ay = host.y0 + (host.y1-host.y0)*t0;
+                bx = host.x0 + (host.x1-host.x0)*t1; by = host.y0 + (host.y1-host.y0)*t1;
+              } else {
+                // Skip free openings in fallback
+                continue;
+              }
+              var added=false; var T=0.03;
+              var sgn = sgnW;
+              var topY = (sgn===1 ? R.minY : R.maxY);
+              var botY = (sgn===1 ? R.maxY : R.minY);
+              if(Math.abs(ay - topY) <= T && Math.abs(by - topY) <= T){
+                var sx = Math.max(R.minX, Math.min(R.maxX, Math.min(ax,bx)));
+                var ex = Math.max(R.minX, Math.min(R.maxX, Math.max(ax,bx)));
+                var q0 = quantizeMeters(sx - R.minX, 2); var q1 = quantizeMeters(ex - R.minX, 2);
+                if(q1 > q0 + 1e-4){
+                  if(isDoor){ var hD=(typeof rec.heightM==='number')?rec.heightM:((__plan2d&&__plan2d.doorHeightM)||2.04); openingsOut.push({type:'door', edge:'minZ', startM:q0, endM:q1, widthM:(q1-q0), heightM:hD, sillM:0, meta:(rec.meta||null)});
+                  } else { var sill=(typeof rec.sillM==='number')?rec.sillM:((__plan2d&&__plan2d.windowSillM)||1.0); var hW=(typeof rec.heightM==='number')?rec.heightM:((__plan2d&&__plan2d.windowHeightM)||1.5); var pk='s'+(+sill.toFixed(3))+'_h'+(+hW.toFixed(3)); (winByEdge.minZ[pk]||(winByEdge.minZ[pk]=[])).push([q0,q1]); }
+                  added=true;
+                }
+              }
+              if(!added && Math.abs(ay - botY) <= T && Math.abs(by - botY) <= T){
+                var s2 = Math.max(R.minX, Math.min(R.maxX, Math.min(ax,bx)));
+                var e2 = Math.max(R.minX, Math.min(R.maxX, Math.max(ax,bx)));
+                var q02 = quantizeMeters(s2 - R.minX, 2); var q12 = quantizeMeters(e2 - R.minX, 2);
+                if(q12 > q02 + 1e-4){ if(isDoor){ var hD2=(typeof rec.heightM==='number')?rec.heightM:((__plan2d&&__plan2d.doorHeightM)||2.04); openingsOut.push({type:'door', edge:'maxZ', startM:q02, endM:q12, widthM:(q12-q02), heightM:hD2, sillM:0, meta:(rec.meta||null)}); } else { var sill2=(typeof rec.sillM==='number')?rec.sillM:((__plan2d&&__plan2d.windowSillM)||1.0); var hW2=(typeof rec.heightM==='number')?rec.heightM:((__plan2d&&__plan2d.windowHeightM)||1.5); var pk2='s'+(+sill2.toFixed(3))+'_h'+(+hW2.toFixed(3)); (winByEdge.maxZ[pk2]||(winByEdge.maxZ[pk2]=[])).push([q02,q12]); } added=true; }
+              }
+              if(!added && Math.abs(ax - R.minX) <= T && Math.abs(bx - R.minX) <= T){
+                var sv = Math.max(R.minY, Math.min(R.maxY, Math.min(ay,by)));
+                var ev = Math.max(R.minY, Math.min(R.maxY, Math.max(ay,by)));
+                var q03 = quantizeMeters(sv - R.minY, 2); var q13 = quantizeMeters(ev - R.minY, 2);
+                if(q13 > q03 + 1e-4){ if(isDoor){ var hD3=(typeof rec.heightM==='number')?rec.heightM:((__plan2d&&__plan2d.doorHeightM)||2.04); openingsOut.push({type:'door', edge:'minX', startM:q03, endM:q13, widthM:(q13-q03), heightM:hD3, sillM:0, meta:(rec.meta||null)}); } else { var sill3=(typeof rec.sillM==='number')?rec.sillM:((__plan2d&&__plan2d.windowSillM)||1.0); var hW3=(typeof rec.heightM==='number')?rec.heightM:((__plan2d&&__plan2d.windowHeightM)||1.5); var pk3='s'+(+sill3.toFixed(3))+'_h'+(+hW3.toFixed(3)); (winByEdge.minX[pk3]||(winByEdge.minX[pk3]=[])).push([q03,q13]); } added=true; }
+              }
+              if(!added && Math.abs(ax - R.maxX) <= T && Math.abs(bx - R.maxX) <= T){
+                var sv2 = Math.max(R.minY, Math.min(R.maxY, Math.min(ay,by)));
+                var ev2 = Math.max(R.minY, Math.min(R.maxY, Math.max(ay,by)));
+                var q04 = quantizeMeters(sv2 - R.minY, 2); var q14 = quantizeMeters(ev2 - R.minY, 2);
+                if(q14 > q04 + 1e-4){ if(isDoor){ var hD4=(typeof rec.heightM==='number')?rec.heightM:((__plan2d&&__plan2d.doorHeightM)||2.04); openingsOut.push({type:'door', edge:'maxX', startM:q04, endM:q14, widthM:(q14-q04), heightM:hD4, sillM:0, meta:(rec.meta||null)}); } else { var sill4=(typeof rec.sillM==='number')?rec.sillM:((__plan2d&&__plan2d.windowSillM)||1.0); var hW4=(typeof rec.heightM==='number')?rec.heightM:((__plan2d&&__plan2d.windowHeightM)||1.5); var pk4='s'+(+sill4.toFixed(3))+'_h'+(+hW4.toFixed(3)); (winByEdge.maxX[pk4]||(winByEdge.maxX[pk4]=[])).push([q04,q14]); } added=true; }
+              }
+            }
+            ['minZ','maxZ','minX','maxX'].forEach(function(edge){ var prof = winByEdge[edge]; if(!prof) return; Object.keys(prof).forEach(function(pk){ var spans=mergeIntervalsFallback(prof[pk]); var m=pk.match(/^s([\d\.\-]+)_h([\d\.\-]+)$/); var wsill=(__plan2d&&__plan2d.windowSillM)||1.0; var wh=(__plan2d&&__plan2d.windowHeightM)||1.5; if(m){ wsill=parseFloat(m[1]); wh=parseFloat(m[2]); } for (var si=0; si<spans.length; si++){ var sM=spans[si][0], eM=spans[si][1]; openingsOut.push({ type:'window', edge:edge, startM:sM, endM:eM, widthM:(eM-sM), heightM:wh, sillM:wsill, meta:null }); } }); });
+            room.openings = openingsOut;
+          }
+        } catch(_fallbackE) { /* ignore fallback opening refresh errors */ }
+        saveProjectSilently(); renderLoop();
+      }
+      if(!quiet) updateStatus(nonDestructive && !stripsOnly ? 'Kept existing rooms; updated wall strips' : 'Applied 2D plan to 3D (standalone walls)');
       return;
     }
 
   // If rooms are not allowed (live strips-only mode), stop here
   if(!allowRooms){ return; }
 
-  // Replace only rooms on the target level; also clear standalone strips if ground floor
-    if (!nonDestructive) {
-      allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
-    }
+  // Replace rooms on the target level for any rebuild when walls exist to avoid duplicates in live applies
+  allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
   // Re-add grouped rooms (from 3D) first so they persist and aren't split by touching walls
   if (Array.isArray(__groupedRooms) && __groupedRooms.length){
     for (var gr=0; gr<__groupedRooms.length; gr++){ allRooms.push(__groupedRooms[gr]); }
@@ -515,38 +589,74 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       roomPoly.name = 'Room';
       roomPoly.groupId = PR.groupId;
       roomPoly.footprint = worldPts; // world-space polygon footprint
-      // Map openings from host walls in this component to world endpoints
-      var openingsW = [];
-      // Merge overlapping windows per host wall to avoid fragmented 3D faces
-      function mergeIntervals(arr){ if(!arr||!arr.length) return []; arr.sort(function(A,B){ return A[0]-B[0]; }); var out=[]; for(var i=0;i<arr.length;i++){ var a=arr[i]; if(!out.length) out.push([a[0],a[1]]); else { var last=out[out.length-1]; if(a[0] <= last[1] + 1e-6){ last[1] = Math.max(last[1], a[1]); } else { out.push([a[0],a[1]]); } } } return out; }
+  // Map openings from host walls in this component to world endpoints
+  var openingsW = [];
+  // Merge overlapping windows per host wall AND per window profile (sill/height) to avoid mixing types
+  function mergeIntervals(arr){ if(!arr||!arr.length) return []; arr.sort(function(A,B){ return A[0]-B[0]; }); var out=[]; for(var i=0;i<arr.length;i++){ var a=arr[i]; if(!out.length) out.push([a[0],a[1]]); else { var last=out[out.length-1]; if(a[0] <= last[1] + 1e-6){ last[1] = Math.max(last[1], a[1]); } else { out.push([a[0],a[1]]); } } } return out; }
       try {
-        // Collect per-host windows and doors
-        var winByHost = Object.create(null);
+        // Collect per-host windows and doors; also collect free openings along polygon edges
+        var winByHost = Object.create(null); // host -> profileKey -> [[t0,t1],...]
         var doorsList = [];
+        var freeWinByEdge = []; // edgeIdx -> profileKey -> [[s0,s1],...]
+        var freeDoors = [];     // {edgeIdx,s0,s1,heightM,meta}
+        var polyPts = Array.isArray(PR.poly) ? PR.poly : [];
+        function projSeg(px,py,ax,ay,bx,by){ var dx=bx-ax, dy=by-ay; var den=dx*dx+dy*dy||1; var t=((px-ax)*dx+(py-ay)*dy)/den; var s=Math.max(0,Math.min(1,t)); var cx=ax+dx*s, cy=ay+dy*s; return { s:s, d: Math.hypot(px-cx, py-cy) }; }
         for (var ei=0; ei<elemsSrc.length; ei++){
           var el = elemsSrc[ei]; if(!el || (el.type!=='window' && el.type!=='door')) continue;
-          if (typeof el.host !== 'number') continue;
-          if (!PR.wallIdxSet[el.host]) continue; // only perimeter walls of this polygon
-          if (el.type==='window'){
-            var ht = el.host; var t0w=Math.max(0,Math.min(1,el.t0||0)), t1w=Math.max(0,Math.min(1,el.t1||0)); if(t1w<t0w){ var tt=t0w; t0w=t1w; t1w=tt; }
-            (winByHost[ht]||(winByHost[ht]=[])).push([t0w,t1w]);
-          } else {
-            doorsList.push(el);
+          if (typeof el.host === 'number'){
+            if (!PR.wallIdxSet[el.host]) continue; // only perimeter walls of this polygon
+            if (el.type==='window'){
+              var ht = el.host; var t0w=Math.max(0,Math.min(1,el.t0||0)), t1w=Math.max(0,Math.min(1,el.t1||0)); if(t1w<t0w){ var tt=t0w; t0w=t1w; t1w=tt; }
+              var sillW = (typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0);
+              var hW = (typeof el.heightM==='number') ? el.heightM : ((__plan2d&&__plan2d.windowHeightM)||1.5);
+              var profKey = 's'+(+sillW.toFixed(3))+'_h'+(+hW.toFixed(3));
+              if(!winByHost[ht]) winByHost[ht] = Object.create(null);
+              (winByHost[ht][profKey]||(winByHost[ht][profKey]=[])).push([t0w,t1w]);
+            } else {
+              doorsList.push(el);
+            }
+          } else if (Array.isArray(polyPts) && polyPts.length>=2) {
+            var axf = (typeof el.x0==='number'? el.x0 : NaN), ayf = (typeof el.y0==='number'? el.y0 : NaN);
+            var bxf = (typeof el.x1==='number'? el.x1 : NaN), byf = (typeof el.y1==='number'? el.y1 : NaN);
+            if(!isFinite(axf)||!isFinite(ayf)||!isFinite(bxf)||!isFinite(byf)) continue;
+            var edgeFound=-1, s0=0, s1=0; var tol = Math.max(0.03, TOL);
+            for (var ei2=0; ei2<polyPts.length; ei2++){
+              var pa=polyPts[ei2], pb=polyPts[(ei2+1)%polyPts.length]; if(!pa||!pb) continue;
+              var h0=projSeg(axf,ayf,pa.x,pa.y,pb.x,pb.y); var h1=projSeg(bxf,byf,pa.x,pa.y,pb.x,pb.y);
+              if(h0.d<=tol && h1.d<=tol){ edgeFound=ei2; s0=h0.s; s1=h1.s; break; }
+            }
+            if(edgeFound>=0){ if(s1<s0){ var tmp=s0; s0=s1; s1=tmp; }
+              if(el.type==='window'){
+                var sillF=(typeof el.sillM==='number')? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0);
+                var hF=(typeof el.heightM==='number')? el.heightM : ((__plan2d&&__plan2d.windowHeightM)||1.5);
+                var pkF='s'+(+sillF.toFixed(3))+'_h'+(+hF.toFixed(3));
+                if(!freeWinByEdge[edgeFound]) freeWinByEdge[edgeFound]=Object.create(null);
+                (freeWinByEdge[edgeFound][pkF]||(freeWinByEdge[edgeFound][pkF]=[])).push([s0,s1]);
+              } else {
+                var dh=(typeof el.heightM==='number')? el.heightM : ((__plan2d&&__plan2d.doorHeightM)||2.04);
+                freeDoors.push({ edgeIdx: edgeFound, s0:s0, s1:s1, heightM:dh, meta:(el.meta||null) });
+              }
+            }
           }
         }
-        // Emit merged windows
+        // Emit merged windows per profile
         Object.keys(winByHost).forEach(function(hk){
           var hostIdx = +hk; var host = elemsSrc[hostIdx]; if(!host || host.type!=='wall') return;
-          var spans = mergeIntervals(winByHost[hk]);
-          for (var si=0; si<spans.length; si++){
-            var s0=spans[si][0], s1=spans[si][1];
-            var ax = host.x0 + (host.x1-host.x0)*s0; var ay = host.y0 + (host.y1-host.y0)*s0;
-            var bx = host.x0 + (host.x1-host.x0)*s1; var by = host.y0 + (host.y1-host.y0)*s1;
-            var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgnp*ay;
-            var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgnp*by;
-            var sill = (__plan2d&&__plan2d.windowSillM)||1.0; var hM = (__plan2d&&__plan2d.windowHeightM)||1.5;
-            openingsW.push({ type:'window', x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: null });
-          }
+          var profMap = winByHost[hk];
+          Object.keys(profMap).forEach(function(pk){
+            var spans = mergeIntervals(profMap[pk]);
+            // parse profile
+            var m = pk.match(/^s([\d\.\-]+)_h([\d\.\-]+)$/); var sill = (__plan2d&&__plan2d.windowSillM)||1.0; var hM = (__plan2d&&__plan2d.windowHeightM)||1.5;
+            if(m){ sill = parseFloat(m[1]); hM = parseFloat(m[2]); }
+            for (var si=0; si<spans.length; si++){
+              var s0=spans[si][0], s1=spans[si][1];
+              var ax = host.x0 + (host.x1-host.x0)*s0; var ay = host.y0 + (host.y1-host.y0)*s0;
+              var bx = host.x0 + (host.x1-host.x0)*s1; var by = host.y0 + (host.y1-host.y0)*s1;
+              var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgnp*ay;
+              var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgnp*by;
+              openingsW.push({ type:'window', x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: null });
+            }
+          });
         });
         // Emit doors unchanged (host anchored)
         for (var di=0; di<doorsList.length; di++){
@@ -558,6 +668,34 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           var dwx1 = (__plan2d.centerX||0) + bxd; var dwz1 = (__plan2d.centerZ||0) + sgnp*byd;
           var dhM = (typeof de.heightM==='number') ? de.heightM : ((__plan2d&&__plan2d.doorHeightM)||2.04);
           openingsW.push({ type:'door', x0: dwx0, z0: dwz0, x1: dwx1, z1: dwz1, sillM: 0, heightM: dhM, meta: (de.meta||null) });
+        }
+        // Emit merged free windows per polygon edge and any free doors
+        if (Array.isArray(polyPts) && polyPts.length>=2){
+          for (var egi=0; egi<polyPts.length; egi++){
+            var profMapF = freeWinByEdge[egi]; if(!profMapF) continue;
+            var pa2=polyPts[egi], pb2=polyPts[(egi+1)%polyPts.length];
+            Object.keys(profMapF).forEach(function(pk){
+              var spans = mergeIntervals(profMapF[pk]);
+              var m = pk.match(/^s([\d\.\-]+)_h([\d\.\-]+)$/); var sill = (__plan2d&&__plan2d.windowSillM)||1.0; var hM = (__plan2d&&__plan2d.windowHeightM)||1.5;
+              if(m){ sill = parseFloat(m[1]); hM = parseFloat(m[2]); }
+              for (var si=0; si<spans.length; si++){
+                var u0=spans[si][0], u1=spans[si][1];
+                var ax = pa2.x + (pb2.x - pa2.x)*u0; var ay = pa2.y + (pb2.y - pa2.y)*u0;
+                var bx = pa2.x + (pb2.x - pa2.x)*u1; var by = pa2.y + (pb2.y - pa2.y)*u1;
+                var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgnp*ay;
+                var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgnp*by;
+                openingsW.push({ type:'window', x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: null });
+              }
+            });
+          }
+          for (var fd=0; fd<freeDoors.length; fd++){
+            var fdRec = freeDoors[fd]; var pa3=polyPts[fdRec.edgeIdx], pb3=polyPts[(fdRec.edgeIdx+1)%polyPts.length];
+            var axd2 = pa3.x + (pb3.x - pa3.x)*fdRec.s0; var ayd2 = pa3.y + (pb3.y - pa3.y)*fdRec.s0;
+            var bxd2 = pa3.x + (pb3.x - pa3.x)*fdRec.s1; var byd2 = pa3.y + (pb3.y - pa3.y)*fdRec.s1;
+            var dwx0b = (__plan2d.centerX||0) + axd2; var dwz0b = (__plan2d.centerZ||0) + sgnp*ayd2;
+            var dwx1b = (__plan2d.centerX||0) + bxd2; var dwz1b = (__plan2d.centerZ||0) + sgnp*byd2;
+            openingsW.push({ type:'door', x0: dwx0b, z0: dwz0b, x1: dwx1b, z1: dwz1b, sillM: 0, heightM: fdRec.heightM, meta: fdRec.meta||null });
+          }
         }
       } catch(_eOpen) {}
       roomPoly.openings = openingsW;
@@ -604,17 +742,21 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       try {
         var openings = [];
         function mergeIntervals2(arr){ if(!arr||!arr.length) return []; arr.sort(function(A,B){ return A[0]-B[0]; }); var out=[]; for(var i=0;i<arr.length;i++){ var a=arr[i]; if(!out.length) out.push([a[0],a[1]]); else { var last=out[out.length-1]; if(a[0] <= last[1] + 1e-6){ last[1] = Math.max(last[1], a[1]); } else { out.push([a[0],a[1]]); } } } return out; }
-        var winByEdge = { minZ:[], maxZ:[], minX:[], maxX:[] };
+        var winByEdge = { minZ:Object.create(null), maxZ:Object.create(null), minX:Object.create(null), maxX:Object.create(null) }; // edge -> profileKey -> [[s,e],...]
         var widthM = (R.maxX - R.minX), depthM = (R.maxY - R.minY);
         for(var ei=0; ei<elemsSrc.length; ei++){
           var el = elemsSrc[ei]; if(!el || (el.type!=='window' && el.type!=='door')) continue;
-          if(typeof el.host!=='number') continue; // only host-anchored for now
-          var host = elemsSrc[el.host]; if(!host || host.type!=='wall') continue;
-          var t0=Math.max(0,Math.min(1,el.t0||0)), t1=Math.max(0,Math.min(1,el.t1||0));
-          var ax = host.x0 + (host.x1-host.x0)*t0;
-          var ay = host.y0 + (host.y1-host.y0)*t0;
-          var bx = host.x0 + (host.x1-host.x0)*t1;
-          var by = host.y0 + (host.y1-host.y0)*t1;
+          var ax,ay,bx,by;
+          if(typeof el.host==='number'){
+            var host = elemsSrc[el.host]; if(!host || host.type!=='wall') continue;
+            var t0=Math.max(0,Math.min(1,el.t0||0)), t1=Math.max(0,Math.min(1,el.t1||0));
+            ax = host.x0 + (host.x1-host.x0)*t0;
+            ay = host.y0 + (host.y1-host.y0)*t0;
+            bx = host.x0 + (host.x1-host.x0)*t1;
+            by = host.y0 + (host.y1-host.y0)*t1;
+          } else {
+            ax = el.x0; ay = el.y0; bx = el.x1; by = el.y1;
+          }
           // Classify against each side with tolerance
           var added=false;
           // Top side (world minZ). In plan, it's y=R.minY when s=1, else y=R.maxY when s=-1.
@@ -632,7 +774,10 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
                 var hM=(typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04));
                 openings.push({type:'door', edge:'minZ', startM:q0, endM:q1, widthM: span, heightM:hM, sillM:0, meta:(el.meta||null)});
               } else { // window
-                winByEdge.minZ.push([q0,q1]);
+                var sillW = (typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0);
+                var hW = (typeof el.heightM==='number') ? el.heightM : ((__plan2d&&__plan2d.windowHeightM)||1.5);
+                var pk = 's'+(+sillW.toFixed(3))+'_h'+(+hW.toFixed(3));
+                (winByEdge.minZ[pk]||(winByEdge.minZ[pk]=[])).push([q0,q1]);
               }
               added=true;
             }
@@ -649,7 +794,10 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
                 var hM2=(typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04));
                 openings.push({type:'door', edge:'maxZ', startM:q02, endM:q12, widthM: span2, heightM:hM2, sillM:0, meta:(el.meta||null)});
               } else {
-                winByEdge.maxZ.push([q02,q12]);
+                var sillW2 = (typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0);
+                var hW2 = (typeof el.heightM==='number') ? el.heightM : ((__plan2d&&__plan2d.windowHeightM)||1.5);
+                var pk2 = 's'+(+sillW2.toFixed(3))+'_h'+(+hW2.toFixed(3));
+                (winByEdge.maxZ[pk2]||(winByEdge.maxZ[pk2]=[])).push([q02,q12]);
               }
               added=true;
             }
@@ -666,7 +814,10 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
                 var hM3=(typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04));
                 openings.push({type:'door', edge:'minX', startM:q03, endM:q13, widthM: span3, heightM:hM3, sillM:0, meta:(el.meta||null)});
               } else {
-                winByEdge.minX.push([q03,q13]);
+                var sillW3 = (typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0);
+                var hW3 = (typeof el.heightM==='number') ? el.heightM : ((__plan2d&&__plan2d.windowHeightM)||1.5);
+                var pk3 = 's'+(+sillW3.toFixed(3))+'_h'+(+hW3.toFixed(3));
+                (winByEdge.minX[pk3]||(winByEdge.minX[pk3]=[])).push([q03,q13]);
               }
               added=true;
             }
@@ -683,20 +834,27 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
                 var hM4=(typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04));
                 openings.push({type:'door', edge:'maxX', startM:q04, endM:q14, widthM: span4, heightM:hM4, sillM:0, meta:(el.meta||null)});
               } else {
-                winByEdge.maxX.push([q04,q14]);
+                var sillW4 = (typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0);
+                var hW4 = (typeof el.heightM==='number') ? el.heightM : ((__plan2d&&__plan2d.windowHeightM)||1.5);
+                var pk4 = 's'+(+sillW4.toFixed(3))+'_h'+(+hW4.toFixed(3));
+                (winByEdge.maxX[pk4]||(winByEdge.maxX[pk4]=[])).push([q04,q14]);
               }
               added=true;
             }
           }
         }
-        // After collecting, merge window spans per edge and emit final window openings
-        var wh = (__plan2d&&__plan2d.windowHeightM)||1.5; var wsill = (__plan2d&&__plan2d.windowSillM)||1.0;
+        // After collecting, merge window spans per edge and per profile, then emit final window openings
         ['minZ','maxZ','minX','maxX'].forEach(function(edge){
-          var merged = mergeIntervals2(winByEdge[edge]);
-          for (var iM=0; iM<merged.length; iM++){
-            var sM=merged[iM][0], eM=merged[iM][1];
-            openings.push({ type:'window', edge: edge, startM: sM, endM: eM, widthM: (eM-sM), heightM: wh, sillM: wsill, meta: null });
-          }
+          var profMap = winByEdge[edge]; if(!profMap) return;
+          Object.keys(profMap).forEach(function(pk){
+            var merged = mergeIntervals2(profMap[pk]);
+            var m = pk.match(/^s([\d\.\-]+)_h([\d\.\-]+)$/); var wsill = (__plan2d&&__plan2d.windowSillM)||1.0; var wh = (__plan2d&&__plan2d.windowHeightM)||1.5;
+            if(m){ wsill = parseFloat(m[1]); wh = parseFloat(m[2]); }
+            for (var iM=0; iM<merged.length; iM++){
+              var sM=merged[iM][0], eM=merged[iM][1];
+              openings.push({ type:'window', edge: edge, startM: sM, endM: eM, widthM: (eM-sM), heightM: wh, sillM: wsill, meta: null });
+            }
+          });
         });
         room.openings = openings;
       } catch(e){ room.openings = []; }

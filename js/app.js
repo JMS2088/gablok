@@ -1,77 +1,7 @@
 // Core engine bootstrap moved to js/core/engine3d.js
 
 // Global animation frame handle to avoid ReferenceErrors before first render
-var animationId = null;
-
-// Safe debug logger used across modules
-if (typeof window !== 'undefined' && typeof window.dbg !== 'function') {
-  window.dbg = function(){ /* no-op debug */ };
-}
-
-// Global measurement helpers used across 2D/3D modules
-// - formatMeters: pretty-print a meter value with sensible decimals and trimmed zeros
-// - quantizeMeters: snap a meter value to the nearest increment (in centimeters)
-if (typeof window !== 'undefined') {
-  if (typeof window.formatMeters !== 'function') {
-    window.formatMeters = function(m, opts) {
-      var value = Number(m);
-      if (!isFinite(value)) return '0';
-      var decimals = (opts && typeof opts.decimals === 'number') ? opts.decimals : (Math.abs(value) >= 10 ? 1 : 2);
-      var s = value.toFixed(decimals);
-      s = s.replace(/\.?0+$/, '');
-      return s;
-    };
-  }
-  if (typeof window.quantizeMeters !== 'function') {
-    window.quantizeMeters = function(m, stepCm) {
-      var step = (typeof stepCm === 'number' ? stepCm : 1);
-      var cm = Math.round((Number(m) * 100) / step) * step;
-      return cm / 100;
-    };
-  }
-}
-
-function startRender() {
-  if (animationId) cancelAnimationFrame(animationId);
-  renderLoop();
-}
-
-// Ensure startApp runs whether this file loads before or after DOMContentLoaded
-function __appDomStart(){
-  try { console.log('DOM loaded, starting app...'); } catch(e){}
-  // Load any persisted 2D drafts so the editor can restore per-floor in-progress work
-  try { loadPlan2dDraftsFromStorage(); } catch(e) {}
-  try { startApp(); } catch(e) { /* engine3d will call startApp once boot-ready if gated */ }
-}
-if (typeof document !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', __appDomStart);
-  } else {
-    setTimeout(__appDomStart, 0);
-  }
-}
-
-// (perf block moved earlier)
-
-
-// ---------- Save/Load and Export ----------
-function serializeProject() {
-  return JSON.stringify({
-    version: 1,
-    camera: camera,
-    rooms: allRooms,
-    wallStrips: wallStrips,
-    stairs: stairsComponent,
-    pergolas: pergolaComponents,
-    garages: garageComponents,
-    pools: poolComponents,
-    roofs: roofComponents,
-    balconies: balconyComponents,
-    furniture: furnitureItems,
-    currentFloor: currentFloor
-  });
-}
-
+// (Removed) corner wall markers overlay
 function restoreProject(json) {
   try {
     var data = JSON.parse(json);
@@ -1062,6 +992,8 @@ var __plan2d = {
   dragWall:null,       // { index, end:'a'|'b', orient:'h'|'v', other:{x,y} }
   // Selected wall subsegment between junctions (for targeted deletion)
   selectedSubsegment:null, // { wallIndex, t0, t1, ax, ay, bx, by }
+  // Debug corner drag offsets (initialized to avoid overlay lookups on undefined)
+  debugCornerOffset: {},
   // Rendering preference: when false, draw white boxes + text on base canvas at original positions
   drawLabelBoxesOnLabelsLayer:false
 };
@@ -1201,17 +1133,18 @@ function plan2dScheduleApply(now){
       var lvl = (typeof currentFloor==='number' ? currentFloor : 0);
       // If walls are unchanged, we can safely rebuild rooms+openings to reflect door/window edits in 3D
       var wallsSigNow = plan2dSigWallsOnly();
-      if(wallsSigNow && __plan2d._lastWallsSig && wallsSigNow === __plan2d._lastWallsSig){
+  if(wallsSigNow && __plan2d._lastWallsSig && wallsSigNow === __plan2d._lastWallsSig){
         // Walls unchanged -> we are applying opening-only edits. Freeze 2D center/scale briefly
         // so the canvas doesn't re-center/zoom slightly due to quantization while rooms are rebuilt.
         try { __plan2d.freezeCenterScaleUntil = Date.now() + 1000; } catch(e){}
-        // Walls unchanged -> safe to rebuild rooms/openings only
-        applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl });
+        // Walls unchanged -> safe to rebuild rooms/openings only; use nonDestructive so zero-wall states don't wipe 3D
+        applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl, nonDestructive:true });
       } else {
         // Walls changed: apply live as strips or rooms (if rectangles are closed) to keep 2D and 3D in sync
         // Also freeze 2D center/scale briefly to prevent noticeable jumps during/after wall edits
         try { __plan2d.freezeCenterScaleUntil = Date.now() + 1000; } catch(e){}
-        applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl });
+        // Use nonDestructive so temporary empty wall sets during edits don't clear existing 3D
+        applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl, nonDestructive:true });
       }
       __plan2d._lastWallsSig = wallsSigNow;
       __plan2d._last3Dsig = plan2dSig3D(); __plan2d._last2Dsig = plan2dSig2D();
@@ -1472,7 +1405,24 @@ function plan2dBind(){
   var fi=document.getElementById('plan2d-import-file'); if(fi) fi.onchange=function(e){ var f=e.target.files&&e.target.files[0]; if(!f)return; var r=new FileReader(); r.onload=function(){ try{ var arr=JSON.parse(r.result); if(Array.isArray(arr)){ __plan2d.elements=arr; __plan2d.selectedIndex=-1; __plan2d.selectedRef=null; __plan2d.selectedSnapshot=null; __plan2d.selectedSubsegment=null; plan2dDraw(); updatePlan2DInfo(); updateStatus('2D plan imported'); plan2dEdited(); } }catch(err){ updateStatus('Import failed'); } }; r.readAsText(f); fi.value=''; };
   var bApply3D=document.getElementById('plan2d-apply-3d'); if(bApply3D) bApply3D.onclick=function(){ try{
     var lvl = (typeof currentFloor==='number' ? currentFloor : 0);
-    applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false, level: lvl });
+    var els = Array.isArray(__plan2d.elements) ? __plan2d.elements : [];
+    var hasWalls = false;
+    for (var i=0;i<els.length;i++){ var e=els[i]; if(e && e.type==='wall'){ hasWalls = true; break; } }
+    // If walls signature hasn't changed, this is an opening-only edit; apply non-destructively to avoid room loss
+    var wallsSigNow = (typeof plan2dSigWallsOnly==='function') ? plan2dSigWallsOnly() : null;
+    var openingOnly = (!!wallsSigNow && !!__plan2d._lastWallsSig && wallsSigNow === __plan2d._lastWallsSig);
+    if (!hasWalls){
+      // Avoid wiping existing 3D when no walls exist in 2D; openings require a perimeter/host
+      applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false, level: lvl, nonDestructive:true });
+      try { updateStatus && updateStatus('Skipped destructive apply: add walls or close loops to form rooms; kept existing 3D'); } catch(e1){}
+    } else if (openingOnly){
+      // Rebuild rooms/openings without clearing if detection fails for any reason
+      applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false, level: lvl, nonDestructive:true });
+    } else {
+      applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false, level: lvl });
+    }
+    // Update last walls signature after an explicit apply
+    try { __plan2d._lastWallsSig = wallsSigNow; __plan2d._last3Dsig = plan2dSig3D(); __plan2d._last2Dsig = plan2dSig2D(); } catch(_e){}
   }catch(e){} };
   // Central deletion used by both keyboard and button; supports subsegment, selection, or hovered element
   function plan2dDeleteSelection(){
@@ -2769,92 +2719,7 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
     ox.restore();
   })();
 
-  // Overlay: corner wall markers (yellow ticks at connected corners)
-  (function(){
-    var elems = __plan2d.elements || [];
-    if(!elems.length) return;
-    __plan2d.__cornerMarkers = [];
-    ox.save();
-    ox.strokeStyle = '#facc15'; // yellow-400
-    ox.lineWidth = 2;
-    for(var i=0;i<elems.length;i++){
-      var el = elems[i]; if(!el || el.type !== 'wall') continue;
-      // Mirror wall geometry calculations used in main wall render
-      var origAx = el.x0, origAy = el.y0, origBx = el.x1, origBy = el.y1;
-      var wdx0 = origBx - origAx, wdy0 = origBy - origAy; var wLen0 = Math.hypot(wdx0, wdy0) || 1;
-      var dirx = wdx0 / wLen0, diry = wdy0 / wLen0;
-      var thick = (el.thickness||__plan2d.wallThicknessM);
-      var halfW = thick/2;
-      // Build void spans (windows/doors) in t-space [0,1]
-      var spans = [];
-      for(var wi=0; wi<elems.length; wi++){
-        var oEl = elems[wi]; if(!oEl || (oEl.type!=='window' && oEl.type!=='door')) continue;
-        if(typeof oEl.host==='number' && oEl.host===i){
-          var ot0 = Math.max(0, Math.min(1, oEl.t0||0));
-          var ot1 = Math.max(0, Math.min(1, oEl.t1||0));
-          if(ot1 < ot0){ var tmpo=ot0; ot0=ot1; ot1=tmpo; }
-          spans.push([ot0, ot1]);
-        } else {
-          // Free opening: include if near wall centerline
-          var tA = plan2dProjectParamOnWall({x:oEl.x0, y:oEl.y0}, el);
-          var tB = plan2dProjectParamOnWall({x:oEl.x1, y:oEl.y1}, el);
-          var nearTol = halfW + 0.05; // meters
-          function pointWallDist(px,py){ var dx=origBx-origAx, dy=origBy-origAy; var denom=(dx*dx+dy*dy)||1; var t=((px-origAx)*dx+(py-origAy)*dy)/denom; t=Math.max(0,Math.min(1,t)); var cx=origAx+t*dx, cy=origAy+t*dy; return Math.hypot(px-cx, py-cy); }
-          var dA = pointWallDist(oEl.x0,oEl.y0), dB = pointWallDist(oEl.x1,oEl.y1);
-          if(dA <= nearTol && dB <= nearTol){ var s0=Math.max(0,Math.min(1,Math.min(tA,tB))); var s1=Math.max(0,Math.min(1,Math.max(tA,tB))); if(s1 > s0 + 1e-4) spans.push([s0,s1]); }
-        }
-      }
-      // Merge spans
-      spans.sort(function(A,B){ return A[0]-B[0]; });
-      var merged=[]; for(var si=0; si<spans.length; si++){ var s=spans[si]; if(merged.length===0) merged.push(s); else { var last=merged[merged.length-1]; if(s[0] <= last[1] + 1e-4){ last[1] = Math.max(last[1], s[1]); } else { merged.push([s[0], s[1]]);} } }
-      // Solid segments are the complement of merged voids
-      var solids=[]; var cursorT=0; for(var mi=0; mi<merged.length; mi++){ var vs=merged[mi]; if(vs[0] > cursorT + 1e-4) solids.push([cursorT, vs[0]]); cursorT = Math.max(cursorT, vs[1]); }
-      if(cursorT < 1 - 1e-4) solids.push([cursorT, 1]);
-      // For each solid, compute screen-space normal and draw ticks at true corners
-      for(var sj=0; sj<solids.length; sj++){
-        var s0 = solids[sj][0], s1 = solids[sj][1];
-        var sx0 = origAx + dirx * (s0 * wLen0), sy0 = origAy + diry * (s0 * wLen0);
-        var sx1 = origAx + dirx * (s1 * wLen0), sy1 = origAy + diry * (s1 * wLen0);
-        var touchesStart = (s0 <= 1e-4) && startConn[i];
-        var touchesEnd   = (s1 >= 1 - 1e-4) && endConn[i];
-        if(touchesStart){ sx0 -= dirx * halfW; sy0 -= diry * halfW; }
-        if(touchesEnd){   sx1 += dirx * halfW; sy1 += diry * halfW; }
-        // Debug: also compute base endpoints before extension
-        var baseAS = worldToScreen2D(origAx + dirx * (s0 * wLen0), origAy + diry * (s0 * wLen0));
-        var baseBS = worldToScreen2D(origAx + dirx * (s1 * wLen0), origAy + diry * (s1 * wLen0));
-        var aS = worldToScreen2D(sx0, sy0); var bS = worldToScreen2D(sx1, sy1);
-        var dxs = bS.x - aS.x, dys = bS.y - aS.y; var Ls = Math.hypot(dxs, dys) || 1;
-        var nx = -dys / Ls, ny = dxs / Ls; var halfPx = (thick * __plan2d.scale) / 2;
-        if(touchesStart){
-          var keyS = i+':s'; var offS = __plan2d.debugCornerOffset[keyS] || {dx:0,dy:0};
-          var ax1=aS.x + nx*halfPx + offS.dx, ay1=aS.y + ny*halfPx + offS.dy, ax2=aS.x - nx*halfPx + offS.dx, ay2=aS.y - ny*halfPx + offS.dy;
-          ox.beginPath(); ox.moveTo(ax1, ay1); ox.lineTo(ax2, ay2); ox.stroke();
-          // small draggable handle
-          ox.fillStyle = '#fde047'; ox.beginPath(); ox.arc(aS.x + offS.dx, aS.y + offS.dy, 4, 0, Math.PI*2); ox.fill(); ox.fillStyle = '#facc15';
-          __plan2d.__cornerMarkers.push({ key: keyS, i: i, end: 's', x: aS.x + offS.dx, y: aS.y + offS.dy, nx: nx, ny: ny, halfPx: halfPx });
-        }
-        if(touchesEnd){
-          var keyE = i+':e'; var offE = __plan2d.debugCornerOffset[keyE] || {dx:0,dy:0};
-          var bx1=bS.x + nx*halfPx + offE.dx, by1=bS.y + ny*halfPx + offE.dy, bx2=bS.x - nx*halfPx + offE.dx, by2=bS.y - ny*halfPx + offE.dy;
-          ox.beginPath(); ox.moveTo(bx1, by1); ox.lineTo(bx2, by2); ox.stroke();
-          ox.fillStyle = '#fde047'; ox.beginPath(); ox.arc(bS.x + offE.dx, bS.y + offE.dy, 4, 0, Math.PI*2); ox.fill(); ox.fillStyle = '#facc15';
-          __plan2d.__cornerMarkers.push({ key: keyE, i: i, end: 'e', x: bS.x + offE.dx, y: bS.y + offE.dy, nx: nx, ny: ny, halfPx: halfPx });
-        }
-        if(__plan2d.debug){
-          // draw small markers for base vs extended endpoints
-          ox.save();
-          ox.fillStyle = '#f0abfc'; // fuchsia-300 base
-          ox.beginPath(); ox.arc(baseAS.x, baseAS.y, 2.5, 0, Math.PI*2); ox.fill();
-          ox.beginPath(); ox.arc(baseBS.x, baseBS.y, 2.5, 0, Math.PI*2); ox.fill();
-          ox.fillStyle = '#22d3ee'; // cyan-400 extended
-          ox.beginPath(); ox.arc(aS.x, aS.y, 2.5, 0, Math.PI*2); ox.fill();
-          ox.beginPath(); ox.arc(bS.x, bS.y, 2.5, 0, Math.PI*2); ox.fill();
-          ox.restore();
-        }
-      }
-    }
-    ox.restore();
-  })();
+  // (Removed) Overlay: corner wall markers (yellow ticks at connected corners)
   } catch(e) {
     // Non-fatal: overlay/labels rendering issues shouldn't break the main render loop
     try { console.warn('2D overlay draw error', e); } catch(_) {}
