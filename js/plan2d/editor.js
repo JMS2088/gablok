@@ -21,7 +21,7 @@ var __plan2d = {
   // Grid snapping step (meters) — finer default for CAD-like precision
   gridStep: 0.1,
   elements:[],       // { type:'wall'|'window'|'door', ... }
-  tool:'wall',       // current tool: wall | window | door | erase | select
+  tool:'select',     // current tool: wall | window | door | erase | select (default to Select)
   start:null,        // world coords of drag start
   last:null,         // world coords of current mouse during drag
   mouse:null,        // {x,y} current mouse position in canvas pixels for overlay anchoring
