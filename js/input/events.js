@@ -127,6 +127,7 @@
           } catch(_polyCapErr) {}
           mouse.down = true;
           selectedRoomId = handle.roomId;
+          try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
           canvas.style.cursor = 'grabbing';
           updateStatus('Resizing...');
 

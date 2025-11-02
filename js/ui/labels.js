@@ -24,9 +24,10 @@
         else if (window.__hoverRoomId) focusId = window.__hoverRoomId;
       } catch(_e) {}
       // keyed reconciliation by id
-      var existingLabel = {}, existingEdit = {};
+  var existingLabel = {}, existingEdit = {}, existingRotate = {};
       Array.prototype.forEach.call(container.querySelectorAll('.room-label'), function(el){ var id = el.getAttribute('data-id'); if(id) existingLabel[id] = el; });
       Array.prototype.forEach.call(container.querySelectorAll('.room-edit-btn'), function(el){ var id = el.getAttribute('data-id'); if(id) existingEdit[id] = el; });
+  Array.prototype.forEach.call(container.querySelectorAll('.roof-rotate-btn'), function(el){ var id = el.getAttribute('data-id'); if(id) existingRotate[id] = el; });
       var seen = {};
 
       function anchorYFor(obj){
@@ -114,6 +115,8 @@
             try {
               // Preserve selection
               window.selectedRoomId = box.id;
+              // Ensure measurements panel stays visible on selection
+              try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
               // If the item lives on a different floor, switch currentFloor directly (avoid switchLevel() which clears selection)
               var lvl = (typeof box.level === 'number' && isFinite(box.level)) ? box.level : 0;
               if (typeof window.currentFloor === 'number' && window.currentFloor !== lvl) {
@@ -131,6 +134,7 @@
           var startDrag = function(clientX, clientY){
             try {
               window.selectedRoomId = box.id;
+              try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
               window.mouse.dragType = dragTypeFor(box);
               window.mouse.dragInfo = { roomId: box.id, startX: clientX, startY: clientY, originalX: box.x, originalZ: box.z };
               window.mouse.down = true;
@@ -222,6 +226,39 @@
           eb.style.top = top + 'px';
         }
   eb.style.opacity = String(Math.max(0, Math.min(1, objA * globalA)));
+
+        // Roof rotate button (360°) above the label; rotates 45° per press
+        if (box.type === 'roof') {
+          var rb = existingRotate[box.id];
+          if (!rb) {
+            rb = document.createElement('button');
+            rb.className = 'roof-rotate-btn';
+            rb.setAttribute('data-id', box.id);
+            rb.type = 'button';
+            rb.title = 'Rotate roof 45°';
+            rb.textContent = '360°';
+            rb.addEventListener('click', function(e){
+              e.stopPropagation();
+              try {
+                var r = findObjectById(box.id); if (!r) return;
+                r.rotation = ((r.rotation || 0) + 45) % 360;
+                if (typeof saveProjectSilently==='function') saveProjectSilently();
+                if (typeof updateStatus==='function') updateStatus('Roof rotated 45°');
+                if (typeof renderLoop==='function') renderLoop();
+              } catch(_rot){}
+            });
+            container.appendChild(rb);
+          }
+          try {
+            var rSize = 32; var rRad = rSize/2; var rGap = 10;
+            var rect2 = { width: (el.__w||60), height: (el.__h||22) };
+            var rotLeft = left - rRad; // center align with label
+            var rotTop = top - (rect2.height/2) - rGap - rRad; // above label
+            rb.style.left = rotLeft + 'px';
+            rb.style.top = rotTop + 'px';
+            rb.style.opacity = String(Math.max(0, Math.min(1, objA * globalA)));
+          } catch(_posRot){}
+        }
         seen[box.id] = true;
       }
 
@@ -237,7 +274,8 @@
       }
       // Remove stale labels
       for (var id in existingLabel){ if(!seen[id]) { var n1 = existingLabel[id]; if(n1 && n1.parentNode===container) container.removeChild(n1); } }
-      for (var id2 in existingEdit){ if(!seen[id2]) { var n2 = existingEdit[id2]; if(n2 && n2.parentNode===container) container.removeChild(n2); } }
+  for (var id2 in existingEdit){ if(!seen[id2]) { var n2 = existingEdit[id2]; if(n2 && n2.parentNode===container) container.removeChild(n2); } }
+  for (var id3 in existingRotate){ if(!seen[id3]) { var n3 = existingRotate[id3]; if(n3 && n3.parentNode===container) container.removeChild(n3); } }
     } catch(e) { /* non-fatal */ }
   };
 })();

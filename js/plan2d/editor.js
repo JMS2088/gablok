@@ -355,7 +355,6 @@ function openPlan2DModal(){
   m.style.display='block';
   try { var cnv=document.getElementById('canvas'); if(cnv) cnv.style.display='none'; } catch(e){}
   try { var l3=document.getElementById('labels-3d'); if(l3) l3.style.display='none'; } catch(e){}
-  try { var meas=document.getElementById('measurements'); if(meas) meas.style.display='none'; } catch(e){}
   // Pin the 2D toolbar to the right edge and align its vertical position with the main navigation's top
   try {
     function __align2DToolbarRightModule(){
@@ -518,7 +517,6 @@ function closePlan2DModal(){
   try{ plan2dStopSyncLoop(); }catch(e){}
   try { var cnv=document.getElementById('canvas'); if(cnv) cnv.style.display='block'; } catch(e){}
   try { var l3=document.getElementById('labels-3d'); if(l3) l3.style.display='block'; } catch(e){}
-  try { var meas=document.getElementById('measurements'); if(meas) meas.style.display='block'; } catch(e){}
   // Cleanup header alignment
   try {
     if(window.__plan2dAlignHeaderModule){ window.removeEventListener('resize', window.__plan2dAlignHeaderModule); delete window.__plan2dAlignHeaderModule; }

@@ -1,5 +1,5 @@
 // ui/roofDropdown.js
-// Roof controls: type selector (7 types) + 360° spin button to preview fit across rooms
+// Roof controls: type selector (7 types)
  (function(){
   var TYPES = [
     {v:'flat', label:'Flat'},
@@ -80,18 +80,9 @@
       ddWrap.appendChild(btn);
       ddWrap.appendChild(list);
 
-      // 360 button
-      var spinBtn = document.createElement('button');
-      spinBtn.id = 'roof-rotate-button';
-      spinBtn.className = 'secondary';
-      spinBtn.textContent = '360°';
-      spinBtn.title = 'Rotate roof 360°';
-      spinBtn.style.padding = '6px 10px';
-      spinBtn.addEventListener('click', function(){ spinRoofOnce(); });
-
       container.appendChild(label);
       container.appendChild(ddWrap);
-      container.appendChild(spinBtn);
+  // Removed top navigation 360° rotate button per request
 
       var controlsBar = document.getElementById('controls') || document.body;
       controlsBar.appendChild(container);
@@ -128,24 +119,7 @@
     setButtonLabel(cur);
   }
 
-  function spinRoofOnce(){
-    var r = getTargetRoof(); if (!r) return;
-    try {
-      var start = (typeof r.rotation==='number' ? r.rotation : 0);
-      var durationMs = 2000; // 2s full spin
-      var startTs = (performance && performance.now) ? performance.now() : Date.now();
-      if (r.__spinTimer) { cancelAnimationFrame(r.__spinTimer); r.__spinTimer = null; }
-      function step(){
-        var now = (performance && performance.now) ? performance.now() : Date.now();
-        var t = Math.min(1, (now - startTs) / durationMs);
-        var angle = start + 360 * t;
-        r.rotation = angle % 360;
-        if (typeof renderLoop==='function') renderLoop();
-        if (t < 1) { r.__spinTimer = requestAnimationFrame(step); } else { r.__spinTimer = null; }
-      }
-      r.__spinTimer = requestAnimationFrame(step);
-    } catch(e){}
-  }
+  // Removed spinRoofOnce animation; rotation is handled via per-roof overlay button in labels.js
 
   // Init and periodic sync
   if (document.readyState === 'loading') {

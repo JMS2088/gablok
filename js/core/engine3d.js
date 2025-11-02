@@ -749,17 +749,54 @@
     try {
       var panel = document.getElementById('measurements'); if(!panel) return;
       var sel = window.selectedRoomId ? findObjectById(window.selectedRoomId) : null;
-      if (!sel) { panel.classList.remove('visible'); return; }
+      // Always keep panel visible
       panel.classList.add('visible');
-      // Populate fields
       function setIfNotActive(id, v){ var el=document.getElementById(id); if(!el) return; if (document.activeElement === el) return; el.value = (v==null?'':v); }
       function txt(id, v){ var el=document.getElementById(id); if(el){ el.textContent = (v==null?'--':v); } }
+
+      // If no object is selected, but a wall strip is selected, show its info
+      if (!sel) {
+        var wsIdx = (typeof window.selectedWallStripIndex==='number') ? window.selectedWallStripIndex : -1;
+        if (wsIdx != null && wsIdx > -1 && Array.isArray(window.wallStrips) && wallStrips[wsIdx]) {
+          var w = wallStrips[wsIdx];
+          var dx = (w.x1||0) - (w.x0||0), dz = (w.z1||0) - (w.z0||0);
+          var L = Math.hypot(dx, dz) || 0;
+          var cx = ((w.x0||0) + (w.x1||0)) / 2;
+          var cz = ((w.z0||0) + (w.z1||0)) / 2;
+          setIfNotActive('input-name', 'Wall');
+          setIfNotActive('input-width', L.toFixed(2));
+          setIfNotActive('input-depth', (w.thickness || 0.3).toFixed(2));
+          setIfNotActive('input-height', (w.height || 3.0).toFixed(2));
+          setIfNotActive('input-pos-x', cx.toFixed(2));
+          setIfNotActive('input-pos-z', cz.toFixed(2));
+          txt('measure-floor', String(w.level!=null? w.level : 0));
+          return;
+        } else {
+          // Clear fields when nothing is selected
+          setIfNotActive('input-name', '');
+          setIfNotActive('input-width', '');
+          setIfNotActive('input-depth', '');
+          setIfNotActive('input-height', '');
+          setIfNotActive('input-pos-x', '');
+          setIfNotActive('input-pos-z', '');
+          txt('measure-floor', '--');
+          return;
+        }
+      }
+      // Populate fields for selection
+      var t = (sel && sel.type) || 'room';
+      var heightProp = 'height';
+      if (t === 'pergola') heightProp = 'totalHeight';
+      // Values
+      var wv = (sel.width!=null? sel.width : 0);
+      var dv = (sel.depth!=null? sel.depth : 0);
+      var hv = (sel[heightProp]!=null? sel[heightProp] : (sel.height!=null? sel.height:0));
       setIfNotActive('input-name', sel.name||'');
-      setIfNotActive('input-width', (sel.width||0).toFixed(2));
-      setIfNotActive('input-depth', (sel.depth||0).toFixed(2));
-      setIfNotActive('input-height', (sel.height||0).toFixed(2));
-      setIfNotActive('input-pos-x', (sel.x||0).toFixed(2));
-      setIfNotActive('input-pos-z', (sel.z||0).toFixed(2));
+      setIfNotActive('input-width', Number(wv).toFixed(2));
+      setIfNotActive('input-depth', Number(dv).toFixed(2));
+      setIfNotActive('input-height', Number(hv).toFixed(2));
+      setIfNotActive('input-pos-x', Number(sel.x||0).toFixed(2));
+      setIfNotActive('input-pos-z', Number(sel.z||0).toFixed(2));
       txt('measure-floor', String(sel.level!=null? sel.level : (sel.type==='balcony'? 1 : 0)));
       // Wire save once
       var save = document.getElementById('save-measurements');
@@ -772,7 +809,8 @@
             s.name = (document.getElementById('input-name')||{}).value || s.name;
             s.width = Math.max(0.5, gv('input-width', s.width||1));
             s.depth = Math.max(0.5, gv('input-depth', s.depth||1));
-            s.height = Math.max(0.5, gv('input-height', s.height||1));
+            var htProp = (s.type==='pergola') ? 'totalHeight' : 'height';
+            s[htProp] = Math.max(0.1, gv('input-height', s[htProp]||s.height||1));
             s.x = gv('input-pos-x', s.x||0); s.z = gv('input-pos-z', s.z||0);
             updateStatus('Saved measurements');
             if (typeof saveProjectSilently==='function') saveProjectSilently();
@@ -791,10 +829,11 @@
             // Apply changes from active or recently changed inputs
             var w = clampNum('input-width', s.width||1, 0.5, 1e6);
             var d = clampNum('input-depth', s.depth||1, 0.5, 1e6);
-            var h = clampNum('input-height', s.height||1, 0.1, 100);
+            var htProp = (s.type==='pergola') ? 'totalHeight' : 'height';
+            var h = clampNum('input-height', s[htProp]||s.height||1, 0.1, 100);
             var px = clampNum('input-pos-x', s.x||0, -1000, 1000);
             var pz = clampNum('input-pos-z', s.z||0, -1000, 1000);
-            s.width = w; s.depth = d; s.height = h; s.x = px; s.z = pz;
+            s.width = w; s.depth = d; s[htProp] = h; s.x = px; s.z = pz;
             _needsFullRender = true; if (typeof renderLoop==='function') renderLoop();
           } catch(e){ /* non-fatal */ }
         }
@@ -803,6 +842,17 @@
       }
     } catch(e) { /* non-fatal */ }
   };
+  // Ensure measurements panel is shown (overrides any inline style from other UIs)
+  if (typeof window.ensureMeasurementsVisible === 'undefined') {
+    window.ensureMeasurementsVisible = function ensureMeasurementsVisible(){
+      try {
+        var panel = document.getElementById('measurements');
+        if (!panel) return;
+        panel.style.display = '';
+        panel.classList.add('visible');
+      } catch(e) { /* non-fatal */ }
+    };
+  }
   if (typeof window.updateStatus === 'undefined') window.updateStatus = function(msg){ try{ var s=document.getElementById('status'); if(s) s.textContent = msg; }catch(e){} };
 
   // Main render loop (idempotent definition)

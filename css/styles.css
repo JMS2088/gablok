@@ -226,7 +226,7 @@
     background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
     padding: 15px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);
     min-width: 200px; width: 340px; font-family: monospace; font-size: 12px;
-    display: none;
+    display: block;
   }
   
   #measurements.visible { display: block; }
@@ -327,6 +327,25 @@
     /* no border */
   }
   .room-edit-btn:active { transform: translate(-50%, -50%) scale(0.96); }
+  /* Roof rotate button: circular 360° control */
+  .roof-rotate-btn {
+    position: absolute;
+    z-index: 60;
+    pointer-events: auto;
+    width: 32px; height: 32px; line-height: 30px; text-align: center;
+    border-radius: 16px; border: 1px solid rgba(0,0,0,0.15);
+    background: #fff; color: #007acc; font-weight: 700; font-size: 10px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+    cursor: pointer;
+    transition: opacity 0s linear, transform 0.06s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  }
+  .roof-rotate-btn:hover {
+    background: #007acc;
+    color: #ffffff;
+    border-color: #007acc;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+  }
+  .roof-rotate-btn:active { transform: scale(0.96); }
   .label-edit-btn {
     z-index: 60; /* above labels */
     border: 1px solid rgba(0,0,0,0.15);
