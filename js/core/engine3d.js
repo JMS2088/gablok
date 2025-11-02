@@ -118,6 +118,93 @@
   // ---- Scene data ----
   if (typeof window.allRooms === 'undefined') window.allRooms = [];
   if (typeof window.wallStrips === 'undefined') window.wallStrips = [];
+  // Wall render mode: 'line' (default) shows free-standing walls as a single line; 'solid' renders 300mm solid strips
+  if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'line';
+  if (typeof window.__roomWallThickness === 'undefined') window.__roomWallThickness = 0.0;
+  if (typeof window.__roomStripTag === 'undefined') window.__roomStripTag = '__fromRooms';
+
+  // Remove previously generated perimeter strips (created from rooms)
+  if (typeof window.removeRoomPerimeterStrips === 'undefined') window.removeRoomPerimeterStrips = function(){
+    try {
+      var tag = window.__roomStripTag || '__fromRooms';
+      if (!Array.isArray(window.wallStrips)) return;
+      window.wallStrips = window.wallStrips.filter(function(ws){ return !(ws && ws[tag]); });
+    } catch(_e) {}
+  };
+
+  // Rebuild perimeter wall strips for all rooms with given thickness (m)
+  if (typeof window.rebuildRoomPerimeterStrips === 'undefined') window.rebuildRoomPerimeterStrips = function(thickness){
+    try {
+      var tag = window.__roomStripTag || '__fromRooms';
+      var t = Math.max(0.01, +thickness || 0.3);
+      if (!Array.isArray(window.allRooms)) return;
+      if (!Array.isArray(window.wallStrips)) window.wallStrips = [];
+      // Remove existing tagged strips first
+      window.removeRoomPerimeterStrips();
+      // Helper: check if a strip for this edge (unordered endpoints) already exists
+      function kf(x){ return Math.round((+x||0)*1000)/1000; } // 1mm
+      function keyFor(x0,z0,x1,z1){ var a=kf(x0)+","+kf(z0), b=kf(x1)+","+kf(z1); return (a<b)? (a+"|"+b):(b+"|"+a); }
+      var existing = Object.create(null);
+      for (var ei=0; ei<window.wallStrips.length; ei++){
+        var s=window.wallStrips[ei]; if(!s) continue; existing[keyFor(s.x0,s.z0,s.x1,s.z1)] = true;
+      }
+      var added = Object.create(null);
+      for (var i=0; i<window.allRooms.length; i++){
+        var r = window.allRooms[i]; if(!r) continue;
+        var level = (r.level||0);
+        var baseY = level * 3.5;
+        var height = (typeof r.height==='number') ? r.height : 3.0;
+        if (Array.isArray(r.footprint) && r.footprint.length>=2){
+          var pts = r.footprint;
+          for (var k=0; k<pts.length; k++){
+            var a = pts[k], b = pts[(k+1)%pts.length]; if(!a||!b) continue;
+            var key = keyFor(a.x,a.z,b.x,b.z);
+            if (existing[key] || added[key]) continue; // already have a user or room strip for this edge
+            window.wallStrips.push({ x0:a.x, z0:a.z, x1:b.x, z1:b.z, thickness:t, height:height, baseY:baseY, level:level, openings:[], [tag]:true });
+            added[key] = true;
+          }
+        } else {
+          // Rectangle from center/width/depth
+          var hw = (r.width||0)/2, hd=(r.depth||0)/2; if(hw<=0||hd<=0) continue;
+          var xL = (r.x||0) - hw, xR=(r.x||0) + hw, zT=(r.z||0) - hd, zB=(r.z||0) + hd;
+          var edges = [ [xL,zT,xR,zT], [xR,zT,xR,zB], [xR,zB,xL,zB], [xL,zB,xL,zT] ];
+          for (var e=0; e<edges.length; e++){
+            var E = edges[e];
+            var key2 = keyFor(E[0],E[1],E[2],E[3]);
+            if (existing[key2] || added[key2]) continue;
+            window.wallStrips.push({ x0:E[0], z0:E[1], x1:E[2], z1:E[3], thickness:t, height:height, baseY:baseY, level:level, openings:[], [tag]:true });
+            added[key2] = true;
+          }
+        }
+      }
+      if (typeof window.saveProjectSilently==='function') window.saveProjectSilently();
+      if (typeof window.renderLoop==='function') window.renderLoop();
+    } catch(_e) {}
+  };
+  if (typeof window.setWallRenderMode === 'undefined') window.setWallRenderMode = function(mode){
+    try {
+      var m = (mode==='solid') ? 'solid' : 'line';
+      window.__wallRenderMode = m;
+      // Rooms: set requested wall thickness and (re)build perimeter strips when in solid mode
+      if (m === 'solid') {
+        // Before building perimeter strips, sync 3D with the latest 2D plan so deleted walls/rooms are reflected.
+        try {
+          if (typeof window.applyPlan2DTo3D === 'function'){
+            // Apply both floors with strict closed-loop detection so open endpoints do not create rooms
+            window.applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, nonDestructive:false, level:0, strictClosedLoopsOnly:true });
+            window.applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, nonDestructive:false, level:1, strictClosedLoopsOnly:true });
+          }
+        } catch(_eSync) {}
+        window.__roomWallThickness = 0.3;
+        if (typeof window.rebuildRoomPerimeterStrips === 'function') window.rebuildRoomPerimeterStrips(window.__roomWallThickness);
+      } else {
+        window.__roomWallThickness = 0.0;
+        if (typeof window.removeRoomPerimeterStrips === 'function') window.removeRoomPerimeterStrips();
+      }
+      if (typeof window.updateStatus === 'function') window.updateStatus('Walls: ' + (m==='solid' ? 'Solid 300mm' : 'Lines'));
+      if (typeof window.renderLoop === 'function') window.renderLoop();
+    } catch(_e) {}
+  };
   if (typeof window.stairsComponent === 'undefined') window.stairsComponent = null;
   if (typeof window.pergolaComponents === 'undefined') window.pergolaComponents = [];
   if (typeof window.garageComponents === 'undefined') window.garageComponents = [];
@@ -543,11 +630,27 @@
     try {
       if (!ws) return;
       var x0=ws.x0, z0=ws.z0, x1=ws.x1, z1=ws.z1;
-      var thick = Math.max(0.02, ws.thickness||0.3);
+      var renderMode = window.__wallRenderMode || 'line';
+      var thinThick = Math.max(0.02, ws.thickness||0.3);
+      var thick = (renderMode==='solid') ? Math.max(0.3, ws.thickness||0.3) : thinThick;
       var h = Math.max(0.1, ws.height||3.0);
       var baseY = (typeof ws.baseY==='number') ? ws.baseY : ((ws.level||0)*3.5);
       var dx = x1-x0, dz = z1-z0; var len = Math.hypot(dx,dz)||1; var nx = -dz/len, nz = dx/len; // left normal
       var hw = thick/2;
+      var onLevel = (ws.level||0) === (currentFloor||0);
+
+      // Line mode: draw a single centerline at mid-height; skip thickness/face outlines
+      if (renderMode === 'line'){
+        var yMid = baseY + Math.min(h*0.5, 1.2);
+        var p0 = project3D(x0, yMid, z0), p1 = project3D(x1, yMid, z1);
+        if (!p0 || !p1) return;
+        ctx.save();
+        ctx.strokeStyle = onLevel ? '#64748b' : 'rgba(148,163,184,0.6)';
+        ctx.lineWidth = onLevel ? 3 : 1.6;
+        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+        ctx.restore();
+        return;
+      }
       // Base corners (counter-clockwise)
       var A = {x:x0+nx*hw, y:baseY, z:z0+nz*hw};
       var B = {x:x1+nx*hw, y:baseY, z:z1+nz*hw};
@@ -562,186 +665,113 @@
       var pAt=project3D(At.x,At.y,At.z), pBt=project3D(Bt.x,Bt.y,Bt.z), pCt=project3D(Ct.x,Ct.y,Ct.z), pDt=project3D(Dt.x,Dt.y,Dt.z);
       if (!pA||!pB||!pC||!pD||!pAt||!pBt||!pCt||!pDt) return;
       ctx.save();
-      var onLevel = (ws.level||0) === (currentFloor||0);
-      ctx.strokeStyle = onLevel ? '#64748b' : 'rgba(148,163,184,0.6)';
-      ctx.lineWidth = onLevel ? 3 : 1.6;
-      // Vertical edges
-      ctx.beginPath(); ctx.moveTo(pA.x,pA.y); ctx.lineTo(pAt.x,pAt.y); ctx.moveTo(pB.x,pB.y); ctx.lineTo(pBt.x,pBt.y); ctx.moveTo(pC.x,pC.y); ctx.lineTo(pCt.x,pCt.y); ctx.moveTo(pD.x,pD.y); ctx.lineTo(pDt.x,pDt.y); ctx.stroke();
-      // Top rectangle
-      ctx.beginPath(); ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); ctx.closePath(); ctx.stroke();
-      // Base rectangle
-      ctx.beginPath(); ctx.moveTo(pA.x,pA.y); ctx.lineTo(pB.x,pB.y); ctx.lineTo(pC.x,pC.y); ctx.lineTo(pD.x,pD.y); ctx.closePath(); ctx.stroke();
-      // Draw any door/window overlays attached to this wall strip (centerline-based)
-      try {
-        var opens = Array.isArray(ws.openings) ? ws.openings : [];
-        // Determine strip top Y once to clamp opening rectangles within wall height
-        var stripTopY = baseY + (typeof ws.height === 'number' ? ws.height : 3.0);
-        for (var oi=0; oi<opens.length; oi++){
-          var op = opens[oi]; if(!op) continue;
-          var sill = (op.type==='window') ? ((typeof op.sillM==='number') ? op.sillM : 1.0) : 0;
-          var oH = (typeof op.heightM==='number') ? op.heightM : ((op.type==='door') ? 2.04 : 1.5);
-          var y0 = baseY + sill;
-          // Clamp to the wall strip height to keep full-height windows within the strip
-          var y1 = Math.min(y0 + oH, stripTopY);
-          // Slightly offset toward the strip's left face to avoid z-fighting
-          var eps = 0.001;
-          var x0o = (op.x0!=null? op.x0 : x0), z0o = (op.z0!=null? op.z0 : z0);
-          var x1o = (op.x1!=null? op.x1 : x1), z1o = (op.z1!=null? op.z1 : z1);
-          // Shift both endpoints outward a hair along the normal
-          var sx0 = x0o + nx*eps, sz0 = z0o + nz*eps;
-          var sx1 = x1o + nx*eps, sz1 = z1o + nz*eps;
-          var sA = project3D(sx0, y0, sz0);
-          var sB = project3D(sx1, y0, sz1);
-          var sC = project3D(sx1, y1, sz1);
-          var sD = project3D(sx0, y1, sz0);
-          if (sA && sB && sC && sD){
-            ctx.save();
-            var col = (op.type==='door') ? '#22c55e' : '#38bdf8';
-            ctx.strokeStyle = onLevel ? col : 'rgba(148,163,184,0.8)';
-            ctx.lineWidth = onLevel ? 3 : 1.8;
-            ctx.beginPath();
-            ctx.moveTo(sA.x, sA.y); ctx.lineTo(sB.x, sB.y);
-            ctx.lineTo(sC.x, sC.y); ctx.lineTo(sD.x, sD.y);
-            ctx.closePath();
-            ctx.stroke();
-            // Draw blue keyline for floor-to-ceiling windows (bottom-right -> top-left)
-            try {
-              if (op.type==='window'){
-                var isFull = (Math.abs((sill||0)) < 1e-3) && (Math.abs((y1) - stripTopY) < 1e-3);
-                if (isFull){
-                  ctx.beginPath();
-                  ctx.strokeStyle = '#38bdf8';
-                  ctx.lineWidth = onLevel ? 2 : 1.4;
-                  ctx.moveTo(sB.x, sB.y);
-                  ctx.lineTo(sD.x, sD.y);
-                  ctx.stroke();
-                }
-              }
-            } catch(_eline){}
-            ctx.restore();
+      // Solid mode: fill top and side faces with window/door cutouts, then outline
+      var edgeCol = onLevel ? '#475569' : 'rgba(148,163,184,0.8)';
+      var fillTop = onLevel ? 'rgba(100,116,139,0.18)' : 'rgba(148,163,184,0.12)';
+      var fillSide = onLevel ? 'rgba(71,85,105,0.28)' : 'rgba(148,163,184,0.18)';
+      ctx.lineWidth = onLevel ? 2.2 : 1.4;
+      ctx.strokeStyle = edgeCol;
+      // Build opening holes for left and right faces; also collect window glass quads (centered)
+      var openings = Array.isArray(ws.openings) ? ws.openings : [];
+      var stripTopY = baseY + (typeof ws.height === 'number' ? ws.height : 3.0);
+      var eps = 0.001;
+      var leftHoles = [];  // each: [{x,y},{x,y},{x,y},{x,y}] projected on left face
+      var rightHoles = []; // projected on right face
+      var glassRects = []; // for windows only, centered in thickness
+      for (var oi=0; oi<openings.length; oi++){
+        var op = openings[oi]; if(!op) continue;
+        var isDoor = (op.type==='door');
+        var sill = isDoor ? 0 : ((typeof op.sillM==='number') ? op.sillM : 1.0);
+        var oH = (typeof op.heightM==='number') ? op.heightM : (isDoor ? 2.04 : 1.5);
+        var y0 = baseY + sill;
+        var y1 = Math.min(y0 + oH, stripTopY);
+        // endpoints along the strip
+        var x0o = (op.x0!=null? op.x0 : x0), z0o = (op.z0!=null? op.z0 : z0);
+        var x1o = (op.x1!=null? op.x1 : x1), z1o = (op.z1!=null? op.z1 : z1);
+        // Left face hole (offset +eps)
+        var lx0 = x0o + nx*eps, lz0 = z0o + nz*eps;
+        var lx1 = x1o + nx*eps, lz1 = z1o + nz*eps;
+        var lA = project3D(lx0, y0, lz0); var lB = project3D(lx1, y0, lz1);
+        var lC = project3D(lx1, y1, lz1); var lD = project3D(lx0, y1, lz0);
+        if (lA && lB && lC && lD) leftHoles.push([lA,lB,lC,lD]);
+        // Right face hole (offset -eps)
+        var rx0 = x0o - nx*eps, rz0 = z0o - nz*eps;
+        var rx1 = x1o - nx*eps, rz1 = z1o - nz*eps;
+        var rA = project3D(rx0, y0, rz0); var rB = project3D(rx1, y0, rz1);
+        var rC = project3D(rx1, y1, rz1); var rD = project3D(rx0, y1, rz0);
+        if (rA && rB && rC && rD) rightHoles.push([rA,rB,rC,rD]);
+        // Glass rectangle centered (for windows only)
+        if (!isDoor){
+          var gA = project3D(x0o, y0, z0o); var gB = project3D(x1o, y0, z1o);
+          var gC = project3D(x1o, y1, z1o); var gD = project3D(x0o, y1, z0o);
+          if (gA && gB && gC && gD) glassRects.push([gA,gB,gC,gD]);
+        }
+      }
+      function fillQuadWithHoles(p0,p1,p2,p3, holes, fill){
+        ctx.beginPath();
+        // outer face polygon
+        ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.closePath();
+        // holes (subpaths)
+        for (var hi=0; hi<holes.length; hi++){
+          var H = holes[hi]; if(!H||H.length!==4) continue;
+          ctx.moveTo(H[0].x, H[0].y); ctx.lineTo(H[1].x, H[1].y); ctx.lineTo(H[2].x, H[2].y); ctx.lineTo(H[3].x, H[3].y); ctx.closePath();
+        }
+        ctx.fillStyle = fill; ctx.fill('evenodd');
+      }
+      // Fill sides with holes to cut out windows/doors
+      fillQuadWithHoles(pA,pB,pBt,pAt, leftHoles, fillSide);
+      fillQuadWithHoles(pD,pC,pCt,pDt, rightHoles, fillSide);
+      // Top face fill only
+      ctx.beginPath(); ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); ctx.closePath(); ctx.fillStyle = fillTop; ctx.fill();
+      // Determine if neighboring strip connects at endpoints to skip cap strokes for flush corners
+      function hasNeighborAt(wx, wz){
+        try {
+          var EPS = 1e-3;
+          var arr = window.wallStrips || [];
+          for (var ii=0; ii<arr.length; ii++){
+            var s = arr[ii]; if(!s || s===ws) continue;
+            var d0 = Math.hypot((s.x0||0) - wx, (s.z0||0) - wz);
+            var d1 = Math.hypot((s.x1||0) - wx, (s.z1||0) - wz);
+            if (d0 < EPS || d1 < EPS) return true;
           }
-        }
-      } catch(__eOpenWS) { /* ignore strip opening draw errors */ }
-      ctx.restore();
-    } catch(e) {}
-  };
-  if (typeof window.dedupeAllEntities === 'undefined') window.dedupeAllEntities = function(){};
-  // Minimal DOM labeler for rooms (provided by ui/labels.js). Guard to avoid duplication.
-  if (typeof window.updateLabels === 'undefined') {
-    window.updateLabels = function(){};
-  }
-  if (typeof window.updateMeasurements === 'undefined') window.updateMeasurements = function(){};
-  if (typeof window.drawWorldHeightScale === 'undefined') window.drawWorldHeightScale = function(){
-    try {
-      if (!ctx || !canvas || !Array.isArray(allRooms) || allRooms.length === 0) return;
-      // Pick a target room: prefer selected on current floor, else first room on current floor, else first room
-      var target = null;
-      if (selectedRoomId) {
-        for (var i=0;i<allRooms.length;i++){ var r=allRooms[i]; if(r && r.id===selectedRoomId) { target=r; break; } }
+        } catch(_eN) {}
+        return false;
       }
-      if (!target) {
-        for (var j=0;j<allRooms.length;j++){ var r2=allRooms[j]; if (r2 && (r2.level||0) === (currentFloor||0)) { target=r2; break; } }
-      }
-      if (!target) target = allRooms[0];
-      if (!target) return;
-
-      // Compute global footprint and total building top height so the ruler grows to full height (across floors/roof)
-      var fp = null;
-      try { if (typeof computeRoofFootprint==='function') fp = computeRoofFootprint(); } catch(_e) { fp = null; }
-      if (!fp) {
-        // Fallback footprint from rooms
-        var minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
-        for (var ri=0; ri<allRooms.length; ri++){
-          var rr=allRooms[ri]; if(!rr) continue;
-          var hw2=(rr.width||1)/2, hd2=(rr.depth||1)/2;
-          minX=Math.min(minX,(rr.x||0)-hw2); maxX=Math.max(maxX,(rr.x||0)+hw2);
-          minZ=Math.min(minZ,(rr.z||0)-hd2); maxZ=Math.max(maxZ,(rr.z||0)+hd2);
-        }
-        if (isFinite(minX)&&isFinite(maxX)&&isFinite(minZ)&&isFinite(maxZ)) {
-          fp = { x:(minX+maxX)/2, z:(minZ+maxZ)/2, width:Math.max(1,maxX-minX), depth:Math.max(1,maxZ-minZ) };
-        } else {
-          fp = { x:(target.x||0), z:(target.z||0), width:(target.width||3), depth:(target.depth||3) };
-        }
-      }
-
-      var baseY = 0.0; // ground reference
-      var topY = 0.0;
-      for (var ti=0; ti<allRooms.length; ti++){
-        var rTop = (allRooms[ti].level||0)*3.5 + Math.max(0.1, allRooms[ti].height||3.0);
-        if (rTop>topY) topY=rTop;
-      }
-      for (var ri2=0; ri2<(roofComponents||[]).length; ri2++){
-        var rf=roofComponents[ri2]; if(!rf) continue; var bH=(typeof rf.baseHeight==='number'&&isFinite(rf.baseHeight))?rf.baseHeight:3.0; var hH=(typeof rf.height==='number'&&isFinite(rf.height))?rf.height:0.6; var rTop2=bH+hH; if(rTop2>topY) topY=rTop2;
-      }
-      if (topY <= baseY + 0.05) topY = baseY + Math.max(3.0, (target.height||3.0));
-
-      // Smooth the displayed height so it grows elegantly as the building grows
-      var targetH = Math.max(0.1, topY - baseY);
-      var curH = (typeof window.__heightRuleH==='number' ? window.__heightRuleH : targetH);
-      var k = 0.2; // smoothing factor per frame
-      var newH = curH + (targetH - curH) * k;
-      if (Math.abs(newH - targetH) < 0.02) newH = targetH;
-      window.__heightRuleH = newH;
-
-      var h = newH;
-
-      // Build footprint corners and choose a visible corner just outside the footprint
-      var hw = Math.max(0.05, (fp.width||1)/2);
-      var hd = Math.max(0.05, (fp.depth||1)/2);
-      var corners = [
-        { x:(fp.x||0)+hw, z:(fp.z||0)+hd },
-        { x:(fp.x||0)+hw, z:(fp.z||0)-hd },
-        { x:(fp.x||0)-hw, z:(fp.z||0)+hd },
-        { x:(fp.x||0)-hw, z:(fp.z||0)-hd }
-      ];
-      var pick=null, p0=null, p1=null; var outset=0.18; // place the scale just outside the room
-      for (var ci=0; ci<corners.length; ci++){
-        var cx=corners[ci].x, cz=corners[ci].z;
-        // offset outward away from room center to position the scale outside of the cube
-        var dirX = cx - (fp.x||0); var dirZ = cz - (fp.z||0); var len=Math.hypot(dirX,dirZ)||1; dirX/=len; dirZ/=len;
-        var ox = cx + dirX*outset, oz = cz + dirZ*outset;
-        var q0 = project3D(ox, baseY, oz);
-        var q1 = project3D(ox, baseY + h, oz);
-        if (q0 && q1) { pick={x:ox,z:oz}; p0=q0; p1=q1; break; }
-      }
-      if (!pick || !p0 || !p1) return;
-
-  // Fade with UI inactivity just like handles/labels
-  var uiA = (typeof window.__uiFadeAlpha === 'number') ? window.__uiFadeAlpha : 1.0;
-  if (uiA <= 0.0) return;
-
-  ctx.save();
-  ctx.globalAlpha = Math.max(0, Math.min(1, uiA));
-
-      // Draw main vertical line at the chosen corner
-      ctx.strokeStyle = '#111827'; // near-black for visibility
-      ctx.lineWidth = 2;
+      var startHasNeighbor = hasNeighborAt(x0, z0);
+      var endHasNeighbor = hasNeighborAt(x1, z1);
+      // Stroke only the long edges and any exposed caps to achieve flush-looking joins
       ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.lineTo(p1.x, p1.y);
+      // Long edge At->Bt
+      ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y);
+      // Cap Bt->Ct only if no neighbor at end
+      if (!endHasNeighbor){ ctx.moveTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); }
+      // Long edge Ct->Dt
+      ctx.moveTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y);
+      // Cap Dt->At only if no neighbor at start
+      if (!startHasNeighbor){ ctx.moveTo(pDt.x,pDt.y); ctx.lineTo(pAt.x,pAt.y); }
       ctx.stroke();
-
-      // Draw ticks and labels every 0.5m
-      var step = 0.5; // meters
-      var ticks = Math.round(h / step);
-      ctx.lineWidth = 1.5; ctx.strokeStyle = '#4b5563';
-      ctx.font = 'bold 13px system-ui, sans-serif';
-      for (var t=0; t<=ticks; t++){
-        var yy = baseY + Math.min(h, t*step);
-        var pt = project3D(pick.x, yy, pick.z); if (!pt) continue;
-        // Tick mark (constant screen-space length for clarity)
-        var lenPx = (t % 2 === 0) ? 12 : 8; // longer tick each 1.0m
-        ctx.beginPath(); ctx.moveTo(pt.x, pt.y); ctx.lineTo(pt.x + lenPx, pt.y); ctx.stroke();
-        // Label text on the right of tick
-        var val = (t*step).toFixed(1).replace(/\.0$/, '.0');
-        var label = val + ' m';
-        ctx.fillStyle = '#111827';
-        ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-        ctx.fillText(label, pt.x + lenPx + 4, pt.y);
+      // Draw translucent blue glass for windows (centered plane)
+      if (glassRects.length){
+        for (var gi=0; gi<glassRects.length; gi++){
+          var G = glassRects[gi]; if(!G||G.length!==4) continue;
+          ctx.beginPath();
+          ctx.moveTo(G[0].x,G[0].y); ctx.lineTo(G[1].x,G[1].y); ctx.lineTo(G[2].x,G[2].y); ctx.lineTo(G[3].x,G[3].y); ctx.closePath();
+          ctx.fillStyle = 'rgba(56,189,248,0.25)'; // light blue glass
+          ctx.fill();
+          ctx.strokeStyle = onLevel ? 'rgba(56,189,248,0.55)' : 'rgba(148,163,184,0.7)';
+          ctx.lineWidth = onLevel ? 1.8 : 1.2;
+          ctx.stroke();
+        }
       }
-
+      // Draw any door/window overlays attached to this wall strip (centerline-based)
+      // In solid mode, we already cut holes and drew glass; skip legacy opening outlines for clarity.
+      try {
+        /* no-op: opening outlines suppressed in solid mode */
+      } catch(_eOpen) {}
+      // Restore context before exiting solid rendering branch
       ctx.restore();
-    } catch(e) { /* non-fatal */ }
+      return;
+    } catch(eSolid) { /* non-fatal */ }
   };
   if (typeof window.updatePerfStatsOverlay === 'undefined') window.updatePerfStatsOverlay = function(){};
   // Minimal measurements panel updater (live-edit friendly)
@@ -878,6 +908,120 @@
     };
   }
   if (typeof window.updateStatus === 'undefined') window.updateStatus = function(msg){ try{ var s=document.getElementById('status'); if(s) s.textContent = msg; }catch(e){} };
+
+  // World height scale ruler drawn near the building footprint
+  if (typeof window.drawWorldHeightScale === 'undefined') window.drawWorldHeightScale = function(){
+    try {
+      if (!ctx || !canvas || !Array.isArray(allRooms) || allRooms.length === 0) return;
+      // Pick a target room: prefer selected on current floor, else first room on current floor, else first room
+      var target = null;
+      if (selectedRoomId) {
+        for (var i=0;i<allRooms.length;i++){ var r=allRooms[i]; if(r && r.id===selectedRoomId) { target=r; break; } }
+      }
+      if (!target) {
+        for (var j=0;j<allRooms.length;j++){ var r2=allRooms[j]; if (r2 && (r2.level||0) === (currentFloor||0)) { target=r2; break; } }
+      }
+      if (!target) target = allRooms[0];
+      if (!target) return;
+
+      // Compute global footprint and total building top height so the ruler grows to full height (across floors/roof)
+      var fp = null;
+      try { if (typeof computeRoofFootprint==='function') fp = computeRoofFootprint(); } catch(_e) { fp = null; }
+      if (!fp) {
+        // Fallback footprint from rooms
+        var minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+        for (var ri=0; ri<allRooms.length; ri++){
+          var rr=allRooms[ri]; if(!rr) continue;
+          var hw2=(rr.width||1)/2, hd2=(rr.depth||1)/2;
+          minX=Math.min(minX,(rr.x||0)-hw2); maxX=Math.max(maxX,(rr.x||0)+hw2);
+          minZ=Math.min(minZ,(rr.z||0)-hd2); maxZ=Math.max(maxZ,(rr.z||0)+hd2);
+        }
+        if (isFinite(minX)&&isFinite(maxX)&&isFinite(minZ)&&isFinite(maxZ)) {
+          fp = { x:(minX+maxX)/2, z:(minZ+maxZ)/2, width:Math.max(1,maxX-minX), depth:Math.max(1,maxZ-minZ) };
+        } else {
+          fp = { x:(target.x||0), z:(target.z||0), width:(target.width||3), depth:(target.depth||3) };
+        }
+      }
+
+      var baseY = 0.0; // ground reference
+      var topY = 0.0;
+      for (var ti=0; ti<allRooms.length; ti++){
+        var rTop = (allRooms[ti].level||0)*3.5 + Math.max(0.1, allRooms[ti].height||3.0);
+        if (rTop>topY) topY=rTop;
+      }
+      for (var ri2=0; ri2<(roofComponents||[]).length; ri2++){
+        var rf=roofComponents[ri2]; if(!rf) continue; var bH=(typeof rf.baseHeight==='number'&&isFinite(rf.baseHeight))?rf.baseHeight:3.0; var hH=(typeof rf.height==='number'&&isFinite(rf.height))?rf.height:0.6; var rTop2=bH+hH; if(rTop2>topY) topY=rTop2;
+      }
+      if (topY <= baseY + 0.05) topY = baseY + Math.max(3.0, (target.height||3.0));
+
+      // Smooth the displayed height so it grows elegantly as the building grows
+      var targetH = Math.max(0.1, topY - baseY);
+      var curH = (typeof window.__heightRuleH==='number' ? window.__heightRuleH : targetH);
+      var k = 0.2; // smoothing factor per frame
+      var newH = curH + (targetH - curH) * k;
+      if (Math.abs(newH - targetH) < 0.02) newH = targetH;
+      window.__heightRuleH = newH;
+
+      var h = newH;
+
+      // Build footprint corners and choose a visible corner just outside the footprint
+      var hw = Math.max(0.05, (fp.width||1)/2);
+      var hd = Math.max(0.05, (fp.depth||1)/2);
+      var corners = [
+        { x:(fp.x||0)+hw, z:(fp.z||0)+hd },
+        { x:(fp.x||0)+hw, z:(fp.z||0)-hd },
+        { x:(fp.x||0)-hw, z:(fp.z||0)+hd },
+        { x:(fp.x||0)-hw, z:(fp.z||0)-hd }
+      ];
+      var pick=null, p0=null, p1=null; var outset=0.18; // place the scale just outside the room
+      for (var ci=0; ci<corners.length; ci++){
+        var cx=corners[ci].x, cz=corners[ci].z;
+        // offset outward away from room center to position the scale outside of the cube
+        var dirX = cx - (fp.x||0); var dirZ = cz - (fp.z||0); var len=Math.hypot(dirX,dirZ)||1; dirX/=len; dirZ/=len;
+        var ox = cx + dirX*outset, oz = cz + dirZ*outset;
+        var q0 = project3D(ox, baseY, oz);
+        var q1 = project3D(ox, baseY + h, oz);
+        if (q0 && q1) { pick={x:ox,z:oz}; p0=q0; p1=q1; break; }
+      }
+      if (!pick || !p0 || !p1) return;
+
+      // Fade with UI inactivity just like handles/labels
+      var uiA = (typeof window.__uiFadeAlpha === 'number') ? window.__uiFadeAlpha : 1.0;
+      if (uiA <= 0.0) return;
+
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, uiA));
+
+      // Draw main vertical line at the chosen corner
+      ctx.strokeStyle = '#111827'; // near-black for visibility
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+
+      // Draw ticks and labels every 0.5m
+      var step = 0.5; // meters
+      var ticks = Math.round(h / step);
+      ctx.lineWidth = 1.5; ctx.strokeStyle = '#4b5563';
+      ctx.font = 'bold 13px system-ui, sans-serif';
+      for (var t=0; t<=ticks; t++){
+        var yy = baseY + Math.min(h, t*step);
+        var pt = project3D(pick.x, yy, pick.z); if (!pt) continue;
+        // Tick mark (constant screen-space length for clarity)
+        var lenPx = (t % 2 === 0) ? 12 : 8; // longer tick each 1.0m
+        ctx.beginPath(); ctx.moveTo(pt.x, pt.y); ctx.lineTo(pt.x + lenPx, pt.y); ctx.stroke();
+        // Label text on the right of tick
+        var val = (t*step).toFixed(1).replace(/\.0$/, '.0');
+        var label = val + ' m';
+        ctx.fillStyle = '#111827';
+        ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+        ctx.fillText(label, pt.x + lenPx + 4, pt.y);
+      }
+
+      ctx.restore();
+    } catch(e) { /* non-fatal */ }
+  };
 
   // Main render loop (idempotent definition)
   if (typeof window.renderLoop === 'undefined') {

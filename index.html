@@ -132,7 +132,7 @@
 
 <div id="controls">
 		<button onclick="addNewRoom()">+ Add Room</button>
-        <!-- Render button removed -->
+	<button id="btn-render-walls" class="secondary" title="Toggle wall render mode">Render: Lines</button>
 	<!-- Custom Level Dropdown (replaces native select) -->
 	<div id="levelDropdown" class="dropdown" aria-label="Level Menu">
 		<button id="levelButton" class="dropdown-button" type="button">
@@ -285,6 +285,7 @@
 				<h3 style="margin:0 0 8px;">Main Toolbar (top)</h3>
 				<ul style="margin:0 0 8px 18px;">
 					<li><strong>+ Add Room</strong>: Create a new rectangular room. Drag its edges or use handles to resize.</li>
+		                    <li><strong>Render</strong>: Toggle free-standing walls between simple lines (draft) and solid 300mm walls.</li>
 					<li><strong>Level Menu</strong>: Switch between Ground/First floors and add components:
 						<ul style="margin:6px 0 0 18px;">
 							<li><strong>+ Stairs</strong>: Add a staircase component.</li>
@@ -575,6 +576,36 @@
 </div>
 
 <script>
+// Render mode toggle for free-standing walls: Lines (default) vs Solid (300mm)
+document.addEventListener('DOMContentLoaded', () => {
+	try {
+		if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'line';
+		var btn = document.getElementById('btn-render-walls');
+		function refreshBtn() {
+			if (!btn) return;
+			btn.textContent = (window.__wallRenderMode === 'solid') ? 'Render: Solid' : 'Render: Lines';
+		}
+		function setMode(mode){
+			try {
+				if (typeof window.setWallRenderMode === 'function') {
+					window.setWallRenderMode(mode);
+				} else {
+					window.__wallRenderMode = mode;
+					if (typeof window.updateStatus === 'function') window.updateStatus('Walls: ' + (mode==='solid'?'Solid 300mm':'Lines'));
+					if (typeof window.renderLoop === 'function') window.renderLoop();
+				}
+				refreshBtn();
+			} catch(_e) {}
+		}
+		if (btn){
+			btn.addEventListener('click', function(){
+				var next = (window.__wallRenderMode === 'solid') ? 'line' : 'solid';
+				setMode(next);
+			});
+			refreshBtn();
+		}
+	} catch(_eR) {}
+});
 // Reset confirmation dialog
 function showResetConfirmation() {
 	const modal = document.getElementById('reset-confirmation-modal');

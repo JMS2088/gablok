@@ -66,6 +66,10 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     var allowRooms = !!opts.allowRooms;
     var quiet = !!opts.quiet;
     var nonDestructive = !!opts.nonDestructive; // when true, don't clear 3D rooms if there are no room walls in 2D (e.g., during view toggles)
+  // When true (default), only create rooms from explicit closed loops (rectangles or single closed polygons).
+  // This avoids inferring rooms from planar subdivision faces which can create unwanted triangular/duplicate rooms
+  // when free-standing walls or T-junctions are present.
+  var strictClosedLoopsOnly = (typeof opts.strictClosedLoopsOnly === 'boolean') ? !!opts.strictClosedLoopsOnly : true;
     // Which floor to apply to (0=ground, 1=first). Default to ground for backward compatibility.
     var targetLevel = (typeof opts.level === 'number') ? opts.level : 0;
     // Debug/telemetry helper: emit a summary event so UI or tests can observe what was applied
@@ -505,7 +509,9 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           }
         }
 
-        // 1) Build snapped node set from remaining walls, split at T-junctions and create half-edges
+  // If strictClosedLoopsOnly is enabled, skip advanced face decomposition that can cut areas into small rooms.
+  if (!strictClosedLoopsOnly) {
+  // 1) Build snapped node set from remaining walls, split at T-junctions and create half-edges
         var nodesP = Object.create(null); // key -> { x, y, out: [] }
         var endpointWalls = []; // keep original wall refs for indexing
         for (var wiP = 0; wiP < elemsSrc.length; wiP++) {
@@ -686,6 +692,11 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           var gid = 'polyf_' + fci + '_' + Math.floor((performance && performance.now) ? performance.now() : Date.now());
           polyRooms.push({ poly: F.poly, groupId: gid, wallIdxSet: F.wallIdxSet });
           // Do NOT mark walls as non-interior; we'll still extrude all walls as strips below.
+        }
+        } else {
+          if (typeof console !== 'undefined' && console.log) {
+            console.log('[applyPlan2DTo3D] strictClosedLoopsOnly=true: Skipping advanced polygon face decomposition');
+          }
         }
       } catch(_polyAdvE) { /* best-effort; ignore on failure */ }
     }
