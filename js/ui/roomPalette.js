@@ -363,7 +363,8 @@
       // Bed details in preview (pillows and sheet on top)
       if (it.kind === 'bed') {
         var topYb = elev + iht;
-        function projTopB(x,z){ return toScreen(projUV(x, topYb, z)); }
+        // Project a point on the bed's top plane in world coords (include item offset)
+        function projTopB(x,z){ return toScreen(projUV(it.x + x, topYb, it.z + z)); }
         function drawRectTopB(x0,z0,x1,z1, fillCol, strokeCol, lw){ var p0=projTopB(x0,z0), p1=projTopB(x1,z0), p2=projTopB(x1,z1), p3=projTopB(x0,z1); if (fillCol){ cx.fillStyle=fillCol; } cx.beginPath(); cx.moveTo(p0.x,p0.y); cx.lineTo(p1.x,p1.y); cx.lineTo(p2.x,p2.y); cx.lineTo(p3.x,p3.y); cx.closePath(); if (fillCol) cx.fill(); if (strokeCol){ cx.strokeStyle=strokeCol; cx.lineWidth=lw||1; cx.stroke(); } }
         var headInset = Math.min(0.12, it.depth*0.08);
         var pillowDepth = Math.min(0.30, it.depth*0.20);
