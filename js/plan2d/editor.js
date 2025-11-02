@@ -686,6 +686,10 @@ function plan2dBind(){
     }
     // Refresh apply signatures after explicit apply
     try { __plan2d._lastWallsSig = wallsSigNow; __plan2d._last3Dsig = plan2dSig3D(); __plan2d._last2Dsig = plan2dSig2D(); } catch(_e2){}
+    // After applying, close the 2D editor and return to 3D view so changes are immediately visible
+    try { closePlan2DModal(); } catch(_eClose) {}
+    try { if (typeof renderLoop==='function') renderLoop(); } catch(_eRender) {}
+    try { if (typeof updateStatus==='function') updateStatus('Applied to 3D and returned to 3D view'); } catch(_eStatus) {}
   }catch(e){} };
   // Window type dropdown: show when a window is selected; update sill/height on change
   (function(){
