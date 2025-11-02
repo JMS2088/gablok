@@ -360,6 +360,31 @@
         cx.beginPath(); cx.moveTo(p0.x,p0.y); cx.lineTo(p1.x,p1.y); cx.lineTo(p2.x,p2.y); cx.lineTo(p3.x,p3.y); cx.closePath(); cx.fill(); cx.stroke();
         var hy = (p2.y + p3.y)*0.5 - 3; cx.strokeStyle = '#c0c0c0'; cx.lineWidth = 1.5; cx.beginPath(); cx.moveTo(p0.x+5, hy); cx.lineTo(p1.x-5, hy); cx.stroke();
       }
+      // Bed details in preview (pillows and sheet on top)
+      if (it.kind === 'bed') {
+        var topYb = elev + iht;
+        function projTopB(x,z){ return toScreen(projUV(x, topYb, z)); }
+        function drawRectTopB(x0,z0,x1,z1, fillCol, strokeCol, lw){ var p0=projTopB(x0,z0), p1=projTopB(x1,z0), p2=projTopB(x1,z1), p3=projTopB(x0,z1); if (fillCol){ cx.fillStyle=fillCol; } cx.beginPath(); cx.moveTo(p0.x,p0.y); cx.lineTo(p1.x,p1.y); cx.lineTo(p2.x,p2.y); cx.lineTo(p3.x,p3.y); cx.closePath(); if (fillCol) cx.fill(); if (strokeCol){ cx.strokeStyle=strokeCol; cx.lineWidth=lw||1; cx.stroke(); } }
+        var headInset = Math.min(0.12, it.depth*0.08);
+        var pillowDepth = Math.min(0.30, it.depth*0.20);
+        var pillowGap = Math.min(0.06, it.width*0.06);
+        var pillowW = Math.min(0.42, it.width*0.44);
+        var halfGap = pillowGap/2;
+        if (it.width >= 1.2) {
+          var leftCx = -pillowW/2 - halfGap;
+          var rightCx = pillowW/2 + halfGap;
+          var z0b = -ihd + headInset; var z1b = z0b + pillowDepth;
+          drawRectTopB(leftCx - pillowW/2, z0b, leftCx + pillowW/2, z1b, 'rgba(240,243,247,0.95)', '#94a3b8', 1);
+          drawRectTopB(rightCx - pillowW/2, z0b, rightCx + pillowW/2, z1b, 'rgba(240,243,247,0.95)', '#94a3b8', 1);
+        } else {
+          var pw = Math.min(0.6, it.width*0.8); var pd = pillowDepth; var z0s = -ihd + headInset; var z1s = z0s + pd;
+          drawRectTopB(-pw/2, z0s, pw/2, z1s, 'rgba(240,243,247,0.95)', '#94a3b8', 1);
+        }
+        var sheetStart = -ihd + headInset + pillowDepth + Math.min(0.06, it.depth*0.04);
+        var sheetEnd = ihd - Math.min(0.08, it.depth*0.06);
+        var sheetMarginX = Math.min(0.06, it.width*0.06);
+        drawRectTopB(-ihw + sheetMarginX, sheetStart, ihw - sheetMarginX, sheetEnd, 'rgba(186, 210, 255, 0.22)', '#93c5fd', 0.8);
+      }
     }
 
     try { drawPaletteCompass(cx, rect, yaw); } catch(e) {}
@@ -508,6 +533,27 @@
       drawCircleTop(plateBaseX + plateGap, plateBaseZ, plateR);
       drawCircleTop(plateBaseX, plateBaseZ + plateGap, plateR);
       drawCircleTop(plateBaseX + plateGap, plateBaseZ + plateGap, plateR);
+    }
+    if (def.kind === 'bed') {
+      function to2b(x,y,z){ return proj3(x,y,z); }
+      function drawRectTopB(x0,z0,x1,z1, fillCol, strokeCol, lw2){ var p0=to2b(x0,ht,z0), p1=to2b(x1,ht,z0), p2=to2b(x1,ht,z1), p3=to2b(x0,ht,z1); if (fillCol){ cx.fillStyle=fillCol; } cx.beginPath(); cx.moveTo(p0.x,p0.y); cx.lineTo(p1.x,p1.y); cx.lineTo(p2.x,p2.y); cx.lineTo(p3.x,p3.y); cx.closePath(); if (fillCol) cx.fill(); if (strokeCol){ cx.strokeStyle=strokeCol; cx.lineWidth=lw2||1; cx.stroke(); } }
+      var headInset = Math.min(0.12, sz*0.08);
+      var pillowDepth = Math.min(0.30, sz*0.20);
+      var pillowGap = Math.min(0.06, sx*0.06);
+      var pillowW = Math.min(0.42, sx*0.44);
+      var halfGap = pillowGap/2;
+      if (sx >= 1.2) {
+        var leftCx = -pillowW/2 - halfGap; var rightCx = pillowW/2 + halfGap; var z0 = -hd + headInset; var z1 = z0 + pillowDepth;
+        drawRectTopB(leftCx - pillowW/2, z0, leftCx + pillowW/2, z1, 'rgba(240,243,247,0.95)', '#94a3b8', 1);
+        drawRectTopB(rightCx - pillowW/2, z0, rightCx + pillowW/2, z1, 'rgba(240,243,247,0.95)', '#94a3b8', 1);
+      } else {
+        var pw = Math.min(0.6, sx*0.8); var pd = pillowDepth; var z0s = -hd + headInset; var z1s = z0s + pd;
+        drawRectTopB(-pw/2, z0s, pw/2, z1s, 'rgba(240,243,247,0.95)', '#94a3b8', 1);
+      }
+      var sheetStart = -hd + headInset + pillowDepth + Math.min(0.06, sz*0.04);
+      var sheetEnd = hd - Math.min(0.08, sz*0.06);
+      var sheetMarginX = Math.min(0.06, sx*0.06);
+      drawRectTopB(-hw + sheetMarginX, sheetStart, hw - sheetMarginX, sheetEnd, 'rgba(186, 210, 255, 0.22)', '#93c5fd', 0.8);
     }
   }
 

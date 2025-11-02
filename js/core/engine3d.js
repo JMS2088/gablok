@@ -749,6 +749,14 @@
   window.updateMeasurements = function(){
     try {
       var panel = document.getElementById('measurements'); if(!panel) return;
+      // Hide measurements panel entirely when 2D floor plan is active
+      try {
+        if (window.__plan2d && __plan2d.active) {
+          panel.classList.remove('visible');
+          panel.style.display = 'none';
+          return;
+        }
+      } catch(_p2d) {}
       var sel = window.selectedRoomId ? findObjectById(window.selectedRoomId) : null;
       // Always keep panel visible
       panel.classList.add('visible');
@@ -862,6 +870,8 @@
       try {
         var panel = document.getElementById('measurements');
         if (!panel) return;
+        // Do not show the panel when 2D floor plan is active
+        if (window.__plan2d && __plan2d.active) { panel.classList.remove('visible'); panel.style.display = 'none'; return; }
         panel.style.display = '';
         panel.classList.add('visible');
       } catch(e) { /* non-fatal */ }

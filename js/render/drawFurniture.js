@@ -53,6 +53,55 @@
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       }
       ctx.restore();
+
+      // Bed extras: pillows and sheet on the top face for kind==='bed'
+      try {
+        if (obj.kind === 'bed') {
+          var top = topY;
+          // Helper to project top rectangle by world coords
+          function drawTopRect(x0,z0,x1,z1, fillCol, strokeCol, lw2){
+            var p0 = window.project3D(x0, top, z0);
+            var p1 = window.project3D(x1, top, z0);
+            var p2 = window.project3D(x1, top, z1);
+            var p3 = window.project3D(x0, top, z1);
+            if (!p0||!p1||!p2||!p3) return;
+            ctx.save(); if (fillCol){ ctx.fillStyle = fillCol; }
+            ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.closePath(); if (fillCol) ctx.fill();
+            if (strokeCol){ ctx.strokeStyle = strokeCol; ctx.lineWidth = lw2||1; ctx.stroke(); }
+            ctx.restore();
+          }
+          // Local -> world for convenience (top plane)
+          function worldAt(localX, localZ){ var p = rotPoint(localX, localZ); return { x: p.x, z: p.z }; }
+          // Determine head side (-hz by convention)
+          var headInset = Math.min(0.12, d*0.08);
+          var pillowDepth = Math.min(0.30, d*0.20);
+          var pillowGap = Math.min(0.06, w*0.06);
+          var pillowW = Math.min(0.42, w*0.44);
+          var halfGap = pillowGap/2;
+          // Two pillows side-by-side if width allows; else single centered pillow
+          if (w >= 1.2) {
+            var leftCx = -pillowW/2 - halfGap;
+            var rightCx = pillowW/2 + halfGap;
+            var z0 = -hz + headInset; var z1 = z0 + pillowDepth;
+            var L0 = worldAt(leftCx - pillowW/2, z0), L1 = worldAt(leftCx + pillowW/2, z0), L2 = worldAt(leftCx + pillowW/2, z1), L3 = worldAt(leftCx - pillowW/2, z1);
+            drawTopRect(L0.x,L0.z,L1.x,L2.z, 'rgba(240,243,247,0.95)', '#94a3b8', 1);
+            var R0 = worldAt(rightCx - pillowW/2, z0), R1 = worldAt(rightCx + pillowW/2, z0), R2 = worldAt(rightCx + pillowW/2, z1), R3 = worldAt(rightCx - pillowW/2, z1);
+            drawTopRect(R0.x,R0.z,R1.x,R2.z, 'rgba(240,243,247,0.95)', '#94a3b8', 1);
+          } else {
+            var pw = Math.min(0.6, w*0.8); var pd = pillowDepth;
+            var z0s = -hz + headInset; var z1s = z0s + pd;
+            var S0 = worldAt(-pw/2, z0s), S1 = worldAt(pw/2, z0s), S2 = worldAt(pw/2, z1s);
+            drawTopRect(S0.x,S0.z,S1.x,S2.z, 'rgba(240,243,247,0.95)', '#94a3b8', 1);
+          }
+          // Sheet/duvet: from just past pillows to foot
+          var sheetStart = -hz + headInset + pillowDepth + Math.min(0.06, d*0.04);
+          var sheetEnd = hz - Math.min(0.08, d*0.06);
+          var sheetMarginX = Math.min(0.06, w*0.06);
+          var A = worldAt(-hx + sheetMarginX, sheetStart), B = worldAt(hx - sheetMarginX, sheetStart);
+          var C = worldAt(hx - sheetMarginX, sheetEnd), D = worldAt(-hx + sheetMarginX, sheetEnd);
+          drawTopRect(A.x,A.z,B.x,C.z, 'rgba(186, 210, 255, 0.22)', '#93c5fd', 0.8);
+        }
+      } catch(_bed){ /* non-fatal */ }
     } catch(e){ /* non-fatal */ }
   }
   drawFurniture.__native = true;
