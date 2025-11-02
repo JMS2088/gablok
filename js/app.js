@@ -51,10 +51,21 @@ function switchLevel(){
     }
     // Regular 3D floor switch
     if (val==='0' || val==='1'){
-      currentFloor = (val==='1') ? 1 : 0;
-      selectedRoomId = null;
+      var newFloor = (val==='1') ? 1 : 0;
+      currentFloor = newFloor;
+      // Preserve selection when possible: only clear if selected item lives on a different floor
+      try {
+        if (typeof findObjectById === 'function' && selectedRoomId) {
+          var obj = findObjectById(selectedRoomId);
+          if (!obj || (typeof obj.level === 'number' && obj.level !== newFloor)) {
+            selectedRoomId = null;
+          }
+        }
+      } catch(_sel){ /* non-fatal */ }
       renderLoop && renderLoop();
       updateStatus && updateStatus('Switched to ' + (currentFloor===0 ? 'Ground' : 'First') + ' Floor');
+      // Ensure measurements panel remains visible after switching
+      try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     }
   } catch(e){ /* ignore */ }
 }

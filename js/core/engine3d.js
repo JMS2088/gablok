@@ -1071,7 +1071,8 @@
     // Design spec: 19 steps over 4 meters total run; keep default height 3.0m
     var w=1.2,d=4.0; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'stairs'});
     stairsComponent={ id:id, name:'Stairs', x:s.x, z:s.z, width:w, depth:d, height:3.0, steps:19, type:'stairs', rotation:0, level:lvl };
-    window.selectedRoomId = id; if(typeof updateStatus==='function') updateStatus('Added Stairs');
+  window.selectedRoomId = id; if(typeof updateStatus==='function') updateStatus('Added Stairs');
+  try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     try { focusCameraOnObject(stairsComponent); } catch(_e) {}
     _needsFullRender=true; startRender();
   };
@@ -1079,19 +1080,22 @@
   if (typeof window.addPergola === 'undefined') window.addPergola = function(){
     var lvl=0, w=3, d=3; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'pergola'});
     var p={ id:newId('pergola'), name:'Pergola', x:s.x, z:s.z, width:w, depth:d, height:2.2, totalHeight:2.2, legWidth:0.25, slatCount:8, slatWidth:0.12, level:lvl, type:'pergola', rotation:0 };
-    (window.pergolaComponents||[]).push(p); window.selectedRoomId=p.id; updateStatus('Added Pergola');
+  (window.pergolaComponents||[]).push(p); window.selectedRoomId=p.id; updateStatus('Added Pergola');
+  try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     try { focusCameraOnObject(p); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   if (typeof window.addGarage === 'undefined') window.addGarage = function(){
     var lvl=0, w=3.2, d=5.5; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'garage'});
     var g={ id:newId('garage'), name:'Garage', x:s.x, z:s.z, width:w, depth:d, height:2.6, level:lvl, type:'garage', rotation:0 };
-    (window.garageComponents||[]).push(g); window.selectedRoomId=g.id; updateStatus('Added Garage');
+  (window.garageComponents||[]).push(g); window.selectedRoomId=g.id; updateStatus('Added Garage');
+  try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     try { focusCameraOnObject(g); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   if (typeof window.addPool === 'undefined') window.addPool = function(){
     var lvl=0, w=4, d=2; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'pool'});
     var p={ id:newId('pool'), name:'Pool', x:s.x, z:s.z, width:w, depth:d, height:1.5, level:lvl, type:'pool', rotation:0 };
-    (window.poolComponents||[]).push(p); window.selectedRoomId=p.id; updateStatus('Added Pool');
+  (window.poolComponents||[]).push(p); window.selectedRoomId=p.id; updateStatus('Added Pool');
+  try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     try { focusCameraOnObject(p); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   // Compute the Y base where roofs should sit: on top of first floor if any rooms exist there, otherwise on top of ground floor
@@ -1138,7 +1142,8 @@
     // Place roof atop first floor if present, else above ground floor rooms
     var baseY = (typeof computeRoofBaseHeight==='function') ? computeRoofBaseHeight() : 3.0;
     var r={ id:newId('roof'), name:'Roof', x:s.x, z:s.z, width:Math.max(0.5,fp.width), depth:Math.max(0.5,fp.depth), baseHeight:baseY, height:1.2, level:lvl, type:'roof', roofType:'flat', rotation:0, autoBase:true, autoFit:true };
-    (window.roofComponents||[]).push(r); window.selectedRoomId=r.id; updateStatus('Added Roof');
+  (window.roofComponents||[]).push(r); window.selectedRoomId=r.id; updateStatus('Added Roof');
+  try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     // Lazy-load the roof UI dropdown when a roof is first added
     try { if (typeof window.loadScript==='function') { window.loadScript('js/ui/roofDropdown.js?v=20251026-1'); } } catch(_e) {}
     try { focusCameraOnObject(r); } catch(_e) {}
@@ -1146,7 +1151,8 @@
   if (typeof window.addBalcony === 'undefined') window.addBalcony = function(){
     var lvl=1, w=2.5, d=1.5; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'balcony'});
     var b={ id:newId('balcony'), name:'Balcony', x:s.x, z:s.z, width:w, depth:d, height:3.0, totalHeight:3.0, wallThickness:0.12, wallHeight:1.0, legWidth:0.18, floorThickness:0.1, slatCount:8, slatWidth:0.12, roofHeight:0.25, level:lvl, type:'balcony', rotation:0 };
-    (window.balconyComponents||[]).push(b); window.selectedRoomId=b.id; updateStatus('Added Balcony');
+  (window.balconyComponents||[]).push(b); window.selectedRoomId=b.id; updateStatus('Added Balcony');
+  try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     try { focusCameraOnObject(b); } catch(_e) {}
     _needsFullRender=true; startRender(); };
 

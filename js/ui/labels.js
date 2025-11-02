@@ -156,53 +156,17 @@
           var newTxt = (box.name || 'Room');
           if (el.__txt !== newTxt) { el.textContent = newTxt; el.__txt = newTxt; el.__w = null; el.__h = null; }
         }
-        // Smooth placement to reduce jitter while camera is moving
-        var prev = window.__labelCache[box.id] || { x: targetLeft, y: targetTop };
-        var isCamDrag = !!(window.mouse && window.mouse.down && window.mouse.dragType === 'camera');
-        var recentlyMoved = (typeof window._camLastMoveTime==='number') ? (nowT - window._camLastMoveTime < 80) : false;
-        var k = (isCamDrag || recentlyMoved) ? 0.25 : 1.0; // stronger smoothing while moving
-        var smX = prev.x + (targetLeft - prev.x) * k;
-        var smY = prev.y + (targetTop - prev.y) * k;
-        window.__labelCache[box.id] = { x: smX, y: smY };
-        var left = smX, top = smY;
+    // Fixed placement: no smoothing, use direct projected position
+    var left = targetLeft, top = targetTop;
         var objA = (typeof window.getObjectUiAlpha === 'function') ? window.getObjectUiAlpha(box.id) : 1.0;
         var globalA = Math.max(0, Math.min(1, (window.__uiFadeAlpha||1.0)));
-        el.style.left = left.toFixed(2) + 'px'; el.style.top = top.toFixed(2) + 'px';
+  var cssLeft = Math.round(left), cssTop = Math.round(top);
+  el.style.left = cssLeft + 'px'; el.style.top = cssTop + 'px';
         // Labels must always be visible and clickable (do not fade out other labels)
         el.style.opacity = '1';
         el.style.pointerEvents = '';
 
-        // Ensure label doesn't sit on top of this object's handles: nudge away from overlapping handle circles
-        try {
-          var skipAvoid = !!(window.mouse && window.mouse.down && window.mouse.dragType === 'camera');
-          var handles = Array.isArray(window.resizeHandles) ? window.resizeHandles.filter(function(h){ return h && h.roomId === box.id; }) : [];
-          if (handles.length && !skipAvoid) {
-            // Use current rect to know size; fallback to approx if not measurable yet
-            var w = Math.max(40, (el.__w || 0) || 60), h = Math.max(18, (el.__h || 0) || 22);
-            var posX = left, posY = top;
-            function overlapsAny(x, y){
-              var Lx = x - w/2, Rx = x + w/2, Ty = y - h/2, By = y + h/2;
-              for (var hi=0; hi<handles.length; hi++){
-                var hh = handles[hi];
-                var hx = (hh.screenX + hh.width/2) / dpr; var hy = (hh.screenY + hh.height/2) / dpr;
-                var hr = Math.max(hh.width, hh.height) / (2*dpr);
-                // Circle-rect overlap test: clamp circle center to rect
-                var cx = Math.max(Lx, Math.min(hx, Rx));
-                var cy = Math.max(Ty, Math.min(hy, By));
-                var dx = hx - cx, dy = hy - cy; if ((dx*dx + dy*dy) <= (hr*hr)) return { overlap:true, hx:hx, hy:hy };
-              }
-              return { overlap:false };
-            }
-            var tries = 0, maxTries = 4; var step = 20;
-            while (tries < maxTries){
-              var ov = overlapsAny(posX, posY); if (!ov.overlap) break;
-              // Push away from the nearest overlapping handle center
-              var dx = posX - ov.hx, dy = posY - ov.hy; var len = Math.hypot(dx,dy) || 1; posX += (dx/len) * step; posY += (dy/len) * step; tries++;
-            }
-            left = posX; top = posY;
-            el.style.left = left + 'px'; el.style.top = top + 'px';
-          }
-        } catch(_e) {}
+        // Keep label in fixed anchor; do not nudge away from handles
 
         // Edit button to the right of the label, vertically centered
         var eb = existingEdit[box.id];
@@ -220,13 +184,13 @@
           var rect = { width: el.__w, height: el.__h };
           var gap = 12; // base gap between pill and button
           var offsetRight = 25; // default extra shift
-          var editLeft = left + (rect.width/2) + gap + offsetRight;
-          var editTop = top; // center aligned vertically
+          var editLeft = Math.round(left + (rect.width/2) + gap + offsetRight);
+          var editTop = Math.round(top); // center aligned vertically
           eb.style.left = editLeft + 'px';
           eb.style.top = editTop + 'px';
         } catch(_e) {
-          eb.style.left = (left + 32 + 25) + 'px';
-          eb.style.top = top + 'px';
+          eb.style.left = Math.round(left + 32 + 25) + 'px';
+          eb.style.top = Math.round(top) + 'px';
         }
         // Show Edit only for the selected object; fade in via CSS transition
         if (!eb.__hudTransition) { eb.__hudTransition = true; eb.style.transition = 'opacity 150ms ease-out'; }
@@ -271,8 +235,8 @@
             var gapInline = 10, gapAfterRotate = 12; // spacing between items
             var rect2 = { width: (el.__w||60), height: (el.__h||22) };
             // Center of rotate button: to the right of the label pill
-            var rotCenterLeft = left + (rect2.width/2) + gapInline + rRad;
-            var rotCenterTop = top;
+            var rotCenterLeft = Math.round(left + (rect2.width/2) + gapInline + rRad);
+            var rotCenterTop = Math.round(top);
             rb.style.left = rotCenterLeft + 'px';
             rb.style.top = rotCenterTop + 'px';
             // Show Rotate only for the selected roof; hide otherwise (transition handled in CSS of the element)
@@ -286,9 +250,9 @@
             }
             // Move the Edit button to the right of the rotate button, aligned center
             var editHalf = 22; // room-edit-btn min width is 44px; use half for center offset
-            var ebCenterLeft = rotCenterLeft + rRad + gapAfterRotate + editHalf;
+            var ebCenterLeft = Math.round(rotCenterLeft + rRad + gapAfterRotate + editHalf);
             eb.style.left = ebCenterLeft + 'px';
-            eb.style.top = top + 'px';
+            eb.style.top = Math.round(top) + 'px';
           } catch(_posRot){}
         }
         seen[box.id] = true;

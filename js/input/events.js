@@ -166,6 +166,8 @@
       if (hitIdx !== -1) {
         selectedWallStripIndex = hitIdx;
         selectedRoomId = null; // clear any object selection
+        // Ensure measurements panel is visible for wall edits, too
+        try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
         // Ensure keyboard events (Delete) reach us
         try { if (!canvas.hasAttribute('tabindex')) canvas.setAttribute('tabindex','0'); canvas.focus({preventScroll:true}); } catch(_e) {}
         mouse.down = false; mouse.dragType = null; mouse.dragInfo = null;
