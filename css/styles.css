@@ -327,23 +327,24 @@
     /* no border */
   }
   .room-edit-btn:active { transform: translate(-50%, -50%) scale(0.96); }
-  /* Roof rotate button: circular 360° control */
+  /* Roof rotate button: match stairs 360 handle (violet circle, white border/text) */
   .roof-rotate-btn {
     position: absolute;
     z-index: 60;
     pointer-events: auto;
-    width: 32px; height: 32px; line-height: 30px; text-align: center;
-    border-radius: 16px; border: 1px solid rgba(0,0,0,0.15);
-    background: #fff; color: #007acc; font-weight: 700; font-size: 10px;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+    width: 32px; height: 32px; text-align: center;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 16px; border: 2px solid rgba(255,255,255,0.9);
+    background: #8b5cf6; color: #ffffff; font-weight: 700; font-size: 12px;
+    box-shadow: none;
     cursor: pointer;
-    transition: opacity 0s linear, transform 0.06s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    transition: opacity 0s linear, transform 0.06s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
   }
   .roof-rotate-btn:hover {
-    background: #007acc;
+    background: #7c3aed; /* slightly darker violet on hover */
     color: #ffffff;
-    border-color: #007acc;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    border-color: rgba(255,255,255,0.95);
+    box-shadow: none;
   }
   .roof-rotate-btn:active { transform: scale(0.96); }
   .label-edit-btn {

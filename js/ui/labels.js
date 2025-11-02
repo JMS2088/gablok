@@ -235,15 +235,17 @@
             rb.className = 'roof-rotate-btn';
             rb.setAttribute('data-id', box.id);
             rb.type = 'button';
-            rb.title = 'Rotate roof 45°';
-            rb.textContent = '360°';
+            rb.title = 'Rotate roof 22.5°';
+            // Match stairs label text (no degree symbol)
+            rb.textContent = '360';
             rb.addEventListener('click', function(e){
               e.stopPropagation();
               try {
                 var r = findObjectById(box.id); if (!r) return;
-                r.rotation = ((r.rotation || 0) + 45) % 360;
+                var delta = 22.5;
+                r.rotation = ((r.rotation || 0) + delta) % 360;
                 if (typeof saveProjectSilently==='function') saveProjectSilently();
-                if (typeof updateStatus==='function') updateStatus('Roof rotated 45°');
+                if (typeof updateStatus==='function') updateStatus('Roof rotated ' + delta + '°');
                 if (typeof renderLoop==='function') renderLoop();
               } catch(_rot){}
             });
