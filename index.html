@@ -189,22 +189,23 @@
 			<div class="dropdown-item" data-action="obj">⬇ 3D - OBJ</div>
 			<div class="dropdown-item" data-action="pdf">📄 PDF (Export Views)</div>
 			<div class="dropdown-item" data-action="json-download">⬇ JSON</div>
+			<div class="dropdown-item" data-action="dxf-export">⬇ Floorplan (DXF)</div>
+			<div class="dropdown-item" data-action="dwg-export">⬇ Floorplan (DWG)</div>
 			<div class="dropdown-item separator" aria-hidden="true"></div>
 			<div class="dropdown-title">Import</div>
 			<div class="dropdown-item" data-action="obj-upload">⬆ 3D - OBJ</div>
 			<div class="dropdown-item" data-action="pdf-floorplan-upload">⬆ Floorplan (PDF)</div>
 			<div class="dropdown-item" data-action="svg-floorplan-upload">⬆ Floorplan (SVG)</div>
+			<div class="dropdown-item" data-action="dxf-floorplan-upload">⬆ Floorplan (DXF)</div>
+			<div class="dropdown-item" data-action="dwg-floorplan-upload">⬆ Floorplan (DWG)</div>
 			<div class="dropdown-item" data-action="json-upload">⬆ JSON</div>
 		</div>
 	</div>
+	<!-- Navigation Compass: sits next to Main Menu dropdown -->
+	<div id="nav-compass" aria-label="North" title="North" style="width:44px; height:44px; display:flex; align-items:center; justify-content:center;">
+		<canvas id="nav-compass-canvas" width="44" height="44" style="width:44px; height:44px; pointer-events:none;"></canvas>
+	</div>
 </div>
-
-<!-- Always-visible navigation compass (top-right) -->
-<div id="nav-compass" aria-label="North" title="North" style="position:fixed; top:20px; right:20px; z-index:100; width:64px; height:64px; display:flex; align-items:center; justify-content:center; pointer-events:none;">
-	<canvas id="nav-compass-canvas" width="64" height="64" style="width:64px; height:64px;"></canvas>
-	<!-- Fallback if canvas not supported -->
-	<noscript><div style="width:64px; height:64px; border-radius:50%; border:1px solid #94a3b8;"></div></noscript>
- </div>
 
 <canvas id="canvas"></canvas>
 <div id="labels-3d"></div>
@@ -312,6 +313,8 @@
 <input type="file" id="upload-obj-file" accept=".obj" style="display:none" />
 <input type="file" id="upload-pdf-floorplan" accept="application/pdf" style="display:none" />
 <input type="file" id="upload-svg-floorplan" accept="image/svg+xml,.svg" style="display:none" />
+<input type="file" id="upload-dxf-floorplan" accept=".dxf,application/dxf,application/x-dxf,text/plain" style="display:none" />
+<input type="file" id="upload-dwg-floorplan" accept=".dwg,application/acad,application/x-acad,application/autocad-dwg" style="display:none" />
 
 <!-- Floorplan Import Modal -->
 <div id="floorplan-modal" style="display:none; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center;">

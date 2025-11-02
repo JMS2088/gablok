@@ -365,9 +365,10 @@
       ctx.strokeStyle='rgba(203,213,225,0.9)';
       ctx.beginPath(); ctx.moveTo(cx-r+4,cy); ctx.lineTo(cx+r-4,cy); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(cx,cy-r+4); ctx.lineTo(cx,cy+r-4); ctx.stroke();
-      // Cardinal labels: flip N/S based on 2D orientation sign to match 2D compass
-      ctx.fillStyle = 'rgba(226,232,240,0.95)';
-      ctx.font = 'bold 12px system-ui, sans-serif';
+  // Cardinal labels: flip N/S based on 2D orientation sign to match 2D compass
+  ctx.fillStyle = 'rgba(226,232,240,0.95)';
+  var fontPx3D = 8; // fixed 8px per request
+  ctx.font = 'bold ' + fontPx3D + 'px system-ui, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       var nY = (sgn===1) ? (cy - r + 10) : (cy + r - 10);
       var sY = (sgn===1) ? (cy + r - 10) : (cy - r + 10);
@@ -390,14 +391,18 @@
         var c = document.getElementById('nav-compass-canvas');
         if (!c) return;
         var dpr = (window.devicePixelRatio||1);
-        var cssW = 64, cssH = 64;
+        // Adapt to the canvas' CSS size in the toolbar (fallback to attributes)
+        var cssW = Math.max(32, Math.floor((c.clientWidth||c.width||44)));
+        var cssH = Math.max(32, Math.floor((c.clientHeight||c.height||44)));
         if (c.width !== Math.floor(cssW*dpr) || c.height !== Math.floor(cssH*dpr)){
           c.width = Math.floor(cssW*dpr); c.height = Math.floor(cssH*dpr);
-          c.style.width = cssW+'px'; c.style.height = cssH+'px';
+          // Preserve existing CSS width/height if set in HTML; otherwise set from computed
+          if (!c.style.width) c.style.width = cssW+'px';
+          if (!c.style.height) c.style.height = cssH+'px';
         }
         var cx = c.getContext('2d'); if(!cx) return; cx.setTransform(1,0,0,1,0,0); cx.clearRect(0,0,c.width,c.height);
         cx.save(); cx.scale(dpr, dpr);
-        var r = 28; var margin = (cssW/2 - r);
+        var r = Math.max(14, Math.min(28, Math.floor(Math.min(cssW, cssH)/2 - 4)));
         var x = (cssW/2), y = (cssH/2);
         var sgn = (window.__plan2d && (window.__plan2d.yFromWorldZSign===-1 || window.__plan2d.yFromWorldZSign===1)) ? window.__plan2d.yFromWorldZSign : 1;
         // Base circle
@@ -406,8 +411,8 @@
         cx.strokeStyle='rgba(203,213,225,0.9)';
         cx.beginPath(); cx.moveTo(x-r+4,y); cx.lineTo(x+r-4,y); cx.stroke();
         cx.beginPath(); cx.moveTo(x,y-r+4); cx.lineTo(x,y+r-4); cx.stroke();
-        // Labels (flip N/S with sign)
-        cx.fillStyle='rgba(226,232,240,0.95)'; cx.font='bold 12px system-ui, sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
+  // Labels (flip N/S with sign) - fixed 8px per request
+  cx.fillStyle='rgba(226,232,240,0.95)'; var fontPxNav = 8; cx.font='bold ' + fontPxNav + 'px system-ui, sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
         var nY = (sgn===1) ? (y - r + 10) : (y + r - 10);
         var sY = (sgn===1) ? (y + r - 10) : (y - r + 10);
         cx.fillText('N', x, nY);
@@ -416,8 +421,10 @@
         cx.fillText('W', x - r + 10, y);
         // Arrow
         cx.beginPath();
-        if (sgn === 1) { cx.moveTo(x, y - r + 6); cx.lineTo(x - 5, y - r + 14); cx.lineTo(x + 5, y - r + 14); }
-        else { cx.moveTo(x, y + r - 6); cx.lineTo(x - 5, y + r - 14); cx.lineTo(x + 5, y + r - 14); }
+        var tip = Math.max(4, Math.floor(r*0.22));
+        var base = Math.max(3, Math.floor(r*0.18));
+        if (sgn === 1) { cx.moveTo(x, y - r + tip); cx.lineTo(x - base, y - r + tip + (base*1.6)); cx.lineTo(x + base, y - r + tip + (base*1.6)); }
+        else { cx.moveTo(x, y + r - tip); cx.lineTo(x - base, y + r - tip - (base*1.6)); cx.lineTo(x + base, y + r - tip - (base*1.6)); }
         cx.closePath(); cx.fillStyle='#3b82f6'; cx.fill();
         cx.restore();
       } catch(_e) { /* non-fatal */ }

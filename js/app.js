@@ -152,10 +152,14 @@ function __wireAppUi(){
           case 'obj': exportOBJ && exportOBJ(); break;
           case 'pdf': exportPdfFromCanvas(); break;
           case 'json-download': download('gablok-project.json', serializeProject && serializeProject() || '{}', 'application/json'); try{ updateStatus('Exported JSON'); }catch(_){} break;
+          case 'dxf-export': { if (window.FileIO) { FileIO.export('dxf'); } else if (window.DXF) { DXF.exportProject(); } break; }
+          case 'dwg-export': { if (window.FileIO) { FileIO.export('dwg'); } else if (window.DWG) { DWG.exportProject(); } break; }
           case 'json-upload': { var f=document.getElementById('upload-file'); if(f) f.click(); } break;
           case 'obj-upload': { var f2=document.getElementById('upload-obj-file'); if(f2) f2.click(); } break;
           case 'pdf-floorplan-upload': { var f3=document.getElementById('upload-pdf-floorplan'); if(f3) f3.click(); } break;
           case 'svg-floorplan-upload': { var f4=document.getElementById('upload-svg-floorplan'); if(f4) f4.click(); } break;
+          case 'dxf-floorplan-upload': { var f5=document.getElementById('upload-dxf-floorplan'); if(f5) f5.click(); } break;
+          case 'dwg-floorplan-upload': { var f6=document.getElementById('upload-dwg-floorplan'); if(f6) f6.click(); } break;
           default: break;
         }
       }catch(err){ /* ignore */ }
@@ -182,6 +186,10 @@ function __wireAppUi(){
       updateStatus && updateStatus('PDF loaded');
     } catch(err){ try{ updateStatus('PDF load failed'); }catch(_){} } finally { pdfIn.value=''; } }; }
     // SVG handler already defined above for upload-svg-floorplan
+    var dxfIn = document.getElementById('upload-dxf-floorplan');
+    if(dxfIn){ dxfIn.onchange = async function(e){ try{ var f=e.target.files && e.target.files[0]; if(!f) return; if (window.DXF && typeof DXF.importFile==='function') { await DXF.importFile(f); } } catch(err){ try{ updateStatus('DXF load failed'); }catch(_){} } finally { dxfIn.value=''; } }; }
+    var dwgIn = document.getElementById('upload-dwg-floorplan');
+    if(dwgIn){ dwgIn.onchange = async function(e){ try{ var f=e.target.files && e.target.files[0]; if(!f) return; if (window.DWG && typeof DWG.importFile==='function') { await DWG.importFile(f); } } catch(err){ try{ updateStatus('DWG load failed'); }catch(_){} } finally { dwgIn.value=''; } }; }
   })();
 
   // Floorplan modal: floor toggle wiring
@@ -248,9 +256,15 @@ function openFloorplanModal(opts){
   __fp.active = true;
   __fp.pdf = opts.pdf || null;
   __fp.page = opts.page || null;
+  // Allow direct image/canvas background (e.g., from DXF rasterization)
+  if (opts.image) {
+    __fp.page = null; __fp.pdf = null;
+    __fp.pageBitmap = { img: opts.image, dx: 0, dy: 0, dw: 0, dh: 0, external: true };
+  } else {
+    __fp.pageBitmap = null;
+  }
   __fp.pageNum = 1;
   __fp.pageCount = (__fp.pdf && __fp.pdf.numPages) ? __fp.pdf.numPages : 1;
-  __fp.pageBitmap = null;
   __fp.viewport = null;
   __fp.pxPerMeter = null;
   __fp.mode = 'calibrate';
@@ -308,8 +322,16 @@ async function renderFloorplanPage(){
       ctx2d.drawImage(off, 0, 0, off.width, off.height, dx, dy, drawW, drawH);
       // Save fitted transform metadata
       __fp.pageBitmap = { img: off, dx: dx, dy: dy, dw: drawW, dh: drawH };
+    } else if (__fp.pageBitmap && __fp.pageBitmap.img) {
+      // Draw provided image/canvas into visible canvas
+      var img = __fp.pageBitmap.img;
+      var scaleFit2 = Math.min(c.width / img.width, c.height / img.height);
+      var drawW2 = Math.floor(img.width * scaleFit2), drawH2 = Math.floor(img.height * scaleFit2);
+      var dx2 = Math.floor((c.width - drawW2) / 2), dy2 = Math.floor((c.height - drawH2) / 2);
+      ctx2d.drawImage(img, 0, 0, img.width, img.height, dx2, dy2, drawW2, drawH2);
+      __fp.pageBitmap.dx = dx2; __fp.pageBitmap.dy = dy2; __fp.pageBitmap.dw = drawW2; __fp.pageBitmap.dh = drawH2;
     } else {
-      // No page, fill bg
+      // No page/image, fill bg
       ctx2d.fillStyle = '#0b1020'; ctx2d.fillRect(0,0,c.width,c.height);
     }
     drawFloorplanOverlay();
