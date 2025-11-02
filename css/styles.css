@@ -347,7 +347,8 @@
     border-color: rgba(255,255,255,0.95);
     box-shadow: none;
   }
-  .roof-rotate-btn:active { transform: scale(0.96); }
+  /* Prevent any positional/scale change on press to keep button static */
+  .roof-rotate-btn:active { transform: translate(-50%, -50%); }
   .label-edit-btn {
     z-index: 60; /* above labels */
     border: 1px solid rgba(0,0,0,0.15);

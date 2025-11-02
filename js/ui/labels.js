@@ -47,11 +47,9 @@
             return Math.max(0.0, (obj.anchorY!=null? obj.anchorY : 0.2));
           }
           if (obj.type === 'stairs') {
-            // Place label closer to the lower portion of the stairs so it appears near the geometry
+            // Middle-center vertically for stairs label
             var h = (obj.height!=null ? obj.height : 3.0);
-            // Aim around 0.8–1.0m above the floor, capped relative to total height
-            var rel = Math.min(1.0, Math.max(0.5, h * 0.35));
-            return lvlY + rel;
+            return lvlY + (h/2);
           }
           if (obj.type === 'furniture') {
             var elev = Math.max(0, obj.elevation||0);
@@ -94,12 +92,8 @@
 
       function placeLabelFor(box){
         if(!box || !box.id) return;
-        var anchorPos;
-        if (box.type === 'stairs') {
-          anchorPos = stairsLabelAnchor(box);
-        } else {
-          anchorPos = { x: box.x||0, y: anchorYFor(box), z: box.z||0 };
-        }
+        // Anchor labels to the object's center for all types so UI does not shift when rotating
+        var anchorPos = { x: box.x||0, y: anchorYFor(box), z: box.z||0 };
         var p = project3D(anchorPos.x, anchorPos.y, anchorPos.z); if(!p) return;
   var dpr = window.devicePixelRatio||1;
   var targetLeft = (p.x / dpr), targetTop = (p.y / dpr);
@@ -277,7 +271,7 @@
               e.stopPropagation();
               try {
                 var r = findObjectById(box.id); if (!r) return;
-                var delta = (r.type === 'garage') ? 90 : 22.5;
+                var delta = 45; // rotate by 45° for all types
                 r.rotation = ((r.rotation || 0) + delta) % 360;
                 if (typeof saveProjectSilently==='function') saveProjectSilently();
                 if (typeof updateStatus==='function') updateStatus((r.name||'Item') + ' rotated ' + delta + '°');
@@ -288,8 +282,7 @@
           }
           try {
             // Title reflects step size
-            var stepTxt = (box.type === 'garage') ? 'Rotate 90°' : 'Rotate 22.5°';
-            rb.title = stepTxt;
+            rb.title = 'Rotate 45°';
             // Inline layout: [Label] [Rotate 360] [Edit]
             var rSize = 32, rRad = rSize/2; // rotate button is 32x32
             var gapInline = 10, gapAfterRotate = 12; // spacing between items
