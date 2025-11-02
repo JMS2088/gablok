@@ -231,6 +231,9 @@ function drawBalcony(balcony) {
 
 function drawHandlesForBalcony(balcony) {
   try {
+    if (window.__useUnifiedHUDHandles) return; // unified HUD draws handles
+    // Show handles only for the actively selected object
+    if (!window.selectedRoomId || window.selectedRoomId !== balcony.id) return;
     var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(balcony.id) : 1.0;
     var isActive = selectedRoomId === balcony.id;
     var handleY = balcony.level * 3.5 + (balcony.height||3.0) * 0.5;

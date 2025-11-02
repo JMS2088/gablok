@@ -4,6 +4,9 @@
 
 function drawHandlesForPergola(pergola) {
   try {
+    if (window.__useUnifiedHUDHandles) return; // unified HUD draws handles
+    // Show handles only for the actively selected object
+    if (!window.selectedRoomId || window.selectedRoomId !== pergola.id) return;
     var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(pergola.id) : 1.0;
     var isActive = selectedRoomId === pergola.id;
     var handleY = (pergola.totalHeight!=null ? pergola.totalHeight : (pergola.height||2.2)) * 0.5;

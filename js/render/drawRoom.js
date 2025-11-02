@@ -274,6 +274,9 @@ function drawRoom(room) {
 function drawHandlesForRoom(room) {
   try {
     if (!room) return;
+    if (window.__useUnifiedHUDHandles) return; // unified HUD draws handles
+    // Show handles only for the actively selected object
+    if (!window.selectedRoomId || window.selectedRoomId !== room.id) return;
     var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(room.id) : 1.0;
     var isActive = selectedRoomId === room.id;
     var levelY = (room.level || 0) * 3.5;

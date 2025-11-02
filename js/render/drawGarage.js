@@ -160,6 +160,9 @@ function drawGarage(garage) {
 
 function drawHandlesForGarage(garage) {
   try {
+    if (window.__useUnifiedHUDHandles) return; // unified HUD draws handles
+    // Show handles only for the actively selected object
+    if (!window.selectedRoomId || window.selectedRoomId !== garage.id) return;
     var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(garage.id) : 1.0;
     var isActive = selectedRoomId === garage.id;
     dbg('Drawing garage handles');

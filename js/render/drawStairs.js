@@ -112,6 +112,9 @@ function drawStairs(stairs) {
 
 function drawHandlesForStairs(stairs) {
   try {
+    if (window.__useUnifiedHUDHandles) return; // unified HUD draws handles
+    // Show handles only for the actively selected object
+    if (!window.selectedRoomId || window.selectedRoomId !== stairs.id) return;
     var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(stairs.id) : 1.0;
     var isActive = selectedRoomId === stairs.id;
     var handleY = (stairs.height||3.0) * 0.5;

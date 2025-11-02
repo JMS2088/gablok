@@ -87,6 +87,9 @@ function drawPool(pool) {
 
 function drawHandlesForPool(pool) {
   try {
+    if (window.__useUnifiedHUDHandles) return; // unified HUD draws handles
+    // Show handles only for the actively selected object
+    if (!window.selectedRoomId || window.selectedRoomId !== pool.id) return;
     var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(pool.id) : 1.0;
     var isActive = selectedRoomId === pool.id;
     var REGULAR_HANDLE_RADIUS = HANDLE_RADIUS;

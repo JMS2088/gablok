@@ -745,6 +745,7 @@
   };
   if (typeof window.updatePerfStatsOverlay === 'undefined') window.updatePerfStatsOverlay = function(){};
   // Minimal measurements panel updater (live-edit friendly)
+  if (typeof window.__measPinnedId === 'undefined') window.__measPinnedId = null; // remembers last valid selection while editing
   window.updateMeasurements = function(){
     try {
       var panel = document.getElementById('measurements'); if(!panel) return;
@@ -754,8 +755,17 @@
       function setIfNotActive(id, v){ var el=document.getElementById(id); if(!el) return; if (document.activeElement === el) return; el.value = (v==null?'':v); }
       function txt(id, v){ var el=document.getElementById(id); if(el){ el.textContent = (v==null?'--':v); } }
 
+      // If user is currently editing within the panel, don't clear values even if selection flickers
+      var focusInside = false;
+      try { var ae = document.activeElement; focusInside = !!(ae && panel.contains(ae)); } catch(_f){}
+      if (!sel && focusInside && window.__measPinnedId) {
+        try { var pinned = findObjectById(window.__measPinnedId); if (pinned) sel = pinned; } catch(_p){}
+      }
+
       // If no object is selected, but a wall strip is selected, show its info
       if (!sel) {
+        // While actively editing, keep current values and avoid clearing the panel
+        if (focusInside) return;
         var wsIdx = (typeof window.selectedWallStripIndex==='number') ? window.selectedWallStripIndex : -1;
         if (wsIdx != null && wsIdx > -1 && Array.isArray(window.wallStrips) && wallStrips[wsIdx]) {
           var w = wallStrips[wsIdx];
@@ -787,6 +797,8 @@
       var t = (sel && sel.type) || 'room';
       var heightProp = 'height';
       if (t === 'pergola') heightProp = 'totalHeight';
+      // Remember the last valid selection while editing
+      try { if (sel && sel.id) window.__measPinnedId = sel.id; } catch(_pin){}
       // Values
       var wv = (sel.width!=null? sel.width : 0);
       var dv = (sel.depth!=null? sel.depth : 0);
@@ -804,7 +816,8 @@
         save.__wired = true;
         save.addEventListener('click', function(){
           try {
-            var s = findObjectById(window.selectedRoomId); if(!s) return;
+            var sid = window.selectedRoomId || window.__measPinnedId;
+            var s = sid ? findObjectById(sid) : null; if(!s) return;
             var gv = function(id, def){ var el=document.getElementById(id); var v=parseFloat(el && el.value); return isFinite(v)? v : def; };
             s.name = (document.getElementById('input-name')||{}).value || s.name;
             s.width = Math.max(0.5, gv('input-width', s.width||1));
@@ -823,7 +836,8 @@
         panel.__measWired = true;
         function onLiveChange(){
           try {
-            var s = findObjectById(window.selectedRoomId); if(!s) return;
+            var sid = window.selectedRoomId || window.__measPinnedId;
+            var s = sid ? findObjectById(sid) : null; if(!s) return;
             var nameEl = document.getElementById('input-name'); if (nameEl && document.activeElement === nameEl) { s.name = nameEl.value || s.name; }
             function clampNum(id, def, minV, maxV){ var el=document.getElementById(id); if(!el) return def; var v=parseFloat(el.value); if(!isFinite(v)) return def; if(minV!=null) v=Math.max(minV,v); if(maxV!=null) v=Math.min(maxV,v); return v; }
             // Apply changes from active or recently changed inputs

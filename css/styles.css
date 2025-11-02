@@ -334,6 +334,7 @@
     pointer-events: auto;
     width: 32px; height: 32px; text-align: center;
     display: flex; align-items: center; justify-content: center;
+    transform: translate(-50%, -50%);
     border-radius: 16px; border: 2px solid rgba(255,255,255,0.9);
     background: #8b5cf6; color: #ffffff; font-weight: 700; font-size: 12px;
     box-shadow: none;

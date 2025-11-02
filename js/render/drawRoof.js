@@ -185,6 +185,9 @@ function drawRoof(roof) {
 
 function drawHandlesForRoof(roof, apexY){
   try {
+    if (window.__useUnifiedHUDHandles) return; // unified HUD draws handles
+    // Show handles only for the actively selected roof
+    if (!window.selectedRoomId || window.selectedRoomId !== roof.id) return;
     var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(roof.id) : 1.0;
     var isActive = selectedRoomId === roof.id;
     var baseY = (typeof roof.baseHeight==='number' && isFinite(roof.baseHeight)) ? roof.baseHeight : 3.0;
