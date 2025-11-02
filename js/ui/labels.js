@@ -199,8 +199,30 @@
         var globalA = Math.max(0, Math.min(1, (window.__uiFadeAlpha||1.0)));
   var cssLeft = Math.round(left), cssTop = Math.round(top);
   el.style.left = cssLeft + 'px'; el.style.top = cssTop + 'px';
-        // Labels must always be visible and clickable (do not fade out other labels)
-        el.style.opacity = '1';
+        // Labels must always be visible and clickable.
+        // Policy: when viewing first floor, fade ground-floor labels slightly;
+        // additionally, apply a distance-based fade so far labels recede a bit.
+        var labelAlpha = 1.0;
+        try {
+          if (typeof window.currentFloor === 'number' && window.currentFloor === 1 && ((box.level||0) === 0)) {
+            labelAlpha *= 0.6; // subtle fade for ground floor while on first floor
+          }
+        } catch(_fa) {}
+        // Distance fade: compute camera-relative depth and fade between near/far thresholds
+        try {
+          var depth = (typeof p === 'object' && p && typeof p._cz === 'number') ? p._cz : ((window.camera && typeof camera.distance==='number') ? camera.distance : 12);
+          var camD = (window.camera && typeof camera.distance==='number') ? camera.distance : 12;
+          var nearD = Math.max(4, camD * 0.6); // full color until ~60% of current zoom distance
+          var farD = Math.max(8, camD * 1.8);  // start to fade past ~180% of current zoom distance
+          var minAlpha = 0.65;                 // keep labels readable even when far
+          var t = 0;
+          if (farD > nearD) t = Math.max(0, Math.min(1, (depth - nearD) / (farD - nearD)));
+          var distAlpha = 1 - t * (1 - minAlpha); // lerp(1 -> minAlpha)
+          // Keep selected label fully opaque for clarity
+          var isSelected = (window.selectedRoomId && window.selectedRoomId === box.id);
+          if (!isSelected) labelAlpha *= distAlpha;
+        } catch(_df) {}
+        el.style.opacity = String(Math.max(0, Math.min(1, labelAlpha)));
         el.style.pointerEvents = '';
 
         // Keep label in fixed anchor; do not nudge away from handles
