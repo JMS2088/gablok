@@ -133,24 +133,61 @@
               if (typeof renderLoop==='function') renderLoop();
             } catch(_) {}
           });
-          // Drag room by label
-          var startDrag = function(clientX, clientY){
+          // Drag-by-label with movement threshold (don't start drag on simple click/tap)
+          var dragActive = false, downX = 0, downY = 0, downT = 0;
+          function beginPotentialDrag(clientX, clientY){
+            dragActive = false; downX = clientX; downY = clientY; downT = (performance && performance.now)? performance.now(): Date.now();
+            // Ensure floor alignment immediately (so selection/drag reflects correct floor)
             try {
-              window.selectedRoomId = box.id;
-              try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
-              window.mouse.dragType = dragTypeFor(box);
-              window.mouse.dragInfo = { roomId: box.id, startX: clientX, startY: clientY, originalX: box.x, originalZ: box.z };
-              window.mouse.down = true;
-              try { if (canvas) canvas.style.cursor = 'grabbing'; } catch(_e){}
-              window._uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now();
-            } catch(_e){}
-          };
-          el.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation();
-            // Ensure drag happens on the correct floor
-            try { var lvl = (typeof box.level === 'number' && isFinite(box.level)) ? box.level : 0; if (typeof window.currentFloor==='number' && window.currentFloor !== lvl){ window.currentFloor = lvl; var nativeSel=document.getElementById('levelSelect'); if(nativeSel) nativeSel.value=String(lvl); var btnText=document.getElementById('levelButtonText'); if(btnText) btnText.textContent = (lvl===1 ? 'First Floor' : 'Ground Floor'); } } catch(_e) {}
-            startDrag(e.clientX, e.clientY);
-          });
-          el.addEventListener('touchstart', function(e){ try{ var t=e.touches&&e.touches[0]; if(t){ startDrag(t.clientX, t.clientY); e.preventDefault(); e.stopPropagation(); } }catch(_e){} }, { passive:false });
+              var lvl = (typeof box.level === 'number' && isFinite(box.level)) ? box.level : 0;
+              if (typeof window.currentFloor==='number' && window.currentFloor !== lvl){
+                window.currentFloor = lvl;
+                var nativeSel=document.getElementById('levelSelect'); if(nativeSel) nativeSel.value=String(lvl);
+                var btnText=document.getElementById('levelButtonText'); if(btnText) btnText.textContent = (lvl===1 ? 'First Floor' : 'Ground Floor');
+              }
+            } catch(_e) {}
+            // Attach move/up listeners to start drag only after threshold
+            function onMove(ev){
+              var cx = ev.clientX != null ? ev.clientX : (ev.touches && ev.touches[0] && ev.touches[0].clientX);
+              var cy = ev.clientY != null ? ev.clientY : (ev.touches && ev.touches[0] && ev.touches[0].clientY);
+              if (cx == null || cy == null) return;
+              var dx = cx - downX, dy = cy - downY;
+              if (!dragActive && (Math.abs(dx) > 3 || Math.abs(dy) > 3)){
+                // Start actual drag now
+                try {
+                  window.selectedRoomId = box.id;
+                  try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
+                  window.mouse.dragType = dragTypeFor(box);
+                  window.mouse.dragInfo = { roomId: box.id, startX: cx, startY: cy, originalX: box.x, originalZ: box.z };
+                  window.mouse.down = true;
+                  try { if (canvas) canvas.style.cursor = 'grabbing'; } catch(_e){}
+                  window._uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now();
+                  dragActive = true;
+                } catch(_e2){}
+              }
+            }
+            function onEnd(){
+              try { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onEnd); } catch(_r){}
+            }
+            function onTouchEnd(){
+              try { document.removeEventListener('touchmove', onMove, { passive:false }); document.removeEventListener('touchend', onTouchEnd); } catch(_r){}
+              // If no drag occurred, treat as a tap selection
+              if (!dragActive){
+                try {
+                  window.selectedRoomId = box.id;
+                  if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible();
+                  if (typeof updateStatus==='function') updateStatus((box.name||'Item')+' selected');
+                  if (typeof renderLoop==='function') renderLoop();
+                } catch(_sel){}
+              }
+            }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onEnd);
+            document.addEventListener('touchmove', onMove, { passive:false });
+            document.addEventListener('touchend', onTouchEnd);
+          }
+          el.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); beginPotentialDrag(e.clientX, e.clientY); });
+          el.addEventListener('touchstart', function(e){ try{ var t=e.touches&&e.touches[0]; if(t){ beginPotentialDrag(t.clientX, t.clientY); e.preventDefault(); e.stopPropagation(); } }catch(_e){} }, { passive:false });
           container.appendChild(el);
         } else {
           var newTxt = (box.name || 'Room');
@@ -192,12 +229,12 @@
           eb.style.left = Math.round(left + 32 + 25) + 'px';
           eb.style.top = Math.round(top) + 'px';
         }
-        // Show Edit only for the selected object; fade in via CSS transition
+        // Show Edit only for the selected object; keep visible (no inactivity fade)
         if (!eb.__hudTransition) { eb.__hudTransition = true; eb.style.transition = 'opacity 150ms ease-out'; }
         (function(){
           var selId2 = (typeof window.selectedRoomId==='string' || typeof window.selectedRoomId==='number') ? window.selectedRoomId : null;
           if (selId2 && selId2 === box.id) {
-            eb.style.opacity = String(Math.max(0, Math.min(1, 1 * globalA)));
+            eb.style.opacity = '1';
             eb.style.pointerEvents = '';
           } else {
             eb.style.opacity = '0';
@@ -205,31 +242,32 @@
           }
         })();
 
-        // Roof rotate button (360°) above the label; rotates 45° per press
-        if (box.type === 'roof') {
+        // Rotate button (360°) for roof, stairs, and garage
+        if (box.type === 'roof' || box.type === 'stairs' || box.type === 'garage') {
           var rb = existingRotate[box.id];
           if (!rb) {
             rb = document.createElement('button');
-            rb.className = 'roof-rotate-btn';
+            rb.className = 'roof-rotate-btn'; // reuse style for all rotate buttons
             rb.setAttribute('data-id', box.id);
             rb.type = 'button';
-            rb.title = 'Rotate roof 22.5°';
-            // Match stairs label text (no degree symbol)
             rb.textContent = '360';
             rb.addEventListener('click', function(e){
               e.stopPropagation();
               try {
                 var r = findObjectById(box.id); if (!r) return;
-                var delta = 22.5;
+                var delta = (r.type === 'garage') ? 90 : 22.5;
                 r.rotation = ((r.rotation || 0) + delta) % 360;
                 if (typeof saveProjectSilently==='function') saveProjectSilently();
-                if (typeof updateStatus==='function') updateStatus('Roof rotated ' + delta + '°');
+                if (typeof updateStatus==='function') updateStatus((r.name||'Item') + ' rotated ' + delta + '°');
                 if (typeof renderLoop==='function') renderLoop();
               } catch(_rot){}
             });
             container.appendChild(rb);
           }
           try {
+            // Title reflects step size
+            var stepTxt = (box.type === 'garage') ? 'Rotate 90°' : 'Rotate 22.5°';
+            rb.title = stepTxt;
             // Inline layout: [Label] [Rotate 360] [Edit]
             var rSize = 32, rRad = rSize/2; // rotate button is 32x32
             var gapInline = 10, gapAfterRotate = 12; // spacing between items
@@ -239,10 +277,10 @@
             var rotCenterTop = Math.round(top);
             rb.style.left = rotCenterLeft + 'px';
             rb.style.top = rotCenterTop + 'px';
-            // Show Rotate only for the selected roof; hide otherwise (transition handled in CSS of the element)
+            // Show Rotate only for the selected item; keep visible (no inactivity fade)
             var selId3 = (typeof window.selectedRoomId==='string' || typeof window.selectedRoomId==='number') ? window.selectedRoomId : null;
             if (selId3 && selId3 === box.id) {
-              rb.style.opacity = String(Math.max(0, Math.min(1, 1 * globalA)));
+              rb.style.opacity = '1';
               rb.style.pointerEvents = '';
             } else {
               rb.style.opacity = '0';
@@ -288,15 +326,16 @@
       // Clear previous frame's hit regions
       window.resizeHandles.length = 0;
 
-      var isActive = true;
-      var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(o.id) : 1.0;
-      var gA = (typeof window.__uiFadeAlpha==='number') ? window.__uiFadeAlpha : 1.0;
+  var isActive = true;
+  var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(o.id) : 1.0;
+  // Selected HUD should not fade out with inactivity; ignore global UI fade for handles
+  var gA = 1.0;
       // Fade-in on selection change
       var nowT = (performance && performance.now)? performance.now(): Date.now();
       if (window.__hudPrevSelId !== sid) { window.__hudPrevSelId = sid; window.__hudSelChangeTime = nowT; }
       var t0 = (typeof window.__hudSelChangeTime==='number') ? window.__hudSelChangeTime : nowT;
       var fadeIn = Math.max(0, Math.min(1, (nowT - t0) / 220));
-      var alpha = Math.max(0, Math.min(1, objA * gA * fadeIn)); if (alpha <= 0) return;
+  var alpha = Math.max(0, Math.min(1, objA * /*no inactivity fade*/ 1.0 * fadeIn)); if (alpha <= 0) return;
 
       // Helpers
       function rotPoint(dx, dz){
