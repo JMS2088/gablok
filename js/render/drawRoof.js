@@ -25,7 +25,24 @@ function drawRoof(roof) {
       var dx = x - roof.x, dz = z - roof.z;
       return { x: roof.x + dx * Math.cos(rotRad) - dz * Math.sin(rotRad), z: roof.z + dx * Math.sin(rotRad) + dz * Math.cos(rotRad) };
     }
-    function P(x, y, z){ var pr = project3D(x,y,z); return pr; }
+    function P(x, y, z){
+      var pr = project3D(x,y,z);
+      if (pr) return pr;
+      // If a roof point is just behind the near plane, gently nudge it forward along camera forward
+      try {
+        var fwd = (window.__proj && Array.isArray(window.__proj.fwd)) ? window.__proj.fwd : null;
+        if (!fwd) return null;
+        var steps = [0.05, 0.15, 0.3, 0.6, 1.0];
+        for (var i=0;i<steps.length;i++){
+          var nx = x + fwd[0]*steps[i];
+          var ny = y + fwd[1]*steps[i];
+          var nz = z + fwd[2]*steps[i];
+          pr = project3D(nx, ny, nz);
+          if (pr) return pr;
+        }
+      } catch(e) { /* non-fatal */ }
+      return null;
+    }
 
     // Eave corners (world) at baseY
     var e0 = rot(roof.x - hw, roof.z - hd);
