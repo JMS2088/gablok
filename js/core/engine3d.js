@@ -149,6 +149,17 @@
         var s=window.wallStrips[ei]; if(!s) continue; existing[keyFor(s.x0,s.z0,s.x1,s.z1)] = true;
       }
       var added = Object.create(null);
+      // Helper: signed polygon area in XZ plane (shoelace); >0 => CCW, <0 => CW
+      function polySignedAreaXZ(pts){
+        try {
+          var s = 0; var n = (pts||[]).length; if (n < 3) return 0;
+          for (var ii=0; ii<n; ii++){
+            var a = pts[ii], b = pts[(ii+1)%n]; if(!a||!b) continue;
+            s += (a.x||0) * (b.z||0) - (b.x||0) * (a.z||0);
+          }
+          return s * 0.5;
+        } catch(_eA){ return 0; }
+      }
       for (var i=0; i<window.allRooms.length; i++){
         var r = window.allRooms[i]; if(!r) continue;
         var level = (r.level||0);
@@ -156,23 +167,48 @@
         var height = (typeof r.height==='number') ? r.height : 3.0;
         if (Array.isArray(r.footprint) && r.footprint.length>=2){
           var pts = r.footprint;
+          var area = polySignedAreaXZ(pts);
+          var isCCW = (area > 0);
+          var interiorIsLeft = isCCW;
+          // Compute axis dominance for the room footprint
+          var minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+          for (var pi=0; pi<pts.length; pi++){ var pp=pts[pi]; if(!pp) continue; minX=Math.min(minX,pp.x||0); maxX=Math.max(maxX,pp.x||0); minZ=Math.min(minZ,pp.z||0); maxZ=Math.max(maxZ,pp.z||0); }
+          var spanX = (isFinite(minX)&&isFinite(maxX)) ? (maxX-minX) : 0;
+          var spanZ = (isFinite(minZ)&&isFinite(maxZ)) ? (maxZ-minZ) : 0;
+          var longerAxis = (spanX >= spanZ) ? 'x' : 'z';
           for (var k=0; k<pts.length; k++){
             var a = pts[k], b = pts[(k+1)%pts.length]; if(!a||!b) continue;
             var key = keyFor(a.x,a.z,b.x,b.z);
             if (existing[key] || added[key]) continue; // already have a user or room strip for this edge
-            window.wallStrips.push({ x0:a.x, z0:a.z, x1:b.x, z1:b.z, thickness:t, height:height, baseY:baseY, level:level, openings:[], [tag]:true });
+            var sdx = (b.x - a.x), sdz = (b.z - a.z);
+            var xDominant = Math.abs(sdx) >= Math.abs(sdz);
+            var isOuterBias = (xDominant && longerAxis==='x') || (!xDominant && longerAxis==='z');
+            // Determine which side should be used as the 'outer miter' side at corners
+            // If the room is CCW (interior is left), real outward is right. We want longer walls to form the exterior miter (use real outward),
+            // and shorter walls to form the interior miter (use inward).
+            var outerFaceLeft = isOuterBias ? (!interiorIsLeft) : (interiorIsLeft);
+            window.wallStrips.push({ x0:a.x, z0:a.z, x1:b.x, z1:b.z, thickness:t, height:height, baseY:baseY, level:level, openings:[], [tag]:true, __outerFaceLeft: outerFaceLeft });
             added[key] = true;
           }
         } else {
           // Rectangle from center/width/depth
           var hw = (r.width||0)/2, hd=(r.depth||0)/2; if(hw<=0||hd<=0) continue;
           var xL = (r.x||0) - hw, xR=(r.x||0) + hw, zT=(r.z||0) - hd, zB=(r.z||0) + hd;
+          var rectPts = [ {x:xL,z:zT}, {x:xR,z:zT}, {x:xR,z:zB}, {x:xL,z:zB} ];
+          var areaR = polySignedAreaXZ(rectPts);
+          var isCCWR = (areaR > 0);
+          var interiorIsLeftR = isCCWR;
+          var longerAxisR = ((r.width||0) >= (r.depth||0)) ? 'x' : 'z';
           var edges = [ [xL,zT,xR,zT], [xR,zT,xR,zB], [xR,zB,xL,zB], [xL,zB,xL,zT] ];
           for (var e=0; e<edges.length; e++){
             var E = edges[e];
             var key2 = keyFor(E[0],E[1],E[2],E[3]);
             if (existing[key2] || added[key2]) continue;
-            window.wallStrips.push({ x0:E[0], z0:E[1], x1:E[2], z1:E[3], thickness:t, height:height, baseY:baseY, level:level, openings:[], [tag]:true });
+            var edx = E[2]-E[0], edz = E[3]-E[1];
+            var xDom = Math.abs(edx) >= Math.abs(edz);
+            var isOuterBiasR = (xDom && longerAxisR==='x') || (!xDom && longerAxisR==='z');
+            var outerFaceLeftR = isOuterBiasR ? (!interiorIsLeftR) : (interiorIsLeftR);
+            window.wallStrips.push({ x0:E[0], z0:E[1], x1:E[2], z1:E[3], thickness:t, height:height, baseY:baseY, level:level, openings:[], [tag]:true, __outerFaceLeft: outerFaceLeftR });
             added[key2] = true;
           }
         }
@@ -637,6 +673,7 @@
       var h = Math.max(0.1, ws.height||3.0);
       var baseY = (typeof ws.baseY==='number') ? ws.baseY : ((ws.level||0)*3.5);
       var dx = x1-x0, dz = z1-z0; var len = Math.hypot(dx,dz)||1; var nx = -dz/len, nz = dx/len; // left normal
+      // Keep normals as-is; mitering will be symmetric at corners (no global flips)
       var hw = thick/2;
       var onLevel = (ws.level||0) === (currentFloor||0);
 
@@ -657,21 +694,196 @@
       var B = {x:x1+nx*hw, y:baseY, z:z1+nz*hw};
       var C = {x:x1-nx*hw, y:baseY, z:z1-nz*hw};
       var D = {x:x0-nx*hw, y:baseY, z:z0-nz*hw};
+
+  // --- Corner and junction correction helpers ---
+      function angleBetween(u,v){ var dot=u.x*v.x + u.z*v.z; var ll=Math.max(1e-6, Math.hypot(u.x,u.z)*Math.hypot(v.x,v.z)); return Math.acos(Math.max(-1,Math.min(1,dot/ll))); }
+      // Compute tangent for this strip (from start->end)
+      var tx = dx/len, tz = dz/len; var tvec = {x:tx, z:tz};
+      // Neighbor directions that share this endpoint (for L-corners)
+      function getNeighborDirsAt(wx, wz){
+        var dirs = [];
+        try {
+          var arr = window.wallStrips || [];
+          for (var ii=0; ii<arr.length; ii++){
+            var s = arr[ii]; if(!s || s===ws) continue;
+            var isStart = (Math.hypot((s.x0||0)-wx, (s.z0||0)-wz) < 1e-3);
+            var isEnd   = (Math.hypot((s.x1||0)-wx, (s.z1||0)-wz) < 1e-3);
+            if (!isStart && !isEnd) continue;
+            var ox = isStart ? (s.x1||0) : (s.x0||0);
+            var oz = isStart ? (s.z1||0) : (s.z0||0);
+            var vx = ox - wx, vz = oz - wz; var L = Math.hypot(vx,vz);
+            if (L > 1e-6){ dirs.push({x:vx/L, z:vz/L}); }
+          }
+        } catch(_eNd) {}
+        return dirs;
+      }
+      // Small vector helpers
+      function _norm2(x,z){ return Math.hypot(x,z)||0; }
+      function _normalize2(x,z){ var L=_norm2(x,z); if(L<1e-6) return {x:0,z:0}; return {x:x/L, z:z/L}; }
+      function _bevelPoint(cornerX,cornerZ, n1x,n1z, n2x,n2z, hw){ var sx=n1x+n2x, sz=n1z+n2z; var n=_normalize2(sx,sz); if(n.x===0 && n.z===0){ // fallback to n1
+          n = _normalize2(n1x+n2x*0.0001, n1z+n2z*0.0001);
+        }
+        return { x: cornerX + n.x*hw, z: cornerZ + n.z*hw };
+      }
+      function _clampMiter(corner, interPt, n1x,n1z, n2x,n2z, hw, fallback){
+        try{
+          if (!interPt) return _bevelPoint(corner.x, corner.z, n1x,n1z, n2x,n2z, hw);
+          var dist = Math.hypot(interPt.x - corner.x, interPt.z - corner.z);
+          var maxLen = hw * 3.0; // clamp very sharp miters
+          if (!isFinite(dist) || dist > maxLen) return _bevelPoint(corner.x, corner.z, n1x,n1z, n2x,n2z, hw);
+          return interPt;
+        } catch(_cm){ return fallback || interPt; }
+      }
+      // Basic 2D line intersection: p + a*d = q + b*e
+      function intersectLines(p, d, q, e){
+        var den = d.x * (-e.z) - d.z * (-e.x);
+        if (Math.abs(den) < 1e-6) return null;
+        var rx = q.x - p.x, rz = q.z - p.z;
+        var a = (rx * (-e.z) - rz * (-e.x)) / den;
+        return { x: p.x + a*d.x, z: p.z + a*d.z };
+      }
+      // Distance from point to segment with projection info
+      function pointSegInfo(px,pz, x0s,z0s, x1s,z1s){
+        var vx = x1s-x0s, vz = z1s-z0s; var L2 = vx*vx + vz*vz; if (L2 < 1e-9) return null;
+        var ux = px - x0s, uz = pz - z0s; var u = (ux*vx + uz*vz)/L2;
+        var clamped = Math.max(0, Math.min(1, u));
+        var qx = x0s + clamped*vx, qz = z0s + clamped*vz;
+        return { d: Math.hypot(px-qx, pz-qz), u: clamped, qx: qx, qz: qz, vx: vx, vz: vz };
+      }
+      // Find a T-junction target strip for endpoint (px,pz): close to mid-segment of another strip
+      function findTJunction(px,pz){
+        var arr = window.wallStrips || []; var best=null; var bestD=1e9;
+        for (var ii=0; ii<arr.length; ii++){
+          var s = arr[ii]; if(!s || s===ws) continue;
+          var sx0=s.x0||0, sz0=s.z0||0, sx1=s.x1||0, sz1=s.z1||0;
+          var info = pointSegInfo(px,pz, sx0,sz0, sx1,sz1);
+          if (!info) continue;
+          // Skip if our projected contact point is too close to neighbor endpoints -> this is an L-corner, not a T
+          var endDistA = Math.hypot(info.qx - sx0, info.qz - sz0);
+          var endDistB = Math.hypot(info.qx - sx1, info.qz - sz1);
+          if (Math.min(endDistA, endDistB) < 0.06) continue; // 6cm from endpoints => treat as corner
+          // Only accept points well inside the segment and within a tight distance tolerance
+          if (info.u > 0.02 && info.u < 0.98){ // strictly inside segment
+            if (info.d < bestD && info.d < 0.03){ best={ s:s, info:info }; bestD=info.d; }
+          }
+        }
+        return best;
+      }
+
+      // --- T-junction handling (butt join) ---
+      var startT = findTJunction(x0, z0);
+      var endT = findTJunction(x1, z1);
+      // Precompute this strip's offset lines at endpoints
+      var pL0 = {x:x0 + nx*hw, z:z0 + nz*hw}, pR0 = {x:x0 - nx*hw, z:z0 - nz*hw};
+      var pL1 = {x:x1 + nx*hw, z:z1 + nz*hw}, pR1 = {x:x1 - nx*hw, z:z1 - nz*hw};
+
+      function applyTTrimAtStart(t){
+        var s = t.s; var inf = t.info; var svx = s.x1 - s.x0, svz = s.z1 - s.z0; var sl = Math.hypot(svx,svz)||1;
+        var ts = {x: svx/sl, z: svz/sl}; var nsx = -ts.z, nsz = ts.x; // neighbor left normal
+        var hwS = Math.max(0.02, (s.thickness||0.3)/2);
+        // side sign: which face we touch
+        var dxp = x0 - inf.qx, dzp = z0 - inf.qz; var side = ((dxp*nsx + dzp*nsz) >= 0) ? 1 : -1;
+        var qFace = { x: inf.qx + nsx*side*hwS, z: inf.qz + nsz*side*hwS };
+        var iL = intersectLines(pL0, tvec, qFace, ts);
+        var iR = intersectLines(pR0, tvec, qFace, ts);
+        if (iL){ A.x = iL.x; A.z = iL.z; }
+        if (iR){ D.x = iR.x; D.z = iR.z; }
+      }
+      function applyTTrimAtEnd(t){
+        var s = t.s; var inf = t.info; var svx = s.x1 - s.x0, svz = s.z1 - s.z0; var sl = Math.hypot(svx,svz)||1;
+        var ts = {x: svx/sl, z: svz/sl}; var nsx = -ts.z, nsz = ts.x;
+        var hwS = Math.max(0.02, (s.thickness||0.3)/2);
+        var dxp = x1 - inf.qx, dzp = z1 - inf.qz; var side = ((dxp*nsx + dzp*nsz) >= 0) ? 1 : -1;
+        var qFace = { x: inf.qx + nsx*side*hwS, z: inf.qz + nsz*side*hwS };
+        var iL = intersectLines(pL1, {x:-tvec.x, z:-tvec.z}, qFace, ts);
+        var iR = intersectLines(pR1, {x:-tvec.x, z:-tvec.z}, qFace, ts);
+        if (iL){ B.x = iL.x; B.z = iL.z; }
+        if (iR){ C.x = iR.x; C.z = iR.z; }
+      }
+      var startIsT = false, endIsT = false;
+      if (startT){ applyTTrimAtStart(startT); startIsT = true; }
+      if (endT){ applyTTrimAtEnd(endT); endIsT = true; }
+
+      // Corner mitering: adjust outer edges where two wall strips meet so edges are flush
+      // Apply miter at start point if a clear neighbor exists (not colinear)
+      var nDirsStart = startIsT ? [] : getNeighborDirsAt(x0, z0);
+      if (nDirsStart.length){
+        // choose neighbor with largest angle to this segment to avoid colinear
+        var best = null, bestAng = -1;
+        for (var ni=0; ni<nDirsStart.length; ni++){
+          var ang = angleBetween(tvec, nDirsStart[ni]);
+          if (ang > bestAng){ bestAng = ang; best = nDirsStart[ni]; }
+        }
+        var nearPi = Math.abs(Math.PI - bestAng) < 0.01;
+        // Snap right-angles to exact 90° for nice 45° miters
+        if (Math.abs(bestAng - (Math.PI/2)) < 0.10) {
+          var ortho1 = { x: -tvec.z, z: tvec.x };
+          var ortho2 = { x: tvec.z,  z: -tvec.x };
+          function _dot(a,b){ return a.x*b.x + a.z*b.z; }
+          best = (_dot(best, ortho1) > _dot(best, ortho2)) ? _normalize2(ortho1.x, ortho1.z) : _normalize2(ortho2.x, ortho2.z);
+          bestAng = Math.PI/2;
+        }
+        if (best && bestAng > 0.17 && !nearPi){
+          // Simple symmetric bevel: move corners along sum of normals -> 45° at right angle
+          var n2x = -best.z, n2z = best.x; // neighbor left normal
+          var sx = nx + n2x, sz = nz + n2z;
+          var s = _normalize2(sx, sz);
+          if (s.x!==0 || s.z!==0){
+            var corner0 = {x:x0, z:z0};
+            var m = { x: corner0.x + s.x*hw, z: corner0.z + s.z*hw };
+            var mOpp = { x: corner0.x - s.x*hw, z: corner0.z - s.z*hw };
+            A.x = m.x; A.z = m.z; // left side corner
+            D.x = mOpp.x; D.z = mOpp.z; // right side corner
+          }
+        }
+      }
+      // Apply miter at end point if a clear neighbor exists (not colinear)
+      var nDirsEnd = endIsT ? [] : getNeighborDirsAt(x1, z1);
+      if (nDirsEnd.length){
+        var bestE = null, bestAngE = -1;
+        for (var nj=0; nj<nDirsEnd.length; nj++){
+          var angE = angleBetween({x:-tvec.x, z:-tvec.z}, nDirsEnd[nj]);
+          if (angE > bestAngE){ bestAngE = angE; bestE = nDirsEnd[nj]; }
+        }
+        var nearPiE = Math.abs(Math.PI - bestAngE) < 0.01;
+        if (Math.abs(bestAngE - (Math.PI/2)) < 0.10) {
+          var ortho1e = { x: -tvec.z, z: tvec.x };
+          var ortho2e = { x: tvec.z,  z: -tvec.x };
+          function _dotE(a,b){ return a.x*b.x + a.z*b.z; }
+          bestE = (_dotE(bestE, ortho1e) > _dotE(bestE, ortho2e)) ? _normalize2(ortho1e.x, ortho1e.z) : _normalize2(ortho2e.x, ortho2e.z);
+          bestAngE = Math.PI/2;
+        }
+        if (bestE && bestAngE > 0.17 && !nearPiE){
+          var n3x = -bestE.z, n3z = bestE.x;
+          var sxE = nx + n3x, szE = nz + n3z;
+          var sE = _normalize2(sxE, szE);
+          if (sE.x!==0 || sE.z!==0){
+            var corner1 = {x:x1, z:z1};
+            var mE = { x: corner1.x + sE.x*hw, z: corner1.z + sE.z*hw };
+            var mOppE = { x: corner1.x - sE.x*hw, z: corner1.z - sE.z*hw };
+            B.x = mE.x; B.z = mE.z;
+            C.x = mOppE.x; C.z = mOppE.z;
+          }
+        }
+      }
+
       var At = {x:A.x, y:baseY+h, z:A.z};
       var Bt = {x:B.x, y:baseY+h, z:B.z};
       var Ct = {x:C.x, y:baseY+h, z:C.z};
       var Dt = {x:D.x, y:baseY+h, z:D.z};
-      // Project
-      var pA=project3D(A.x,A.y,A.z), pB=project3D(B.x,B.y,B.z), pC=project3D(C.x,C.y,C.z), pD=project3D(D.x,D.y,D.z);
+      // Project (after potential miter adjustments)
+  var pA=project3D(A.x,A.y,A.z), pB=project3D(B.x,B.y,B.z), pC=project3D(C.x,C.y,C.z), pD=project3D(D.x,D.y,D.z);
       var pAt=project3D(At.x,At.y,At.z), pBt=project3D(Bt.x,Bt.y,Bt.z), pCt=project3D(Ct.x,Ct.y,Ct.z), pDt=project3D(Dt.x,Dt.y,Dt.z);
       if (!pA||!pB||!pC||!pD||!pAt||!pBt||!pCt||!pDt) return;
       ctx.save();
-      // Solid mode: fill top and side faces with window/door cutouts, then outline
-      var edgeCol = onLevel ? '#475569' : 'rgba(148,163,184,0.8)';
-      var fillTop = onLevel ? 'rgba(100,116,139,0.18)' : 'rgba(148,163,184,0.12)';
-      var fillSide = onLevel ? 'rgba(71,85,105,0.28)' : 'rgba(148,163,184,0.18)';
+  // Solid mode: translucent faces per requirement; keep lines subtle and seal micro-gaps
+  var edgeCol = onLevel ? 'rgba(71,85,105,0.35)' : 'rgba(148,163,184,0.35)';
+  var fillTop = onLevel ? 'rgba(100,116,139,0.20)' : 'rgba(148,163,184,0.15)';
+  var fillSide = onLevel ? 'rgba(71,85,105,0.26)' : 'rgba(148,163,184,0.18)';
       ctx.lineWidth = onLevel ? 2.2 : 1.4;
       ctx.strokeStyle = edgeCol;
+  ctx.lineJoin = 'miter';
+  ctx.miterLimit = 8;
       // Build opening holes for left and right faces; also collect window glass quads (centered)
       var openings = Array.isArray(ws.openings) ? ws.openings : [];
       var stripTopY = baseY + (typeof ws.height === 'number' ? ws.height : 3.0);
@@ -722,8 +934,14 @@
       // Fill sides with holes to cut out windows/doors
       fillQuadWithHoles(pA,pB,pBt,pAt, leftHoles, fillSide);
       fillQuadWithHoles(pD,pC,pCt,pDt, rightHoles, fillSide);
-      // Top face fill only
-      ctx.beginPath(); ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); ctx.closePath(); ctx.fillStyle = fillTop; ctx.fill();
+  // Top face fill only
+  ctx.beginPath(); ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); ctx.closePath(); ctx.fillStyle = fillTop; ctx.fill();
+  // Seal top perimeter with a low-contrast stroke to hide 1px gaps due to rounding
+  ctx.save();
+  ctx.strokeStyle = onLevel ? 'rgba(71,85,105,0.22)' : 'rgba(148,163,184,0.18)';
+  ctx.lineWidth = 1.0;
+  ctx.beginPath(); ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); ctx.closePath(); ctx.stroke();
+  ctx.restore();
       // Determine if neighboring strip connects at endpoints to skip cap strokes for flush corners
       function hasNeighborAt(wx, wz){
         try {
@@ -738,19 +956,19 @@
         } catch(_eN) {}
         return false;
       }
-      var startHasNeighbor = hasNeighborAt(x0, z0);
-      var endHasNeighbor = hasNeighborAt(x1, z1);
-      // Stroke only the long edges and any exposed caps to achieve flush-looking joins
-      ctx.beginPath();
-      // Long edge At->Bt
-      ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y);
-      // Cap Bt->Ct only if no neighbor at end
-      if (!endHasNeighbor){ ctx.moveTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); }
-      // Long edge Ct->Dt
-      ctx.moveTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y);
-      // Cap Dt->At only if no neighbor at start
-      if (!startHasNeighbor){ ctx.moveTo(pDt.x,pDt.y); ctx.lineTo(pAt.x,pAt.y); }
-      ctx.stroke();
+  var startHasNeighbor = hasNeighborAt(x0, z0) || startIsT;
+  var endHasNeighbor = hasNeighborAt(x1, z1) || endIsT;
+  // Stroke only the long edges and any exposed caps; keep lines very subtle
+  ctx.beginPath();
+  // Long edge At->Bt
+  ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y);
+  // Cap Bt->Ct only if no neighbor at end
+  if (!endHasNeighbor){ ctx.moveTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); }
+  // Long edge Ct->Dt
+  ctx.moveTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y);
+  // Cap Dt->At only if no neighbor at start
+  if (!startHasNeighbor){ ctx.moveTo(pDt.x,pDt.y); ctx.lineTo(pAt.x,pAt.y); }
+  ctx.stroke();
       // Draw translucent blue glass for windows (centered plane)
       if (glassRects.length){
         for (var gi=0; gi<glassRects.length; gi++){

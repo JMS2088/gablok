@@ -654,7 +654,8 @@
             if (typeof applyPlan2DTo3D === 'function') {
               console.log('🔧 Rebuilding 3D from fresh 2D plan after drag');
               var lvl = (typeof currentFloor==='number' ? currentFloor : 0);
-              applyPlan2DTo3D(snap, { allowRooms:true, quiet:true, level: lvl, nonDestructive:true });
+              // Use destructive apply here to replace rooms on this level and avoid duplicates
+              applyPlan2DTo3D(snap, { allowRooms:true, quiet:true, level: lvl, nonDestructive:false });
             }
             
             // Only redraw if the 2D plan is actually visible

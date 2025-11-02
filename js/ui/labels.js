@@ -154,6 +154,9 @@
                   window.mouse.dragType = dragTypeFor(box);
                   window.mouse.dragInfo = { roomId: box.id, startX: cx, startY: cy, originalX: box.x, originalZ: box.z };
                   window.mouse.down = true;
+                  // Block 2D->3D auto-apply while dragging in 3D via label to avoid duplication
+                  window.__dragging3DRoom = true;
+                  try { console.log('🟢 START 3D DRAG (label) - Flag set:', window.__dragging3DRoom, 'Room:', box.name || box.id); } catch(_log){}
                   try { if (canvas) canvas.style.cursor = 'grabbing'; } catch(_e){}
                   window._uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now();
                   dragActive = true;
