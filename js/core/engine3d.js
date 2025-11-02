@@ -190,9 +190,10 @@
         // Before building perimeter strips, sync 3D with the latest 2D plan so deleted walls/rooms are reflected.
         try {
           if (typeof window.applyPlan2DTo3D === 'function'){
-            // Apply both floors with strict closed-loop detection so open endpoints do not create rooms
-            window.applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, nonDestructive:false, level:0, strictClosedLoopsOnly:true });
-            window.applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, nonDestructive:false, level:1, strictClosedLoopsOnly:true });
+            // Apply both floors with strict closed-loop detection so open endpoints do not create rooms.
+            // Use nonDestructive:true so pressing Render never clears 3D rooms when 2D is empty.
+            window.applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, nonDestructive:true, level:0, strictClosedLoopsOnly:true });
+            window.applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, nonDestructive:true, level:1, strictClosedLoopsOnly:true });
           }
         } catch(_eSync) {}
         window.__roomWallThickness = 0.3;
