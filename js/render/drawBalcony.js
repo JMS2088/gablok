@@ -233,7 +233,7 @@ function drawHandlesForBalcony(balcony) {
   try {
     var objA = (typeof window.getObjectUiAlpha==='function') ? window.getObjectUiAlpha(balcony.id) : 1.0;
     var isActive = selectedRoomId === balcony.id;
-    var handleY = balcony.level * 3.5 + (balcony.height||2.2) * 0.5;
+    var handleY = balcony.level * 3.5 + (balcony.height||3.0) * 0.5;
     
     var balconyHandles = [
       {x: balcony.x + balcony.width/2, y: handleY, z: balcony.z, type: 'width+', label: 'X+'},

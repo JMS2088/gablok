@@ -196,13 +196,16 @@ function drawRoom(room) {
       if (Array.isArray(room.openings) && room.openings.length) {
         var hw2 = room.width / 2; var hd2 = room.depth / 2;
         var yBase = roomFloorY; // floor level
+        // Precompute the room's top Y to clamp full-height openings safely
+        var roomTopY = roomFloorY + (typeof room.height === 'number' ? room.height : 3.0);
         for (var oi=0; oi<room.openings.length; oi++){
           var op = room.openings[oi]; if(!op) continue;
           // Determine base and top Y positions using sill/height
           var sill = (op.type==='window') ? ((typeof op.sillM==='number') ? op.sillM : 1.0) : 0;
           var oH = (typeof op.heightM==='number') ? op.heightM : ((op.type==='door') ? 2.04 : 1.5);
           var y0 = yBase + sill;
-          var y1 = y0 + oH;
+          // Clamp to the room's ceiling to ensure "floor-to-ceiling" spans don't exceed room height
+          var y1 = Math.min(y0 + oH, roomTopY);
           // Build rectangle corners (world space) along the specified edge or by world endpoints
           var pA=null,pB=null,pC=null,pD=null; // A->B bottom edge, B->C right jamb, C->D top edge, D->A left jamb
           if (typeof op.x0 === 'number' && typeof op.z0 === 'number' && typeof op.x1 === 'number' && typeof op.z1 === 'number') {
@@ -243,6 +246,21 @@ function drawRoom(room) {
               ctx.lineTo(sC.x, sC.y); ctx.lineTo(sD.x, sD.y);
               ctx.closePath();
               ctx.stroke();
+              // Draw blue keyline for floor-to-ceiling windows (bottom-right -> top-left)
+              try {
+                if (op.type === 'window'){
+                  var isFull = (Math.abs((sill||0)) < 1e-3) && (Math.abs((y1) - roomTopY) < 1e-3);
+                  if (isFull){
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#38bdf8';
+                    ctx.lineWidth = currentLevel ? 2 : 1.4;
+                    // bottom-right (B) to top-left (D)
+                    ctx.moveTo(sB.x, sB.y);
+                    ctx.lineTo(sD.x, sD.y);
+                    ctx.stroke();
+                  }
+                }
+              } catch(_eline){}
               ctx.restore();
             }
           }

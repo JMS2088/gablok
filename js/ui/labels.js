@@ -107,8 +107,26 @@
           el.className='room-label';
           el.setAttribute('data-id', box.id);
           el.textContent = box.name || 'Room'; el.__txt = (box.name || 'Room'); el.__w = null; el.__h = null;
-          // Select on click
-          el.addEventListener('click', function(e){ e.stopPropagation(); try{ window.selectedRoomId = box.id; if(typeof updateStatus==='function') updateStatus((box.name||'Item')+' selected'); if (typeof renderLoop==='function') renderLoop(); }catch(_){} });
+          // Select on click (also switch to the object's floor without clearing selection)
+          el.addEventListener('click', function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+              // Preserve selection
+              window.selectedRoomId = box.id;
+              // If the item lives on a different floor, switch currentFloor directly (avoid switchLevel() which clears selection)
+              var lvl = (typeof box.level === 'number' && isFinite(box.level)) ? box.level : 0;
+              if (typeof window.currentFloor === 'number' && window.currentFloor !== lvl) {
+                window.currentFloor = lvl;
+                try {
+                  var nativeSel = document.getElementById('levelSelect'); if (nativeSel) nativeSel.value = String(lvl);
+                  var btnText = document.getElementById('levelButtonText'); if (btnText) btnText.textContent = (lvl === 1 ? 'First Floor' : 'Ground Floor');
+                } catch(_ui) {}
+              }
+              if (typeof updateStatus==='function') updateStatus((box.name||'Item')+' selected');
+              if (typeof renderLoop==='function') renderLoop();
+            } catch(_) {}
+          });
           // Drag room by label
           var startDrag = function(clientX, clientY){
             try {
@@ -120,7 +138,11 @@
               window._uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now();
             } catch(_e){}
           };
-          el.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); startDrag(e.clientX, e.clientY); });
+          el.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation();
+            // Ensure drag happens on the correct floor
+            try { var lvl = (typeof box.level === 'number' && isFinite(box.level)) ? box.level : 0; if (typeof window.currentFloor==='number' && window.currentFloor !== lvl){ window.currentFloor = lvl; var nativeSel=document.getElementById('levelSelect'); if(nativeSel) nativeSel.value=String(lvl); var btnText=document.getElementById('levelButtonText'); if(btnText) btnText.textContent = (lvl===1 ? 'First Floor' : 'Ground Floor'); } } catch(_e) {}
+            startDrag(e.clientX, e.clientY);
+          });
           el.addEventListener('touchstart', function(e){ try{ var t=e.touches&&e.touches[0]; if(t){ startDrag(t.clientX, t.clientY); e.preventDefault(); e.stopPropagation(); } }catch(_e){} }, { passive:false });
           container.appendChild(el);
         } else {

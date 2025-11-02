@@ -355,26 +355,72 @@
       var margin = 18;
       var cx = (canvas.width  - (margin + r));
       var cy = (canvas.height - (margin + r));
+      var sgn = (window.__plan2d && (window.__plan2d.yFromWorldZSign===-1 || window.__plan2d.yFromWorldZSign===1)) ? window.__plan2d.yFromWorldZSign : 1;
+      var alpha = (typeof window.__uiFadeAlpha==='number') ? (0.85 * window.__uiFadeAlpha) : 0.85;
       ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
       // Base circle
-      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='rgba(0,0,0,0.45)'; ctx.fill(); ctx.strokeStyle='rgba(0,0,0,0.2)'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='rgba(15,23,42,0.55)'; ctx.fill(); ctx.strokeStyle='rgba(148,163,184,0.35)'; ctx.lineWidth=1; ctx.stroke();
       // Cross hairs
-      ctx.strokeStyle='#e2e8f0';
+      ctx.strokeStyle='rgba(203,213,225,0.9)';
       ctx.beginPath(); ctx.moveTo(cx-r+4,cy); ctx.lineTo(cx+r-4,cy); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(cx,cy-r+4); ctx.lineTo(cx,cy+r-4); ctx.stroke();
-      // Cardinal labels (fixed in compass space)
-      ctx.fillStyle = '#ffffff';
+      // Cardinal labels: flip N/S based on 2D orientation sign to match 2D compass
+      ctx.fillStyle = 'rgba(226,232,240,0.95)';
       ctx.font = 'bold 12px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('N', cx, cy - r + 10);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      var nY = (sgn===1) ? (cy - r + 10) : (cy + r - 10);
+      var sY = (sgn===1) ? (cy + r - 10) : (cy - r + 10);
+      ctx.fillText('N', cx, nY);
+      ctx.fillText('S', cx, sY);
       ctx.fillText('E', cx + r - 10, cy);
-      ctx.fillText('S', cx, cy + r - 10);
       ctx.fillText('W', cx - r + 10, cy);
-      // North arrow: rotate relative to camera yaw so it points toward world north
-      var ang = -camera.yaw; ctx.translate(cx,cy); ctx.rotate(ang);
-      ctx.beginPath(); ctx.moveTo(0,-r+6); ctx.lineTo(-5,-r+14); ctx.lineTo(5,-r+14); ctx.closePath(); ctx.fillStyle='#3b82f6'; ctx.fill();
+      // North arrow: match 2D compass (up if sgn=1, down if sgn=-1)
+      ctx.beginPath();
+      if (sgn === 1) { ctx.moveTo(cx, cy - r + 6); ctx.lineTo(cx - 5, cy - r + 14); ctx.lineTo(cx + 5, cy - r + 14); }
+      else { ctx.moveTo(cx, cy + r - 6); ctx.lineTo(cx - 5, cy + r - 14); ctx.lineTo(cx + 5, cy + r - 14); }
+      ctx.closePath(); ctx.fillStyle='#3b82f6'; ctx.fill();
       ctx.restore();
+    };
+  }
+  // Navigation compass: draw into #nav-compass-canvas in top-right UI
+  if (typeof window.drawNavCompass === 'undefined') {
+    window.drawNavCompass = function drawNavCompass(){
+      try {
+        var c = document.getElementById('nav-compass-canvas');
+        if (!c) return;
+        var dpr = (window.devicePixelRatio||1);
+        var cssW = 64, cssH = 64;
+        if (c.width !== Math.floor(cssW*dpr) || c.height !== Math.floor(cssH*dpr)){
+          c.width = Math.floor(cssW*dpr); c.height = Math.floor(cssH*dpr);
+          c.style.width = cssW+'px'; c.style.height = cssH+'px';
+        }
+        var cx = c.getContext('2d'); if(!cx) return; cx.setTransform(1,0,0,1,0,0); cx.clearRect(0,0,c.width,c.height);
+        cx.save(); cx.scale(dpr, dpr);
+        var r = 28; var margin = (cssW/2 - r);
+        var x = (cssW/2), y = (cssH/2);
+        var sgn = (window.__plan2d && (window.__plan2d.yFromWorldZSign===-1 || window.__plan2d.yFromWorldZSign===1)) ? window.__plan2d.yFromWorldZSign : 1;
+        // Base circle
+        cx.beginPath(); cx.arc(x,y,r,0,Math.PI*2); cx.fillStyle='rgba(15,23,42,0.55)'; cx.fill(); cx.strokeStyle='rgba(148,163,184,0.35)'; cx.lineWidth=1; cx.stroke();
+        // Cross hairs
+        cx.strokeStyle='rgba(203,213,225,0.9)';
+        cx.beginPath(); cx.moveTo(x-r+4,y); cx.lineTo(x+r-4,y); cx.stroke();
+        cx.beginPath(); cx.moveTo(x,y-r+4); cx.lineTo(x,y+r-4); cx.stroke();
+        // Labels (flip N/S with sign)
+        cx.fillStyle='rgba(226,232,240,0.95)'; cx.font='bold 12px system-ui, sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
+        var nY = (sgn===1) ? (y - r + 10) : (y + r - 10);
+        var sY = (sgn===1) ? (y + r - 10) : (y - r + 10);
+        cx.fillText('N', x, nY);
+        cx.fillText('S', x, sY);
+        cx.fillText('E', x + r - 10, y);
+        cx.fillText('W', x - r + 10, y);
+        // Arrow
+        cx.beginPath();
+        if (sgn === 1) { cx.moveTo(x, y - r + 6); cx.lineTo(x - 5, y - r + 14); cx.lineTo(x + 5, y - r + 14); }
+        else { cx.moveTo(x, y + r - 6); cx.lineTo(x - 5, y + r - 14); cx.lineTo(x + 5, y + r - 14); }
+        cx.closePath(); cx.fillStyle='#3b82f6'; cx.fill();
+        cx.restore();
+      } catch(_e) { /* non-fatal */ }
     };
   }
   if (typeof window.isOffscreenByCenter === 'undefined') {
@@ -521,11 +567,15 @@
       // Draw any door/window overlays attached to this wall strip (centerline-based)
       try {
         var opens = Array.isArray(ws.openings) ? ws.openings : [];
+        // Determine strip top Y once to clamp opening rectangles within wall height
+        var stripTopY = baseY + (typeof ws.height === 'number' ? ws.height : 3.0);
         for (var oi=0; oi<opens.length; oi++){
           var op = opens[oi]; if(!op) continue;
           var sill = (op.type==='window') ? ((typeof op.sillM==='number') ? op.sillM : 1.0) : 0;
           var oH = (typeof op.heightM==='number') ? op.heightM : ((op.type==='door') ? 2.04 : 1.5);
-          var y0 = baseY + sill, y1 = y0 + oH;
+          var y0 = baseY + sill;
+          // Clamp to the wall strip height to keep full-height windows within the strip
+          var y1 = Math.min(y0 + oH, stripTopY);
           // Slightly offset toward the strip's left face to avoid z-fighting
           var eps = 0.001;
           var x0o = (op.x0!=null? op.x0 : x0), z0o = (op.z0!=null? op.z0 : z0);
@@ -547,6 +597,20 @@
             ctx.lineTo(sC.x, sC.y); ctx.lineTo(sD.x, sD.y);
             ctx.closePath();
             ctx.stroke();
+            // Draw blue keyline for floor-to-ceiling windows (bottom-right -> top-left)
+            try {
+              if (op.type==='window'){
+                var isFull = (Math.abs((sill||0)) < 1e-3) && (Math.abs((y1) - stripTopY) < 1e-3);
+                if (isFull){
+                  ctx.beginPath();
+                  ctx.strokeStyle = '#38bdf8';
+                  ctx.lineWidth = onLevel ? 2 : 1.4;
+                  ctx.moveTo(sB.x, sB.y);
+                  ctx.lineTo(sD.x, sD.y);
+                  ctx.stroke();
+                }
+              }
+            } catch(_eline){}
             ctx.restore();
           }
         }
@@ -805,6 +869,8 @@
         try { if (typeof updateLabels==='function') updateLabels(); } catch(_e2) {}
         try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_e3) {}
         try { if (typeof drawWorldHeightScale==='function') drawWorldHeightScale(); } catch(_e4) {}
+  // 3D HUD compass moved to navigation compass; draw there instead of overlay
+  try { if (typeof drawNavCompass==='function') drawNavCompass(); } catch(_eC) {}
 
         // Emit a one-time event after the very first successful frame so the splash can hide immediately
         try {
@@ -1008,7 +1074,7 @@
     _needsFullRender=true; startRender(); };
   if (typeof window.addBalcony === 'undefined') window.addBalcony = function(){
     var lvl=1, w=2.5, d=1.5; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'balcony'});
-    var b={ id:newId('balcony'), name:'Balcony', x:s.x, z:s.z, width:w, depth:d, height:2.2, totalHeight:2.2, wallThickness:0.12, wallHeight:1.0, legWidth:0.18, floorThickness:0.1, slatCount:8, slatWidth:0.12, roofHeight:0.25, level:lvl, type:'balcony', rotation:0 };
+    var b={ id:newId('balcony'), name:'Balcony', x:s.x, z:s.z, width:w, depth:d, height:3.0, totalHeight:3.0, wallThickness:0.12, wallHeight:1.0, legWidth:0.18, floorThickness:0.1, slatCount:8, slatWidth:0.12, roofHeight:0.25, level:lvl, type:'balcony', rotation:0 };
     (window.balconyComponents||[]).push(b); window.selectedRoomId=b.id; updateStatus('Added Balcony');
     try { focusCameraOnObject(b); } catch(_e) {}
     _needsFullRender=true; startRender(); };

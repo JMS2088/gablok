@@ -293,6 +293,7 @@ function plan2dSetSelection(idx){
   }catch(e){ __plan2d.selectedIndex = (typeof idx==='number'? idx : -1); __plan2d.selectedRef = null; }
   // Update any contextual UI tied to selection (e.g., window type)
   try { if(__plan2d.__refreshWindowTypeUI) __plan2d.__refreshWindowTypeUI(); } catch(_e){}
+  try { if(__plan2d.__refreshDoorSwingUI) __plan2d.__refreshDoorSwingUI(); } catch(_e){}
 }
 
 // Find element index by matching a stored geometry snapshot (with tolerance)
@@ -723,6 +724,38 @@ function plan2dBind(){
         });
       }
       __plan2d.__refreshWindowTypeUI = refreshWindowTypeUI;
+    }catch(_e){}
+  })();
+  // Door swing dropdown: show when a door is selected; update meta.swing on change
+  (function(){
+    try{
+      var wrap = document.getElementById('plan2d-door-swing');
+      var sel = document.getElementById('plan2d-door-swing-select');
+      function refreshDoorSwingUI(){
+        try{
+          if(!wrap||!sel){ return; }
+          var idx = __plan2d.selectedIndex; var els = __plan2d.elements||[]; var visible=false;
+          if(typeof idx==='number' && idx>=0 && els[idx] && els[idx].type==='door'){
+            visible = true;
+            var e = els[idx];
+            var swing = (e && e.meta && (e.meta.swing==='out' || e.meta.swing==='in')) ? e.meta.swing : 'in';
+            sel.value = swing;
+          }
+          wrap.style.display = visible ? 'block' : 'none';
+        }catch(_e){}
+      }
+      if(sel && !sel.__bound2dDoor){
+        sel.__bound2dDoor = true;
+        sel.addEventListener('change', function(){
+          var idx = __plan2d.selectedIndex; var els=__plan2d.elements||[];
+          if(!(idx>=0) || !els[idx] || els[idx].type!=='door') return;
+          var e=els[idx];
+          if(!e.meta) e.meta={ hinge:'t0', swing:'in' };
+          e.meta.swing = (sel.value==='out') ? 'out' : 'in';
+          plan2dDraw(); plan2dEdited();
+        });
+      }
+      __plan2d.__refreshDoorSwingUI = refreshDoorSwingUI;
     }catch(_e){}
   })();
   // Central deletion used by both keyboard and button; supports subsegment, selection, or hovered element
@@ -1405,7 +1438,7 @@ function plan2dCursor(){
 }
 
 function plan2dFinalize(a,b){ if(!a||!b) return; // snap to straight axis
-  var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='door'){ __plan2d.elements.push({type:'door', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:0.9, meta:{hinge:'left'}}); } plan2dEdited(); }
+  var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='door'){ __plan2d.elements.push({type:'door', x0:a.x,y0:a.y,x1:b.x,y1:b.y, thickness:0.9, meta:{hinge:'left', swing:'in'}}); } plan2dEdited(); }
 
 // Finalize multi-point wall chain: create wall segments between consecutive points
 function plan2dFinalizeChain(){
@@ -2256,38 +2289,9 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       if (console && console.debug) console.debug('[2D] c', c.width, c.height, 'ov', ov.width, ov.height, 'scale', __plan2d.scale, 'dpr', dpr);
     } catch(e){}
   }
-  // Overlay: Compass rose (screen-space orientation consistent with 3D). +X = East (right). North (world +Z)
-  // is up if __plan2d.yFromWorldZSign === 1, and down if it's -1.
-  (function(){
-    var pad = 16; var cx = pad + 22, cy = pad + 22; var r = 18;
-    ox.save();
-    // Outer circle
-    ox.beginPath(); ox.arc(cx, cy, r, 0, Math.PI*2); ox.fillStyle='rgba(15,23,42,0.55)'; ox.fill();
-    ox.strokeStyle='rgba(148,163,184,0.8)'; ox.lineWidth=1; ox.stroke();
-    // Axes lines
-    ox.strokeStyle='rgba(203,213,225,0.9)';
-    ox.beginPath(); ox.moveTo(cx, cy-r+4); ox.lineTo(cx, cy+r-4); ox.stroke(); // N-S
-    ox.beginPath(); ox.moveTo(cx-r+4, cy); ox.lineTo(cx+r-4, cy); ox.stroke(); // W-E
-    // Arrowhead and labels respect orientation sign
-    var sgn = (__plan2d.yFromWorldZSign||1);
-    var northUp = (sgn===1);
-    // Arrowhead for North
-    if(northUp){
-      ox.beginPath(); ox.moveTo(cx, cy-r+4); ox.lineTo(cx-4, cy-r+10); ox.lineTo(cx+4, cy-r+10); ox.closePath(); ox.fillStyle='rgba(59,130,246,0.95)'; ox.fill();
-    } else {
-      // North points down
-      ox.beginPath(); ox.moveTo(cx, cy+r-4); ox.lineTo(cx-4, cy+r-10); ox.lineTo(cx+4, cy+r-10); ox.closePath(); ox.fillStyle='rgba(59,130,246,0.95)'; ox.fill();
-    }
-    // Labels N/E/S/W (flip N/S positions when sign=-1)
-    ox.fillStyle='rgba(226,232,240,0.95)'; ox.font='11px sans-serif'; ox.textAlign='center'; ox.textBaseline='middle';
-    var nY = northUp ? (cy - r - 8) : (cy + r + 8);
-    var sY = northUp ? (cy + r + 8) : (cy - r - 8);
-    ox.fillText('N', cx, nY);
-    ox.fillText('S', cx, sY);
-    ox.fillText('E', cx + r + 10, cy);
-    ox.fillText('W', cx - r - 10, cy);
-    ox.restore();
-  })();
+  // Overlay: Compass disabled (moved to main navigation on the right to always be visible)
+  // Intentionally no-op; the compass is drawn in the main UI instead of the 2D overlay.
+  (function(){ return; })();
 
   // (Removed) Overlay: corner wall markers
   } catch(e) {

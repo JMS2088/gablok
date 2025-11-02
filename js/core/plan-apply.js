@@ -758,7 +758,13 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   var existingLvl = wallStrips.filter(function(ws){ return (ws.level||0)===targetLevel; });
   var merged = _dedupeStripsByGeom(existingLvl.concat(strips));
   wallStrips = keepOther.concat(merged);
-  saveProjectSilently(); selectedRoomId=null; selectedWallStripIndex = -1; renderLoop();
+  // Persist strips. In nonDestructive mode (and not stripsOnly), do NOT clear current object selection.
+  saveProjectSilently();
+  if (!nonDestructive || stripsOnly) {
+    selectedRoomId = null;
+  }
+  selectedWallStripIndex = -1;
+  renderLoop();
       // Fallback: in nonDestructive mode with no rooms detected, refresh openings on existing rectangular rooms
       if (nonDestructive && !stripsOnly) {
         try {

@@ -115,7 +115,14 @@
             // Add a window centered on the right wall (width 1.2m)
             var winW = window.__plan2d.windowDefaultWidthM || 1.2; var rightLen = 3.0; var wSpan = Math.max(0.1, winW / rightLen);
             var wHalf = wSpan/2; var w0 = 0.5 - wHalf, w1 = 0.5 + wHalf;
-            window.__plan2d.elements.push({ type:'window', host: idxRight, t0: w0, t1: w1, thickness: wt });
+            // Support testing full-height windows via ?fullWin=1
+            var fullWin = (flagApply && (qs('fullWin') && qs('fullWin') !== '0' && qs('fullWin') !== 'false'));
+            var winEl = { type:'window', host: idxRight, t0: w0, t1: w1, thickness: wt };
+            if (fullWin) {
+              winEl.sillM = 0;
+              winEl.heightM = (window.__plan2d.wallHeightM || 3.0);
+            }
+            window.__plan2d.elements.push(winEl);
             try { window.plan2dDraw && window.plan2dDraw(); } catch(_d){}
             // Apply to 3D
             var lvl = (typeof window.currentFloor==='number'? window.currentFloor : 0);

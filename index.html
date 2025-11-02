@@ -199,6 +199,13 @@
 	</div>
 </div>
 
+<!-- Always-visible navigation compass (top-right) -->
+<div id="nav-compass" aria-label="North" title="North" style="position:fixed; top:20px; right:20px; z-index:100; width:64px; height:64px; display:flex; align-items:center; justify-content:center; pointer-events:none;">
+	<canvas id="nav-compass-canvas" width="64" height="64" style="width:64px; height:64px;"></canvas>
+	<!-- Fallback if canvas not supported -->
+	<noscript><div style="width:64px; height:64px; border-radius:50%; border:1px solid #94a3b8;"></div></noscript>
+ </div>
+
 <canvas id="canvas"></canvas>
 <div id="labels-3d"></div>
 <div id="status">Ready</div>
@@ -426,12 +433,8 @@
 						<button id="plan2d-floor-ground" type="button" title="Switch to Ground Floor">Ground</button>
 						<button id="plan2d-floor-first" type="button" title="Switch to First Floor">First</button>
 					</div>
-					<div id="plan2d-compass" aria-label="North" title="North" style="width:28px; height:28px; border:1px solid #cbd5e1; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.25); user-select:none;">
-						<svg width="12" height="12" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-							<polygon points="12,3 16,11 12,9 8,11" fill="#e2e8f0"/>
-							<circle cx="12" cy="12" r="2" fill="#94a3b8"/>
-						</svg>
-					</div>
+					<!-- Compass now rendered on 2D overlay canvas to match 3D HUD; hide header compass -->
+					<div id="plan2d-compass" style="display:none;"></div>
 				</div>
 			</div>
 			<div id="plan2d-toolbar-right" style="display:flex; gap:6px; align-items:flex-start;">
@@ -468,6 +471,13 @@
 						<select id="plan2d-window-type-select" style="width:100%; font-size:12px; padding:4px 6px; border-radius:6px; border:1px solid #94a3b8; background:#0b1020; color:#e2e8f0;">
 							<option value="standard">Standard (sill 1.0m, height 1.5m)</option>
 							<option value="full">Full height (floor to ceiling)</option>
+						</select>
+					</div>
+					<div id="plan2d-door-swing" style="display:none; margin-top:6px;">
+						<label for="plan2d-door-swing-select" style="display:block; font-size:11px; color:#e2e8f0; margin-bottom:4px;">Door swing</label>
+						<select id="plan2d-door-swing-select" style="width:100%; font-size:12px; padding:4px 6px; border-radius:6px; border:1px solid #94a3b8; background:#0b1020; color:#e2e8f0;">
+							<option value="in">Inwards</option>
+							<option value="out">Outwards</option>
 						</select>
 					</div>
 				</div>
