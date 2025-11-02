@@ -265,28 +265,92 @@
 	<div id="room-palette-backdrop" onclick="hideRoomPalette()"></div>
 	</div>
 
-<div id="info-modal">
-	<div id="info-content">
-		<button class="close-button" onclick="hideInfo()">&times;</button>
-		<h2>3D Home Configurator</h2>
-		<p><strong>Camera Controls:</strong></p>
-		<ul>
-			<li>Drag to rotate view</li>
-			<li>Shift + Drag to pan</li>
-			<li>Mouse wheel to zoom in/out</li>
-		</ul>
-		<p><strong>Building:</strong></p>
-		<ul>
-			<li>Click "+ Add Room" to create new rooms</li>
-			<li>Use dropdown to add stairs, pergolas, garages, or roofs</li>
-			<li>Click room labels to select and drag objects</li>
-			<li>Drag colored handles to resize selected objects</li>
-		</ul>
-		<p><strong>Keyboard:</strong></p>
-		<ul>
-			<li>Escape - Clear selection</li>
-			<li>Delete - Remove selected object</li>
-		</ul>
+<div id="info-modal" style="display:none; position:fixed; inset:0; z-index:11000; align-items:center; justify-content:center;">
+	<div id="info-backdrop" style="position:absolute; inset:0; background:rgba(0,0,0,0.45);" onclick="hideInfo()"></div>
+	<div id="info-content" style="position:relative; width:min(980px, 96vw); max-height:calc(100vh - 40px); overflow:auto; background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25);">
+		<div style="display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid #e5e7eb; background:#f8fafc; position:sticky; top:0; z-index:1;">
+			<strong style="flex:1">Information & Help</strong>
+			<button class="secondary" onclick="hideInfo()" title="Close">✕</button>
+		</div>
+		<div style="padding:16px; display:grid; grid-template-columns: 1fr; gap:18px;">
+			<section>
+				<h3 style="margin:0 0 8px;">Camera</h3>
+				<ul style="margin:0 0 8px 18px;">
+					<li>Drag: rotate view</li>
+					<li>Shift + Drag: pan view</li>
+					<li>Mouse wheel: zoom in/out</li>
+				</ul>
+			</section>
+			<section>
+				<h3 style="margin:0 0 8px;">Main Toolbar (top)</h3>
+				<ul style="margin:0 0 8px 18px;">
+					<li><strong>+ Add Room</strong>: Create a new rectangular room. Drag its edges or use handles to resize.</li>
+					<li><strong>Level Menu</strong>: Switch between Ground/First floors and add components:
+						<ul style="margin:6px 0 0 18px;">
+							<li><strong>+ Stairs</strong>: Add a staircase component.</li>
+							<li><strong>+ Pergola</strong>: Add an outdoor pergola structure.</li>
+							<li><strong>+ Garage</strong>: Add a garage volume.</li>
+							<li><strong>+ Roof</strong>: Add a roof. Change style via the Roof Type dropdown; rotate with the 360° button.</li>
+							<li><strong>+ Pool</strong>: Add a pool cutout.</li>
+							<li><strong>+ Balcony</strong>: Add a balcony platform.</li>
+						</ul>
+					</li>
+					<li><strong>Reset</strong>: Clear the project (confirmation required).</li>
+					<li><strong>💰 Price</strong>: Open pricing panel.</li>
+					<li><strong>📐 Floor Plan</strong>: Open the 2D floor plan editor. Your 3D stays in sync.</li>
+					<li><strong>Main Menu</strong>:
+						<ul style="margin:6px 0 0 18px;">
+							<li><strong>Information</strong>: Open this help.</li>
+							<li><strong>Share</strong>: Get a shareable URL.</li>
+							<li><strong>Export</strong>: OBJ (3D), PDF (views), JSON (project), DXF/DWG (floorplan).</li>
+							<li><strong>Import</strong>: OBJ, PDF/SVG/DXF/DWG floorplans, JSON.</li>
+						</ul>
+					</li>
+				</ul>
+			</section>
+			<section>
+				<h3 style="margin:0 0 8px;">3D Editing</h3>
+				<ul style="margin:0 0 8px 18px;">
+					<li><strong>Labels</strong>: Name labels are always visible. Selected items reveal Edit and 360° buttons.</li>
+					<li><strong>Edit</strong>: Opens the Room Palette to add furniture to the selected room.</li>
+					<li><strong>360°</strong>: Rotates the selected item by 45° per click (roof, stairs, garage, furniture where applicable).</li>
+					<li><strong>Handles</strong>: Colored X/Z handles resize width/depth; Y handle adjusts height (when available).</li>
+					<li><strong>Object Measurements</strong>: Right panel for precise sizing and naming; click Save to apply.</li>
+				</ul>
+			</section>
+			<section>
+				<h3 style="margin:0 0 8px;">2D Floor Plan Editor</h3>
+				<ul style="margin:0 0 8px 18px;">
+					<li><strong>Select</strong> (default): Click to select doors/windows/walls. Delete removes selection. Arrow keys nudge. Hold Space to pan.</li>
+					<li><strong>Wall</strong>: Draw axis-aligned walls. Shift-click to chain segments. Double-click or press Enter to finish. Close loops to form rooms.</li>
+					<li><strong>Window</strong>: Click a wall to place; drag endpoints to size. Use the Window Type dropdown for Standard/Full height.</li>
+					<li><strong>Door</strong>: Click a wall to place; drag endpoints to size. Use the Door Swing dropdown to set In/Out.</li>
+					<li><strong>Erase</strong>: Click to remove elements under the cursor.</li>
+					<li><strong>Fit</strong>: Fit view to current content.</li>
+					<li><strong>Flip Y</strong>: Mirror vertical axis to match 3D orientation.</li>
+					<li><strong>Clear</strong>: Remove all elements in the 2D plan (confirmation required).</li>
+					<li><strong>Apply to 3D</strong>: Apply changes and automatically return to 3D view.</li>
+					<li><strong>Floor Toggle</strong>: Switch between Ground/First floors while editing.</li>
+				</ul>
+			</section>
+			<section>
+				<h3 style="margin:0 0 8px;">Room Palette (Furniture)</h3>
+				<ul style="margin:0 0 8px 18px;">
+					<li><strong>Preview</strong>: Drag to orbit the preview; drag items within room bounds.</li>
+					<li><strong>Add to Room</strong>: Commit preview items to the selected room.</li>
+					<li><strong>Clear</strong>: Remove all preview items (keeps existing room furniture).</li>
+					<li><strong>Visuals</strong>: Beds show pillows and a sheet; kitchen shows sinks/hob. Dimensions shown in item details.</li>
+				</ul>
+			</section>
+			<section>
+				<h3 style="margin:0 0 8px;">Keyboard</h3>
+				<ul style="margin:0 0 8px 18px;">
+					<li><strong>Escape</strong>: Clear selection.</li>
+					<li><strong>Delete</strong>: Delete selected object (3D) or element (2D).</li>
+					<li><strong>Arrow Keys</strong> (2D): Nudge selection. Hold Shift to move faster; Alt for finer steps.</li>
+				</ul>
+			</section>
+		</div>
 	</div>
 </div>
 
