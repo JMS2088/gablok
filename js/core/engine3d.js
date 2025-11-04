@@ -699,9 +699,9 @@
       function angleBetween(u,v){ var dot=u.x*v.x + u.z*v.z; var ll=Math.max(1e-6, Math.hypot(u.x,u.z)*Math.hypot(v.x,v.z)); return Math.acos(Math.max(-1,Math.min(1,dot/ll))); }
       // Compute tangent for this strip (from start->end)
       var tx = dx/len, tz = dz/len; var tvec = {x:tx, z:tz};
-      // Neighbor directions that share this endpoint (for L-corners)
-      function getNeighborDirsAt(wx, wz){
-        var dirs = [];
+      // Neighbor strips + directions that share this endpoint (for L-corners)
+      function getNeighborAt(wx, wz){
+        var infos = [];
         try {
           var arr = window.wallStrips || [];
           for (var ii=0; ii<arr.length; ii++){
@@ -712,10 +712,25 @@
             var ox = isStart ? (s.x1||0) : (s.x0||0);
             var oz = isStart ? (s.z1||0) : (s.z0||0);
             var vx = ox - wx, vz = oz - wz; var L = Math.hypot(vx,vz);
-            if (L > 1e-6){ dirs.push({x:vx/L, z:vz/L}); }
+            if (L > 1e-6){ infos.push({ s:s, dir:{x:vx/L, z:vz/L} }); }
           }
         } catch(_eNd) {}
-        return dirs;
+        if (!infos.length) return null;
+        // choose neighbor with largest angle to this segment to avoid colinear
+        var best = null, bestAng = -1;
+        for (var i=0; i<infos.length; i++){
+          var ang = angleBetween(tvec, infos[i].dir);
+          if (ang > bestAng){ bestAng = ang; best = infos[i]; }
+        }
+        if (!best) return null;
+        // Snap to perfect orthogonal if near 90° to improve 45° geometry
+        if (Math.abs(bestAng - (Math.PI/2)) < 0.10) {
+          var ortho1 = { x: -tvec.z, z: tvec.x };
+          var ortho2 = { x: tvec.z,  z: -tvec.x };
+          function _dot(a,b){ return a.x*b.x + a.z*b.z; }
+          best.dir = (_dot(best.dir, ortho1) > _dot(best.dir, ortho2)) ? _normalize2(ortho1.x, ortho1.z) : _normalize2(ortho2.x, ortho2.z);
+        }
+        return best;
       }
       // Small vector helpers
       function _norm2(x,z){ return Math.hypot(x,z)||0; }
@@ -805,65 +820,34 @@
       if (endT){ applyTTrimAtEnd(endT); endIsT = true; }
 
       // Corner mitering: adjust outer edges where two wall strips meet so edges are flush
-      // Apply miter at start point if a clear neighbor exists (not colinear)
-      var nDirsStart = startIsT ? [] : getNeighborDirsAt(x0, z0);
-      if (nDirsStart.length){
-        // choose neighbor with largest angle to this segment to avoid colinear
-        var best = null, bestAng = -1;
-        for (var ni=0; ni<nDirsStart.length; ni++){
-          var ang = angleBetween(tvec, nDirsStart[ni]);
-          if (ang > bestAng){ bestAng = ang; best = nDirsStart[ni]; }
-        }
-        var nearPi = Math.abs(Math.PI - bestAng) < 0.01;
-        // Snap right-angles to exact 90° for nice 45° miters
-        if (Math.abs(bestAng - (Math.PI/2)) < 0.10) {
-          var ortho1 = { x: -tvec.z, z: tvec.x };
-          var ortho2 = { x: tvec.z,  z: -tvec.x };
-          function _dot(a,b){ return a.x*b.x + a.z*b.z; }
-          best = (_dot(best, ortho1) > _dot(best, ortho2)) ? _normalize2(ortho1.x, ortho1.z) : _normalize2(ortho2.x, ortho2.z);
-          bestAng = Math.PI/2;
-        }
-        if (best && bestAng > 0.17 && !nearPi){
-          // Simple symmetric bevel: move corners along sum of normals -> 45° at right angle
-          var n2x = -best.z, n2z = best.x; // neighbor left normal
-          var sx = nx + n2x, sz = nz + n2z;
-          var s = _normalize2(sx, sz);
-          if (s.x!==0 || s.z!==0){
-            var corner0 = {x:x0, z:z0};
-            var m = { x: corner0.x + s.x*hw, z: corner0.z + s.z*hw };
-            var mOpp = { x: corner0.x - s.x*hw, z: corner0.z - s.z*hw };
-            A.x = m.x; A.z = m.z; // left side corner
-            D.x = mOpp.x; D.z = mOpp.z; // right side corner
-          }
+      // Apply simple fixed 45° miter at start using local diagonal (start uses t+n)
+      if (!startIsT){
+        var corner0 = { x:x0, z:z0 };
+        // Cut line along the diagonal across the strip: d = t + n (normalized)
+        var dxs = tvec.x + nx, dzs = tvec.z + nz; var dl = Math.hypot(dxs, dzs);
+        if (dl > 1e-6){
+          var cutDir = { x: dxs/dl, z: dzs/dl };
+          var pL0 = { x: corner0.x + nx*hw, z: corner0.z + nz*hw };
+          var pR0 = { x: corner0.x - nx*hw, z: corner0.z - nz*hw };
+          var iL0 = intersectLines(pL0, tvec, corner0, cutDir);
+          var iR0 = intersectLines(pR0, tvec, corner0, cutDir);
+          if (iL0){ A.x = iL0.x; A.z = iL0.z; }
+          if (iR0){ D.x = iR0.x; D.z = iR0.z; }
         }
       }
-      // Apply miter at end point if a clear neighbor exists (not colinear)
-      var nDirsEnd = endIsT ? [] : getNeighborDirsAt(x1, z1);
-      if (nDirsEnd.length){
-        var bestE = null, bestAngE = -1;
-        for (var nj=0; nj<nDirsEnd.length; nj++){
-          var angE = angleBetween({x:-tvec.x, z:-tvec.z}, nDirsEnd[nj]);
-          if (angE > bestAngE){ bestAngE = angE; bestE = nDirsEnd[nj]; }
-        }
-        var nearPiE = Math.abs(Math.PI - bestAngE) < 0.01;
-        if (Math.abs(bestAngE - (Math.PI/2)) < 0.10) {
-          var ortho1e = { x: -tvec.z, z: tvec.x };
-          var ortho2e = { x: tvec.z,  z: -tvec.x };
-          function _dotE(a,b){ return a.x*b.x + a.z*b.z; }
-          bestE = (_dotE(bestE, ortho1e) > _dotE(bestE, ortho2e)) ? _normalize2(ortho1e.x, ortho1e.z) : _normalize2(ortho2e.x, ortho2e.z);
-          bestAngE = Math.PI/2;
-        }
-        if (bestE && bestAngE > 0.17 && !nearPiE){
-          var n3x = -bestE.z, n3z = bestE.x;
-          var sxE = nx + n3x, szE = nz + n3z;
-          var sE = _normalize2(sxE, szE);
-          if (sE.x!==0 || sE.z!==0){
-            var corner1 = {x:x1, z:z1};
-            var mE = { x: corner1.x + sE.x*hw, z: corner1.z + sE.z*hw };
-            var mOppE = { x: corner1.x - sE.x*hw, z: corner1.z - sE.z*hw };
-            B.x = mE.x; B.z = mE.z;
-            C.x = mOppE.x; C.z = mOppE.z;
-          }
+      // Apply simple fixed 45° miter at end using opposite diagonal (end uses t-n)
+      if (!endIsT){
+        var corner1 = { x:x1, z:z1 };
+        var dxse = tvec.x - nx, dzse = tvec.z - nz; var dle = Math.hypot(dxse, dzse);
+        if (dle > 1e-6){
+          var cutDirE = { x: dxse/dle, z: dzse/dle };
+          var pL1 = { x: corner1.x + nx*hw, z: corner1.z + nz*hw };
+          var pR1 = { x: corner1.x - nx*hw, z: corner1.z - nz*hw };
+          var back = { x: -tvec.x, z: -tvec.z };
+          var iL1 = intersectLines(pL1, back, corner1, cutDirE);
+          var iR1 = intersectLines(pR1, back, corner1, cutDirE);
+          if (iL1){ B.x = iL1.x; B.z = iL1.z; }
+          if (iR1){ C.x = iR1.x; C.z = iR1.z; }
         }
       }
 
