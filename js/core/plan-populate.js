@@ -418,7 +418,14 @@ function populatePlan2DFromDesign(){
     var sgnWS = (__plan2d.yFromWorldZSign||1);
     for (var wsi=0; wsi<wallStrips.length; wsi++){
       var ws = wallStrips[wsi];
+      if (!ws) continue;
       if ((ws.level||0) !== lvl) continue;
+      // Skip perimeter strips that were generated from rooms when in solid render mode.
+      // These are tagged in 3D with window.__roomStripTag (default '__fromRooms').
+      try {
+        var tagKey = (typeof window !== 'undefined' && window.__roomStripTag) ? window.__roomStripTag : '__fromRooms';
+        if (ws[tagKey]) continue;
+      } catch(_eTag) {}
       // Map world to plan: x -> x-cx, z -> s*(z-cz)
       var eWall = {
         type: 'wall',

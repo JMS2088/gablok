@@ -335,6 +335,8 @@
           garage.z = snap.z;
           currentSnapGuides = snap.guides;
           updateStatus('Moving ' + garage.name + '...');
+          // Keep solid room/garage wall strips in sync while dragging in Render mode
+          __maybeRebuildRoomStripsThrottled();
         }
       } else if (mouse.dragType === 'pool' && mouse.dragInfo) {
         var pool = findObjectById(mouse.dragInfo.roomId);

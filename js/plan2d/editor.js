@@ -255,12 +255,15 @@ function plan2dScheduleApply(now){
         // so the canvas doesn't re-center/zoom slightly due to quantization while rooms are rebuilt.
         try { __plan2d.freezeCenterScaleUntil = Date.now() + 1000; } catch(e){}
         // Walls unchanged -> safe to rebuild rooms/openings only
-        applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl, nonDestructive:true });
+  applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl, nonDestructive:true });
+  // If solid render mode is active, rebuild perimeter strips so new/edited openings cut solids immediately
+  try { if (window.__wallRenderMode === 'solid' && typeof window.rebuildRoomPerimeterStrips==='function') { window.rebuildRoomPerimeterStrips(window.__roomWallThickness||0.3); } } catch(_eRS) {}
       } else {
         // Walls changed: apply live as strips or rooms (if rectangles are closed) to keep 2D and 3D in sync
         // Also freeze 2D center/scale briefly to prevent noticeable jumps during/after wall edits
         try { __plan2d.freezeCenterScaleUntil = Date.now() + 1000; } catch(e){}
-        applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl, nonDestructive:true });
+  applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level: lvl, nonDestructive:true });
+  try { if (window.__wallRenderMode === 'solid' && typeof window.rebuildRoomPerimeterStrips==='function') { window.rebuildRoomPerimeterStrips(window.__roomWallThickness||0.3); } } catch(_eRS2) {}
       }
       __plan2d._lastWallsSig = wallsSigNow;
       __plan2d._last3Dsig = plan2dSig3D(); __plan2d._last2Dsig = plan2dSig2D();
@@ -676,13 +679,16 @@ function plan2dBind(){
     var openingOnly = (!!wallsSigNow && !!__plan2d._lastWallsSig && wallsSigNow === __plan2d._lastWallsSig);
     if (!hasWalls){
       // Avoid wiping existing 3D when no room walls exist in 2D; openings require a perimeter
-      applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false, level: lvl, nonDestructive:true });
+  applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false, level: lvl, nonDestructive:true });
+  try { if (window.__wallRenderMode === 'solid' && typeof window.rebuildRoomPerimeterStrips==='function') { window.rebuildRoomPerimeterStrips(window.__roomWallThickness||0.3); } } catch(_eRS3) {}
       try { updateStatus && updateStatus('Skipped destructive apply: add walls or close loops to form rooms; kept existing 3D'); } catch(_e1){}
     } else if (openingOnly){
       // Rebuild rooms/openings without clearing if room detection hiccups
-      applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false, level: lvl, nonDestructive:true });
+  applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false, level: lvl, nonDestructive:true });
+  try { if (window.__wallRenderMode === 'solid' && typeof window.rebuildRoomPerimeterStrips==='function') { window.rebuildRoomPerimeterStrips(window.__roomWallThickness||0.3); } } catch(_eRS4) {}
     } else {
-      applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false, level: lvl });
+  applyPlan2DTo3D(undefined, { allowRooms:true, quiet:false, level: lvl });
+  try { if (window.__wallRenderMode === 'solid' && typeof window.rebuildRoomPerimeterStrips==='function') { window.rebuildRoomPerimeterStrips(window.__roomWallThickness||0.3); } } catch(_eRS5) {}
     }
     // Refresh apply signatures after explicit apply
     try { __plan2d._lastWallsSig = wallsSigNow; __plan2d._last3Dsig = plan2dSig3D(); __plan2d._last2Dsig = plan2dSig2D(); } catch(_e2){}
@@ -1417,6 +1423,7 @@ function plan2dFlipVertical(){
     try { __plan2d.freezeCenterScaleUntil = Date.now() + 800; } catch(_e2){}
     // Nudge 3D apply non-destructively so overlays remain coherent (geometry unchanged)
   try { applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, level:(typeof currentFloor==='number'? currentFloor:0), nonDestructive:true }); } catch(_e3){}
+  try { if (window.__wallRenderMode === 'solid' && typeof window.rebuildRoomPerimeterStrips==='function') { window.rebuildRoomPerimeterStrips(window.__roomWallThickness||0.3); } } catch(_eRS6) {}
   try { __plan2d._last3Dsig = plan2dSig3D(); __plan2d._last2Dsig = plan2dSig2D(); __plan2d._lastWallsSig = plan2dSigWallsOnly(); } catch(_eSig){}
   try { updateStatus && updateStatus('Flipped 2D orientation (Y) to mirror 3D'); } catch(_e4){}
   } catch(e) { /* ignore */ }

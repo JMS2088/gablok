@@ -149,6 +149,37 @@
         var s=window.wallStrips[ei]; if(!s) continue; existing[keyFor(s.x0,s.z0,s.x1,s.z1)] = true;
       }
       var added = Object.create(null);
+      // Small geometry helpers for openings mapping
+      function pointSegInfo(px,pz, x0s,z0s, x1s,z1s){ var vx = x1s-x0s, vz = z1s-z0s; var L2 = vx*vx + vz*vz; if (L2 < 1e-9) return null; var ux = px - x0s, uz = pz - z0s; var u = (ux*vx + uz*vz)/L2; var clamped = Math.max(0, Math.min(1, u)); var qx = x0s + clamped*vx, qz = z0s + clamped*vz; return { d: Math.hypot(px-qx, pz-qz), u: clamped, qx: qx, qz: qz, vx: vx, vz: vz }; }
+      function openingsForEdge(room, x0e,z0e,x1e,z1e, isRect, rectMeta){
+        var outs = []; if(!room || !Array.isArray(room.openings)) return outs;
+        var EPS = 0.06; // 6 cm tolerance to bind world-endpoint openings to this edge
+        for (var oi=0; oi<room.openings.length; oi++){
+          var op = room.openings[oi]; if(!op) continue;
+          if (typeof op.x0 === 'number' && typeof op.z0 === 'number' && typeof op.x1 === 'number' && typeof op.z1 === 'number'){
+            // Opening defined by world endpoints: project to this edge and accept if both endpoints lie on/near it
+            var i0 = pointSegInfo(op.x0, op.z0, x0e,z0e, x1e,z1e);
+            var i1 = pointSegInfo(op.x1, op.z1, x0e,z0e, x1e,z1e);
+            if (i0 && i1 && i0.d <= EPS && i1.d <= EPS && i0.u >= -1e-3 && i1.u <= 1+1e-3){ outs.push({ type: op.type, x0: op.x0, z0: op.z0, x1: op.x1, z1: op.z1, sillM: (op.sillM||0), heightM: op.heightM, meta: (op.meta||null) }); }
+          } else if (isRect && op && typeof op.edge === 'string' && typeof op.startM === 'number' && typeof op.endM === 'number' && rectMeta){
+            // Rectangular room edge-based opening: map to world endpoints along this edge if edges match
+            var edge = op.edge; var sM = op.startM; var eM = op.endM; if (eM < sM){ var tmp=sM; sM=eM; eM=tmp; }
+            var xL=rectMeta.xL, xR=rectMeta.xR, zT=rectMeta.zT, zB=rectMeta.zB;
+            var wx0, wz0, wx1, wz1; var match=false;
+            if (edge==='minZ'){ // top
+              if (Math.abs(zT - z0e) <= 1e-6 && Math.abs(zT - z1e) <= 1e-6){ wx0 = xL + sM; wx1 = xL + eM; wz0 = zT; wz1 = zT; match=true; }
+            } else if (edge==='maxZ'){ // bottom
+              if (Math.abs(zB - z0e) <= 1e-6 && Math.abs(zB - z1e) <= 1e-6){ wx0 = xL + sM; wx1 = xL + eM; wz0 = zB; wz1 = zB; match=true; }
+            } else if (edge==='minX'){ // left
+              if (Math.abs(xL - x0e) <= 1e-6 && Math.abs(xL - x1e) <= 1e-6){ wz0 = zT + sM; wz1 = zT + eM; wx0 = xL; wx1 = xL; match=true; }
+            } else if (edge==='maxX'){ // right
+              if (Math.abs(xR - x0e) <= 1e-6 && Math.abs(xR - x1e) <= 1e-6){ wz0 = zT + sM; wz1 = zT + eM; wx0 = xR; wx1 = xR; match=true; }
+            }
+            if (match){ outs.push({ type: op.type, x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: (op.sillM||0), heightM: op.heightM, meta: (op.meta||null) }); }
+          }
+        }
+        return outs;
+      }
       // Helper: signed polygon area in XZ plane (shoelace); >0 => CCW, <0 => CW
       function polySignedAreaXZ(pts){
         try {
@@ -187,7 +218,9 @@
             // If the room is CCW (interior is left), real outward is right. We want longer walls to form the exterior miter (use real outward),
             // and shorter walls to form the interior miter (use inward).
             var outerFaceLeft = isOuterBias ? (!interiorIsLeft) : (interiorIsLeft);
-            window.wallStrips.push({ x0:a.x, z0:a.z, x1:b.x, z1:b.z, thickness:t, height:height, baseY:baseY, level:level, openings:[], [tag]:true, __outerFaceLeft: outerFaceLeft });
+            // Attach any openings that lie on this edge (polygon rooms use world endpoints)
+            var openEdge = openingsForEdge(r, a.x,a.z,b.x,b.z, false, null);
+            window.wallStrips.push({ x0:a.x, z0:a.z, x1:b.x, z1:b.z, thickness:t, height:height, baseY:baseY, level:level, openings:openEdge, [tag]:true, __outerFaceLeft: outerFaceLeft });
             added[key] = true;
           }
         } else {
@@ -208,11 +241,53 @@
             var xDom = Math.abs(edx) >= Math.abs(edz);
             var isOuterBiasR = (xDom && longerAxisR==='x') || (!xDom && longerAxisR==='z');
             var outerFaceLeftR = isOuterBiasR ? (!interiorIsLeftR) : (interiorIsLeftR);
-            window.wallStrips.push({ x0:E[0], z0:E[1], x1:E[2], z1:E[3], thickness:t, height:height, baseY:baseY, level:level, openings:[], [tag]:true, __outerFaceLeft: outerFaceLeftR });
+            // Map rectangle edge-based openings to world endpoints for this edge
+            var openEdgeR = openingsForEdge(r, E[0],E[1],E[2],E[3], true, { xL:xL, xR:xR, zT:zT, zB:zB });
+            window.wallStrips.push({ x0:E[0], z0:E[1], x1:E[2], z1:E[3], thickness:t, height:height, baseY:baseY, level:level, openings:openEdgeR, [tag]:true, __outerFaceLeft: outerFaceLeftR });
             added[key2] = true;
           }
         }
+        // (Garages are handled in a separate block below)
       }
+      // After processing all rooms, add garage perimeter strips (excluding the door/front edge)
+      try {
+        var garages = Array.isArray(window.garageComponents) ? window.garageComponents : [];
+        for (var gi=0; gi<garages.length; gi++){
+          var g = garages[gi]; if(!g) continue;
+          var levelG = (g.level||0);
+          var baseYG = levelG * 3.5;
+          var heightG = (typeof g.height==='number') ? g.height : 2.6;
+          var hwg = (g.width||0)/2, hdg=(g.depth||0)/2; if(hwg<=0||hdg<=0) continue;
+          var cxG = (g.x||0), czG = (g.z||0);
+          var rot = ((g.rotation||0) * Math.PI) / 180;
+          var cos = Math.cos(rot), sin = Math.sin(rot);
+          function rotPtLocal(lx,lz){ var rx = lx*cos - lz*sin; var rz = lx*sin + lz*cos; return { x: cxG + rx, z: czG + rz }; }
+          // Local CCW corners relative to center
+          var c0 = rotPtLocal(-hwg, -hdg); // front-left (local minZ)
+          var c1 = rotPtLocal( hwg, -hdg); // front-right
+          var c2 = rotPtLocal( hwg,  hdg); // back-right
+          var c3 = rotPtLocal(-hwg,  hdg); // back-left
+          var polyG = [c0,c1,c2,c3];
+          var areaG = polySignedAreaXZ(polyG);
+          var interiorIsLeftG = (areaG > 0);
+          var longerAxisG = ((g.width||0) >= (g.depth||0)) ? 'x' : 'z';
+          // Edges in local CCW order; index 0 is the front/door edge before rotation (between c0->c1)
+          var edgesG = [ [c0,c1], [c1,c2], [c2,c3], [c3,c0] ];
+          for (var egi=0; egi<edgesG.length; egi++){
+            if (egi === 0) continue; // skip door/front edge
+            var E0 = edgesG[egi][0];
+            var E1 = edgesG[egi][1];
+            var keyG = keyFor(E0.x,E0.z,E1.x,E1.z);
+            if (existing[keyG] || added[keyG]) continue;
+            var edx = E1.x - E0.x, edz = E1.z - E0.z;
+            var xDomG = Math.abs(edx) >= Math.abs(edz);
+            var isOuterBiasG = (xDomG && longerAxisG==='x') || (!xDomG && longerAxisG==='z');
+            var outerFaceLeftG = isOuterBiasG ? (!interiorIsLeftG) : (interiorIsLeftG);
+            window.wallStrips.push({ x0:E0.x, z0:E0.z, x1:E1.x, z1:E1.z, thickness:t, height:heightG, baseY:baseYG, level:levelG, openings:[], [tag]:true, __outerFaceLeft: outerFaceLeftG });
+            added[keyG] = true;
+          }
+        }
+      } catch(_eGar) { /* best-effort for garages */ }
       if (typeof window.saveProjectSilently==='function') window.saveProjectSilently();
       if (typeof window.renderLoop==='function') window.renderLoop();
     } catch(_e) {}
@@ -706,6 +781,8 @@
           var arr = window.wallStrips || [];
           for (var ii=0; ii<arr.length; ii++){
             var s = arr[ii]; if(!s || s===ws) continue;
+            // Only consider neighbors on the same level to avoid cross-floor interference
+            if ((s.level||0) !== (ws.level||0)) continue;
             var isStart = (Math.hypot((s.x0||0)-wx, (s.z0||0)-wz) < 1e-3);
             var isEnd   = (Math.hypot((s.x1||0)-wx, (s.z1||0)-wz) < 1e-3);
             if (!isStart && !isEnd) continue;
@@ -770,6 +847,8 @@
         var arr = window.wallStrips || []; var best=null; var bestD=1e9;
         for (var ii=0; ii<arr.length; ii++){
           var s = arr[ii]; if(!s || s===ws) continue;
+          // Same-level only to prevent other floors from affecting T-trim
+          if ((s.level||0) !== (ws.level||0)) continue;
           var sx0=s.x0||0, sz0=s.z0||0, sx1=s.x1||0, sz1=s.z1||0;
           var info = pointSegInfo(px,pz, sx0,sz0, sx1,sz1);
           if (!info) continue;
@@ -933,6 +1012,8 @@
           var arr = window.wallStrips || [];
           for (var ii=0; ii<arr.length; ii++){
             var s = arr[ii]; if(!s || s===ws) continue;
+            // Same-level only
+            if ((s.level||0) !== (ws.level||0)) continue;
             var d0 = Math.hypot((s.x0||0) - wx, (s.z0||0) - wz);
             var d1 = Math.hypot((s.x1||0) - wx, (s.z1||0) - wz);
             if (d0 < EPS || d1 < EPS) return true;
