@@ -296,17 +296,9 @@
     try {
       var m = (mode==='solid') ? 'solid' : 'line';
       window.__wallRenderMode = m;
-      // Rooms: set requested wall thickness and (re)build perimeter strips when in solid mode
+      // Simplified: do not run 2D→3D applies here. Just rebuild from existing 3D state for ALL rooms/garages across floors.
+      // This guarantees that pressing Render applies to ground and first floor together, without duplication or missed floors.
       if (m === 'solid') {
-        // Before building perimeter strips, sync 3D with the latest 2D plan so deleted walls/rooms are reflected.
-        try {
-          if (typeof window.applyPlan2DTo3D === 'function'){
-            // Apply both floors with strict closed-loop detection so open endpoints do not create rooms.
-            // Use nonDestructive:true so pressing Render never clears 3D rooms when 2D is empty.
-            window.applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, nonDestructive:true, level:0, strictClosedLoopsOnly:true });
-            window.applyPlan2DTo3D(undefined, { allowRooms:true, quiet:true, nonDestructive:true, level:1, strictClosedLoopsOnly:true });
-          }
-        } catch(_eSync) {}
         window.__roomWallThickness = 0.3;
         if (typeof window.rebuildRoomPerimeterStrips === 'function') window.rebuildRoomPerimeterStrips(window.__roomWallThickness);
       } else {

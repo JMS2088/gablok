@@ -792,7 +792,8 @@ function plan2dBind(){
         var idxSnap = plan2dFindElementIndexFromSnapshot(__plan2d.selectedSnapshot);
         if(idxSnap>=0) delIdx = idxSnap;
       }
-      if(delIdx>=0){ __plan2d.elements.splice(delIdx,1); didDel=true; }
+      // Use robust eraser to keep host indices (windows/doors) consistent and remove hosted openings
+      if(delIdx>=0){ didDel = !!plan2dEraseElementAt(delIdx); }
       if(didDel){
         __plan2d.selectedIndex=-1; __plan2d.selectedRef=null; __plan2d.selectedSnapshot=null; __plan2d.selectedSubsegment=null;
         plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
@@ -801,12 +802,12 @@ function plan2dBind(){
     }
     // 3) If nothing explicitly selected, delete hovered door/window or hovered wall subsegment (quick delete)
     if(typeof __plan2d.hoverWindowIndex==='number' && __plan2d.hoverWindowIndex>=0){
-      __plan2d.elements.splice(__plan2d.hoverWindowIndex,1);
+      plan2dEraseElementAt(__plan2d.hoverWindowIndex);
   __plan2d.hoverWindowIndex = -1; __plan2d.selectedIndex=-1; __plan2d.selectedRef=null; __plan2d.selectedSnapshot=null; __plan2d.selectedSubsegment=null;
       plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
     }
     if(typeof __plan2d.hoverDoorIndex==='number' && __plan2d.hoverDoorIndex>=0){
-      __plan2d.elements.splice(__plan2d.hoverDoorIndex,1);
+      plan2dEraseElementAt(__plan2d.hoverDoorIndex);
   __plan2d.hoverDoorIndex = -1; __plan2d.selectedIndex=-1; __plan2d.selectedRef=null; __plan2d.selectedSnapshot=null; __plan2d.selectedSubsegment=null;
       plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
     }
@@ -1254,7 +1255,9 @@ function plan2dBind(){
             __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return;
           }
         }
-        if(key==='Delete' || key==='Backspace'){
+        // Robust delete key detection across browsers/keyboards
+        var isDelKey = (key==='Delete' || key==='Backspace' || key==='Del' || (ev && (ev.code==='Delete' || ev.keyCode===46 || ev.keyCode===8)));
+        if(isDelKey){
           var did = plan2dDeleteSelection();
           ev.preventDefault(); ev.stopPropagation();
           return;
