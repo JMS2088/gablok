@@ -64,6 +64,13 @@ function switchLevel(){
       } catch(_sel){ /* non-fatal */ }
       renderLoop && renderLoop();
       updateStatus && updateStatus('Switched to ' + (currentFloor===0 ? 'Ground' : 'First') + ' Floor');
+      // Keep render style consistent across floors: if solid mode is active, rebuild room perimeter strips
+      try {
+        if (window.__wallRenderMode === 'solid' && typeof window.rebuildRoomPerimeterStrips === 'function') {
+          var t = (typeof window.__roomWallThickness === 'number' && window.__roomWallThickness > 0) ? window.__roomWallThickness : 0.3;
+          window.rebuildRoomPerimeterStrips(t);
+        }
+      } catch(_eRe){ /* non-fatal */ }
       // Ensure measurements panel remains visible after switching
       try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     }

@@ -2075,6 +2075,8 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
     }
   }
 
+  // No ghost overlay: 2D walls are live-updated from 3D during drag so both views stay in lockstep
+
   // Live label while dragging a window endpoint (host-anchored)
   if(__plan2d.dragWindow){
     try {

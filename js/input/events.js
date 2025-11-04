@@ -2,6 +2,71 @@
 // Exposes window.setupEvents(), called by startApp() in engine3d.js
 (function(){
   if (typeof window.setupEvents === 'function') return;
+  // Throttled live rebuild for solid wall strips so rendered walls follow during drags/resizes
+  function __maybeRebuildRoomStripsThrottled(){
+    try {
+      if (window.__wallRenderMode !== 'solid') return;
+      if (typeof window.rebuildRoomPerimeterStrips !== 'function') return;
+      var now = (performance && performance.now) ? performance.now() : Date.now();
+      var last = (typeof window.__lastStripRebuildAt === 'number') ? window.__lastStripRebuildAt : 0;
+      // Limit to ~20 Hz while dragging to keep things responsive
+      if (last && (now - last) < 50) return;
+      window.__lastStripRebuildAt = now;
+      var t = (typeof window.__roomWallThickness === 'number' && window.__roomWallThickness > 0) ? window.__roomWallThickness : 0.3;
+      window.rebuildRoomPerimeterStrips(t);
+    } catch(_eRR) { /* non-fatal */ }
+  }
+  // Live-update 2D plan walls for a given 3D room so 2D and 3D move together during drag/resize.
+  function updatePlan2DWallsForRoom(room){
+    try {
+      if (!room || !window.__plan2d || !Array.isArray(__plan2d.elements)) return;
+      var gid = 'room:' + room.id;
+      // Collect all 2D walls that belong to this room
+      var indices = [];
+      for (var i=0;i<__plan2d.elements.length;i++){
+        var el = __plan2d.elements[i];
+        if (!el || el.type !== 'wall') continue;
+        if (el.groupId === gid) indices.push(i);
+      }
+      if (indices.length < 4) return; // no grouped walls to update
+
+      var sgn = (__plan2d.yFromWorldZSign || 1);
+      var cx = (typeof __plan2d.centerX==='number'? __plan2d.centerX : 0);
+      var cz = (typeof __plan2d.centerZ==='number'? __plan2d.centerZ : 0);
+      var hw = (room.width||0)/2, hd = (room.depth||0)/2;
+      var rot = ((room.rotation||0) * Math.PI)/180;
+      function rotPt(px,pz){ var dx=px-(room.x||0), dz=pz-(room.z||0); return { x: (room.x||0) + dx*Math.cos(rot) - dz*Math.sin(rot), z: (room.z||0) + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+      // World-space corners in consistent order (ccw): c1(-x,-z), c2(+x,-z), c3(+x,+z), c4(-x,+z)
+      var c1=rotPt((room.x||0)-hw, (room.z||0)-hd);
+      var c2=rotPt((room.x||0)+hw, (room.z||0)-hd);
+      var c3=rotPt((room.x||0)+hw, (room.z||0)+hd);
+      var c4=rotPt((room.x||0)-hw, (room.z||0)+hd);
+      function toPlan(p){ return { x: (p.x - cx), y: sgn * (p.z - cz) }; }
+      var p1=toPlan(c1), p2=toPlan(c2), p3=toPlan(c3), p4=toPlan(c4);
+      var segs=[ {a:p1,b:p2}, {a:p2,b:p3}, {a:p3,b:p4}, {a:p4,b:p1} ];
+      function mid(ptA, ptB){ return { x: (ptA.x+ptB.x)/2, y: (ptA.y+ptB.y)/2 }; }
+      function dist2(a,b){ var dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy; }
+      // Build list of current walls (midpoints) and desired segments (midpoints), then greedy match
+      var walls = indices.map(function(idx){ var e=__plan2d.elements[idx]; return { idx: idx, mid: mid({x:e.x0,y:e.y0},{x:e.x1,y:e.y1}) }; });
+      var desired = segs.map(function(sg){ return { seg: sg, mid: mid(sg.a, sg.b), taken:false }; });
+      for (var w=0; w<walls.length; w++){
+        var bestJ=-1, bestD=Infinity;
+        for (var j=0;j<desired.length;j++){
+          if (desired[j].taken) continue; var d = dist2(walls[w].mid, desired[j].mid); if (d < bestD){ bestD=d; bestJ=j; }
+        }
+        if (bestJ>=0){
+          desired[bestJ].taken = true;
+          var el2 = __plan2d.elements[walls[w].idx]; var sg2 = desired[bestJ].seg;
+          el2.x0 = sg2.a.x; el2.y0 = sg2.a.y; el2.x1 = sg2.b.x; el2.y1 = sg2.b.y;
+        }
+      }
+      // Redraw 2D if active
+      if (__plan2d.active && typeof window.plan2dDraw==='function') window.plan2dDraw();
+      // While updating 2D live, also keep solid wall strips in sync when Render mode is active
+      __maybeRebuildRoomStripsThrottled();
+    } catch(_eU) { /* non-fatal live 2D update */ }
+  }
+  window.__updatePlan2DWallsForRoom = updatePlan2DWallsForRoom;
   window.setupEvents = function setupEvents() {
     window.addEventListener('resize', setupCanvas);
     // Track UI interactions so we can fade affordances when idle
@@ -225,6 +290,10 @@
           object.z = snap.z;
           currentSnapGuides = snap.guides;
           updateStatus('Moving ' + object.name + '...');
+          // Live-update 2D grouped walls to follow the 3D room during drag (no ghosts, no duplication)
+          try { updatePlan2DWallsForRoom(object); } catch(_g) {}
+          // And keep solid wall strips following the move during Render mode
+          __maybeRebuildRoomStripsThrottled();
         }
       } else if (mouse.dragType === 'stairs' && mouse.dragInfo) {
         if (stairsComponent) {
@@ -320,6 +389,8 @@
             var step = target.type === 'garage' ? 90 : 22.5;
             target.rotation = (target.rotation + step) % 360;
             renderLoop();
+            try { updatePlan2DWallsForRoom(target); } catch(_rotU) {}
+            __maybeRebuildRoomStripsThrottled();
             updateStatus(target.name + ' rotated ' + step + '°');
             return;
           }
@@ -471,6 +542,8 @@
             } catch(_polyXErr) {}
             if (target.type === 'roof') target.autoFit = false; // manual resize disables auto-fit
             updateStatus('Resizing width...');
+            try { updatePlan2DWallsForRoom(target); } catch(_gw) {}
+            __maybeRebuildRoomStripsThrottled();
           } else if (type === 'depth+' || type === 'depth-') {
             // Measure along dragged face normal (sZ * axisZ)
             var sZ = mouse.dragInfo.sideSign || (type === 'depth+' ? 1 : -1);
@@ -585,6 +658,8 @@
             } catch(_polyZErr) {}
             if (target.type === 'roof') target.autoFit = false; // manual resize disables auto-fit
             updateStatus('Resizing depth...');
+            try { updatePlan2DWallsForRoom(target); } catch(_gd) {}
+            __maybeRebuildRoomStripsThrottled();
           } else if (type === 'height') {
             var heightChange = -(dy * 0.005);
             var maxH = (target.type === 'pool') ? 5 : 10;
@@ -614,6 +689,8 @@
       // If we just finished resizing OR moving a room, sync to 2D and save
       if ((mouse.dragType === 'handle' || mouse.dragType === 'room' || mouse.dragType === 'balcony') && mouse.dragInfo && mouse.dragInfo.roomId) {
         try {
+          // Ensure final 2D grouped walls match the final 3D room pose
+          try { var rmFinal = findObjectById(mouse.dragInfo.roomId); if (rmFinal) updatePlan2DWallsForRoom(rmFinal); } catch(_cf) {}
           console.log('🔄 SYNCING 3D -> 2D (flag still true to block feedback)');
           // Sync 3D changes to 2D plan (ALWAYS sync, even if 2D plan is not visible,
           // to ensure openings stay in correct positions when applyPlan2DTo3D is called later)
@@ -657,6 +734,9 @@
               // Use destructive apply here to replace rooms on this level and avoid duplicates
               applyPlan2DTo3D(snap, { allowRooms:true, quiet:true, level: lvl, nonDestructive:false });
             }
+
+            // If Render mode is active, immediately rebuild the solid room perimeter strips once more
+            __maybeRebuildRoomStripsThrottled();
             
             // Only redraw if the 2D plan is actually visible
             if (__plan2d.active && typeof plan2dDraw === 'function') {
