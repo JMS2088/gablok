@@ -418,6 +418,10 @@ function openPlan2DModal(){
   } catch(e) {}
   plan2dBind();
   plan2dResize();
+  // Default tool to Select on open so clicking always selects, and Delete works immediately
+  try {
+    plan2dSetTool('select');
+  } catch(_eTool) {}
   // Bind 2D floor toggle buttons: apply current floor then switch and load the new floor
   try {
     var bGround = document.getElementById('plan2d-floor-ground');
@@ -537,6 +541,27 @@ function closePlan2DModal(){
   try {
     if(window.__plan2dAlignToolbarRightModule){ window.removeEventListener('resize', window.__plan2dAlignToolbarRightModule); delete window.__plan2dAlignToolbarRightModule; }
     var tb=document.getElementById('plan2d-toolbar-right'); if(tb){ tb.style.position=''; tb.style.right=''; tb.style.top=''; tb.style.zIndex=''; }
+  } catch(e){}
+}
+
+// Helper: set the current 2D tool and update toolbar button active state
+function plan2dSetTool(name){
+  try {
+    var valid = { select:1, wall:1, window:1, door:1, erase:1 };
+    var tool = (name && valid[name]) ? name : 'select';
+    __plan2d.tool = tool;
+    var ids = ['plan2d-tool-select','plan2d-tool-wall','plan2d-tool-window','plan2d-tool-door','plan2d-tool-erase'];
+    for (var i=0;i<ids.length;i++){
+      var el = document.getElementById(ids[i]); if(!el) continue;
+      if ((tool==='select' && ids[i]==='plan2d-tool-select') ||
+          (tool==='wall'   && ids[i]==='plan2d-tool-wall') ||
+          (tool==='window' && ids[i]==='plan2d-tool-window') ||
+          (tool==='door'   && ids[i]==='plan2d-tool-door') ||
+          (tool==='erase'  && ids[i]==='plan2d-tool-erase')) { el.classList.add('active'); }
+      else { el.classList.remove('active'); }
+    }
+    // Update cursor based on tool
+    plan2dCursor();
   } catch(e){}
 }
 
@@ -664,11 +689,11 @@ function plan2dBind(){
     }, true);
   }
   // Tool buttons
-  var bWall=document.getElementById('plan2d-tool-wall'); if(bWall) bWall.onclick=function(){ __plan2d.tool='wall'; plan2dCursor(); try{ updateStatus('Wall tool: Shift-click to chain walls, double-click or Enter to finish, Esc to cancel. Close loops to form rooms.'); }catch(e){} };
-  var bWin=document.getElementById('plan2d-tool-window'); if(bWin) bWin.onclick=function(){ __plan2d.tool='window'; plan2dCursor(); updateStatus('Window tool: click a wall to place a window, then drag the endpoints to size it.'); };
-  var bDoor=document.getElementById('plan2d-tool-door'); if(bDoor) bDoor.onclick=function(){ __plan2d.tool='door'; plan2dCursor(); };
-  var bSel=document.getElementById('plan2d-tool-select'); if(bSel) bSel.onclick=function(){ __plan2d.tool='select'; plan2dCursor(); };
-  var bErase=document.getElementById('plan2d-tool-erase'); if(bErase) bErase.onclick=function(){ __plan2d.tool='erase'; plan2dCursor(); };
+  var bWall=document.getElementById('plan2d-tool-wall'); if(bWall) bWall.onclick=function(){ plan2dSetTool('wall'); try{ updateStatus('Wall tool: Shift-click to chain walls, double-click or Enter to finish, Esc to cancel. Close loops to form rooms.'); }catch(e){} };
+  var bWin=document.getElementById('plan2d-tool-window'); if(bWin) bWin.onclick=function(){ plan2dSetTool('window'); updateStatus('Window tool: click a wall to place a window, then drag the endpoints to size it.'); };
+  var bDoor=document.getElementById('plan2d-tool-door'); if(bDoor) bDoor.onclick=function(){ plan2dSetTool('door'); };
+  var bSel=document.getElementById('plan2d-tool-select'); if(bSel) bSel.onclick=function(){ plan2dSetTool('select'); };
+  var bErase=document.getElementById('plan2d-tool-erase'); if(bErase) bErase.onclick=function(){ plan2dSetTool('erase'); };
   // View utilities: Fit and Flip Y
   var bFit=document.getElementById('plan2d-fit'); if(bFit) bFit.onclick=function(){ try{ if(plan2dFitViewToContent(48)){ __plan2d.hasUserPannedZoomed=true; } }catch(e){} };
   var bFlip=document.getElementById('plan2d-flip-y'); if(bFlip) bFlip.onclick=function(){ try{ plan2dFlipVertical(); } catch(e){} };
@@ -791,12 +816,12 @@ function plan2dBind(){
       try{
         if(__plan2d.selectedRef){
           var idxNow = __plan2d.elements.indexOf(__plan2d.selectedRef);
+          // If the exact object is still present, prefer its current index; otherwise keep the original selectedIndex as a best-effort fallback
           if(idxNow >= 0) delIdx = idxNow;
-          else if (delIdx>=__plan2d.elements.length || __plan2d.elements[delIdx]!==__plan2d.selectedRef){ delIdx = -1; }
         }
       }catch(e){}
       // If reference lookup failed, try geometry snapshot matching
-      if(delIdx<0 && __plan2d.selectedSnapshot){
+      if((delIdx==null || delIdx<0 || delIdx>=(__plan2d.elements||[]).length) && __plan2d.selectedSnapshot){
         var idxSnap = plan2dFindElementIndexFromSnapshot(__plan2d.selectedSnapshot);
         if(idxSnap>=0) delIdx = idxSnap;
       }

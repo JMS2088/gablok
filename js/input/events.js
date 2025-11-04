@@ -777,6 +777,8 @@
     });
     
     document.addEventListener('keydown', function(e) {
+      // When 2D editor is active, ignore 3D keyboard shortcuts entirely
+      try { if (window.__plan2d && __plan2d.active) return; } catch(_e) {}
       if (e.key === 'Escape') {
         var rpm = document.getElementById('room-palette-modal');
         if (rpm && rpm.style.display === 'block') {
@@ -786,7 +788,7 @@
           selectedWallStripIndex = -1;
           updateStatus('Selection cleared');
         }
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedRoomId || (typeof selectedWallStripIndex==='number' && selectedWallStripIndex>-1))) {
+  } else if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedRoomId || (typeof selectedWallStripIndex==='number' && selectedWallStripIndex>-1))) {
         e.preventDefault();
         
         var roomIndex = -1;

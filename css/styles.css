@@ -41,6 +41,10 @@
   #plan2d-content { outline: none; }
   #plan2d-content:focus { outline: none !important; box-shadow: 0 22px 70px -8px rgba(0,0,0,0.55); }
 
+  /* Hide 1–2px browser focus outline around the 2D canvases when they are focused for keyboard input */
+  #plan2d-canvas:focus, #plan2d-overlay:focus { outline: none !important; }
+  #plan2d-canvas, #plan2d-overlay { -webkit-tap-highlight-color: transparent; }
+
   /* Match 2D Plan toolbar buttons to main navigation secondary button style */
   #plan2d-content button.secondary {
     background: #ffffff !important;
