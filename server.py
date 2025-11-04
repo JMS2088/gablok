@@ -3,7 +3,11 @@ import os
 import socket
 import argparse
 import json
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
+import time
+
+# Lightweight in-memory store for test reports
+_last_test_report = { 'msg': '', 'ts': 0 }
 
 
 class NoCacheHandler(SimpleHTTPRequestHandler):
@@ -110,6 +114,40 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         # Normalize/redirect bad forwarded host pattern before handling
         if self._maybe_redirect_host():
+            return
+        # Tiny test reporting endpoints used by in-browser harness
+        if self.path.startswith('/__report'):
+            try:
+                qs = ''
+                try:
+                    qs = self.path.split('?', 1)[1]
+                except Exception:
+                    qs = ''
+                params = parse_qs(qs)
+                msg = params.get('msg', [''])[0]
+                global _last_test_report
+                _last_test_report = { 'msg': msg, 'ts': int(time.time()*1000) }
+                self.send_response(200)
+                self.send_header('Content-Type','text/plain; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(b'OK')
+            except Exception:
+                self.send_response(500)
+                self.send_header('Content-Type','text/plain; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(b'ERR')
+            return
+        if self.path == '/__last-test':
+            try:
+                body = json.dumps(_last_test_report).encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type','application/json; charset=utf-8')
+                self.send_header('Cache-Control','no-store')
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception:
+                self.send_response(500)
+                self.end_headers()
             return
         # Simple health check endpoint
         if self.path in ('/__health','/__ping'):

@@ -62,6 +62,69 @@ var __plan2d = {
   panAtStart:{x:0,y:0}
 };
 
+// --- 2D tracing utilities (opt-in via ?trace2d=1 or localStorage 'gablok_trace2d'=1) ---
+(function(){
+  function qs2d(name){ try { var m = String(location.search||'').match(new RegExp('[?&]'+name+'=([^&]+)')); return m ? decodeURIComponent(m[1]) : null; } catch(_) { return null; } }
+  try {
+    if (typeof window.__trace2d === 'undefined') {
+      var qFlag = qs2d('trace2d');
+      var lsFlag = null; try { lsFlag = localStorage.getItem('gablok_trace2d'); } catch(_ls){}
+      window.__trace2d = !!( (qFlag && qFlag!=='0' && qFlag!=='false') || (lsFlag && lsFlag!=='0' && lsFlag!=='false') );
+    }
+    if (!window.__log2d) {
+      window.__log2d = function(){ try { if (!window.__trace2d) return; var args = Array.prototype.slice.call(arguments); args.unshift('[2D]'); console.log.apply(console, args); } catch(_e){} };
+    }
+  } catch(_e) {}
+})();
+
+// --- Global Delete key safety net (capture-phase) ---
+// Ensures Delete works across repeated 2D editor opens by attaching a single, persistent
+// document-level listener that routes to the 2D deletion routine when 2D is active.
+(function(){
+  try {
+    if (!window.__plan2dGlobalKeys){
+      window.__plan2dGlobalKeys = true;
+      function __ensureDedupState(){
+        if (!window.__plan2d) return;
+        if (typeof __plan2d.__lastDeleteEventAt !== 'number') __plan2d.__lastDeleteEventAt = 0;
+        if (typeof __plan2d.__lastDeleteKeydownAt !== 'number') __plan2d.__lastDeleteKeydownAt = 0;
+        if (typeof __plan2d.__lastDeleteHandledAt !== 'number') __plan2d.__lastDeleteHandledAt = 0;
+        if (typeof __plan2d.__handlingDelete !== 'boolean') __plan2d.__handlingDelete = false;
+      }
+      function __isDelete(ev){ return !!(ev && (ev.key==='Delete' || ev.key==='Backspace' || ev.code==='Delete' || ev.keyCode===46 || ev.keyCode===8)); }
+      function __maybeGlobalDelete(ev){
+        try {
+          if (!window.__plan2d || !__plan2d.active) return;
+          if (!__isDelete(ev)) return;
+          __ensureDedupState();
+          var now = Date.now();
+          if (ev.repeat) { ev.preventDefault(); ev.stopPropagation(); return; }
+          // Keyup only as fallback when no recent keydown was seen
+          var isUp = (ev.type === 'keyup');
+          var recentKeydown = (__plan2d.__lastDeleteKeydownAt && (now - __plan2d.__lastDeleteKeydownAt) < 800);
+          var recentHandled = (__plan2d.__lastDeleteHandledAt && (now - __plan2d.__lastDeleteHandledAt) < 600);
+          if (isUp && (recentKeydown || recentHandled)) { ev.preventDefault(); ev.stopPropagation(); return; }
+          if (__plan2d.__lastDeleteEventAt && (now - __plan2d.__lastDeleteEventAt) < 500) { ev.preventDefault(); ev.stopPropagation(); return; }
+          __plan2d.__lastDeleteEventAt = now; if (ev.type==='keydown') __plan2d.__lastDeleteKeydownAt = now;
+          if (__plan2d.__handlingDelete) { ev.preventDefault(); ev.stopPropagation(); return; }
+          __plan2d.__handlingDelete = true;
+          try {
+            if (typeof window.plan2dDeleteSelection === 'function'){
+              var did = window.plan2dDeleteSelection();
+              if (did) __plan2d.__lastDeleteHandledAt = now;
+              ev.preventDefault(); ev.stopPropagation();
+              try { if (window.__log2d) __log2d('Global Delete handled (safety net)', did); } catch(_l){}
+              return;
+            }
+          } finally { __plan2d.__handlingDelete = false; }
+        } catch(_e) {}
+      }
+      document.addEventListener('keydown', __maybeGlobalDelete, true);
+      document.addEventListener('keyup', __maybeGlobalDelete, true);
+    }
+  } catch(_eg){}
+})();
+
 // Per-floor 2D drafts so in-progress edits persist across floor switches within the 2D editor
 var __plan2dDrafts = { 0: null, 1: null };
 
@@ -292,12 +355,14 @@ function plan2dSetSelection(idx){
       __plan2d.selectedSnapshot = snap;
     })();
     // Give the user a short grace period to hit Delete without the sync loop clearing selection
-    __plan2d.freezeSyncUntil = Date.now() + 900; // ~0.9s
+    __plan2d.freezeSyncUntil = Date.now() + 1500; // ~1.5s for extra safety across slower devices
   }catch(e){ __plan2d.selectedIndex = (typeof idx==='number'? idx : -1); __plan2d.selectedRef = null; }
   // Update any contextual UI tied to selection (e.g., window type)
   try { if(__plan2d.__refreshWindowTypeUI) __plan2d.__refreshWindowTypeUI(); } catch(_e){}
   try { if(__plan2d.__refreshDoorSwingUI) __plan2d.__refreshDoorSwingUI(); } catch(_e){}
 }
+// Expose selection helper for test harnesses and external tooling
+try { if (typeof window !== 'undefined') { window.plan2dSetSelection = plan2dSetSelection; } } catch(_eWin) {}
 
 // Find element index by matching a stored geometry snapshot (with tolerance)
 function plan2dFindElementIndexFromSnapshot(snap){
@@ -402,6 +467,7 @@ function openPlan2DModal(){
     if (baseC && !baseC.hasAttribute('tabindex')) baseC.setAttribute('tabindex','0');
     if (ovC && !ovC.hasAttribute('tabindex')) ovC.setAttribute('tabindex','0');
     if (ovC && typeof ovC.focus==='function') setTimeout(function(){ try{ ovC.focus(); }catch(_e){} }, 0);
+    try { __log2d('openPlan2DModal: focus overlay set, active=', __plan2d.active); } catch(_l){}
   } catch(_eFocus) {}
   // Clear any 3D selection to avoid Delete key acting on 3D while in 2D editor
   try { selectedRoomId = null; } catch(e) {}
@@ -802,15 +868,25 @@ function plan2dBind(){
   // Central deletion used by both keyboard and button; supports subsegment, selection, or hovered element
   function plan2dDeleteSelection(){
     if(!__plan2d.active) return false;
+    try { __log2d('plan2dDeleteSelection: enter', {
+      selectedIndex: __plan2d.selectedIndex,
+      hasSelectedSubsegment: !!__plan2d.selectedSubsegment,
+      hoverWindowIndex: __plan2d.hoverWindowIndex,
+      hoverDoorIndex: __plan2d.hoverDoorIndex,
+      elementsCount: (__plan2d.elements||[]).length
+    }); } catch(_l){}
     // 1) Prefer wall subsegment if selected
     if(__plan2d.selectedSubsegment){
+      try { __log2d('plan2dDeleteSelection: deleting selected subsegment'); } catch(_l){}
       if(plan2dDeleteSelectedSubsegment()){
   __plan2d.selectedSubsegment=null; __plan2d.selectedIndex=-1; __plan2d.selectedRef=null;
+        try { updateStatus && updateStatus('Deleted wall segment'); } catch(_s){}
         plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
       }
     }
     // 2) Next: delete current explicit selection (door/window/wall)
     if(__plan2d.selectedIndex>=0){
+      try { __log2d('plan2dDeleteSelection: deleting explicit selection', { index: __plan2d.selectedIndex, type: ((__plan2d.elements||[])[__plan2d.selectedIndex]||{}).type }); } catch(_l){}
       // Resolve current index using stable object reference if available
       var delIdx = __plan2d.selectedIndex; var didDel=false;
       try{
@@ -828,34 +904,45 @@ function plan2dBind(){
       // Use robust eraser to keep host indices (windows/doors) consistent and remove hosted openings
       if(delIdx>=0){ didDel = !!plan2dEraseElementAt(delIdx); }
       if(didDel){
+        try { __log2d('plan2dDeleteSelection: explicit delete success'); } catch(_l){}
         __plan2d.selectedIndex=-1; __plan2d.selectedRef=null; __plan2d.selectedSnapshot=null; __plan2d.selectedSubsegment=null;
+        try { updateStatus && updateStatus('Deleted item'); } catch(_s2){}
         plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
       }
       // If we could not resolve the element (stale ref/index), fall through to hover-based deletion
     }
     // 3) If nothing explicitly selected, delete hovered door/window or hovered wall subsegment (quick delete)
     if(typeof __plan2d.hoverWindowIndex==='number' && __plan2d.hoverWindowIndex>=0){
+      try { __log2d('plan2dDeleteSelection: deleting hovered window', { index: __plan2d.hoverWindowIndex }); } catch(_l){}
       plan2dEraseElementAt(__plan2d.hoverWindowIndex);
   __plan2d.hoverWindowIndex = -1; __plan2d.selectedIndex=-1; __plan2d.selectedRef=null; __plan2d.selectedSnapshot=null; __plan2d.selectedSubsegment=null;
+      try { updateStatus && updateStatus('Deleted window'); } catch(_s3){}
       plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
     }
     if(typeof __plan2d.hoverDoorIndex==='number' && __plan2d.hoverDoorIndex>=0){
+      try { __log2d('plan2dDeleteSelection: deleting hovered door', { index: __plan2d.hoverDoorIndex }); } catch(_l){}
       plan2dEraseElementAt(__plan2d.hoverDoorIndex);
   __plan2d.hoverDoorIndex = -1; __plan2d.selectedIndex=-1; __plan2d.selectedRef=null; __plan2d.selectedSnapshot=null; __plan2d.selectedSubsegment=null;
+      try { updateStatus && updateStatus('Deleted door'); } catch(_s4){}
       plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
     }
     if(__plan2d.hoverSubsegment){
       // Promote hover subsegment to selected and delete via the same routine
+      try { __log2d('plan2dDeleteSelection: deleting hovered subsegment'); } catch(_l){}
       __plan2d.selectedSubsegment = __plan2d.hoverSubsegment;
       if(plan2dDeleteSelectedSubsegment()){
   __plan2d.selectedSubsegment = null; __plan2d.selectedIndex = -1; __plan2d.selectedRef = null; __plan2d.selectedSnapshot = null;
+        try { updateStatus && updateStatus('Deleted wall segment'); } catch(_s5){}
         plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); return true;
       }
     }
     // Else: nothing selected; do nothing
+    try { __log2d('plan2dDeleteSelection: nothing deleted'); } catch(_l){}
     updateStatus && updateStatus('Select a door, window, or wall segment first');
     return false;
   }
+  // Expose deletion helper so tests/UI can call the same routine
+  try { if (typeof window !== 'undefined') { window.plan2dDeleteSelection = plan2dDeleteSelection; } } catch(_eWin2) {}
   // Hook Delete Selected button to shared deletion
   var bDelSel=document.getElementById('plan2d-delete-selected'); if(bDelSel) bDelSel.onclick=function(){ plan2dDeleteSelection(); };
   if(!c.__plan2dBound){
@@ -1275,12 +1362,48 @@ function plan2dBind(){
       __plan2d.start=null; __plan2d.last=null; plan2dDraw();
     });
     // Delete selected via keyboard (capture-phase to prevent global handlers)
+    // Hardened: listen on both document and window, and provide a keyup fallback. Dedupe via timestamp.
     if(!window.__plan2dKeydown){
+      // Robust single-handling guards
+      __plan2d.__lastDeleteEventAt = 0;           // legacy guard
+      __plan2d.__lastDeleteKeydownAt = 0;         // last keydown timestamp for Delete
+      __plan2d.__lastDeleteHandledAt = 0;         // last time we actually performed a delete
+      __plan2d.__handlingDelete = false;          // reentrancy guard
+      function _maybeHandleDelete(ev){
+        // Dedupe rapid duplicate events across window/document/keydown/keyup
+        var now = Date.now();
+        var isDelKey = (ev && (ev.key==='Delete' || ev.key==='Backspace' || ev.key==='Del' || ev.code==='Delete' || ev.keyCode===46 || ev.keyCode===8));
+        if(!isDelKey) return false;
+        if(!__plan2d.active) return false;
+        // Ignore auto-repeats when user holds down the key
+        if (ev && ev.repeat) { ev.preventDefault(); ev.stopPropagation(); return true; }
+        // If this is keyup shortly after a keydown we handled, ignore to prevent double-deletes.
+        // Treat keyup as a fallback only when no keydown was observed for a while (some environments suppress keydown).
+        var recentKeydown = (__plan2d.__lastDeleteKeydownAt && (now - __plan2d.__lastDeleteKeydownAt) < 800);
+        var recentHandled = (__plan2d.__lastDeleteHandledAt && (now - __plan2d.__lastDeleteHandledAt) < 600);
+        if (ev && ev.type === 'keyup' && (recentKeydown || recentHandled)) {
+          ev.preventDefault(); ev.stopPropagation(); return true;
+        }
+        try { __log2d('keydown/keyup Delete detected', { key: ev.key, code: ev.code, keyCode: ev.keyCode, which: ev.which, target: (ev.target && ev.target.tagName), activeEl: (document && document.activeElement && document.activeElement.tagName), selectedIndex: __plan2d.selectedIndex, hasSelectedSubsegment: !!__plan2d.selectedSubsegment, hoverWindowIndex: __plan2d.hoverWindowIndex, hoverDoorIndex: __plan2d.hoverDoorIndex }); } catch(_l){}
+        // Strengthen dedupe window across document/window and keydown/keyup
+        if (__plan2d.__lastDeleteEventAt && (now - __plan2d.__lastDeleteEventAt) < 500) { ev.preventDefault(); ev.stopPropagation(); return true; }
+        __plan2d.__lastDeleteEventAt = now;
+        if (ev && ev.type === 'keydown') { __plan2d.__lastDeleteKeydownAt = now; }
+        if (__plan2d.__handlingDelete) { ev.preventDefault(); ev.stopPropagation(); return true; }
+        __plan2d.__handlingDelete = true;
+        var did = false;
+        try { did = plan2dDeleteSelection(); } finally { __plan2d.__handlingDelete = false; }
+        if (did) { __plan2d.__lastDeleteHandledAt = now; }
+        ev.preventDefault(); ev.stopPropagation();
+        try { __log2d('Delete handled, result:', did, 'elements now:', (__plan2d.elements||[]).length); } catch(_l2){}
+        return did;
+      }
       window.__plan2dKeydown = function(ev){
         if(!__plan2d.active) return;
         var key = ev.key;
-        // On any editing key (Enter/Escape/Delete), freeze sync briefly so selection isn't cleared mid-action
-        try { __plan2d.freezeSyncUntil = Date.now() + 1200; } catch(_e){}
+        try { __log2d('2D keydown', { key: key, code: ev.code, keyCode: ev.keyCode, which: ev.which, target: (ev.target && ev.target.tagName) }); } catch(_l3){}
+  // On any editing key (Enter/Escape/Delete), freeze sync briefly so selection isn't cleared mid-action
+  try { __plan2d.freezeSyncUntil = Date.now() + 1500; } catch(_e){}
         // Finish/cancel multi-point wall chain
         if(__plan2d.tool==='wall' && __plan2d.chainActive){
           if(key==='Enter'){
@@ -1291,12 +1414,7 @@ function plan2dBind(){
           }
         }
         // Robust delete key detection across browsers/keyboards
-        var isDelKey = (key==='Delete' || key==='Backspace' || key==='Del' || (ev && (ev.code==='Delete' || ev.keyCode===46 || ev.keyCode===8)));
-        if(isDelKey){
-          var did = plan2dDeleteSelection();
-          ev.preventDefault(); ev.stopPropagation();
-          return;
-        }
+        if(_maybeHandleDelete(ev)) return;
         // Door hinge/swing toggles when a door is selected
         if(__plan2d.selectedIndex>=0){
           var selEl = __plan2d.elements[__plan2d.selectedIndex];
@@ -1346,8 +1464,32 @@ function plan2dBind(){
           if(moved){ plan2dAutoSnapAndJoin(); plan2dDraw(); updatePlan2DInfo(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return; }
         }
       };
-      // Use capture=true so this runs before document-level handlers
+      // Use capture=true so this runs before bubbling handlers
       document.addEventListener('keydown', window.__plan2dKeydown, true);
+      // Extra binding on key surfaces as a safety net (dedupe prevents double-handling)
+      try {
+        var __cnt = document.getElementById('plan2d-content');
+        var __ovl = document.getElementById('plan2d-overlay');
+        if (__cnt) {
+          __cnt.addEventListener('keydown', window.__plan2dKeydown, true);
+          __cnt.addEventListener('keydown', window.__plan2dKeydown, false);
+        }
+        if (__ovl) {
+          __ovl.addEventListener('keydown', window.__plan2dKeydown, true);
+          __ovl.addEventListener('keydown', window.__plan2dKeydown, false);
+        }
+      } catch(_ebind){}
+      // Keyup fallback for environments that suppress keydown
+      if (!window.__plan2dKeyup) {
+        window.__plan2dKeyup = function(ev){ if(!__plan2d.active) return; _maybeHandleDelete(ev); };
+        document.addEventListener('keyup', window.__plan2dKeyup, true);
+        try {
+          var __cnt2 = document.getElementById('plan2d-content');
+          var __ovl2 = document.getElementById('plan2d-overlay');
+          if (__cnt2) { __cnt2.addEventListener('keyup', window.__plan2dKeyup, true); }
+          if (__ovl2) { __ovl2.addEventListener('keyup', window.__plan2dKeyup, true); }
+        } catch(_ekup){}
+      }
     }
   }
   plan2dCursor();
@@ -1355,11 +1497,33 @@ function plan2dBind(){
 function plan2dUnbind(){
   try{
     if(window.__plan2dResize){ window.removeEventListener('resize', window.__plan2dResize); }
-    if(window.__plan2dKeydown){ document.removeEventListener('keydown', window.__plan2dKeydown, true); }
+    if(window.__plan2dKeydown){
+      try{ document.removeEventListener('keydown', window.__plan2dKeydown, true); }catch(_e){}
+      // Also attempt to remove any legacy window-level listeners from previous sessions
+      try{ window.removeEventListener('keydown', window.__plan2dKeydown, true); }catch(_e){}
+      try {
+        var __cnt3 = document.getElementById('plan2d-content');
+        var __ovl3 = document.getElementById('plan2d-overlay');
+        if (__cnt3) { __cnt3.removeEventListener('keydown', window.__plan2dKeydown, true); __cnt3.removeEventListener('keydown', window.__plan2dKeydown, false); }
+        if (__ovl3) { __ovl3.removeEventListener('keydown', window.__plan2dKeydown, true); __ovl3.removeEventListener('keydown', window.__plan2dKeydown, false); }
+      } catch(_eRmKd){}
+    }
+    if(window.__plan2dKeyup){
+      try{ document.removeEventListener('keyup', window.__plan2dKeyup, true); }catch(_e){}
+      // Also attempt to remove any legacy window-level listeners from previous sessions
+      try{ window.removeEventListener('keyup', window.__plan2dKeyup, true); }catch(_e){}
+      try {
+        var __cnt4 = document.getElementById('plan2d-content');
+        var __ovl4 = document.getElementById('plan2d-overlay');
+        if (__cnt4) { __cnt4.removeEventListener('keyup', window.__plan2dKeyup, true); }
+        if (__ovl4) { __ovl4.removeEventListener('keyup', window.__plan2dKeyup, true); }
+      } catch(_eRmKu){}
+    }
   }catch(e){}
   // Ensure handlers are re-attachable next time we open the 2D editor
   try { window.__plan2dResize = null; } catch(e){}
   try { window.__plan2dKeydown = null; } catch(e){}
+  try { window.__plan2dKeyup = null; } catch(e){}
 }
 
 function plan2dResize(){

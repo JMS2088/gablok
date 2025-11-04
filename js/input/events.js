@@ -2,6 +2,18 @@
 // Exposes window.setupEvents(), called by startApp() in engine3d.js
 (function(){
   if (typeof window.setupEvents === 'function') return;
+  // Optional tracing for 3D keys/selection: ?trace3d=1 (or reuse ?trace2d=1) or localStorage 'gablok_trace3d'=1
+  (function(){
+    function qs(name){ try { var m = String(location.search||'').match(new RegExp('[?&]'+name+'=([^&]+)')); return m ? decodeURIComponent(m[1]) : null; } catch(_) { return null; } }
+    try {
+      if (typeof window.__trace3d === 'undefined'){
+        var q3 = qs('trace3d'); var q2 = qs('trace2d');
+        var ls3=null; try { ls3 = localStorage.getItem('gablok_trace3d'); } catch(_ls){}
+        window.__trace3d = !!( (q3 && q3!=='0' && q3!=='false') || (q2 && q2!=='0' && q2!=='false') || (ls3 && ls3!=='0' && ls3!=='false') );
+      }
+      if (!window.__log3d){ window.__log3d = function(){ try { if(!window.__trace3d) return; var a=["[3D]"]; for(var i=0;i<arguments.length;i++) a.push(arguments[i]); console.log.apply(console, a); } catch(_e){} }; }
+    } catch(_e){}
+  })();
   // Throttled live rebuild for solid wall strips so rendered walls follow during drags/resizes
   function __maybeRebuildRoomStripsThrottled(){
     try {
@@ -777,8 +789,9 @@
     });
     
     document.addEventListener('keydown', function(e) {
+      try { __log3d('keydown', { key:e.key, code:e.code, keyCode:e.keyCode, which:e.which, target:(e.target&&e.target.tagName), active2D:(window.__plan2d && __plan2d.active) }); } catch(_l){}
       // When 2D editor is active, ignore 3D keyboard shortcuts entirely
-      try { if (window.__plan2d && __plan2d.active) return; } catch(_e) {}
+      try { if (window.__plan2d && __plan2d.active) { __log3d('keydown ignored (2D active)'); return; } } catch(_e) {}
       if (e.key === 'Escape') {
         var rpm = document.getElementById('room-palette-modal');
         if (rpm && rpm.style.display === 'block') {
@@ -790,6 +803,7 @@
         }
   } else if ((e.key === 'Delete' || e.key === 'Backspace') && (selectedRoomId || (typeof selectedWallStripIndex==='number' && selectedWallStripIndex>-1))) {
         e.preventDefault();
+    try { __log3d('Delete pressed in 3D', { selectedRoomId: selectedRoomId, selectedWallStripIndex: selectedWallStripIndex }); } catch(_l2){}
         
         var roomIndex = -1;
         for (var i = 0; i < allRooms.length; i++) {
@@ -804,6 +818,7 @@
           allRooms.splice(roomIndex, 1);
           selectedRoomId = null;
           updateStatus(room.name + ' deleted');
+          try { __log3d('Deleted room'); } catch(_l3){}
           return;
         }
         
@@ -811,6 +826,7 @@
           stairsComponent = null;
           selectedRoomId = null;
           updateStatus('Stairs deleted');
+          try { __log3d('Deleted stairs'); } catch(_l4){}
           return;
         }
         
@@ -827,6 +843,7 @@
           pergolaComponents.splice(pergolaIndex, 1);
           selectedRoomId = null;
           updateStatus(pergola.name + ' deleted');
+          try { __log3d('Deleted pergola'); } catch(_l5){}
           return;
         }
         
@@ -843,6 +860,7 @@
           balconyComponents.splice(balconyIndex, 1);
           selectedRoomId = null;
           updateStatus(balcony.name + ' deleted');
+          try { __log3d('Deleted balcony'); } catch(_l6){}
           return;
         }
         
@@ -859,6 +877,7 @@
           garageComponents.splice(garageIndex, 1);
           selectedRoomId = null;
           updateStatus(garage.name + ' deleted');
+          try { __log3d('Deleted garage'); } catch(_l7){}
           return;
         }
         
@@ -874,6 +893,7 @@
           poolComponents.splice(poolIndex, 1);
           selectedRoomId = null;
           updateStatus(pool.name + ' deleted');
+          try { __log3d('Deleted pool'); } catch(_l8){}
           return;
         }
         
@@ -890,6 +910,7 @@
           roofComponents.splice(roofIndex, 1);
           selectedRoomId = null;
           updateStatus(roof.name + ' deleted');
+          try { __log3d('Deleted roof'); } catch(_l9){}
           return;
         }
         
@@ -902,6 +923,7 @@
           furnitureItems.splice(furnIndex, 1);
           selectedRoomId = null;
           updateStatus((furn.name || 'Item') + ' deleted');
+          try { __log3d('Deleted furniture'); } catch(_l10){}
           return;
         }
         // If a wall strip is selected (and no object matched), delete it
@@ -914,11 +936,13 @@
             saveProjectSilently();
             renderLoop();
             updateStatus('Wall deleted');
+            try { __log3d('Deleted wall strip'); } catch(_l11){}
             return;
           }
         }
         
         updateStatus('Cannot delete - select an object first');
+        try { __log3d('Delete ignored: nothing selected'); } catch(_l12){}
       }
     });
   };
