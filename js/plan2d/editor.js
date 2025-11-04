@@ -395,6 +395,14 @@ function openPlan2DModal(){
     window.addEventListener('resize', window.__plan2dAlignHeaderModule);
   } catch(e){}
   __plan2d.active=true;
+  // Ensure the 2D receives keyboard events: make canvases focusable and focus overlay by default
+  try {
+    var baseC = document.getElementById('plan2d-canvas');
+    var ovC = document.getElementById('plan2d-overlay');
+    if (baseC && !baseC.hasAttribute('tabindex')) baseC.setAttribute('tabindex','0');
+    if (ovC && !ovC.hasAttribute('tabindex')) ovC.setAttribute('tabindex','0');
+    if (ovC && typeof ovC.focus==='function') setTimeout(function(){ try{ ovC.focus(); }catch(_e){} }, 0);
+  } catch(_eFocus) {}
   // Clear any 3D selection to avoid Delete key acting on 3D while in 2D editor
   try { selectedRoomId = null; } catch(e) {}
   // Sync floor toggle and native level selector to the current 3D floor
@@ -1246,6 +1254,8 @@ function plan2dBind(){
       window.__plan2dKeydown = function(ev){
         if(!__plan2d.active) return;
         var key = ev.key;
+        // On any editing key (Enter/Escape/Delete), freeze sync briefly so selection isn't cleared mid-action
+        try { __plan2d.freezeSyncUntil = Date.now() + 1200; } catch(_e){}
         // Finish/cancel multi-point wall chain
         if(__plan2d.tool==='wall' && __plan2d.chainActive){
           if(key==='Enter'){
