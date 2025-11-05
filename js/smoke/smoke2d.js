@@ -11,8 +11,18 @@
   // If none of the known flags are present, do nothing
   if ((!flag2d || flag2d === '0' || flag2d === 'false') && (!flagApply || flagApply === '0' || flagApply === 'false') && (!flagTest || flagTest === '0' || flagTest === 'false')) return;
   function setStatus(msg){ try{ var s=document.getElementById('status'); if(s) s.textContent = msg; }catch(e){} }
+  // Lightweight reporter with retry and global hook for manual use
+  function report(msg){
+    try { window.__lastSmokeMsg = msg; } catch(_h){}
+    try {
+      fetch('/__report?msg='+encodeURIComponent(msg)).catch(function(){});
+    } catch(_r) {}
+  }
+  try { if (!window.__smokeReport) window.__smokeReport = report; } catch(_g){}
   function ready(fn){ if(document.readyState==='complete'||document.readyState==='interactive'){ setTimeout(fn,0); } else { document.addEventListener('DOMContentLoaded', fn); } }
   ready(function(){
+    // Early ping so server shows activity even if later steps fail
+    try { report('smoke2d:START '+(new Date().toISOString())); } catch(_p){}
     // Ensure editor module is loaded
     function ensureEditor(){
       return new Promise(function(resolve){
@@ -62,7 +72,6 @@
         }
 
         // Programmatic keyboard event for Delete
-        function report(msg){ try { fetch('/__report?msg='+encodeURIComponent(msg)).catch(function(){}); } catch(_r){} }
         function fireDelete(){ try {
           var ev = new KeyboardEvent('keydown', { key:'Delete', code:'Delete', keyCode:46, which:46, bubbles:true, cancelable:true });
           document.dispatchEvent(ev); window.dispatchEvent(ev);
@@ -286,6 +295,7 @@
             })();
           } else {
             setStatus('2D tests: unknown test "'+flagTest+'"');
+            report('2D tests: unknown test '+flagTest);
           }
         }
 

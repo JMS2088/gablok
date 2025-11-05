@@ -100,6 +100,85 @@
           var A = worldAt(-hx + sheetMarginX, sheetStart), B = worldAt(hx - sheetMarginX, sheetStart);
           var C = worldAt(hx - sheetMarginX, sheetEnd), D = worldAt(-hx + sheetMarginX, sheetEnd);
           drawTopRect(A.x,A.z,B.x,C.z, 'rgba(186, 210, 255, 0.22)', '#93c5fd', 0.8);
+        } else if (obj.kind === 'kitchen') {
+          // Kitchen extras: sink recess(es), hob plates, simple faucet(s), and an oven front
+          var topK = topY;
+          function kDrawTopRect(x0,z0,x1,z1, fillCol, strokeCol, lw2){
+            var p0 = window.project3D(x0, topK, z0);
+            var p1 = window.project3D(x1, topK, z0);
+            var p2 = window.project3D(x1, topK, z1);
+            var p3 = window.project3D(x0, topK, z1);
+            if (!p0||!p1||!p2||!p3) return;
+            ctx.save(); if (fillCol){ ctx.fillStyle = fillCol; }
+            ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.closePath(); if (fillCol) ctx.fill();
+            if (strokeCol){ ctx.strokeStyle = strokeCol; ctx.lineWidth = lw2||1; ctx.stroke(); }
+            ctx.restore();
+          }
+          function kWorld(localX, localZ){ var p = rotPoint(localX, localZ); return { x: p.x, z: p.z }; }
+          // Dimensions: enforce 0.7m depth visually for tops like UI
+          var hw = w/2, hd = d/2; // already set; d for kitchens should be normalized to 0.7 in project
+          // Sink: single or double depending on width
+          var isLargeK = (w >= 3.4) || (d >= 1.6) || (obj.name && /large|03/i.test(obj.name||''));
+          var sinkW = isLargeK ? 0.9 : 0.55; var sinkD = 0.45;
+          var sinkCxLocal = -hw * 0.35; var sinkCzLocal = 0;
+          if (isLargeK) {
+            var w2 = sinkW/2 - 0.02;
+            var A0 = kWorld(sinkCxLocal - 0.02 - w2, sinkCzLocal - sinkD/2);
+            var A1 = kWorld(sinkCxLocal - 0.02 + w2, sinkCzLocal + sinkD/2);
+            var B0 = kWorld(sinkCxLocal + 0.02 - w2, sinkCzLocal - sinkD/2);
+            var B1 = kWorld(sinkCxLocal + 0.02 + w2, sinkCzLocal + sinkD/2);
+            kDrawTopRect(A0.x, A0.z, A1.x, A1.z, 'rgba(206,214,222,0.55)', '#5b6773', 1);
+            kDrawTopRect(B0.x, B0.z, B1.x, B1.z, 'rgba(206,214,222,0.55)', '#5b6773', 1);
+          } else {
+            var S0 = kWorld(sinkCxLocal - sinkW/2, sinkCzLocal - sinkD/2);
+            var S1 = kWorld(sinkCxLocal + sinkW/2, sinkCzLocal + sinkD/2);
+            kDrawTopRect(S0.x, S0.z, S1.x, S1.z, 'rgba(206,214,222,0.55)', '#5b6773', 1);
+          }
+          // Hob: four plates to the opposite side of sink
+          function drawPlate(cxLocal, czLocal, r){
+            var steps = 18; ctx.save(); ctx.strokeStyle = '#2d3748'; ctx.lineWidth = 1.4;
+            for (var k=0;k<steps;k++){
+              var a0=(k/steps)*Math.PI*2, a1=((k+1)/steps)*Math.PI*2;
+              var p0w = kWorld(cxLocal + Math.cos(a0)*r, czLocal + Math.sin(a0)*r);
+              var p1w = kWorld(cxLocal + Math.cos(a1)*r, czLocal + Math.sin(a1)*r);
+              var P0 = window.project3D(p0w.x, topK, p0w.z);
+              var P1 = window.project3D(p1w.x, topK, p1w.z);
+              if (!P0||!P1) continue; ctx.beginPath(); ctx.moveTo(P0.x,P0.y); ctx.lineTo(P1.x,P1.y); ctx.stroke();
+            }
+            ctx.restore();
+          }
+          var plateR = 0.12, plateGap = 0.28; var plateBaseX = hw * 0.25; var plateBaseZ = -plateGap/2;
+          drawPlate(plateBaseX, plateBaseZ, plateR);
+          drawPlate(plateBaseX + plateGap, plateBaseZ, plateR);
+          drawPlate(plateBaseX, plateBaseZ + plateGap, plateR);
+          drawPlate(plateBaseX + plateGap, plateBaseZ + plateGap, plateR);
+          // Simple taps (two stems and spouts) above top plane near sink
+          function drawTap(txLocal, tzLocal){
+            var stemH = 0.12, spoutL = 0.10;
+            var baseW = kWorld(txLocal, tzLocal - sinkD/2 - 0.03);
+            var topW = kWorld(txLocal, tzLocal - sinkD/2 - 0.03);
+            var spW = kWorld(txLocal, tzLocal - sinkD/2 - 0.03 + spoutL);
+            var B = window.project3D(baseW.x, topK, baseW.z);
+            var T = window.project3D(topW.x, topK + stemH, topW.z);
+            var S = window.project3D(spW.x, topK + stemH, spW.z);
+            if (B&&T){ ctx.save(); ctx.strokeStyle='#475569'; ctx.lineWidth=1.6; ctx.beginPath(); ctx.moveTo(B.x,B.y); ctx.lineTo(T.x,T.y); if (S){ ctx.lineTo(S.x,S.y);} ctx.stroke(); ctx.restore(); }
+          }
+          var w2t = (sinkW - (isLargeK?0.04:0))/2;
+          // Two taps centered over each bowl (or both sides if single)
+          var leftTx = sinkCxLocal - (isLargeK ? (w2t+0.02) : sinkW*0.15);
+          var rightTx = sinkCxLocal + (isLargeK ? (w2t+0.02) : sinkW*0.15);
+          drawTap(leftTx, sinkCzLocal);
+          drawTap(rightTx, sinkCzLocal);
+          // Oven front on the +Z face (local front)
+          var hobCenterX = plateBaseX + plateGap/2; var ovenW = Math.min(0.7, w*0.5), ovenH = 0.45;
+          var ox0 = hobCenterX - ovenW/2, ox1 = hobCenterX + ovenW/2; var ozLocal = hd; // front face at +hz
+          var oy0 = y0 + 0.15, oy1 = Math.min(topK - 0.1, oy0 + ovenH);
+          var A0w = rotPoint(ox0, ozLocal), A1w = rotPoint(ox1, ozLocal);
+          var P0 = window.project3D(A0w.x, oy0, A0w.z);
+          var P1 = window.project3D(A1w.x, oy0, A1w.z);
+          var P2 = window.project3D(A1w.x, oy1, A1w.z);
+          var P3 = window.project3D(A0w.x, oy1, A0w.z);
+          if (P0&&P1&&P2&&P3){ ctx.save(); ctx.strokeStyle='#1f2937'; ctx.fillStyle='rgba(30,41,59,0.12)'; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(P0.x,P0.y); ctx.lineTo(P1.x,P1.y); ctx.lineTo(P2.x,P2.y); ctx.lineTo(P3.x,P3.y); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); }
         }
       } catch(_bed){ /* non-fatal */ }
     } catch(e){ /* non-fatal */ }

@@ -77,7 +77,7 @@
   }
   afterFirstPaint(function(){
     // Prefetch commonly used assets but stagger them to avoid bursty connection spikes
-    var urls = ['js/ui/roomPalette.js','js/ui/pricing.js','js/ui/modals.js','js/ui/roofDropdown.js','js/plan2d/editor.js?v=20251101-1',
+    var urls = ['js/ui/roomPalette.js','js/ui/pricing.js','js/ui/modals.js','js/ui/roofDropdown.js','js/plan2d/editor.js?v=20251101-1','js/plan2d/utils.js',
       'js/render/drawPergola.js','js/render/drawGarage.js','js/render/drawBalcony.js','js/render/drawStairs.js','js/render/drawPool.js','js/render/drawRoof.js'];
     var delay = 0;
     for (var i=0;i<urls.length;i++){

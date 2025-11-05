@@ -65,9 +65,9 @@
     { label: 'UI labels', url: 'js/ui/labels.js?v=20251026-1', critical: true },
     { label: 'Room renderer', url: 'js/render/drawRoom.js?v=20251026-2', critical: true },
   'js/input/events.js?v=20251101-6',
+  { label: 'Keyboard router', url: 'js/input/keyboard.js?v=20251104-1', critical: true },
   { label: 'Plan apply', url: 'js/core/plan-apply.js?v=20251101-7', critical: true },
   { label: 'Plan populate', url: 'js/core/plan-populate.js?v=20251101-4', critical: true },
-    { label: 'Plan 2D editor', url: 'js/plan2d/editor.js?v=20251101-1', critical: true },
     { label: 'App core', url: 'js/app.js?v=20251026-1', critical: true }
   ];
 

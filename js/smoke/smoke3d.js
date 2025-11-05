@@ -2,6 +2,8 @@
 // No dependencies. Loads after app.js and runs once on DOMContentLoaded.
 (function(){
   function setStatus(msg){ try{ var s=document.getElementById('status'); if(s) s.textContent = msg; }catch(e){} }
+  function qs(name){ try { var m = String(location.search||'').match(new RegExp('[?&]'+name+'=([^&]+)')); return m ? decodeURIComponent(m[1]) : null; } catch(_) { return null; } }
+  function report(msg){ try { fetch('/__report?msg='+encodeURIComponent(msg)).catch(function(){}); } catch(_r){} }
   function sampleNonWhitePixels(ctx, x, y, w, h){
     try{
       var img = ctx.getImageData(x, y, w, h);
@@ -50,6 +52,27 @@
   ready(function(){
     // Defer slightly to let startApp run
     setTimeout(run, 150);
+    // Optional kitchen placement smoke: ?test3d=kitchen
+    try {
+      var t3d = qs('test3d');
+      if (t3d === 'kitchen') {
+        setTimeout(function(){
+          try {
+            if (!Array.isArray(window.allRooms) || window.allRooms.length===0) {
+              if (typeof window.addNewRoom==='function') window.addNewRoom();
+            }
+            var room = (Array.isArray(window.allRooms) && window.allRooms[0]) || null;
+            if (!room) { setStatus('Kitchen smoke: no room'); report('Kitchen smoke: no room'); return; }
+            if (!Array.isArray(window.furnitureItems)) window.furnitureItems = [];
+            var depth = 0.7;
+            var furn = { id: 'furn_smoke_kitchen', x: room.x, z: room.z, width: 3.0, depth: depth, height: 0.9, level: room.level, elevation: 0, name: 'Kitchen Design 01', type: 'furniture', rotation: 0, kind: 'kitchen' };
+            window.furnitureItems.push(furn);
+            if (typeof window.renderLoop==='function') window.renderLoop();
+            setStatus('Kitchen smoke: placed test kitchen'); report('Kitchen smoke: placed');
+          } catch(ex){ setStatus('Kitchen smoke: ERROR'); report('Kitchen smoke: ERROR'); }
+        }, 250);
+      }
+    } catch(_e){}
   });
   // Expose manual trigger
   window.smokeTest3D = run;
