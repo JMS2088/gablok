@@ -1,3 +1,29 @@
+## Wall Corners — Corner Config 007 (DO NOT CHANGE)
+
+This documents the current, correct behavior for wall corners in 3D (the visual you get for the first room placed in the 3D area). The implementation lives in `js/core/engine3d.js` inside `drawWallStrip`, annotated with a banner comment: "Corner Config 007 — DO NOT CHANGE".
+
+Summary
+- T‑junctions: endpoints that land near the middle of another wall are trimmed (butt join). This prevents overlaps while keeping the primary wall continuous.
+- L‑corners: two walls sharing an endpoint are mitered with a fixed 45° cut per wall by intersecting each offset face with a local diagonal.
+  - Start endpoint uses the diagonal (t + n)
+  - End endpoint uses the diagonal (t − n)
+  where t is the unit tangent from (x0,z0) to (x1,z1), and n is the unit left normal.
+
+Why it’s correct for the first room
+- The first room is axis‑aligned and rectangular. For a 90° corner, (t ± n) gives an exact 45° miter on both faces when thickness is constant across the walls. This yields perfectly flush edges without gaps or overdraw.
+
+Key parameters and thresholds
+- Same‑level only: junction detection ignores strips from other floors.
+- T‑junction classification: requires the projected contact to be > 6 cm away from the neighbor’s endpoints (to avoid misclassifying an L‑corner as a T).
+- Offset geometry: corners A/B/C/D are computed from the centerline by offsetting ± (thickness/2) along the left/right normal, then corrected by the miter or T‑trim.
+
+Do not modify (007 contract)
+- The 45° construction using (t + n) at start and (t − n) at end.
+- The T‑junction trim and its endpoint distance threshold.
+- The order of intersection operations that determines A/D at start and B/C at end.
+
+Changing any of the above is likely to reintroduce non‑flush corners, hairline gaps, or visible overlaps.
+
 # Gablok Architecture Audit & Optimization Report
 **Date:** November 1, 2025  
 **Conducted by:** Senior Development Team

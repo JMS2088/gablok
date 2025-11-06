@@ -442,16 +442,17 @@
       var cx = rx*__proj.right[0] + ry*__proj.right[1] + rz*__proj.right[2];
       var cy = rx*__proj.up[0]    + ry*__proj.up[1]    + rz*__proj.up[2];
       var cz = rx*__proj.fwd[0]   + ry*__proj.fwd[1]   + rz*__proj.fwd[2];
-      // Near-plane guard: clamp very-near front points; drop points that are sufficiently behind the camera.
-      // This avoids geometric bending while still keeping extremely close points projectable.
+      // Near-plane guard: never let points disappear due to extreme close-ups.
+      // Always clamp to a tiny positive depth so nearby/inside geometry stays visible.
+      // Only drop points that are drastically behind the camera (rare in normal use).
       if (cz <= 1e-5) {
-        if (cz > -0.5) {
-          cz = 0.01; // slightly behind: clamp forward to near plane
+        if (cz > -5.0) {
+          cz = 0.01; // clamp onto near plane for slightly-behind to moderately-behind points
         } else {
-          return null; // too far behind camera; ignore
+          return null; // extremely far behind the camera; safe to ignore
         }
       }
-      if (cz < 0.01) cz = 0.01;    // clamp very close points so they remain projectable
+      if (cz < 0.01) cz = 0.01;    // final safety clamp
       // Reduce perspective a little by blending cz with a reference depth (camera distance)
       var k = Math.max(0, Math.min(1, window.PERSPECTIVE_STRENGTH));
       var refZ = Math.max(0.5, camera.distance || 12);
@@ -764,6 +765,44 @@
       var D = {x:x0-nx*hw, y:baseY, z:z0-nz*hw};
 
   // --- Corner and junction correction helpers ---
+  /**
+   * Corner Config 007 — DO NOT CHANGE
+   * ---------------------------------------------------------------
+   * This section documents the corner behavior that yields perfectly flush
+   * corners for the first room placed in the 3D area. Keep this algorithm
+   * intact to preserve visual correctness.
+   *
+   * Overview
+   * - For endpoints that form a T-junction (one strip butting into the middle
+   *   of another), we trim this strip to the neighbor's face so there is no
+   *   overlap. (See findTJunction/applyTTrimAtStart/End below.)
+   * - For L-corners (two strips meeting at a shared endpoint), we apply a
+   *   fixed 45° miter per strip by intersecting each offset face with a local
+   *   diagonal:
+   *     • start endpoint uses the direction (t + n)
+   *     • end   endpoint uses the direction (t - n)
+   *   where t is the unit tangent from (x0,z0)→(x1,z1) and n is the left unit
+   *   normal. This produces symmetric 45° cuts so both faces meet edge-to-edge.
+   *
+   * Why this works (first room case)
+   * - The first placed room’s walls are axis-aligned rectangles. For right
+   *   angles, the (t ± n) diagonal yields an exact 45° miter on both faces
+   *   when thickness is constant across all strips, so the outer edges align
+   *   perfectly with no gaps or overdraw.
+   *
+   * Invariants and assumptions
+   * - Same-level strips only contribute to junction logic.
+   * - Wall thickness is uniform per strip; all room walls typically share the
+   *   same thickness.
+   * - T-junction detection ignores points within 6 cm of a neighbor’s ends to
+   *   avoid misclassifying L-corners as T’s.
+   *
+   * Do not modify
+   * - The 45° construction using (t+n) at start and (t−n) at end.
+   * - The T-junction trim logic or its endpoint distance thresholds.
+   * - The order of intersection calls that computes A/D at start and B/C at end.
+   * Any alteration can reintroduce gaps, overlaps, or non-flush corners.
+   */
       function angleBetween(u,v){ var dot=u.x*v.x + u.z*v.z; var ll=Math.max(1e-6, Math.hypot(u.x,u.z)*Math.hypot(v.x,v.z)); return Math.acos(Math.max(-1,Math.min(1,dot/ll))); }
       // Compute tangent for this strip (from start->end)
       var tx = dx/len, tz = dz/len; var tvec = {x:tx, z:tz};
@@ -857,7 +896,7 @@
         return best;
       }
 
-      // --- T-junction handling (butt join) ---
+  // --- T-junction handling (butt join) ---  [Corner Config 007]
       var startT = findTJunction(x0, z0);
       var endT = findTJunction(x1, z1);
       // Precompute this strip's offset lines at endpoints
@@ -891,8 +930,8 @@
       if (startT){ applyTTrimAtStart(startT); startIsT = true; }
       if (endT){ applyTTrimAtEnd(endT); endIsT = true; }
 
-      // Corner mitering: adjust outer edges where two wall strips meet so edges are flush
-      // Apply simple fixed 45° miter at start using local diagonal (start uses t+n)
+      // Corner mitering (L-corners): fixed 45° miter per strip so edges meet perfectly
+      // 007-start: use local diagonal (t + n) to compute A (left) and D (right)
       if (!startIsT){
         var corner0 = { x:x0, z:z0 };
         // Cut line along the diagonal across the strip: d = t + n (normalized)
@@ -907,7 +946,7 @@
           if (iR0){ D.x = iR0.x; D.z = iR0.z; }
         }
       }
-      // Apply simple fixed 45° miter at end using opposite diagonal (end uses t-n)
+      // 007-end: use local diagonal (t − n) to compute B (left) and C (right)
       if (!endIsT){
         var corner1 = { x:x1, z:z1 };
         var dxse = tvec.x - nx, dzse = tvec.z - nz; var dle = Math.hypot(dxse, dzse);
@@ -929,8 +968,8 @@
       var Dt = {x:D.x, y:baseY+h, z:D.z};
       // Project (after potential miter adjustments)
   var pA=project3D(A.x,A.y,A.z), pB=project3D(B.x,B.y,B.z), pC=project3D(C.x,C.y,C.z), pD=project3D(D.x,D.y,D.z);
-      var pAt=project3D(At.x,At.y,At.z), pBt=project3D(Bt.x,Bt.y,Bt.z), pCt=project3D(Ct.x,Ct.y,Ct.z), pDt=project3D(Dt.x,Dt.y,Dt.z);
-      if (!pA||!pB||!pC||!pD||!pAt||!pBt||!pCt||!pDt) return;
+    var pAt=project3D(At.x,At.y,At.z), pBt=project3D(Bt.x,Bt.y,Bt.z), pCt=project3D(Ct.x,Ct.y,Ct.z), pDt=project3D(Dt.x,Dt.y,Dt.z);
+    // Do not early-return if some points are behind or near-plane clamped; draw whatever faces are valid
       ctx.save();
   // Solid mode: translucent faces per requirement; keep lines subtle and seal micro-gaps
   var edgeCol = onLevel ? 'rgba(71,85,105,0.35)' : 'rgba(148,163,184,0.35)';
@@ -987,17 +1026,44 @@
         }
         ctx.fillStyle = fill; ctx.fill('evenodd');
       }
-      // Fill sides with holes to cut out windows/doors
-      fillQuadWithHoles(pA,pB,pBt,pAt, leftHoles, fillSide);
-      fillQuadWithHoles(pD,pC,pCt,pDt, rightHoles, fillSide);
-  // Top face fill only
-  ctx.beginPath(); ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); ctx.closePath(); ctx.fillStyle = fillTop; ctx.fill();
-  // Seal top perimeter with a low-contrast stroke to hide 1px gaps due to rounding
-  ctx.save();
-  ctx.strokeStyle = onLevel ? 'rgba(71,85,105,0.22)' : 'rgba(148,163,184,0.18)';
-  ctx.lineWidth = 1.0;
-  ctx.beginPath(); ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); ctx.closePath(); ctx.stroke();
-  ctx.restore();
+      var canLeft = (pA&&pB&&pBt&&pAt);
+      var canRight = (pD&&pC&&pCt&&pDt);
+      var canTop = (pAt&&pBt&&pCt&&pDt);
+      var drewFace = false;
+      // Fill sides with holes to cut out windows/doors (only when all four projected points exist)
+      if (canLeft)  { fillQuadWithHoles(pA,pB,pBt,pAt, leftHoles, fillSide); drewFace = true; }
+      if (canRight) { fillQuadWithHoles(pD,pC,pCt,pDt, rightHoles, fillSide); drewFace = true; }
+  // Top face fill only (when valid)
+  if (canTop) {
+    ctx.beginPath(); ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); ctx.closePath(); ctx.fillStyle = fillTop; ctx.fill();
+    // Seal top perimeter with a low-contrast stroke to hide 1px gaps due to rounding
+    ctx.save();
+    ctx.strokeStyle = onLevel ? 'rgba(71,85,105,0.22)' : 'rgba(148,163,184,0.18)';
+    ctx.lineWidth = 1.0;
+    ctx.beginPath(); ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); ctx.closePath(); ctx.stroke();
+    ctx.restore();
+    drewFace = true;
+  }
+      // Fallback: if no face could be drawn (all four-point faces invalid), draw a centerline at mid-height
+      if (!drewFace) {
+        var yMid = baseY + Math.min(h*0.5, 1.2);
+        var cp0 = project3D(x0, yMid, z0), cp1 = project3D(x1, yMid, z1);
+        if (cp0 && cp1) {
+          ctx.save();
+          ctx.strokeStyle = onLevel ? 'rgba(100,116,139,0.9)' : 'rgba(148,163,184,0.8)';
+          ctx.lineWidth = onLevel ? 2.0 : 1.2;
+          ctx.beginPath(); ctx.moveTo(cp0.x, cp0.y); ctx.lineTo(cp1.x, cp1.y); ctx.stroke();
+          ctx.restore();
+        } else {
+          // Last-ditch: draw any available projected corner as a small dot so the wall is never fully invisible
+          var pts = [pA,pB,pC,pD,pAt,pBt,pCt,pDt];
+          for (var pi=0; pi<pts.length; pi++){
+            var P = pts[pi]; if (!P) continue;
+            ctx.save(); ctx.fillStyle = onLevel ? 'rgba(100,116,139,0.95)' : 'rgba(148,163,184,0.85)';
+            ctx.beginPath(); ctx.arc(P.x, P.y, 2, 0, Math.PI*2); ctx.fill(); ctx.restore();
+          }
+        }
+      }
       // Determine if neighboring strip connects at endpoints to skip cap strokes for flush corners
       function hasNeighborAt(wx, wz){
         try {
@@ -1019,13 +1085,13 @@
   // Stroke only the long edges and any exposed caps; keep lines very subtle
   ctx.beginPath();
   // Long edge At->Bt
-  ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y);
+  if (pAt && pBt) { ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); }
   // Cap Bt->Ct only if no neighbor at end
-  if (!endHasNeighbor){ ctx.moveTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); }
+  if (!endHasNeighbor && pBt && pCt){ ctx.moveTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); }
   // Long edge Ct->Dt
-  ctx.moveTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y);
+  if (pCt && pDt) { ctx.moveTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); }
   // Cap Dt->At only if no neighbor at start
-  if (!startHasNeighbor){ ctx.moveTo(pDt.x,pDt.y); ctx.lineTo(pAt.x,pAt.y); }
+  if (!startHasNeighbor && pDt && pAt){ ctx.moveTo(pDt.x,pDt.y); ctx.lineTo(pAt.x,pAt.y); }
   ctx.stroke();
       // Draw translucent blue glass for windows (centered plane)
       if (glassRects.length){
