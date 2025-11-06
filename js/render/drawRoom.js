@@ -4,6 +4,9 @@
 
 function drawRoom(room) {
   try {
+  var solidMode = (window.__wallRenderMode === 'solid');
+  // Only suppress room wireframe while an active 3D drag is in progress to avoid ghosting with solid walls
+  var suppressWire = !!(solidMode && window.__dragging3DRoom);
     // Helpers: near-plane clipping in camera space to keep floors/outlines visible without bending
     var kBlend = Math.max(0, Math.min(1, (typeof window.PERSPECTIVE_STRENGTH==='number'? window.PERSPECTIVE_STRENGTH:0.88)));
     var refZ = Math.max(0.5, (camera && camera.distance) || 12);
@@ -128,17 +131,21 @@ function drawRoom(room) {
           ctx.fillStyle = 'rgba(180,180,180,0.10)';
         }
         ctx.fill();
-        // outline
-        ctx.beginPath(); var so = camToScreen(baseClip[0]); if(so){ ctx.moveTo(so.x, so.y); }
-        for (var bo=1; bo<baseClip.length; bo++){ var sb2 = camToScreen(baseClip[bo]); if(sb2){ ctx.lineTo(sb2.x, sb2.y); } }
-        ctx.closePath(); ctx.stroke();
+        // outline (skip only while actively dragging in solid mode)
+        if (!suppressWire) {
+          ctx.beginPath(); var so = camToScreen(baseClip[0]); if(so){ ctx.moveTo(so.x, so.y); }
+          for (var bo=1; bo<baseClip.length; bo++){ var sb2 = camToScreen(baseClip[bo]); if(sb2){ ctx.lineTo(sb2.x, sb2.y); } }
+          ctx.closePath(); ctx.stroke();
+        }
       }
-      // Edges (12), clipped per segment
-      var edges = [ [0,1],[1,2],[2,3],[3,0], [4,5],[5,6],[6,7],[7,4], [0,4],[1,5],[2,6],[3,7] ];
-      for (var eIdx=0; eIdx<edges.length; eIdx++){
-        var e = edges[eIdx]; var a3=corners[e[0]], b3=corners[e[1]];
-        var ac = toCam(a3), bc = toCam(b3); var seg = clipSegmentNear(ac, bc); if(!seg) continue;
-        var A2 = camToScreen(seg[0]), B2 = camToScreen(seg[1]); if(!A2||!B2) continue; ctx.beginPath(); ctx.moveTo(A2.x,A2.y); ctx.lineTo(B2.x,B2.y); ctx.stroke();
+      // Edges (12), clipped per segment — skip only while actively dragging in solid mode
+      if (!suppressWire) {
+        var edges = [ [0,1],[1,2],[2,3],[3,0], [4,5],[5,6],[6,7],[7,4], [0,4],[1,5],[2,6],[3,7] ];
+        for (var eIdx=0; eIdx<edges.length; eIdx++){
+          var e = edges[eIdx]; var a3=corners[e[0]], b3=corners[e[1]];
+          var ac = toCam(a3), bc = toCam(b3); var seg = clipSegmentNear(ac, bc); if(!seg) continue;
+          var A2 = camToScreen(seg[0]), B2 = camToScreen(seg[1]); if(!A2||!B2) continue; ctx.beginPath(); ctx.moveTo(A2.x,A2.y); ctx.lineTo(B2.x,B2.y); ctx.stroke();
+        }
       }
     } else {
       // Draw polygonal room: base (floor) fill, side outlines, and top outline
@@ -164,32 +171,36 @@ function drawRoom(room) {
         for (var bi=1; bi<baseClip.length; bi++){ var sb = camToScreen(baseClip[bi]); if(sb){ ctx.lineTo(sb.x, sb.y); } }
         ctx.closePath();
         ctx.fill();
-        // Base outline
-        ctx.beginPath(); var b1 = camToScreen(baseClip[0]); if(b1){ ctx.moveTo(b1.x, b1.y); }
-        for (var bo=1; bo<baseClip.length; bo++){ var sb2 = camToScreen(baseClip[bo]); if(sb2){ ctx.lineTo(sb2.x, sb2.y); } }
-        ctx.closePath();
-        ctx.stroke();
+        // Base outline — skip only while actively dragging in solid mode
+        if (!suppressWire) {
+          ctx.beginPath(); var b1 = camToScreen(baseClip[0]); if(b1){ ctx.moveTo(b1.x, b1.y); }
+          for (var bo=1; bo<baseClip.length; bo++){ var sb2 = camToScreen(baseClip[bo]); if(sb2){ ctx.lineTo(sb2.x, sb2.y); } }
+          ctx.closePath();
+          ctx.stroke();
+        }
       }
-      // Top outline (clipped)
+      // Top outline (clipped) — skip only while actively dragging in solid mode
       var topClip = clipPolyNear(topCam);
-      if (topClip.length >= 2){
+      if (!suppressWire && topClip.length >= 2){
         ctx.beginPath(); var t0 = camToScreen(topClip[0]); if(t0){ ctx.moveTo(t0.x, t0.y); }
         for (var ti=1; ti<topClip.length; ti++){ var st = camToScreen(topClip[ti]); if(st){ ctx.lineTo(st.x, st.y); } }
         ctx.closePath(); ctx.stroke();
       }
-      // Draw side edges (vertical) with clipping per segment
-      for (var si=0; si<room.footprint.length; si++){
-        var pt = room.footprint[si];
-        var ac = toCam({x:pt.x,y:roomFloorY,z:pt.z});
-        var bc = toCam({x:pt.x,y:topY,z:pt.z});
-        var seg = clipSegmentNear(ac, bc); if(!seg) continue; var A = camToScreen(seg[0]), B = camToScreen(seg[1]); if(!A||!B) continue;
-        ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+      // Side edges (vertical) — skip only while actively dragging in solid mode
+      if (!suppressWire) {
+        for (var si=0; si<room.footprint.length; si++){
+          var pt = room.footprint[si];
+          var ac = toCam({x:pt.x,y:roomFloorY,z:pt.z});
+          var bc = toCam({x:pt.x,y:topY,z:pt.z});
+          var seg = clipSegmentNear(ac, bc); if(!seg) continue; var A = camToScreen(seg[0]), B = camToScreen(seg[1]); if(!A||!B) continue;
+          ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+        }
       }
     }
     
     // Rectangle case floor fill moved above during clipping
 
-    try { if (typeof drawHandlesForRoom === 'function') drawHandlesForRoom(room); } catch(e) {}
+  try { if (typeof drawHandlesForRoom === 'function') drawHandlesForRoom(room); } catch(e) {}
 
     // Draw openings (doors/windows) with full rectangular outline at correct sill/height
     try {

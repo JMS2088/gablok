@@ -123,6 +123,45 @@
   if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'solid';
   if (typeof window.__roomWallThickness === 'undefined') window.__roomWallThickness = 0.0;
   if (typeof window.__roomStripTag === 'undefined') window.__roomStripTag = '__fromRooms';
+  // Corner code overlay (for diagnosing problem corners)
+  if (typeof window.__showCornerCodes === 'undefined') window.__showCornerCodes = false;
+  if (typeof window.__cornerCodeMap === 'undefined') window.__cornerCodeMap = {};
+  // Shared exterior-corner snap map: ensures adjacent strips use the exact same
+  // world coordinate at convex exterior corners, eliminating tiny gaps.
+  if (typeof window.__extCornerSnap === 'undefined') window.__extCornerSnap = {};
+  // Track the set of perimeter edge keys used by the last rebuild so we can
+  // remove any previously generated perimeter strips even if they don't match
+  // the current footprint (prevents "ghost" solids at old positions during drags).
+  if (typeof window.__lastPerimeterEdges === 'undefined') window.__lastPerimeterEdges = null;
+
+  // Utility: deduplicate wallStrips by unordered endpoints and level. Prefer
+  // the most recently added perimeter-derived strip (tagged) over older ones.
+  if (typeof window.dedupeWallStrips === 'undefined') window.dedupeWallStrips = function(){
+    try {
+      var arr = window.wallStrips; if (!Array.isArray(arr) || arr.length < 2) return;
+      function kf(v){ return Math.round((+v||0)*1000)/1000; }
+      function key(s){ var a=kf(s.x0)+","+kf(s.z0), b=kf(s.x1)+","+kf(s.z1); var u=(a<b)?(a+"|"+b):(b+"|"+a); return (s.level||0)+"#"+u; }
+      var tag = window.__roomStripTag || '__fromRooms';
+      // Choose best per key scanning from right (newest first); prefer tagged
+      var best = Object.create(null);
+      for (var i=arr.length-1; i>=0; i--){
+        var s = arr[i]; if(!s) continue; var k = key(s);
+        if (!best[k]) { best[k] = s; }
+        else {
+          var curBest = best[k];
+          if (!!s[tag] && !curBest[tag]) { best[k] = s; }
+        }
+      }
+      // Rebuild array keeping only selected winners in original order
+      var out = [];
+      var kept = Object.create(null);
+      for (var j=0; j<arr.length; j++){
+        var sj = arr[j]; if(!sj) continue; var kj = key(sj);
+        if (best[kj] === sj && !kept[kj]) { out.push(sj); kept[kj] = true; }
+      }
+      window.wallStrips = out;
+    } catch(_eDed) { /* non-fatal */ }
+  };
 
   // Remove previously generated perimeter strips (created from rooms)
   if (typeof window.removeRoomPerimeterStrips === 'undefined') window.removeRoomPerimeterStrips = function(){
@@ -140,11 +179,68 @@
       var t = Math.max(0.01, +thickness || 0.3);
       if (!Array.isArray(window.allRooms)) return;
       if (!Array.isArray(window.wallStrips)) window.wallStrips = [];
-      // Remove existing tagged strips first
+      // Build a set of perimeter edge keys (unordered endpoints, per-level) across all rooms/garages,
+      // so we can remove any existing strips (tagged or not) that overlap those edges to prevent duplicates.
+      function kf(v){ return Math.round((+v||0)*1000)/1000; } // 1mm
+      function edgeKeyWithLevel(level,x0,z0,x1,z1){
+        var a = kf(x0)+","+kf(z0), b = kf(x1)+","+kf(z1); var k = (a<b)? (a+"|"+b):(b+"|"+a); return (level||0)+"#"+k;
+      }
+      var perimeterKeys = Object.create(null);
+      try {
+        // Rooms (rect and polygon)
+        for (var ri=0; ri<window.allRooms.length; ri++){
+          var r0 = window.allRooms[ri]; if(!r0) continue; var lev=(r0.level||0);
+          if (Array.isArray(r0.footprint) && r0.footprint.length>=2){
+            var pts0 = r0.footprint; for (var kk=0; kk<pts0.length; kk++){
+              var a0=pts0[kk], b0=pts0[(kk+1)%pts0.length]; if(!a0||!b0) continue;
+              var ek = edgeKeyWithLevel(lev, a0.x,a0.z, b0.x,b0.z); perimeterKeys[ek] = true;
+            }
+          } else {
+            var hw0=(r0.width||0)/2, hd0=(r0.depth||0)/2; if(hw0>0 && hd0>0){
+              var xL=(r0.x||0)-hw0, xR=(r0.x||0)+hw0, zT=(r0.z||0)-hd0, zB=(r0.z||0)+hd0;
+              var edges0 = [ [xL,zT,xR,zT], [xR,zT,xR,zB], [xR,zB,xL,zB], [xL,zB,xL,zT] ];
+              for (var ee=0; ee<edges0.length; ee++){
+                var E=edges0[ee]; var ek2 = edgeKeyWithLevel(lev, E[0],E[1],E[2],E[3]); perimeterKeys[ek2] = true;
+              }
+            }
+          }
+        }
+        // Garages (exclude door/front edge) — compute world corners from center/rotation
+        var garages0 = Array.isArray(window.garageComponents) ? window.garageComponents : [];
+        for (var gi0=0; gi0<garages0.length; gi0++){
+          var g0 = garages0[gi0]; if(!g0) continue; var levG=(g0.level||0);
+          var hwg=(g0.width||0)/2, hdg=(g0.depth||0)/2; if(hwg<=0||hdg<=0) continue;
+          var rot0 = ((g0.rotation||0) * Math.PI)/180; var cos0=Math.cos(rot0), sin0=Math.sin(rot0);
+          function rL(lx,lz){ var rx=lx*cos0 - lz*sin0, rz=lx*sin0 + lz*cos0; return { x:(g0.x||0)+rx, z:(g0.z||0)+rz }; }
+          var c0=rL(-hwg,-hdg), c1=rL(hwg,-hdg), c2=rL(hwg,hdg), c3=rL(-hwg,hdg);
+          var egs=[[c0,c1],[c1,c2],[c2,c3],[c3,c0]]; for (var eg=0; eg<egs.length; eg++){ if (eg===0) continue; var A=egs[eg][0], B=egs[eg][1]; var ek3=edgeKeyWithLevel(levG, A.x,A.z,B.x,B.z); perimeterKeys[ek3]=true; }
+        }
+      } catch(_ePK) {}
+      // First, remove strips that belonged to the previous perimeter rebuild (old pose)
+      try {
+        var prevKeys = (window.__lastPerimeterEdges && typeof window.__lastPerimeterEdges === 'object') ? window.__lastPerimeterEdges : null;
+        if (prevKeys) {
+          window.wallStrips = (window.wallStrips||[]).filter(function(ws){
+            if (!ws) return false;
+            var keyPrev = edgeKeyWithLevel((ws.level||0), ws.x0,ws.z0, ws.x1,ws.z1);
+            return !prevKeys[keyPrev]; // drop any strip that was part of the last perimeter set
+          });
+        }
+      } catch(_ePrev) {}
+      // Next, remove existing strips that match perimeter edges of the current set regardless of tag to avoid double walls
+      try {
+        window.wallStrips = (window.wallStrips||[]).filter(function(ws){
+          if (!ws) return false; // discard bogus
+          var key = edgeKeyWithLevel((ws.level||0), ws.x0,ws.z0, ws.x1,ws.z1);
+          // Keep if not a perimeter edge; remove if it is (we'll add fresh tagged ones below)
+          return !perimeterKeys[key];
+        });
+      } catch(_eFilt) {}
+      // Also remove previously tagged strips to be safe
       window.removeRoomPerimeterStrips();
       // Helper: check if a strip for this edge (unordered endpoints) already exists
-      function kf(x){ return Math.round((+x||0)*1000)/1000; } // 1mm
-      function keyFor(x0,z0,x1,z1){ var a=kf(x0)+","+kf(z0), b=kf(x1)+","+kf(z1); return (a<b)? (a+"|"+b):(b+"|"+a); }
+  function kf(x){ return Math.round((+x||0)*1000)/1000; } // 1mm
+  function keyFor(x0,z0,x1,z1){ var a=kf(x0)+","+kf(z0), b=kf(x1)+","+kf(z1); return (a<b)? (a+"|"+b):(b+"|"+a); }
       var existing = Object.create(null);
       for (var ei=0; ei<window.wallStrips.length; ei++){
         var s=window.wallStrips[ei]; if(!s) continue; existing[keyFor(s.x0,s.z0,s.x1,s.z1)] = true;
@@ -221,7 +317,7 @@
             var outerFaceLeft = isOuterBias ? (!interiorIsLeft) : (interiorIsLeft);
             // Attach any openings that lie on this edge (polygon rooms use world endpoints)
             var openEdge = openingsForEdge(r, a.x,a.z,b.x,b.z, false, null);
-            window.wallStrips.push({ x0:a.x, z0:a.z, x1:b.x, z1:b.z, thickness:t, height:height, baseY:baseY, level:level, openings:openEdge, [tag]:true, __outerFaceLeft: outerFaceLeft });
+            window.wallStrips.push({ x0:a.x, z0:a.z, x1:b.x, z1:b.z, thickness:t, height:height, baseY:baseY, level:level, openings:openEdge, [tag]:true, __outerFaceLeft: outerFaceLeft, __interiorLeft: interiorIsLeft });
             added[key] = true;
           }
         } else {
@@ -244,7 +340,7 @@
             var outerFaceLeftR = isOuterBiasR ? (!interiorIsLeftR) : (interiorIsLeftR);
             // Map rectangle edge-based openings to world endpoints for this edge
             var openEdgeR = openingsForEdge(r, E[0],E[1],E[2],E[3], true, { xL:xL, xR:xR, zT:zT, zB:zB });
-            window.wallStrips.push({ x0:E[0], z0:E[1], x1:E[2], z1:E[3], thickness:t, height:height, baseY:baseY, level:level, openings:openEdgeR, [tag]:true, __outerFaceLeft: outerFaceLeftR });
+            window.wallStrips.push({ x0:E[0], z0:E[1], x1:E[2], z1:E[3], thickness:t, height:height, baseY:baseY, level:level, openings:openEdgeR, [tag]:true, __outerFaceLeft: outerFaceLeftR, __interiorLeft: interiorIsLeftR });
             added[key2] = true;
           }
         }
@@ -284,11 +380,15 @@
             var xDomG = Math.abs(edx) >= Math.abs(edz);
             var isOuterBiasG = (xDomG && longerAxisG==='x') || (!xDomG && longerAxisG==='z');
             var outerFaceLeftG = isOuterBiasG ? (!interiorIsLeftG) : (interiorIsLeftG);
-            window.wallStrips.push({ x0:E0.x, z0:E0.z, x1:E1.x, z1:E1.z, thickness:t, height:heightG, baseY:baseYG, level:levelG, openings:[], [tag]:true, __outerFaceLeft: outerFaceLeftG });
+            window.wallStrips.push({ x0:E0.x, z0:E0.z, x1:E1.x, z1:E1.z, thickness:t, height:heightG, baseY:baseYG, level:levelG, openings:[], [tag]:true, __outerFaceLeft: outerFaceLeftG, __interiorLeft: interiorIsLeftG });
             added[keyG] = true;
           }
         }
       } catch(_eGar) { /* best-effort for garages */ }
+      // Save current perimeter edge keys so a future rebuild can purge them (prevents ghosts)
+      try { window.__lastPerimeterEdges = perimeterKeys; } catch(_eSavePk) {}
+      // Final safety: dedupe resulting strips by edge+level to eliminate any residual duplicates
+      try { if (typeof window.dedupeWallStrips === 'function') window.dedupeWallStrips(); } catch(_eDd) {}
       if (typeof window.saveProjectSilently==='function') window.saveProjectSilently();
       if (typeof window.renderLoop==='function') window.renderLoop();
     } catch(_e) {}
@@ -297,6 +397,8 @@
     try {
       var m = (mode==='solid') ? 'solid' : 'line';
       window.__wallRenderMode = m;
+      // When user presses Render (solid), enable corner codes so endpoints are labeled on screen
+      if (m === 'solid') { window.__showCornerCodes = true; }
       // Simplified: do not run 2D→3D applies here. Just rebuild from existing 3D state for ALL rooms/garages across floors.
       // This guarantees that pressing Render applies to ground and first floor together, without duplication or missed floors.
       if (m === 'solid') {
@@ -442,17 +544,11 @@
       var cx = rx*__proj.right[0] + ry*__proj.right[1] + rz*__proj.right[2];
       var cy = rx*__proj.up[0]    + ry*__proj.up[1]    + rz*__proj.up[2];
       var cz = rx*__proj.fwd[0]   + ry*__proj.fwd[1]   + rz*__proj.fwd[2];
-      // Near-plane guard: never let points disappear due to extreme close-ups.
-      // Always clamp to a tiny positive depth so nearby/inside geometry stays visible.
-      // Only drop points that are drastically behind the camera (rare in normal use).
-      if (cz <= 1e-5) {
-        if (cz > -5.0) {
-          cz = 0.01; // clamp onto near plane for slightly-behind to moderately-behind points
-        } else {
-          return null; // extremely far behind the camera; safe to ignore
-        }
-      }
-      if (cz < 0.01) cz = 0.01;    // final safety clamp
+      // Near/behind handling:
+      // - Hard cull points that are sufficiently behind the camera to avoid rendering a mirrored scene (e.g., second grid floor)
+      // - Clamp points very close to the near plane to a small positive depth so nearby/inside geometry stays visible
+      if (cz < -0.25) return null;           // behind camera -> discard
+      if (cz < 0.02) cz = 0.02;              // near plane clamp
       // Reduce perspective a little by blending cz with a reference depth (camera distance)
       var k = Math.max(0, Math.min(1, window.PERSPECTIVE_STRENGTH));
       var refZ = Math.max(0.5, camera.distance || 12);
@@ -745,6 +841,51 @@
       // Keep normals as-is; mitering will be symmetric at corners (no global flips)
       var hw = thick/2;
       var onLevel = (ws.level||0) === (currentFloor||0);
+      // Small helper to draw a unique corner code near a world point (x,z) at a given height
+      function drawCornerCodeAt(xw, yw, zw){
+        try {
+          if (!window.__showCornerCodes) return;
+          var key = null;
+          // Quantize to centimeters for stable keys across frames
+          function kf(v){ return Math.round((+v||0)*100)/100; }
+          key = (ws.level||0) + '|' + kf(xw) + '|' + kf(zw);
+          var code = window.__cornerCodeMap && window.__cornerCodeMap[key];
+          if (!code) return;
+          var p = project3D(xw, yw, zw); if (!p) return;
+          // Skip offscreen to reduce clutter
+          if (isOffscreenByCenter && isOffscreenByCenter(p)) return;
+          ctx.save();
+          // Draw small pill background for readability
+          var txt = code;
+          ctx.font = 'bold 11px system-ui, sans-serif';
+          var padX = 4, padY = 2;
+          var w = Math.ceil(ctx.measureText(txt).width) + padX*2;
+          var h = 14;
+          var x = Math.round(p.x + 6), y = Math.round(p.y - h/2 - 2);
+          ctx.fillStyle = onLevel ? 'rgba(17,24,39,0.75)' : 'rgba(55,65,81,0.6)';
+          ctx.strokeStyle = 'rgba(226,232,240,0.35)';
+          ctx.lineWidth = 1;
+          // Rounded rect
+          var r = 6;
+          ctx.beginPath();
+          ctx.moveTo(x+r, y);
+          ctx.lineTo(x+w-r, y);
+          ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+          ctx.lineTo(x+w, y+h-r);
+          ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+          ctx.lineTo(x+r, y+h);
+          ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+          ctx.lineTo(x, y+r);
+          ctx.quadraticCurveTo(x, y, x+r, y);
+          ctx.closePath();
+          ctx.fill(); ctx.stroke();
+          // Text
+          ctx.fillStyle = 'rgba(248,250,252,0.95)';
+          ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          ctx.fillText(txt, x + padX, y + h/2);
+          ctx.restore();
+        } catch(_eCC) { /* ignore */ }
+      }
 
       // Line mode: draw a single centerline at mid-height; skip thickness/face outlines
       if (renderMode === 'line'){
@@ -756,6 +897,9 @@
         ctx.lineWidth = onLevel ? 3 : 1.6;
         ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
         ctx.restore();
+        // Corner codes in line mode too (using same mid-height for label position)
+        drawCornerCodeAt(x0, yMid, z0);
+        drawCornerCodeAt(x1, yMid, z1);
         return;
       }
       // Base corners (counter-clockwise)
@@ -930,35 +1074,177 @@
       if (startT){ applyTTrimAtStart(startT); startIsT = true; }
       if (endT){ applyTTrimAtEnd(endT); endIsT = true; }
 
-      // Corner mitering (L-corners): fixed 45° miter per strip so edges meet perfectly
-      // 007-start: use local diagonal (t + n) to compute A (left) and D (right)
+      // Corner mitering (L-corners)
+      // 007: default symmetric 45° miter; 007-Inner: for room perimeters, keep interior face uncut on concave corners only
+      var isRoomPerimeter = !!ws[(window.__roomStripTag||'__fromRooms')];
+      // Prefer consistent interior-left flag from generation; fallback to inverse of outerFaceLeft if needed
+      var interiorLeftGlobal = (typeof ws.__interiorLeft === 'boolean')
+        ? ws.__interiorLeft
+        : ((typeof ws.__outerFaceLeft === 'boolean') ? (!ws.__outerFaceLeft) : null);
+      // Determine concavity at endpoints using neighbor directions
+      var __EPS_TURN = 1e-3;
+      function classifyCornerAtStart(){
+        try {
+          var nb = getNeighborAt(x0, z0); if (!nb || interiorLeftGlobal==null) return { has:false, concave:false, convex:false };
+          // Turn from neighbor segment toward this strip
+          var cross = (nb.dir.x * tvec.z) - (nb.dir.z * tvec.x);
+          var conc = interiorLeftGlobal ? (cross < -__EPS_TURN) : (cross > __EPS_TURN);
+          var conv = interiorLeftGlobal ? (cross > __EPS_TURN)  : (cross < -__EPS_TURN);
+          return { has:true, concave: conc, convex: conv };
+        } catch(_e) { return { has:false, concave:false, convex:false }; }
+      }
+      function classifyCornerAtEnd(){
+        try {
+          var nb = getNeighborAt(x1, z1); if (!nb || interiorLeftGlobal==null) return { has:false, concave:false, convex:false };
+          var back = { x: -tvec.x, z: -tvec.z };
+          var cross = (nb.dir.x * back.z) - (nb.dir.z * back.x);
+          var conc = interiorLeftGlobal ? (cross < -__EPS_TURN) : (cross > __EPS_TURN);
+          var conv = interiorLeftGlobal ? (cross > __EPS_TURN)  : (cross < -__EPS_TURN);
+          return { has:true, concave: conc, convex: conv };
+        } catch(_e) { return { has:false, concave:false, convex:false }; }
+      }
+      var __startClass = classifyCornerAtStart();
+      var __endClass = classifyCornerAtEnd();
+      var startConcave = __startClass.concave;
+      var endConcave = __endClass.concave;
+      var startConvex = __startClass.convex;
+      var endConvex = __endClass.convex;
+      // 007-start: local diagonal (t + n) — with asymmetric option for inner corners
       if (!startIsT){
         var corner0 = { x:x0, z:z0 };
-        // Cut line along the diagonal across the strip: d = t + n (normalized)
         var dxs = tvec.x + nx, dzs = tvec.z + nz; var dl = Math.hypot(dxs, dzs);
         if (dl > 1e-6){
           var cutDir = { x: dxs/dl, z: dzs/dl };
-          var pL0 = { x: corner0.x + nx*hw, z: corner0.z + nz*hw };
-          var pR0 = { x: corner0.x - nx*hw, z: corner0.z - nz*hw };
-          var iL0 = intersectLines(pL0, tvec, corner0, cutDir);
-          var iR0 = intersectLines(pR0, tvec, corner0, cutDir);
-          if (iL0){ A.x = iL0.x; A.z = iL0.z; }
-          if (iR0){ D.x = iR0.x; D.z = iR0.z; }
+          var pL0s = { x: corner0.x + nx*hw, z: corner0.z + nz*hw };
+          var pR0s = { x: corner0.x - nx*hw, z: corner0.z - nz*hw };
+          var iL0 = intersectLines(pL0s, tvec, corner0, cutDir);
+          var iR0 = intersectLines(pR0s, tvec, corner0, cutDir);
+          if (isRoomPerimeter && interiorLeftGlobal != null && startConcave){
+            // Inner corner handling: preserve interior face endpoint, miter the exterior only
+            if (interiorLeftGlobal){
+              // interior is left: keep A at original offset; only miter D
+              if (iR0){ D.x = iR0.x; D.z = iR0.z; }
+              else { D.x = pR0s.x; D.z = pR0s.z; }
+              A.x = pL0s.x; A.z = pL0s.z;
+            } else {
+              // interior is right: keep D; only miter A
+              if (iL0){ A.x = iL0.x; A.z = iL0.z; }
+              else { A.x = pL0s.x; A.z = pL0s.z; }
+              D.x = pR0s.x; D.z = pR0s.z;
+            }
+          } else if (isRoomPerimeter && interiorLeftGlobal != null && startConvex){
+            // Exterior (convex) corner: make outer faces meet exactly by intersecting outer offset lines of this and neighbor
+            var nb0 = getNeighborAt(x0, z0);
+            var iExt0 = null;
+            // Use or populate a shared snap for this corner to guarantee both walls use the same point
+            try {
+              var __key0 = (ws.level||0) + '|' + Math.round(corner0.x*100) + '|' + Math.round(corner0.z*100) + '|ext';
+              if (window.__extCornerSnap && window.__extCornerSnap[__key0]) {
+                iExt0 = window.__extCornerSnap[__key0];
+              }
+            } catch(_eSnap0Rd) {}
+            try {
+              if (!iExt0 && nb0 && nb0.s){
+                var tsx = nb0.dir.x, tsz = nb0.dir.z; var nsx = -tsz, nsz = tsx;
+                var hwN = Math.max(0.02, (nb0.s.thickness||0.3)/2);
+                var intLeftN = (typeof nb0.s.__interiorLeft==='boolean') ? nb0.s.__interiorLeft : ((typeof nb0.s.__outerFaceLeft==='boolean') ? (!nb0.s.__outerFaceLeft) : null);
+                var exSignN = (intLeftN===true) ? -1 : 1; // exterior is right if interiorLeft
+                var qOut0 = { x: corner0.x + nsx*exSignN*hwN, z: corner0.z + nsz*exSignN*hwN };
+                var pOut0 = interiorLeftGlobal ? pR0s : pL0s; // our exterior at start
+                var dOut0 = tvec; var eOut0 = { x: tsx, z: tsz };
+                iExt0 = intersectLines(pOut0, dOut0, qOut0, eOut0);
+              }
+            } catch(_eX0) { iExt0 = null; }
+            // Persist the snapped point for neighbors (quantize to cm to stabilize)
+            try {
+              if (iExt0) {
+                var __key0w = (ws.level||0) + '|' + Math.round(corner0.x*100) + '|' + Math.round(corner0.z*100) + '|ext';
+                window.__extCornerSnap[__key0w] = { x: iExt0.x, z: iExt0.z };
+              }
+            } catch(_eSnap0Wr) {}
+            if (interiorLeftGlobal){
+              // exterior is right: set D to exterior intersection or fallback; miter A (interior)
+              if (iExt0){ D.x = iExt0.x; D.z = iExt0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
+              if (iL0){ A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
+            } else {
+              // exterior is left: set A to exterior intersection or fallback; miter D (interior)
+              if (iExt0){ A.x = iExt0.x; A.z = iExt0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
+              if (iR0){ D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
+            }
+          } else {
+            // Default symmetric 45° miter
+            if (iL0){ A.x = iL0.x; A.z = iL0.z; }
+            if (iR0){ D.x = iR0.x; D.z = iR0.z; }
+          }
         }
       }
-      // 007-end: use local diagonal (t − n) to compute B (left) and C (right)
+      // 007-end: local diagonal (t − n) — with asymmetric option for inner corners
       if (!endIsT){
         var corner1 = { x:x1, z:z1 };
         var dxse = tvec.x - nx, dzse = tvec.z - nz; var dle = Math.hypot(dxse, dzse);
         if (dle > 1e-6){
           var cutDirE = { x: dxse/dle, z: dzse/dle };
-          var pL1 = { x: corner1.x + nx*hw, z: corner1.z + nz*hw };
-          var pR1 = { x: corner1.x - nx*hw, z: corner1.z - nz*hw };
+          var pL1s = { x: corner1.x + nx*hw, z: corner1.z + nz*hw };
+          var pR1s = { x: corner1.x - nx*hw, z: corner1.z - nz*hw };
           var back = { x: -tvec.x, z: -tvec.z };
-          var iL1 = intersectLines(pL1, back, corner1, cutDirE);
-          var iR1 = intersectLines(pR1, back, corner1, cutDirE);
-          if (iL1){ B.x = iL1.x; B.z = iL1.z; }
-          if (iR1){ C.x = iR1.x; C.z = iR1.z; }
+          var iL1 = intersectLines(pL1s, back, corner1, cutDirE);
+          var iR1 = intersectLines(pR1s, back, corner1, cutDirE);
+          if (isRoomPerimeter && interiorLeftGlobal != null && endConcave){
+            if (interiorLeftGlobal){
+              // interior is left: keep B; only miter C
+              if (iR1){ C.x = iR1.x; C.z = iR1.z; }
+              else { C.x = pR1s.x; C.z = pR1s.z; }
+              B.x = pL1s.x; B.z = pL1s.z;
+            } else {
+              // interior is right: keep C; only miter B
+              if (iL1){ B.x = iL1.x; B.z = iL1.z; }
+              else { B.x = pL1s.x; B.z = pL1s.z; }
+              C.x = pR1s.x; C.z = pR1s.z;
+            }
+          } else if (isRoomPerimeter && interiorLeftGlobal != null && endConvex){
+            // Exterior (convex) corner: intersect outer offset lines to make outer faces meet
+            var nb1 = getNeighborAt(x1, z1);
+            var iExt1 = null;
+            // Shared snap read
+            try {
+              var __key1 = (ws.level||0) + '|' + Math.round(corner1.x*100) + '|' + Math.round(corner1.z*100) + '|ext';
+              if (window.__extCornerSnap && window.__extCornerSnap[__key1]) {
+                iExt1 = window.__extCornerSnap[__key1];
+              }
+            } catch(_eSnap1Rd) {}
+            try {
+              if (!iExt1 && nb1 && nb1.s){
+                var tsx = nb1.dir.x, tsz = nb1.dir.z; var nsx = -tsz, nsz = tsx;
+                var hwN = Math.max(0.02, (nb1.s.thickness||0.3)/2);
+                var intLeftN = (typeof nb1.s.__interiorLeft==='boolean') ? nb1.s.__interiorLeft : ((typeof nb1.s.__outerFaceLeft==='boolean') ? (!nb1.s.__outerFaceLeft) : null);
+                var exSignN = (intLeftN===true) ? -1 : 1;
+                var qOut1 = { x: corner1.x + nsx*exSignN*hwN, z: corner1.z + nsz*exSignN*hwN };
+                var pOut1 = interiorLeftGlobal ? pR1s : pL1s; // our exterior at end
+                var dOut1 = { x: -tvec.x, z: -tvec.z }; var eOut1 = { x: tsx, z: tsz };
+                iExt1 = intersectLines(pOut1, dOut1, qOut1, eOut1);
+              }
+            } catch(_eX1) { iExt1 = null; }
+            // Persist snap
+            try {
+              if (iExt1) {
+                var __key1w = (ws.level||0) + '|' + Math.round(corner1.x*100) + '|' + Math.round(corner1.z*100) + '|ext';
+                window.__extCornerSnap[__key1w] = { x: iExt1.x, z: iExt1.z };
+              }
+            } catch(_eSnap1Wr) {}
+            if (interiorLeftGlobal){
+              // exterior is right: set C to exterior intersection; miter B
+              if (iExt1){ C.x = iExt1.x; C.z = iExt1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
+              if (iL1){ B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
+            } else {
+              // exterior is left: set B to exterior intersection; miter C
+              if (iExt1){ B.x = iExt1.x; B.z = iExt1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
+              if (iR1){ C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
+            }
+          } else {
+            // Default symmetric 45° miter
+            if (iL1){ B.x = iL1.x; B.z = iL1.z; }
+            if (iR1){ C.x = iR1.x; C.z = iR1.z; }
+          }
         }
       }
 
@@ -974,7 +1260,8 @@
   // Solid mode: translucent faces per requirement; keep lines subtle and seal micro-gaps
   var edgeCol = onLevel ? 'rgba(71,85,105,0.35)' : 'rgba(148,163,184,0.35)';
   var fillTop = onLevel ? 'rgba(100,116,139,0.20)' : 'rgba(148,163,184,0.15)';
-  var fillSide = onLevel ? 'rgba(71,85,105,0.26)' : 'rgba(148,163,184,0.18)';
+  // Base side tone for solid faces; we modulate per-face by camera perspective so render walls "follow" camera like keyline walls
+  var __baseSide = onLevel ? {r:71,g:85,b:105,a:0.26} : {r:148,g:163,b:184,a:0.18};
       ctx.lineWidth = onLevel ? 2.2 : 1.4;
       ctx.strokeStyle = edgeCol;
   ctx.lineJoin = 'miter';
@@ -1030,9 +1317,21 @@
       var canRight = (pD&&pC&&pCt&&pDt);
       var canTop = (pAt&&pBt&&pCt&&pDt);
       var drewFace = false;
+      // Compute simple Lambert-like shading from camera forward to face normal to follow perspective
+      function __shade(dot){
+        var t = Math.max(0, Math.min(1, 0.5*dot + 0.5)); // [-1,1] -> [0,1]
+        var k = 0.55 + 0.45*t; // brightness factor
+        var a = Math.max(0.12, Math.min(0.9, __baseSide.a * (0.8 + 0.5*t)));
+        return 'rgba(' + Math.round(__baseSide.r*k) + ',' + Math.round(__baseSide.g*k) + ',' + Math.round(__baseSide.b*k) + ',' + a.toFixed(3) + ')';
+      }
+      var __fwd = (__proj && __proj.fwd) ? __proj.fwd : [0,0,1];
+      var __dotLeft = nx*(__fwd[0]||0) + nz*(__fwd[2]||0);
+  var __dotRight = (-nx)*(__fwd[0]||0) + (-nz)*(__fwd[2]||0);
+      var __fillLeft = __shade(__dotLeft);
+      var __fillRight = __shade(__dotRight);
       // Fill sides with holes to cut out windows/doors (only when all four projected points exist)
-      if (canLeft)  { fillQuadWithHoles(pA,pB,pBt,pAt, leftHoles, fillSide); drewFace = true; }
-      if (canRight) { fillQuadWithHoles(pD,pC,pCt,pDt, rightHoles, fillSide); drewFace = true; }
+      if (canLeft)  { fillQuadWithHoles(pA,pB,pBt,pAt, leftHoles, __fillLeft); drewFace = true; }
+      if (canRight) { fillQuadWithHoles(pD,pC,pCt,pDt, rightHoles, __fillRight); drewFace = true; }
   // Top face fill only (when valid)
   if (canTop) {
     ctx.beginPath(); ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); ctx.closePath(); ctx.fillStyle = fillTop; ctx.fill();
@@ -1064,6 +1363,10 @@
           }
         }
       }
+      // Draw corner codes near endpoints at a readable height
+      var labelY = baseY + Math.min(h*0.5, 1.1);
+      drawCornerCodeAt(x0, labelY, z0);
+      drawCornerCodeAt(x1, labelY, z1);
       // Determine if neighboring strip connects at endpoints to skip cap strokes for flush corners
       function hasNeighborAt(wx, wz){
         try {
@@ -1116,6 +1419,33 @@
       return;
     } catch(eSolid) { /* non-fatal */ }
   };
+  // Build unique, readable codes for each unique corner (endpoint) on the current floor
+  if (typeof window.computeCornerCodes === 'undefined') {
+    window.computeCornerCodes = function(){
+      try {
+        var map = {};
+        var pts = [];
+        var lvl = (typeof currentFloor==='number') ? currentFloor : 0;
+        function kf(v){ return Math.round((+v||0)*100)/100; }
+        var ws = Array.isArray(window.wallStrips) ? window.wallStrips : [];
+        for (var i=0; i<ws.length; i++){
+          var s = ws[i]; if (!s) continue; if ((s.level||0)!==lvl) continue;
+          var k0 = lvl + '|' + kf(s.x0||0) + '|' + kf(s.z0||0);
+          var k1 = lvl + '|' + kf(s.x1||0) + '|' + kf(s.z1||0);
+          if (!map[k0]) { map[k0] = true; pts.push(k0); }
+          if (!map[k1]) { map[k1] = true; pts.push(k1); }
+        }
+        // Sort keys for stable numbering
+        pts.sort();
+        var out = {};
+        for (var j=0; j<pts.length; j++){
+          var code = 'C' + (j+1).toString().padStart(3,'0');
+          out[pts[j]] = code;
+        }
+        window.__cornerCodeMap = out;
+      } catch(_eCCB) { window.__cornerCodeMap = {}; }
+    };
+  }
   if (typeof window.updatePerfStatsOverlay === 'undefined') window.updatePerfStatsOverlay = function(){};
   // Minimal measurements panel updater (live-edit friendly)
   if (typeof window.__measPinnedId === 'undefined') window.__measPinnedId = null; // remembers last valid selection while editing
@@ -1411,6 +1741,7 @@
         }
         // Draw interior wall strips (extruded 2D walls)
         try {
+          if (window.__showCornerCodes && typeof window.computeCornerCodes==='function') { window.computeCornerCodes(); }
           var __ws = window.wallStrips || [];
           for (var __wsi=0; __wsi<__ws.length; __wsi++){
             try { if (typeof drawWallStrip==='function') drawWallStrip(__ws[__wsi]); } catch(__eWs) {}

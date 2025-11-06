@@ -19,15 +19,29 @@
     try {
       if (window.__wallRenderMode !== 'solid') return;
       if (typeof window.rebuildRoomPerimeterStrips !== 'function') return;
-      var now = (performance && performance.now) ? performance.now() : Date.now();
-      var last = (typeof window.__lastStripRebuildAt === 'number') ? window.__lastStripRebuildAt : 0;
-      // Limit to ~20 Hz while dragging to keep things responsive
-      if (last && (now - last) < 50) return;
-      window.__lastStripRebuildAt = now;
+      // Coalesce multiple calls per frame and avoid re-entrancy
+      if (window.__pendingStripRebuild) return;
+      window.__pendingStripRebuild = true;
       var t = (typeof window.__roomWallThickness === 'number' && window.__roomWallThickness > 0) ? window.__roomWallThickness : 0.3;
-      window.rebuildRoomPerimeterStrips(t);
-    } catch(_eRR) { /* non-fatal */ }
+      requestAnimationFrame(function(){
+        try {
+          // Clear last-snap map so exterior corners recompute cleanly for the new pose
+          try { if (window.__extCornerSnap) window.__extCornerSnap = {}; } catch(_eSnap) {}
+          if (window.__rebuildingStrips) return; // if a rebuild is in progress, skip this frame
+          window.__rebuildingStrips = true;
+          window.rebuildRoomPerimeterStrips(t);
+        } catch(_eRR) { /* non-fatal */ }
+        finally {
+          window.__rebuildingStrips = false;
+          window.__pendingStripRebuild = false;
+          // Record last time for telemetry
+          try { window.__lastStripRebuildAt = (performance && performance.now) ? performance.now() : Date.now(); } catch(_t) {}
+        }
+      });
+    } catch(_eRR2) { /* non-fatal */ }
   }
+  // Expose for other modules (labels.js) to trigger an immediate rebuild at drag start
+  try { if (!window.__maybeRebuildRoomStripsThrottled) window.__maybeRebuildRoomStripsThrottled = __maybeRebuildRoomStripsThrottled; } catch(_eExpose) {}
   // Live-update 2D plan walls for a given 3D room so 2D and 3D move together during drag/resize.
   function updatePlan2DWallsForRoom(room){
     try {
@@ -284,6 +298,18 @@
           // Calculate delta movement for this frame
           var deltaX = snap.x - object.x;
           var deltaZ = snap.z - object.z;
+
+          // If this is a polygonal room (has a footprint), translate its footprint so solids follow live
+          try {
+            if (Array.isArray(object.footprint) && object.footprint.length > 0 && (deltaX !== 0 || deltaZ !== 0)) {
+              for (var fpi = 0; fpi < object.footprint.length; fpi++) {
+                var pt = object.footprint[fpi]; if (!pt) continue;
+                // Mutate in place so rebuildRoomPerimeterStrips reads updated world coords
+                pt.x = (pt.x||0) + deltaX;
+                pt.z = (pt.z||0) + deltaZ;
+              }
+            }
+          } catch(_fpMove) { /* non-fatal */ }
           
           // Move openings (doors/windows) with the room
           if (Array.isArray(object.openings) && object.openings.length > 0 && (deltaX !== 0 || deltaZ !== 0)) {

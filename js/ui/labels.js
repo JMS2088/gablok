@@ -158,6 +158,8 @@
                   window.__dragging3DRoom = true;
                   try { console.log('🟢 START 3D DRAG (label) - Flag set:', window.__dragging3DRoom, 'Room:', box.name || box.id); } catch(_log){}
                   try { if (canvas) canvas.style.cursor = 'grabbing'; } catch(_e){}
+                  // Kick an immediate perimeter rebuild in solid mode so the render follows from the first frame
+                  try { if (typeof window.__maybeRebuildRoomStripsThrottled === 'function') window.__maybeRebuildRoomStripsThrottled(); } catch(_rb){}
                   window._uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now();
                   dragActive = true;
                 } catch(_e2){}

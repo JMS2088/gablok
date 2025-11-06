@@ -767,7 +767,9 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   // Merge new strips with existing strips on this level and dedupe
   var keepOther = wallStrips.filter(function(ws){ return (ws.level||0)!==targetLevel; });
   var existingLvl = wallStrips.filter(function(ws){ return (ws.level||0)===targetLevel; });
-  var merged = _dedupeStripsByGeom(existingLvl.concat(strips));
+  // Replace per-level strips with the newly computed strips (do not merge with existing)
+  // This ensures deleted 2D walls are removed from 3D instead of being preserved by merge.
+  var merged = _dedupeStripsByGeom(strips);
   wallStrips = keepOther.concat(merged);
   // Persist strips. In nonDestructive mode (and not stripsOnly), do NOT clear current object selection.
   saveProjectSilently();
@@ -1318,7 +1320,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   // Append interior strips for this level, merged with existing same-level strips, and dedupe
   var keepOther2 = wallStrips.filter(function(ws){ return (ws.level||0)!==targetLevel; });
   var existingLvl2 = wallStrips.filter(function(ws){ return (ws.level||0)===targetLevel; });
-  var merged2 = _dedupeStripsByGeom(existingLvl2.concat(strips2));
+  // Replace per-level strips with newly computed interior strips for this level.
+  var merged2 = _dedupeStripsByGeom(strips2);
   wallStrips = keepOther2.concat(merged2);
   selectedWallStripIndex = -1;
   } catch(e){ /* interior strips non-fatal */ }
