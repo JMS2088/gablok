@@ -118,8 +118,9 @@
   // ---- Scene data ----
   if (typeof window.allRooms === 'undefined') window.allRooms = [];
   if (typeof window.wallStrips === 'undefined') window.wallStrips = [];
-  // Wall render mode: 'line' (default) shows free-standing walls as a single line; 'solid' renders 300mm solid strips
-  if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'line';
+  // Wall render mode: default to 'solid' so walls appear as solid strips (no mid-height keyline)
+  // Users can toggle to 'line' via the toolbar if desired.
+  if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'solid';
   if (typeof window.__roomWallThickness === 'undefined') window.__roomWallThickness = 0.0;
   if (typeof window.__roomStripTag === 'undefined') window.__roomStripTag = '__fromRooms';
 

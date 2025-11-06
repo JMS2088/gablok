@@ -984,16 +984,16 @@ function plan2dBind(){
           return null;
         }
         if(__plan2d.chainPoints.length===0){
-          // Start point may snap to nearby existing wall endpoint for clean joins
-          var snapEnd = findNearbyEndpoint(pt, 0.12); if(snapEnd){ pt = {x:plan2dSnap(snapEnd.x), y:plan2dSnap(snapEnd.y)}; }
+          // Start point may snap to nearby existing wall endpoint for clean joins (more generous tol)
+          var snapEnd = findNearbyEndpoint(pt, 0.25); if(snapEnd){ pt = {x:plan2dSnap(snapEnd.x), y:plan2dSnap(snapEnd.y)}; }
           __plan2d.chainPoints.push(pt);
         } else {
           // Axis lock new segment relative to last point
           var lastPt = __plan2d.chainPoints[__plan2d.chainPoints.length-1];
           var dxN = pt.x - lastPt.x, dyN = pt.y - lastPt.y;
           if(Math.abs(dxN) >= Math.abs(dyN)) pt = { x: pt.x, y: lastPt.y }; else pt = { x: lastPt.x, y: pt.y };
-          // Snap new endpoint to any nearby existing wall endpoint
-          var nearEp = findNearbyEndpoint(pt, 0.12); if(nearEp){ pt = {x:plan2dSnap(nearEp.x), y:plan2dSnap(nearEp.y)}; }
+          // Snap new endpoint to any nearby existing wall endpoint (more generous tol)
+          var nearEp = findNearbyEndpoint(pt, 0.25); if(nearEp){ pt = {x:plan2dSnap(nearEp.x), y:plan2dSnap(nearEp.y)}; }
           // If near first point, close immediately
           var p0 = __plan2d.chainPoints[0];
           if(Math.hypot(pt.x - p0.x, pt.y - p0.y) <= 0.1){
@@ -1001,8 +1001,9 @@ function plan2dBind(){
             plan2dFinalizeChain();
             return;
           }
-          // If the new segment touches any existing wall (including earlier chain segments), snap to the intersection and finish the chain to avoid duplicate rooms
-          var didFinalize = false;
+          // If the new segment touches any existing wall (including earlier chain segments), snap to the intersection.
+          // Do NOT auto-finalize here; allow users to continue chaining many segments. Closing is explicit via near-first-point/double-click/Enter.
+          var alreadyPushed = false;
           {
             var hit = null; var ax=lastPt.x, ay=lastPt.y, bx=pt.x, by=pt.y;
             // Check against existing walls
@@ -1019,11 +1020,10 @@ function plan2dBind(){
                 if(ix2){ hit = ix2; break; }
               }
             }
-            if(hit){ pt = { x: plan2dSnap(hit.x), y: plan2dSnap(hit.y) }; __plan2d.chainPoints.push(pt); plan2dFinalizeChain(); didFinalize = true; }
+            if(hit){ pt = { x: plan2dSnap(hit.x), y: plan2dSnap(hit.y) }; __plan2d.chainPoints.push(pt); alreadyPushed = true; }
           }
-          if(didFinalize){ return; }
-          // Otherwise, extend chain normally
-          __plan2d.chainPoints.push(pt);
+          // Extend chain normally (avoid pushing twice if we already added intersection point)
+          if(!alreadyPushed) __plan2d.chainPoints.push(pt);
         }
         plan2dDraw();
         return;
@@ -1041,7 +1041,7 @@ function plan2dBind(){
         var hitD = plan2dHitDoorEndpoint(p, 0.15);
         if(hitD){ __plan2d.dragDoor = hitD; return; }
         // Walls: grab an endpoint for resizing
-        var hitWEnd = plan2dHitWallEndpoint(p, 0.18);
+  var hitWEnd = plan2dHitWallEndpoint(p, 0.30);
         if(hitWEnd){
           var w = __plan2d.elements[hitWEnd.index];
           if(w && w.type==='wall'){
@@ -1233,7 +1233,7 @@ function plan2dBind(){
         var hW = plan2dHitWindowSegment(p, 0.2); if(hW && typeof hW.index==='number') __plan2d.hoverWindowIndex = hW.index;
         if(__plan2d.hoverDoorIndex<0 && __plan2d.hoverWindowIndex<0){ __plan2d.hoverSubsegment = plan2dHitWallSubsegment(p, 0.2); }
         // Hover endpoint on walls for better affordance
-        __plan2d.hoverWallEnd = plan2dHitWallEndpoint(p, 0.18) || null;
+  __plan2d.hoverWallEnd = plan2dHitWallEndpoint(p, 0.30) || null;
         // Cursor hint: grab when near a wall endpoint
         try { if(__plan2d.hoverWallEnd){ c.style.cursor='grab'; } else { c.style.cursor='pointer'; } } catch(_){}
       }
@@ -2812,7 +2812,7 @@ function plan2dSnapTOnWall(wall, t){
   var sp = plan2dSnapPoint({x:wx,y:wy});
   var denom = dx*dx+dy*dy||1; var tt=((sp.x-x0)*dx+(sp.y-y0)*dy)/denom; return Math.max(0, Math.min(1, tt));
 }
-function plan2dEq(a,b,t){ return Math.abs(a-b) <= (t||0.02); }
+function plan2dEq(a,b,t){ return Math.abs(a-b) <= (t||0.05); }
 function plan2dAutoSnapAndJoin(){
   var els = __plan2d.elements||[];
   // 1) Snap endpoints to grid and enforce axis alignment for walls
@@ -2832,7 +2832,7 @@ function plan2dAutoSnapAndJoin(){
       }
     }
   }
-  // 2) Join flush when walls cross or meet
+  // 2) Join flush when walls cross or meet (more generous snapping)
   for(var a=0;a<els.length;a++){
     var wa=els[a]; if(!wa||wa.type!=='wall') continue;
     var aH = plan2dEq(wa.y0, wa.y1);
@@ -2846,10 +2846,10 @@ function plan2dAutoSnapAndJoin(){
         var by0=Math.min(wb.y0,wb.y1), by1=Math.max(wb.y0,wb.y1);
         if(x>=ax0-1e-6 && x<=ax1+1e-6 && y>=by0-1e-6 && y<=by1+1e-6){
           // Snap nearby endpoints to exact intersection
-          if(Math.hypot(wa.x0-x, wa.y0-y) <= 0.08){ wa.x0=x; wa.y0=y; }
-          if(Math.hypot(wa.x1-x, wa.y1-y) <= 0.08){ wa.x1=x; wa.y1=y; }
-          if(Math.hypot(wb.x0-x, wb.y0-y) <= 0.08){ wb.x0=x; wb.y0=y; }
-          if(Math.hypot(wb.x1-x, wb.y1-y) <= 0.08){ wb.x1=x; wb.y1=y; }
+          if(Math.hypot(wa.x0-x, wa.y0-y) <= 0.20){ wa.x0=x; wa.y0=y; }
+          if(Math.hypot(wa.x1-x, wa.y1-y) <= 0.20){ wa.x1=x; wa.y1=y; }
+          if(Math.hypot(wb.x0-x, wb.y0-y) <= 0.20){ wb.x0=x; wb.y0=y; }
+          if(Math.hypot(wb.x1-x, wb.y1-y) <= 0.20){ wb.x1=x; wb.y1=y; }
         }
       } else if(!aH && bH){
         // A vertical, B horizontal
@@ -2857,25 +2857,25 @@ function plan2dAutoSnapAndJoin(){
         var bx0=Math.min(wb.x0,wb.x1), bx1=Math.max(wb.x0,wb.x1);
         var ay0=Math.min(wa.y0,wa.y1), ay1=Math.max(wa.y0,wa.y1);
         if(x2>=bx0-1e-6 && x2<=bx1+1e-6 && y2>=ay0-1e-6 && y2<=ay1+1e-6){
-          if(Math.hypot(wa.x0-x2, wa.y0-y2) <= 0.08){ wa.x0=x2; wa.y0=y2; }
-          if(Math.hypot(wa.x1-x2, wa.y1-y2) <= 0.08){ wa.x1=x2; wa.y1=y2; }
-          if(Math.hypot(wb.x0-x2, wb.y0-y2) <= 0.08){ wb.x0=x2; wb.y0=y2; }
-          if(Math.hypot(wb.x1-x2, wb.y1-y2) <= 0.08){ wb.x1=x2; wb.y1=y2; }
+          if(Math.hypot(wa.x0-x2, wa.y0-y2) <= 0.20){ wa.x0=x2; wa.y0=y2; }
+          if(Math.hypot(wa.x1-x2, wa.y1-y2) <= 0.20){ wa.x1=x2; wa.y1=y2; }
+          if(Math.hypot(wb.x0-x2, wb.y0-y2) <= 0.20){ wb.x0=x2; wb.y0=y2; }
+          if(Math.hypot(wb.x1-x2, wb.y1-y2) <= 0.20){ wb.x1=x2; wb.y1=y2; }
         }
       } else if(aH && bH){
         // both horizontal same Y: snap Y and any near-equal X endpoints
-        if(plan2dEq(wa.y0, wb.y0, 0.05)){
+        if(plan2dEq(wa.y0, wb.y0, 0.10)){
           var yH = plan2dSnap(wa.y0); wa.y0=wa.y1=yH; wb.y0=wb.y1=yH;
           var ptsA=[wa.x0,wa.x1], ptsB=[wb.x0,wb.x1];
-          for(var i1=0;i1<2;i1++) for(var j1=0;j1<2;j1++) if(plan2dEq(ptsA[i1], ptsB[j1], 0.05)){ var nv=plan2dSnap((ptsA[i1]+ptsB[j1])/2); ptsA[i1]=ptsB[j1]=nv; }
+          for(var i1=0;i1<2;i1++) for(var j1=0;j1<2;j1++) if(plan2dEq(ptsA[i1], ptsB[j1], 0.10)){ var nv=plan2dSnap((ptsA[i1]+ptsB[j1])/2); ptsA[i1]=ptsB[j1]=nv; }
           wa.x0=ptsA[0]; wa.x1=ptsA[1]; wb.x0=ptsB[0]; wb.x1=ptsB[1];
         }
       } else {
         // both vertical same X
-        if(plan2dEq(wa.x0, wb.x0, 0.05)){
+        if(plan2dEq(wa.x0, wb.x0, 0.10)){
           var xV = plan2dSnap(wa.x0); wa.x0=wa.x1=xV; wb.x0=wb.x1=xV;
           var pa=[wa.y0,wa.y1], pb=[wb.y0,wb.y1];
-          for(var i2=0;i2<2;i2++) for(var j2=0;j2<2;j2++) if(plan2dEq(pa[i2], pb[j2], 0.05)){ var nv2=plan2dSnap((pa[i2]+pb[j2])/2); pa[i2]=pb[j2]=nv2; }
+          for(var i2=0;i2<2;i2++) for(var j2=0;j2<2;j2++) if(plan2dEq(pa[i2], pb[j2], 0.10)){ var nv2=plan2dSnap((pa[i2]+pb[j2])/2); pa[i2]=pb[j2]=nv2; }
           wa.y0=pa[0]; wa.y1=pa[1]; wb.y0=pb[0]; wb.y1=pb[1];
         }
       }
@@ -2885,7 +2885,7 @@ function plan2dAutoSnapAndJoin(){
 
 // Hit-test near wall endpoints for dragging
 function plan2dHitWallEndpoint(p, tol){
-  var best=null; var bestD=tol||0.18;
+  var best=null; var bestD=(typeof tol==='number'? tol : 0.30);
   var els=__plan2d.elements||[];
   for(var i=0;i<els.length;i++){
     var e=els[i]; if(!e||e.type!=='wall') continue;

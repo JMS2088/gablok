@@ -2,6 +2,95 @@
 // Populate the 2D Floor Plan from the current 3D model for the currently selected floor
 // Extracted from app.js for modularity; loaded by bootstrap before app core.
 function populatePlan2DFromDesign(){
+  // Prefer reconstructing from user wall strips (non-room-tagged) when present on this floor.
+  // This preserves multi-segment layouts and avoids collapsing into coarse room rectangles.
+  try {
+    var lvlPref = (typeof currentFloor==='number' ? currentFloor : 0);
+    var tagKeyPref = (typeof window !== 'undefined' && window.__roomStripTag) ? window.__roomStripTag : '__fromRooms';
+    var userStrips = [];
+    for (var wsP=0; wsP<wallStrips.length; wsP++){
+      var sP = wallStrips[wsP]; if(!sP) continue;
+      if ((sP.level||0)!==lvlPref) continue;
+      // Only pick strips NOT generated from rooms
+      if (sP[tagKeyPref]) continue;
+      userStrips.push(sP);
+    }
+    if (userStrips.length > 0) {
+      // Compute extents for centering and scale fit
+      var sMinX1=Infinity, sMaxX1=-Infinity, sMinZ1=Infinity, sMaxZ1=-Infinity;
+      for (var ii=0; ii<userStrips.length; ii++){
+        var us = userStrips[ii];
+        sMinX1 = Math.min(sMinX1, us.x0, us.x1);
+        sMaxX1 = Math.max(sMaxX1, us.x0, us.x1);
+        sMinZ1 = Math.min(sMinZ1, us.z0, us.z1);
+        sMaxZ1 = Math.max(sMaxZ1, us.z0, us.z1);
+      }
+      var cx1 = (isFinite(sMinX1) && isFinite(sMaxX1)) ? (sMinX1 + sMaxX1) / 2 : 0;
+      var cz1 = (isFinite(sMinZ1) && isFinite(sMaxZ1)) ? (sMinZ1 + sMaxZ1) / 2 : 0;
+      __plan2d.centerX = cx1; __plan2d.centerZ = cz1;
+      var c1 = document.getElementById('plan2d-canvas');
+      if (c1) {
+        var spanX1 = Math.max(0.5, (sMaxX1 - sMinX1));
+        var spanZ1 = Math.max(0.5, (sMaxZ1 - sMinZ1));
+        var pad1 = 0.15;
+        var fitWm1 = spanX1 * (1 + pad1), fitHm1 = spanZ1 * (1 + pad1);
+        var scaleX1 = (c1.width>0) ? (c1.width/(fitWm1||1)) : (__plan2d.scale||50);
+        var scaleY1 = (c1.height>0) ? (c1.height/(fitHm1||1)) : (__plan2d.scale||50);
+        var newScale1 = Math.max(10, Math.min(140, Math.floor(Math.min(scaleX1, scaleY1))));
+        if (isFinite(newScale1) && newScale1>0) __plan2d.scale = newScale1;
+      }
+      // Populate 2D from user strips: add walls, then attach openings from strips by projection
+      __plan2d.elements = [];
+      var sgn1 = (__plan2d.yFromWorldZSign||1);
+      var wallIdxMap = new Map(); // map from strip object to created wall index
+      for (var jj=0; jj<userStrips.length; jj++){
+        var ws1 = userStrips[jj];
+        var idxW = __plan2d.elements.length;
+        var wEl = {
+          type: 'wall',
+          x0: ws1.x0 - cx1,
+          y0: sgn1 * (ws1.z0 - cz1),
+          x1: ws1.x1 - cx1,
+          y1: sgn1 * (ws1.z1 - cz1),
+          thickness: (ws1.thickness || __plan2d.wallThicknessM || 0.3)
+        };
+        __plan2d.elements.push(wEl);
+        wallIdxMap.set(ws1, idxW);
+      }
+      // Attach openings carried by strips back to their host walls
+      try {
+        if (typeof plan2dProjectParamOnWall === 'function') {
+          for (var kk=0; kk<userStrips.length; kk++){
+            var ws2 = userStrips[kk];
+            var hostIdx = wallIdxMap.get(ws2);
+            if (typeof hostIdx !== 'number') continue;
+            var openingsArr = Array.isArray(ws2.openings) ? ws2.openings : [];
+            for (var oi=0; oi<openingsArr.length; oi++){
+              var op = openingsArr[oi]; if(!op) continue;
+              // Convert world endpoints to plan space relative to new center/sign
+              var p0 = { x: (op.x0 - cx1), y: sgn1 * (op.z0 - cz1) };
+              var p1 = { x: (op.x1 - cx1), y: sgn1 * (op.z1 - cz1) };
+              var hostWall = __plan2d.elements[hostIdx];
+              if (!hostWall) continue;
+              var t0 = plan2dProjectParamOnWall(p0, hostWall);
+              var t1 = plan2dProjectParamOnWall(p1, hostWall);
+              if (op.type === 'window'){
+                var win = { type:'window', host: hostIdx, t0: t0, t1: t1, thickness: (hostWall.thickness||__plan2d.wallThicknessM) };
+                if (typeof op.sillM==='number') win.sillM = op.sillM;
+                if (typeof op.heightM==='number') win.heightM = op.heightM;
+                if (op.meta) win.meta = op.meta;
+                __plan2d.elements.push(win);
+              } else if (op.type === 'door'){
+                __plan2d.elements.push({ type:'door', host: hostIdx, t0: t0, t1: t1, widthM: Math.hypot(p1.x-p0.x, p1.y-p0.y), heightM: (typeof op.heightM==='number'? op.heightM : (__plan2d.doorHeightM||2.04)), thickness: (hostWall.thickness||__plan2d.wallThicknessM), meta: (op.meta||{ hinge:'t0', swing:'in' }) });
+              }
+            }
+          }
+        }
+      } catch(_eOpeningsFromStrips) { /* non-fatal */ }
+      return true;
+    }
+  } catch(_prefE) { /* ignore and fallback to room-driven path */ }
+
   // Collect rectangles for rooms on the current floor; include garages on ground and balconies on first
   var rects = [];
   var lvl = (typeof currentFloor==='number' ? currentFloor : 0);

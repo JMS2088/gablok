@@ -41,8 +41,8 @@
         var reasons=[]; if(!hasGridOrGeometry) reasons.push('grid/geometry not detected'); if(!hasRoom) reasons.push('no room present');
         if (!window.__debugStickyStatus) setStatus('Smoke test failed: ' + reasons.join(', '));
         else console.warn('[Smoke] failed:', reasons.join(', '));
-        // Visual hint: red border around canvas
-        try{ c.style.outline = '3px solid #ef4444'; c.style.outlineOffset = '-3px'; }catch(e){}
+        // Visual hint (red border) only in debug mode; avoid showing to end users
+        try{ if (window.__debug && window.__debug.enabled) { c.style.outline = '3px solid #ef4444'; c.style.outlineOffset = '-3px'; } }catch(e){}
         console.warn('[Smoke] Details:', { w:w, h:h, nonWhite, hasRoom, allRooms: window.allRooms });
       }
     }

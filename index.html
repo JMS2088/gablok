@@ -582,7 +582,7 @@
 // Render mode toggle for free-standing walls: Lines (default) vs Solid (300mm)
 document.addEventListener('DOMContentLoaded', () => {
 	try {
-		if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'line';
+		if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'solid';
 		var btn = document.getElementById('btn-render-walls');
 		function refreshBtn() {
 			if (!btn) return;
