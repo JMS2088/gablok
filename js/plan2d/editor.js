@@ -61,6 +61,12 @@ var __plan2d = {
   panMouse0:null,
   panAtStart:{x:0,y:0}
 };
+// Rulers & Guides: per-floor persistent guides and transient UI state
+__plan2d.guidesV = __plan2d.guidesV || []; // vertical guides (x in meters)
+__plan2d.guidesH = __plan2d.guidesH || []; // horizontal guides (y in meters)
+__plan2d.selectedGuide = __plan2d.selectedGuide || null; // { dir:'v'|'h', index:number }
+__plan2d.hoverGuide = __plan2d.hoverGuide || null;       // { dir:'v'|'h', index:number }
+__plan2d.dragGuide = __plan2d.dragGuide || null;         // { dir:'v'|'h', index?:number, value:number, isNew:boolean }
 
 // --- 2D tracing utilities (opt-in via ?trace2d=1 or localStorage 'gablok_trace2d'=1) ---
 (function(){
@@ -156,7 +162,9 @@ function plan2dSaveDraft(level){
       yFromWorldZSign: __plan2d.yFromWorldZSign || 1,
       lastWallsSig: (__plan2d._lastWallsSig || null),
       last2Dsig: (__plan2d._last2Dsig || null),
-      last3Dsig: (function(){ try { return plan2dSig3D(); } catch(e){ return null; } })()
+      last3Dsig: (function(){ try { return plan2dSig3D(); } catch(e){ return null; } })(),
+      guidesV: Array.isArray(__plan2d.guidesV) ? __plan2d.guidesV.slice() : [],
+      guidesH: Array.isArray(__plan2d.guidesH) ? __plan2d.guidesH.slice() : []
     };
     // Persist drafts so they survive reloads
     savePlan2dDraftsToStorage();
@@ -179,6 +187,9 @@ function plan2dLoadDraft(level){
     __plan2d._lastWallsSig = d.lastWallsSig || null;
     __plan2d._last2Dsig = d.last2Dsig || null;
     __plan2d._last3Dsig = d.last3Dsig || null;
+    // Guides
+    __plan2d.guidesV = Array.isArray(d.guidesV) ? d.guidesV.slice() : [];
+    __plan2d.guidesH = Array.isArray(d.guidesH) ? d.guidesH.slice() : [];
     return true;
   }catch(e){ return false; }
 }
@@ -667,6 +678,8 @@ function plan2dBind(){
   // Ensure key events reach the editor reliably
   try { var content=document.getElementById('plan2d-content'); if(content){ if(!content.hasAttribute('tabindex')) content.setAttribute('tabindex','0'); content.focus({preventScroll:true}); } } catch(e) {}
   var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return;
+  var rTop = document.getElementById('plan2d-ruler-top');
+  var rLeft = document.getElementById('plan2d-ruler-left');
   if(!window.__plan2dResize){
     window.__plan2dResize=function(){ if(__plan2d.active){ plan2dResize(); plan2dDraw(); } };
     window.addEventListener('resize', window.__plan2dResize);
@@ -877,10 +890,18 @@ function plan2dBind(){
     try { __log2d('plan2dDeleteSelection: enter', {
       selectedIndex: __plan2d.selectedIndex,
       hasSelectedSubsegment: !!__plan2d.selectedSubsegment,
+      selectedGuide: __plan2d.selectedGuide,
       hoverWindowIndex: __plan2d.hoverWindowIndex,
       hoverDoorIndex: __plan2d.hoverDoorIndex,
       elementsCount: (__plan2d.elements||[]).length
     }); } catch(_l){}
+    // 0) Guides: delete selected guide if any
+    if(__plan2d.selectedGuide && __plan2d.selectedGuide.dir){
+      var g=__plan2d.selectedGuide; var did=false;
+      if(g.dir==='v' && g.index>=0 && g.index<(__plan2d.guidesV||[]).length){ __plan2d.guidesV.splice(g.index,1); did=true; }
+      if(g.dir==='h' && g.index>=0 && g.index<(__plan2d.guidesH||[]).length){ __plan2d.guidesH.splice(g.index,1); did=true; }
+      if(did){ __plan2d.selectedGuide=null; plan2dDraw(); return true; }
+    }
     // 1) Prefer wall subsegment if selected
     if(__plan2d.selectedSubsegment){
       try { __log2d('plan2dDeleteSelection: deleting selected subsegment'); } catch(_l){}
@@ -951,12 +972,51 @@ function plan2dBind(){
   try { if (typeof window !== 'undefined') { window.plan2dDeleteSelection = plan2dDeleteSelection; } } catch(_eWin2) {}
   // Hook Delete Selected button to shared deletion
   var bDelSel=document.getElementById('plan2d-delete-selected'); if(bDelSel) bDelSel.onclick=function(){ plan2dDeleteSelection(); };
+  // Ruler interactions: drag from rulers to create guides
+  (function(){
+    if(rTop && !rTop.__bound2d){
+      rTop.__bound2d = true;
+      rTop.addEventListener('mousedown', function(e){ if(!__plan2d.active) return; e.preventDefault(); e.stopPropagation();
+        var baseRect = c.getBoundingClientRect();
+        var px = (e.clientX - baseRect.left) * (c.width / baseRect.width);
+        var py = (28/2); // arbitrary baseline; y not used for x mapping
+        var w = screenToWorld2D(px, py);
+        __plan2d.dragGuide = { dir:'v', value: w.x, isNew:true };
+        __plan2d.selectedGuide = null; __plan2d.hoverGuide = null;
+        plan2dDraw();
+      }, true);
+    }
+    if(rLeft && !rLeft.__bound2d){
+      rLeft.__bound2d = true;
+      rLeft.addEventListener('mousedown', function(e){ if(!__plan2d.active) return; e.preventDefault(); e.stopPropagation();
+        var baseRect = c.getBoundingClientRect();
+        var px = (28/2);
+        var py = (e.clientY - baseRect.top) * (c.height / baseRect.height);
+        var w = screenToWorld2D(px, py);
+        __plan2d.dragGuide = { dir:'h', value: w.y, isNew:true };
+        __plan2d.selectedGuide = null; __plan2d.hoverGuide = null;
+        plan2dDraw();
+      }, true);
+    }
+  })();
   if(!c.__plan2dBound){
     c.__plan2dBound=true;
     c.addEventListener('mousedown', function(e){
       if(!__plan2d.active) return;
       var rect=c.getBoundingClientRect();
       var p=screenToWorld2D((e.clientX-rect.left)*(c.width/rect.width),(e.clientY-rect.top)*(c.height/rect.height));
+      // Guides: in Select tool, prioritize grabbing existing guide near cursor
+      (function(){
+        if(__plan2d.tool!=='select') return;
+        var hit = plan2dHitGuideAtScreen((e.clientX-rect.left)*(c.width/rect.width), (e.clientY-rect.top)*(c.height/rect.height));
+        if(hit){
+          __plan2d.selectedGuide = { dir: hit.dir, index: hit.index };
+          var val = (hit.dir==='v') ? __plan2d.guidesV[hit.index] : __plan2d.guidesH[hit.index];
+          __plan2d.dragGuide = { dir: hit.dir, index: hit.index, value: val, isNew:false };
+          e.preventDefault(); e.stopPropagation(); plan2dDraw(); return;
+        }
+      })();
+      if(__plan2d.dragGuide){ return; }
       // marker drag removed
       if(__plan2d.tool==='erase'){ plan2dEraseAt(p); return; }
       // Multi-point wall chain: Shift-click to start/add points; finish with double-click or Enter; Esc to cancel
@@ -1231,6 +1291,19 @@ function plan2dBind(){
       var cx = (e.clientX-rect.left)*(c.width/rect.width);
       var cy = (e.clientY-rect.top)*(c.height/rect.height);
       __plan2d.mouse = { x: cx, y: cy };
+      // Guide drag preview
+      if(__plan2d.dragGuide){
+        var w = screenToWorld2D(cx, cy);
+        if(__plan2d.dragGuide.dir==='v'){ __plan2d.dragGuide.value = w.x; }
+        else { __plan2d.dragGuide.value = w.y; }
+        plan2dDraw();
+        return;
+      }
+      // Hover guide detection and cursor hint
+      if(__plan2d.tool==='select' && !__plan2d.dragDoor && !__plan2d.dragDoorWhole && !__plan2d.dragWindow && !__plan2d.dragWall && !__plan2d.start){
+        __plan2d.hoverGuide = plan2dHitGuideAtScreen(cx, cy);
+        try { if(__plan2d.hoverGuide){ c.style.cursor = (__plan2d.hoverGuide.dir==='v' ? 'ew-resize' : 'ns-resize'); } } catch(_e){}
+      }
       var p=screenToWorld2D(cx, cy);
       // Hover hints for select/erase
       __plan2d.hoverDoorIndex = -1; __plan2d.hoverWindowIndex = -1; __plan2d.hoverSubsegment = null;
@@ -1290,9 +1363,9 @@ function plan2dBind(){
               plan2dEdited();
             }
           } else {
-            // Free door: move endpoint directly
-            if(dd.end==='a'){ de.x0 = p.x; de.y0 = p.y; }
-            if(dd.end==='b'){ de.x1 = p.x; de.y1 = p.y; }
+            // Free door: move endpoint directly (guide-aware)
+            if(dd.end==='a'){ de.x0 = plan2dSnapX(p.x); de.y0 = plan2dSnapY(p.y); }
+            if(dd.end==='b'){ de.x1 = plan2dSnapX(p.x); de.y1 = plan2dSnapY(p.y); }
             plan2dDraw(); plan2dEdited();
           }
         }
@@ -1319,11 +1392,11 @@ function plan2dBind(){
         var dwl = __plan2d.dragWall; var w = __plan2d.elements[dwl.index]; if(w && w.type==='wall'){
           // Keep orientation axis-locked and snap to grid; join will be handled on mouseup
           if(dwl.end==='a'){
-            if(dwl.orient==='h'){ w.x0 = plan2dSnap(p.x); w.y0 = w.y1 = plan2dSnap(w.y0); }
-            else { w.y0 = plan2dSnap(p.y); w.x0 = w.x1 = plan2dSnap(w.x0); }
+            if(dwl.orient==='h'){ w.x0 = plan2dSnapX(p.x); w.y0 = w.y1 = plan2dSnap(w.y0); }
+            else { w.y0 = plan2dSnapY(p.y); w.x0 = w.x1 = plan2dSnap(w.x0); }
           } else {
-            if(dwl.orient==='h'){ w.x1 = plan2dSnap(p.x); w.y1 = w.y0 = plan2dSnap(w.y1); }
-            else { w.y1 = plan2dSnap(p.y); w.x1 = w.x0 = plan2dSnap(w.x1); }
+            if(dwl.orient==='h'){ w.x1 = plan2dSnapX(p.x); w.y1 = w.y0 = plan2dSnap(w.y1); }
+            else { w.y1 = plan2dSnapY(p.y); w.x1 = w.x0 = plan2dSnap(w.x1); }
           }
           plan2dDraw(); plan2dEdited();
         }
@@ -1334,6 +1407,18 @@ function plan2dBind(){
       if(!__plan2d.active) return;
       // Clear mouse to avoid lingering preview gaps for window/door after finishing interaction
       __plan2d.mouse = null;
+      // Finalize guide drag
+      if(__plan2d.dragGuide){
+        var g = __plan2d.dragGuide; var val = g.value;
+        if(g.isNew){
+          if(g.dir==='v'){ __plan2d.guidesV.push(val); __plan2d.selectedGuide = { dir:'v', index: __plan2d.guidesV.length-1 }; }
+          else { __plan2d.guidesH.push(val); __plan2d.selectedGuide = { dir:'h', index: __plan2d.guidesH.length-1 }; }
+        } else {
+          if(g.dir==='v' && typeof g.index==='number'){ __plan2d.guidesV[g.index] = val; __plan2d.selectedGuide = { dir:'v', index:g.index }; }
+          if(g.dir==='h' && typeof g.index==='number'){ __plan2d.guidesH[g.index] = val; __plan2d.selectedGuide = { dir:'h', index:g.index }; }
+        }
+        __plan2d.dragGuide = null; plan2dDraw(); return;
+      }
   // marker drag removed
   if(__plan2d.dragWindow){ __plan2d.dragWindow=null; updatePlan2DInfo(); plan2dEdited(); }
     if(__plan2d.dragDoor){ __plan2d.dragDoor=null; updatePlan2DInfo(); plan2dEdited(); }
@@ -1535,6 +1620,8 @@ function plan2dUnbind(){
 function plan2dResize(){
   var c=document.getElementById('plan2d-canvas');
   var ov=document.getElementById('plan2d-overlay');
+  var rt=document.getElementById('plan2d-ruler-top');
+  var rl=document.getElementById('plan2d-ruler-left');
   var l2=document.getElementById('labels-2d');
   if(!c||!ov) return;
   var rect=c.getBoundingClientRect();
@@ -1544,6 +1631,9 @@ function plan2dResize(){
   if(c.width!==W||c.height!==H){ c.width=W; c.height=H; }
   if(ov.width!==W||ov.height!==H){ ov.width=W; ov.height=H; }
   if(l2 && (l2.width!==W||l2.height!==H)){ l2.width=W; l2.height=H; }
+  // Rulers: fixed thickness 28 CSS px
+  if(rt){ var rw = Math.floor(rect.width*dpr); var rh = Math.floor(28*dpr); if(rt.width!==rw||rt.height!==rh){ rt.width=rw; rt.height=rh; } }
+  if(rl){ var rw2 = Math.floor(28*dpr); var rh2 = Math.floor(rect.height*dpr); if(rl.width!==rw2||rl.height!==rh2){ rl.width=rw2; rl.height=rh2; } }
   // Redraw after resize to keep grid crisp to new pixel grid
   try { plan2dDraw(); } catch(e) {}
 }
@@ -1677,6 +1767,11 @@ function plan2dFinalizeChain(){
 }
 
 function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height);
+  // Rulers (drawn on separate canvases)
+  try {
+    var rt=document.getElementById('plan2d-ruler-top'); var rl=document.getElementById('plan2d-ruler-left');
+    if(rt && rl){ plan2dDrawRulers(rt.getContext('2d'), rl.getContext('2d')); }
+  } catch(_eR) {}
   // CAD-style grid: major 1 m and minor 0.1 m lines aligned to device pixels; include pan offsets
   var step=__plan2d.scale, w=c.width, h=c.height; 
   var originX = w/2 + (__plan2d.panX * step), originY = h/2 - (__plan2d.panY * step);
@@ -1719,7 +1814,8 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
       // Live segment to current mouse
       if(__plan2d.mouse && pts.length){
         var mW = screenToWorld2D(__plan2d.mouse.x, __plan2d.mouse.y);
-        var mS = worldToScreen2D(plan2dSnap(mW.x), plan2dSnap(mW.y));
+        // Guide-aware snapping for live preview
+        var mS = worldToScreen2D(plan2dSnapX(mW.x), plan2dSnapY(mW.y));
         var last = worldToScreen2D(pts[pts.length-1].x, pts[pts.length-1].y);
         ctx.setLineDash([6,4]); ctx.strokeStyle = '#0ea5e9'; // sky-600
         ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(mS.x, mS.y); ctx.stroke(); ctx.setLineDash([]);
@@ -2410,6 +2506,76 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
     ctx.restore();
   }
   var ox=ov.getContext('2d'); ox.setTransform(1,0,0,1,0,0); ox.clearRect(0,0,ov.width,ov.height);
+  // Draw guides on overlay: snapped to device pixels
+  try {
+    var s = __plan2d.scale; var w = c.width, h = c.height;
+    function sx(wx){ return worldToScreen2D(wx, 0).x; }
+    function sy(wy){ return worldToScreen2D(0, wy).y; }
+    ox.save();
+    // Existing guides
+    // Prepare label style
+    var dpr = window.devicePixelRatio || 1;
+    ox.font = (10*dpr) + 'px system-ui, sans-serif';
+    ox.fillStyle = '#e5e7eb';
+    var labelPad = Math.floor(3*dpr);
+    var lastLabelEndX = -Infinity;
+    for(var iV=0;iV<(__plan2d.guidesV||[]).length;iV++){
+      var xw = __plan2d.guidesV[iV]; var xs = Math.round(sx(xw)) + 0.5;
+      ox.strokeStyle = (__plan2d.selectedGuide && __plan2d.selectedGuide.dir==='v' && __plan2d.selectedGuide.index===iV) ? '#f59e0b' : 'rgba(56,189,248,0.85)';
+      ox.lineWidth = 1; ox.beginPath(); ox.moveTo(xs,0); ox.lineTo(xs,h); ox.stroke();
+      // Label near top ruler: "x m" with overlap avoidance
+      try {
+        var txt = (typeof formatMeters==='function' ? formatMeters(Math.abs(xw)) + ' m' : (xw.toFixed(2)+' m'));
+        var tw = ox.measureText(txt).width;
+        var bx = xs + 6; var by = Math.floor(4*dpr);
+        if (bx > lastLabelEndX + 6) {
+          // draw simple dark backdrop for readability
+          ox.save();
+          ox.fillStyle = 'rgba(2,6,23,0.55)';
+          ox.fillRect(Math.floor(bx - labelPad), Math.floor(by - labelPad), Math.ceil(tw + labelPad*2), Math.ceil(12*dpr + labelPad*2));
+          ox.fillStyle = '#e5e7eb'; ox.textAlign='left'; ox.textBaseline='top';
+          ox.fillText(txt, bx, by);
+          ox.restore();
+          lastLabelEndX = bx + tw;
+        }
+      } catch(e){}
+    }
+    var lastLabelEndY = -Infinity;
+    for(var iH=0;iH<(__plan2d.guidesH||[]).length;iH++){
+      var yw = __plan2d.guidesH[iH]; var ys = Math.round(sy(yw)) + 0.5;
+      ox.strokeStyle = (__plan2d.selectedGuide && __plan2d.selectedGuide.dir==='h' && __plan2d.selectedGuide.index===iH) ? '#f59e0b' : 'rgba(56,189,248,0.85)';
+      ox.lineWidth = 1; ox.beginPath(); ox.moveTo(0,ys); ox.lineTo(w,ys); ox.stroke();
+      // Label near left ruler: "y m" with overlap avoidance
+      try {
+        var txtH = (typeof formatMeters==='function' ? formatMeters(Math.abs(yw)) + ' m' : (yw.toFixed(2)+' m'));
+        var twH = ox.measureText(txtH).width;
+        var bxH = Math.floor(4*dpr); var byH = ys + 6;
+        if (byH > lastLabelEndY + Math.ceil(12*dpr) + 6) {
+          ox.save();
+          ox.fillStyle = 'rgba(2,6,23,0.55)';
+          ox.fillRect(Math.floor(bxH - labelPad), Math.floor(byH - labelPad), Math.ceil(twH + labelPad*2), Math.ceil(12*dpr + labelPad*2));
+          ox.fillStyle = '#e5e7eb'; ox.textAlign='left'; ox.textBaseline='top';
+          ox.fillText(txtH, bxH, byH);
+          ox.restore();
+          lastLabelEndY = byH + Math.ceil(12*dpr);
+        }
+      } catch(e){}
+    }
+    // Dragging preview
+    if(__plan2d.dragGuide){
+      ox.strokeStyle = '#f59e0b'; ox.setLineDash([6,4]);
+      if(__plan2d.dragGuide.dir==='v'){
+        var xs2 = Math.round(sx(__plan2d.dragGuide.value)) + 0.5; ox.beginPath(); ox.moveTo(xs2,0); ox.lineTo(xs2,h); ox.stroke();
+        // label for preview
+        try { var txt2 = (typeof formatMeters==='function' ? formatMeters(Math.abs(__plan2d.dragGuide.value)) + ' m' : (__plan2d.dragGuide.value.toFixed(2)+' m')); var tw2 = ox.measureText(txt2).width; var bx2 = xs2 + 6; var by2 = Math.floor(4*(window.devicePixelRatio||1)); ox.setLineDash([]); ox.save(); ox.fillStyle='rgba(2,6,23,0.55)'; var lp=Math.floor(3*(window.devicePixelRatio||1)); ox.fillRect(Math.floor(bx2-lp), Math.floor(by2-lp), Math.ceil(tw2+lp*2), Math.ceil(12*(window.devicePixelRatio||1)+lp*2)); ox.fillStyle='#e5e7eb'; ox.textAlign='left'; ox.textBaseline='top'; ox.fillText(txt2, bx2, by2); ox.restore(); ox.setLineDash([6,4]); } catch(e){}
+      } else {
+        var ys2 = Math.round(sy(__plan2d.dragGuide.value)) + 0.5; ox.beginPath(); ox.moveTo(0,ys2); ox.lineTo(w,ys2); ox.stroke();
+        try { var txt3 = (typeof formatMeters==='function' ? formatMeters(Math.abs(__plan2d.dragGuide.value)) + ' m' : (__plan2d.dragGuide.value.toFixed(2)+' m')); var tw3 = ox.measureText(txt3).width; var bx3 = Math.floor(4*(window.devicePixelRatio||1)); var by3 = ys2 + 6; ox.setLineDash([]); ox.save(); ox.fillStyle='rgba(2,6,23,0.55)'; var lp2=Math.floor(3*(window.devicePixelRatio||1)); ox.fillRect(Math.floor(bx3-lp2), Math.floor(by3-lp2), Math.ceil(tw3+lp2*2), Math.ceil(12*(window.devicePixelRatio||1)+lp2*2)); ox.fillStyle='#e5e7eb'; ox.textAlign='left'; ox.textBaseline='top'; ox.fillText(txt3, bx3, by3); ox.restore(); ox.setLineDash([6,4]); } catch(e){}
+      }
+      ox.setLineDash([]);
+    }
+    ox.restore();
+  } catch(_eG) {}
   // Dedicated 2D labels canvas (draw text here, keep shapes/effects on overlay)
   var l2c = document.getElementById('labels-2d');
   var lx = l2c ? l2c.getContext('2d') : ox; // fallback to overlay if missing
@@ -2524,6 +2690,68 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
 
   // (Removed) Overlay: live wall dimension during drag
   // (Removed) Overlay: dimension lines for every wall
+}
+// Draw top and left rulers: adaptive ticks/labels in meters aligned to pan/zoom
+function plan2dDrawRulers(ctxTop, ctxLeft){
+  try{
+    var c=document.getElementById('plan2d-canvas'); if(!c||!ctxTop||!ctxLeft) return;
+    var dpr=window.devicePixelRatio||1; var s=__plan2d.scale; var W=c.width, H=c.height;
+    // Clear backgrounds
+    ctxTop.setTransform(1,0,0,1,0,0); ctxTop.clearRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
+    ctxLeft.setTransform(1,0,0,1,0,0); ctxLeft.clearRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
+    // Backgrounds (match CSS)
+    ctxTop.fillStyle='rgba(15,23,42,0.85)'; ctxTop.fillRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
+    ctxLeft.fillStyle='rgba(15,23,42,0.85)'; ctxLeft.fillRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
+    // Mapping helpers
+    var originX = W/2 + (__plan2d.panX * s);
+    var originY = H/2 - (__plan2d.panY * s);
+    function worldXToPx(wx){ return originX + wx*s; }
+    function worldYToPx(wy){ return originY - wy*s; }
+    // Visible world ranges
+    var minXw = (0 - originX)/s, maxXw = (W - originX)/s;
+    var minYw = (originY - H)/s, maxYw = (originY - 0)/s;
+    // Choose step for ~100px between major ticks
+    function chooseStep(){
+      var targetPx=100; var base = targetPx / Math.max(1e-6, s);
+      var pow = Math.pow(10, Math.floor(Math.log10(Math.max(1e-6, base))));
+      var steps=[1,2,5,10]; var best=steps[0]*pow; for(var i=0;i<steps.length;i++){ var st=steps[i]*pow; if(Math.abs(st-base) < Math.abs(best-base)) best=st; }
+      return best;
+    }
+    var step = chooseStep(); var minor = step/10;
+    // Top ruler ticks
+    ctxTop.save(); ctxTop.translate(0.5,0.5); ctxTop.strokeStyle='#94a3b8';
+    var minorStartX = Math.ceil(minXw/minor)*minor;
+    for(var xm=minorStartX; xm<=maxXw+1e-8; xm+=minor){ var px = Math.round(worldXToPx(xm)); var isMajor = (Math.abs((xm/step)-Math.round(xm/step)) < 1e-6);
+      var len = isMajor ? Math.floor(18*dpr) : Math.floor(10*dpr);
+      ctxTop.beginPath(); ctxTop.moveTo(px, ctxTop.canvas.height-1); ctxTop.lineTo(px, ctxTop.canvas.height-1-len); ctxTop.stroke(); }
+    ctxTop.fillStyle='#e2e8f0'; ctxTop.font=(10*dpr)+'px system-ui, sans-serif'; ctxTop.textAlign='center'; ctxTop.textBaseline='top';
+    var startX = Math.ceil(minXw/step)*step;
+    for(var xw=startX; xw<=maxXw+1e-8; xw+=step){ var px2 = Math.round(worldXToPx(xw)); var label = String((Math.abs(xw)<1e-6)?0:+xw.toFixed(2).replace(/\.00$/,'')); ctxTop.fillText(label, px2, Math.floor(2*dpr)); }
+    ctxTop.restore();
+    // Left ruler ticks
+    ctxLeft.save(); ctxLeft.translate(0.5,0.5); ctxLeft.strokeStyle='#94a3b8';
+    var minorStartY = Math.ceil(minYw/minor)*minor;
+    for(var ym=minorStartY; ym<=maxYw+1e-8; ym+=minor){ var py = Math.round(worldYToPx(ym)); var isMajorY = (Math.abs((ym/step)-Math.round(ym/step)) < 1e-6);
+      var lenY = isMajorY ? Math.floor(18*dpr) : Math.floor(10*dpr);
+      ctxLeft.beginPath(); ctxLeft.moveTo(ctxLeft.canvas.width-1, py); ctxLeft.lineTo(ctxLeft.canvas.width-1-lenY, py); ctxLeft.stroke(); }
+    ctxLeft.fillStyle='#e2e8f0'; ctxLeft.font=(10*dpr)+'px system-ui, sans-serif'; ctxLeft.textAlign='right'; ctxLeft.textBaseline='middle';
+    var startY = Math.ceil(minYw/step)*step;
+    for(var yw=startY; yw<=maxYw+1e-8; yw+=step){ var py2 = Math.round(worldYToPx(yw)); var labelY = String((Math.abs(yw)<1e-6)?0:+yw.toFixed(2).replace(/\.00$/,'')); ctxLeft.fillText(labelY, ctxLeft.canvas.width - Math.floor(2*dpr), py2); }
+    ctxLeft.restore();
+  } catch(_e) { /* non-fatal rulers */ }
+}
+
+// Hit-test guides near a screen pixel position; returns {dir,index} or null
+function plan2dHitGuideAtScreen(px, py){
+  try{
+    var tol = 6; // px tolerance
+    function sx(wx){ return worldToScreen2D(wx, 0).x; }
+    function sy(wy){ return worldToScreen2D(0, wy).y; }
+    var best=null; var bestD=tol+1;
+    for(var i=0;i<(__plan2d.guidesV||[]).length;i++){ var xs=sx(__plan2d.guidesV[i]); var d=Math.abs(px - xs); if(d<=tol && d<bestD){ best={dir:'v', index:i}; bestD=d; } }
+    for(var j=0;j<(__plan2d.guidesH||[]).length;j++){ var ys=sy(__plan2d.guidesH[j]); var d2=Math.abs(py - ys); if(d2<=tol && d2<bestD){ best={dir:'h', index:j}; bestD=d2; } }
+    return best;
+  } catch(_e){ return null; }
 }
 function plan2dHoverErase(p){
   var best=-1, bestDist=0.25;
@@ -2807,9 +3035,27 @@ function plan2dDeleteSelectedSubsegment(){
   return true;
 }
 
-// ===== Grid snapping and joining helpers =====
+// ===== Grid and guide snapping and joining helpers =====
 function plan2dSnap(v){ var step = (__plan2d.gridStep || 0.1); return Math.round(v/step)*step; }
-function plan2dSnapPoint(p){ return { x: plan2dSnap(p.x), y: plan2dSnap(p.y) }; }
+function plan2dSnapX(v){
+  try {
+    var s = __plan2d.scale || 1; var tolM = 8 / Math.max(1e-6, s);
+    var gs = __plan2d.guidesV || []; var best = null; var bestD = tolM + 1e-6;
+    for (var i=0;i<gs.length;i++){ var d = Math.abs(v - gs[i]); if (d <= tolM && d < bestD){ bestD = d; best = gs[i]; } }
+    if (best != null) return best;
+  } catch(e){}
+  return plan2dSnap(v);
+}
+function plan2dSnapY(v){
+  try {
+    var s = __plan2d.scale || 1; var tolM = 8 / Math.max(1e-6, s);
+    var gs = __plan2d.guidesH || []; var best = null; var bestD = tolM + 1e-6;
+    for (var i=0;i<gs.length;i++){ var d = Math.abs(v - gs[i]); if (d <= tolM && d < bestD){ bestD = d; best = gs[i]; } }
+    if (best != null) return best;
+  } catch(e){}
+  return plan2dSnap(v);
+}
+function plan2dSnapPoint(p){ return { x: plan2dSnapX(p.x), y: plan2dSnapY(p.y) }; }
 function plan2dSnapTOnWall(wall, t){
   t = Math.max(0, Math.min(1, t||0));
   var x0=wall.x0,y0=wall.y0,x1=wall.x1,y1=wall.y1;

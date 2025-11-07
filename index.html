@@ -530,6 +530,13 @@
 		<div style="display:flex; flex:1; min-height:0;">
 			<div style="flex:1; position:relative; background:#0b1020;">
 				<canvas id="plan2d-canvas" style="position:absolute; inset:0; width:100%; height:100%; display:block; cursor:crosshair; z-index:1; background:repeating-linear-gradient(0deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px), repeating-linear-gradient(90deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px);"></canvas>
+				<!-- Rulers: top and left -->
+				<canvas id="plan2d-ruler-top" style="position:absolute; left:0; top:0; height:28px; width:100%; z-index:3; pointer-events:auto;
+					background:rgba(15,23,42,0.85); border-bottom:1px solid rgba(148,163,184,0.35);
+				"></canvas>
+				<canvas id="plan2d-ruler-left" style="position:absolute; left:0; top:0; width:28px; height:100%; z-index:3; pointer-events:auto;
+					background:rgba(15,23,42,0.85); border-right:1px solid rgba(148,163,184,0.35);
+				"></canvas>
 				<canvas id="plan2d-overlay" style="position:absolute; inset:0; pointer-events:none; z-index:2;"></canvas>
 				<canvas id="labels-2d" style="position:absolute; inset:0; pointer-events:none; z-index:3;"></canvas>
 				<!-- Floating side overlay for Apply/Import/Export (frees full canvas width) -->

@@ -741,10 +741,11 @@
       ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
       // Base circle (white background)
       ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='#ffffff'; ctx.fill(); ctx.strokeStyle='#000000'; ctx.lineWidth=1; ctx.stroke();
-      // Cross hairs (black)
-      ctx.strokeStyle='#000000';
-      ctx.beginPath(); ctx.moveTo(cx-r+4,cy); ctx.lineTo(cx+r-4,cy); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx,cy-r+4); ctx.lineTo(cx,cy+r-4); ctx.stroke();
+  // Cross hairs (black) — inset so lines do not touch letters at rim
+  ctx.strokeStyle='#000000';
+  var inset = 14; // must be > letter offset (10)
+  ctx.beginPath(); ctx.moveTo(cx - r + 4 + inset, cy); ctx.lineTo(cx + r - 4 - inset, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy - r + 4 + inset); ctx.lineTo(cx, cy + r - 4 - inset); ctx.stroke();
       // Cardinal labels: flip N/S based on 2D orientation sign to match 2D compass (black letters)
       ctx.fillStyle = '#000000';
       var fontPx3D = 8; // fixed 8px
@@ -787,10 +788,11 @@
         var sgn = (window.__plan2d && (window.__plan2d.yFromWorldZSign===-1 || window.__plan2d.yFromWorldZSign===1)) ? window.__plan2d.yFromWorldZSign : 1;
     // Base circle (white background)
     cx.beginPath(); cx.arc(x,y,r,0,Math.PI*2); cx.fillStyle='#ffffff'; cx.fill(); cx.strokeStyle='#000000'; cx.lineWidth=1; cx.stroke();
-    // Cross hairs (black)
-    cx.strokeStyle='#000000';
-        cx.beginPath(); cx.moveTo(x-r+4,y); cx.lineTo(x+r-4,y); cx.stroke();
-        cx.beginPath(); cx.moveTo(x,y-r+4); cx.lineTo(x,y+r-4); cx.stroke();
+  // Cross hairs (black) — inset so lines do not touch letters at rim
+  cx.strokeStyle='#000000';
+  var inset = 14; // must be > letter offset (10)
+  cx.beginPath(); cx.moveTo(x - r + 4 + inset, y); cx.lineTo(x + r - 4 - inset, y); cx.stroke();
+  cx.beginPath(); cx.moveTo(x, y - r + 4 + inset); cx.lineTo(x, y + r - 4 - inset); cx.stroke();
     // Labels (flip N/S with sign) - fixed 8px (black letters)
     cx.fillStyle='#000000'; var fontPxNav = 8; cx.font='bold ' + fontPxNav + 'px system-ui, sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
         var nY = (sgn===1) ? (y - r + 10) : (y + r - 10);
