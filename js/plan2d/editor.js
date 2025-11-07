@@ -2550,67 +2550,10 @@ function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=do
   // (Removed) Overlay: dimension lines for every wall
 }
 // Draw top and left rulers: adaptive ticks/labels in meters aligned to pan/zoom
-function plan2dDrawRulers(ctxTop, ctxLeft){
-  try{
-    var c=document.getElementById('plan2d-canvas'); if(!c||!ctxTop||!ctxLeft) return;
-    var dpr=window.devicePixelRatio||1; var s=__plan2d.scale; var W=c.width, H=c.height;
-    // Clear backgrounds
-    ctxTop.setTransform(1,0,0,1,0,0); ctxTop.clearRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
-    ctxLeft.setTransform(1,0,0,1,0,0); ctxLeft.clearRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
-    // Backgrounds (match CSS)
-    ctxTop.fillStyle='rgba(15,23,42,0.85)'; ctxTop.fillRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
-    ctxLeft.fillStyle='rgba(15,23,42,0.85)'; ctxLeft.fillRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
-    // Mapping helpers
-    var originX = W/2 + (__plan2d.panX * s);
-    var originY = H/2 - (__plan2d.panY * s);
-    function worldXToPx(wx){ return originX + wx*s; }
-    function worldYToPx(wy){ return originY - wy*s; }
-    // Visible world ranges
-    var minXw = (0 - originX)/s, maxXw = (W - originX)/s;
-    var minYw = (originY - H)/s, maxYw = (originY - 0)/s;
-    // Choose step for ~100px between major ticks
-    function chooseStep(){
-      var targetPx=100; var base = targetPx / Math.max(1e-6, s);
-      var pow = Math.pow(10, Math.floor(Math.log10(Math.max(1e-6, base))));
-      var steps=[1,2,5,10]; var best=steps[0]*pow; for(var i=0;i<steps.length;i++){ var st=steps[i]*pow; if(Math.abs(st-base) < Math.abs(best-base)) best=st; }
-      return best;
-    }
-    var step = chooseStep(); var minor = step/10;
-    // Top ruler ticks
-    ctxTop.save(); ctxTop.translate(0.5,0.5); ctxTop.strokeStyle='#94a3b8';
-    var minorStartX = Math.ceil(minXw/minor)*minor;
-    for(var xm=minorStartX; xm<=maxXw+1e-8; xm+=minor){ var px = Math.round(worldXToPx(xm)); var isMajor = (Math.abs((xm/step)-Math.round(xm/step)) < 1e-6);
-      var len = isMajor ? Math.floor(18*dpr) : Math.floor(10*dpr);
-      ctxTop.beginPath(); ctxTop.moveTo(px, ctxTop.canvas.height-1); ctxTop.lineTo(px, ctxTop.canvas.height-1-len); ctxTop.stroke(); }
-    ctxTop.fillStyle='#e2e8f0'; ctxTop.font=(10*dpr)+'px system-ui, sans-serif'; ctxTop.textAlign='center'; ctxTop.textBaseline='top';
-    var startX = Math.ceil(minXw/step)*step;
-    for(var xw=startX; xw<=maxXw+1e-8; xw+=step){ var px2 = Math.round(worldXToPx(xw)); var label = String((Math.abs(xw)<1e-6)?0:+xw.toFixed(2).replace(/\.00$/,'')); ctxTop.fillText(label, px2, Math.floor(2*dpr)); }
-    ctxTop.restore();
-    // Left ruler ticks
-    ctxLeft.save(); ctxLeft.translate(0.5,0.5); ctxLeft.strokeStyle='#94a3b8';
-    var minorStartY = Math.ceil(minYw/minor)*minor;
-    for(var ym=minorStartY; ym<=maxYw+1e-8; ym+=minor){ var py = Math.round(worldYToPx(ym)); var isMajorY = (Math.abs((ym/step)-Math.round(ym/step)) < 1e-6);
-      var lenY = isMajorY ? Math.floor(18*dpr) : Math.floor(10*dpr);
-      ctxLeft.beginPath(); ctxLeft.moveTo(ctxLeft.canvas.width-1, py); ctxLeft.lineTo(ctxLeft.canvas.width-1-lenY, py); ctxLeft.stroke(); }
-    ctxLeft.fillStyle='#e2e8f0'; ctxLeft.font=(10*dpr)+'px system-ui, sans-serif'; ctxLeft.textAlign='right'; ctxLeft.textBaseline='middle';
-    var startY = Math.ceil(minYw/step)*step;
-    for(var yw=startY; yw<=maxYw+1e-8; yw+=step){ var py2 = Math.round(worldYToPx(yw)); var labelY = String((Math.abs(yw)<1e-6)?0:+yw.toFixed(2).replace(/\.00$/,'')); ctxLeft.fillText(labelY, ctxLeft.canvas.width - Math.floor(2*dpr), py2); }
-    ctxLeft.restore();
-  } catch(_e) { /* non-fatal rulers */ }
-}
+/* plan2dDrawRulers moved to js/plan2d/draw.js */
 
 // Hit-test guides near a screen pixel position; returns {dir,index} or null
-function plan2dHitGuideAtScreen(px, py){
-  try{
-    var tol = 6; // px tolerance
-    function sx(wx){ return worldToScreen2D(wx, 0).x; }
-    function sy(wy){ return worldToScreen2D(0, wy).y; }
-    var best=null; var bestD=tol+1;
-    for(var i=0;i<(__plan2d.guidesV||[]).length;i++){ var xs=sx(__plan2d.guidesV[i]); var d=Math.abs(px - xs); if(d<=tol && d<bestD){ best={dir:'v', index:i}; bestD=d; } }
-    for(var j=0;j<(__plan2d.guidesH||[]).length;j++){ var ys=sy(__plan2d.guidesH[j]); var d2=Math.abs(py - ys); if(d2<=tol && d2<bestD){ best={dir:'h', index:j}; bestD=d2; } }
-    return best;
-  } catch(_e){ return null; }
-}
+/* plan2dHitGuideAtScreen moved to js/plan2d/draw.js */
 function plan2dHoverErase(p){
   var best=-1, bestDist=0.25;
   for(var i=0;i<__plan2d.elements.length;i++){

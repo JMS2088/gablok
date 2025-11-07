@@ -1,8 +1,998 @@
-// Plan2D draw routine (extracted)
-// Exposes global function plan2dDraw used by editor and inputs.
+// Plan2D draw routines (extracted from editor.js)
+// Defines: plan2dDraw, plan2dDrawRulers, plan2dHitGuideAtScreen
 (function(){
-  if (typeof window.plan2dDraw === 'function') return;
-  window.plan2dDraw = function plan2dDraw(){
-    // The original implementation is kept in editor.js and moved here.
-  };
+  if (typeof window.plan2dDraw !== 'function') {
+    window.plan2dDraw = function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height);
+      // Rulers (drawn on separate canvases)
+      try {
+        var rt=document.getElementById('plan2d-ruler-top'); var rl=document.getElementById('plan2d-ruler-left');
+        if(rt && rl){ plan2dDrawRulers(rt.getContext('2d'), rl.getContext('2d')); }
+      } catch(_eR) {}
+      // CAD-style grid: major 1 m and minor 0.1 m lines aligned to device pixels; include pan offsets
+      var step=__plan2d.scale, w=c.width, h=c.height; 
+      var originX = w/2 + (__plan2d.panX * step), originY = h/2 - (__plan2d.panY * step);
+      ctx.save();
+      ctx.translate(0.5,0.5); // center 1px strokes
+      ctx.lineWidth=1;
+      // Minor grid (0.1 m)
+      var minorStep=step/10;
+      if(minorStep>=4){
+        ctx.strokeStyle='rgba(255,255,255,0.04)';
+        var startXm = originX % minorStep; if(startXm<0) startXm+=minorStep;
+        for(var xm=startXm; xm<w; xm+=minorStep){ var xx=Math.round(xm); ctx.beginPath(); ctx.moveTo(xx,0); ctx.lineTo(xx,h); ctx.stroke(); }
+        var startYm = originY % minorStep; if(startYm<0) startYm+=minorStep;
+        for(var ym=startYm; ym<h; ym+=minorStep){ var yy=Math.round(ym); ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(w,yy); ctx.stroke(); }
+      }
+      // Major grid (1 m)
+      ctx.strokeStyle='rgba(255,255,255,0.10)';
+      var startX = originX % step; if(startX<0) startX+=step;
+      for(var x=startX; x<w; x+=step){ var x0=Math.round(x); ctx.beginPath(); ctx.moveTo(x0,0); ctx.lineTo(x0,h); ctx.stroke(); }
+      var startY = originY % step; if(startY<0) startY+=step;
+      for(var y=startY; y<h; y+=step){ var y0=Math.round(y); ctx.beginPath(); ctx.moveTo(0,y0); ctx.lineTo(w,y0); ctx.stroke(); }
+      // Axes
+      ctx.strokeStyle='rgba(255,255,255,0.16)';
+      ctx.beginPath(); ctx.moveTo(Math.round(originX),0); ctx.lineTo(Math.round(originX),h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,Math.round(originY)); ctx.lineTo(w,Math.round(originY)); ctx.stroke();
+      ctx.restore();
+      // Preview: multi-point wall chain (polyline) when active
+      try {
+        if(__plan2d.tool==='wall' && __plan2d.chainActive && Array.isArray(__plan2d.chainPoints) && __plan2d.chainPoints.length){
+          var pts = __plan2d.chainPoints;
+          // Draw existing segments
+          ctx.save();
+          ctx.strokeStyle = '#64748b'; // slate-500
+          ctx.lineWidth = 2;
+          for(var pi=0; pi<pts.length-1; pi++){
+            var aP = worldToScreen2D(pts[pi].x, pts[pi].y);
+            var bP = worldToScreen2D(pts[pi+1].x, pts[pi+1].y);
+            ctx.beginPath(); ctx.moveTo(aP.x, aP.y); ctx.lineTo(bP.x, bP.y); ctx.stroke();
+          }
+          // Live segment to current mouse
+          if(__plan2d.mouse && pts.length){
+            var mW = screenToWorld2D(__plan2d.mouse.x, __plan2d.mouse.y);
+            // Guide-aware snapping for live preview
+            var mS = worldToScreen2D(plan2dSnapX(mW.x), plan2dSnapY(mW.y));
+            var last = worldToScreen2D(pts[pts.length-1].x, pts[pts.length-1].y);
+            ctx.setLineDash([6,4]); ctx.strokeStyle = '#0ea5e9'; // sky-600
+            ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(mS.x, mS.y); ctx.stroke(); ctx.setLineDash([]);
+          }
+          // Vertex handles
+          for(var pj=0; pj<pts.length; pj++){
+            var pS = worldToScreen2D(pts[pj].x, pts[pj].y);
+            ctx.beginPath(); ctx.fillStyle = '#f59e0b'; ctx.strokeStyle='rgba(15,23,42,0.8)'; ctx.lineWidth=2; // amber-500
+            ctx.arc(pS.x, pS.y, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+          }
+          ctx.restore();
+        }
+      } catch(e) { /* non-fatal chain preview */ }
+      // Elements
+      // Precompute connections at endpoints to extend walls and make corners flush
+      var elems=__plan2d.elements;
+      // Precompute wall intersections to enable sub-segment selection/deletion
+      var __wallIntersections = plan2dComputeWallIntersections(elems);
+      var startConn=new Array(elems.length).fill(false), endConn=new Array(elems.length).fill(false);
+      (function(){
+        function key(x,y){ return (Math.round(x*1000))+','+(Math.round(y*1000)); }
+        var map={};
+        for(var i=0;i<elems.length;i++){
+          var e=elems[i]; if(e.type!=='wall') continue;
+          var ks=key(e.x0,e.y0), ke=key(e.x1,e.y1);
+          (map[ks]||(map[ks]=[])).push({i:i,end:'s'});
+          (map[ke]||(map[ke]=[])).push({i:i,end:'e'});
+        }
+        Object.keys(map).forEach(function(k){ var arr=map[k]; if(arr.length>1){ for(var j=0;j<arr.length;j++){ if(arr[j].end==='s') startConn[arr[j].i]=true; else endConn[arr[j].i]=true; } } });
+      })();
+      for(var i=0;i<elems.length;i++){
+        var el=elems[i];
+        var ax=el.x0, ay=el.y0, bx=el.x1, by=el.y1;
+        // Compute dynamic endpoints for host-anchored windows
+        var isHostWindow = (el.type==='window' && typeof el.host==='number');
+        if(isHostWindow){
+          var host = elems[el.host];
+          if(!host || host.type!=='wall'){ continue; }
+          var hx0=host.x0, hy0=host.y0, hx1=host.x1, hy1=host.y1;
+          var t0 = Math.max(0, Math.min(1, el.t0||0));
+          var t1 = Math.max(0, Math.min(1, el.t1||0));
+          ax = hx0 + (hx1-hx0)*t0; ay = hy0 + (hy1-hy0)*t0;
+          bx = hx0 + (hx1-hx0)*t1; by = hy0 + (hy1-hy0)*t1;
+        }
+        if(el.type==='wall'){
+          // Compute original endpoints and thickness
+          var origAx = el.x0, origAy = el.y0, origBx = el.x1, origBy = el.y1;
+          var wdx0 = origBx - origAx, wdy0 = origBy - origAy; var wLen0 = Math.hypot(wdx0, wdy0) || 1;
+          var dirx = wdx0 / wLen0, diry = wdy0 / wLen0;
+          var thick = (el.thickness||__plan2d.wallThicknessM);
+          var halfW = thick/2;
+          // Build void spans (windows and doors) in t-space [0,1]
+          var spans = [];
+          for(var wi=0; wi<elems.length; wi++){
+            var oEl = elems[wi]; if(oEl.type!=='window' && oEl.type!=='door') continue;
+            if(typeof oEl.host==='number' && oEl.host===i){
+              var ot0 = Math.max(0, Math.min(1, oEl.t0||0));
+              var ot1 = Math.max(0, Math.min(1, oEl.t1||0));
+              if(ot1 < ot0){ var tmpo=ot0; ot0=ot1; ot1=tmpo; }
+              spans.push([ot0, ot1]);
+            } else {
+              // Free opening: if it lies along this wall, treat as void
+              var tA = plan2dProjectParamOnWall({x:oEl.x0, y:oEl.y0}, el);
+              var tB = plan2dProjectParamOnWall({x:oEl.x1, y:oEl.y1}, el);
+              // Check that both endpoints are near the wall centerline
+              var nearTol = halfW + 0.05; // meters
+              function pointWallDist(px,py){ var dx=origBx-origAx, dy=origBy-origAy; var denom=(dx*dx+dy*dy)||1; var t=((px-origAx)*dx+(py-origAy)*dy)/denom; t=Math.max(0,Math.min(1,t)); var cx=origAx+t*dx, cy=origAy+t*dy; return Math.hypot(px-cx, py-cy); }
+              var dA = pointWallDist(oEl.x0,oEl.y0), dB = pointWallDist(oEl.x1,oEl.y1);
+              if(dA <= nearTol && dB <= nearTol){
+                var s0 = Math.max(0, Math.min(1, Math.min(tA,tB)));
+                var s1 = Math.max(0, Math.min(1, Math.max(tA,tB)));
+                if(s1 > s0 + 1e-4) spans.push([s0,s1]);
+              }
+            }
+          }
+          // Live preview: carve a temporary gap where a door/window would be placed before element creation
+          if(__plan2d.mouse && !__plan2d.dragWindow && !__plan2d.dragDoor && !__plan2d.dragDoorWhole && !__plan2d.start){
+            var cPt = __plan2d.mouse; // screen-space
+            var pWorld = screenToWorld2D(cPt.x, cPt.y);
+            var near = plan2dFindNearestWall(pWorld, 0.3);
+            if(near && typeof near.index==='number' && near.index===i){
+              var tHover = plan2dProjectParamOnWall(pWorld, el);
+              if(__plan2d.tool==='door'){
+                var halfT = ((__plan2d.doorWidthM||0.92) / 2) / wLen0; var t0p=tHover-halfT, t1p=tHover+halfT;
+                if(t1p>t0p){ t0p=Math.max(0,t0p); t1p=Math.min(1,t1p); if(t1p>t0p+1e-6) spans.push([t0p,t1p]); }
+              } else if(__plan2d.tool==='window'){
+                var wPreview = (__plan2d.windowDefaultWidthM||1.2);
+                var halfTw = (wPreview/2)/wLen0; var t0w=tHover-halfTw, t1w=tHover+halfTw;
+                if(t1w>t0w){ t0w=Math.max(0,t0w); t1w=Math.min(1,t1w); if(t1w>t0w+1e-6) spans.push([t0w,t1w]); }
+              }
+            }
+          }
+          // Merge spans
+          spans.sort(function(A,B){ return A[0]-B[0]; });
+          var merged=[]; for(var si=0; si<spans.length; si++){ var s=spans[si]; if(merged.length===0) merged.push(s); else { var last=merged[merged.length-1]; if(s[0] <= last[1] + 1e-4){ last[1] = Math.max(last[1], s[1]); } else { merged.push([s[0], s[1]]);} } }
+          // Create solid segments as complement of merged spans
+          var solids=[]; var cursorT=0; for(var mi=0; mi<merged.length; mi++){ var vs=merged[mi]; if(vs[0] > cursorT + 1e-4) solids.push([cursorT, vs[0]]); cursorT = Math.max(cursorT, vs[1]); }
+          if(cursorT < 1 - 1e-4) solids.push([cursorT, 1]);
+          // If the wall is fully void due to openings spanning 100% of its length, draw a thin dashed centerline
+          if(solids.length===0){
+            var aLine = worldToScreen2D(origAx, origAy); var bLine = worldToScreen2D(origBx, origBy);
+            ctx.save();
+            ctx.strokeStyle = 'rgba(203,213,225,0.9)'; // slate-300
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([5,4]);
+            ctx.beginPath(); ctx.moveTo(aLine.x, aLine.y); ctx.lineTo(bLine.x, bLine.y); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.restore();
+          }
+          // Convert each solid segment to world endpoints, applying flush extension only at outer ends
+          for(var sj=0; sj<solids.length; sj++){
+            var s0 = solids[sj][0], s1 = solids[sj][1];
+            var sx0 = origAx + dirx * (s0 * wLen0), sy0 = origAy + diry * (s0 * wLen0);
+            var sx1 = origAx + dirx * (s1 * wLen0), sy1 = origAy + diry * (s1 * wLen0);
+            // Extend only if this touches the true ends
+            var touchesStart = (s0 <= 1e-4) && startConn[i];
+            var touchesEnd   = (s1 >= 1 - 1e-4) && endConn[i];
+            if(touchesStart){ sx0 -= dirx * halfW; sy0 -= diry * halfW; }
+            if(touchesEnd){   sx1 += dirx * halfW; sy1 += diry * halfW; }
+            var aSeg = worldToScreen2D(sx0, sy0); var bSeg = worldToScreen2D(sx1, sy1);
+            var dxs=bSeg.x-aSeg.x, dys=bSeg.y-aSeg.y; var Ls=Math.sqrt(dxs*dxs+dys*dys)||1; var nx=-dys/Ls, ny=dxs/Ls; var halfPx=(thick*__plan2d.scale)/2;
+            ctx.beginPath(); ctx.fillStyle='#e5e7eb'; ctx.strokeStyle='#334155'; ctx.lineWidth=__plan2d.wallStrokePx;
+            ctx.moveTo(aSeg.x+nx*halfPx,aSeg.y+ny*halfPx); ctx.lineTo(bSeg.x+nx*halfPx,bSeg.y+ny*halfPx); ctx.lineTo(bSeg.x-nx*halfPx,bSeg.y-ny*halfPx); ctx.lineTo(aSeg.x-nx*halfPx,aSeg.y-ny*halfPx); ctx.closePath(); ctx.fill(); ctx.stroke();
+
+            // Inline segment length measurement centered inside the wall polygon (no pill)
+            (function(){
+              var minLabelPx = 30; // skip very tiny segments
+              if(Ls < minLabelPx) return;
+              var segLenM = Math.hypot(sx1 - sx0, sy1 - sy0);
+              var txt = formatMeters(segLenM) + ' m';
+              var midx = (aSeg.x + bSeg.x) * 0.5, midy = (aSeg.y + bSeg.y) * 0.5;
+              var angle = Math.atan2(dys, dxs);
+              if (angle > Math.PI/2 || angle < -Math.PI/2) angle += Math.PI; // keep upright
+              var pad = 6; var maxW = Math.max(10, Ls - pad*2);
+              var marginY = 2; var maxH = Math.max(6, (2*halfPx) - marginY*2);
+              ctx.save();
+              ctx.translate(midx, midy);
+              ctx.rotate(angle);
+              var baseFontSize = 18; ctx.font = baseFontSize + 'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+              var textW = ctx.measureText(txt).width;
+              var scale = Math.min(1, maxW / Math.max(1, textW), maxH / baseFontSize);
+              if (scale < 0.5) { ctx.restore(); return; }
+              ctx.scale(scale, scale);
+              // subtle outline for contrast on light wall fill
+              ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(51,65,85,0.7)'; ctx.strokeText(txt, 0, 0.5);
+              ctx.fillStyle = '#0b1220';
+              ctx.fillText(txt, 0, 0.5);
+              ctx.restore();
+            })();
+      // Live preview: carve a temporary gap where a door/window would be placed before element creation
+          }
+          // Skip default solid wall draw since we've drawn segments
+          continue;
+        }
+        var a=worldToScreen2D(ax,ay), b=worldToScreen2D(bx,by);
+        if(el.type==='window'){
+          // Draw window as outline-only rectangle (no fill) at wall thickness and a center blue line
+          var dxw=b.x-a.x, dyw=b.y-a.y; var Lw=Math.sqrt(dxw*dxw+dyw*dyw)||1; var nxw=-dyw/Lw, nyw=dxw/Lw;
+          // Thickness: inherit from host wall if present, else element thickness or default
+          var thickM = isHostWindow ? ( (elems[el.host].thickness||__plan2d.wallThicknessM) ) : (el.thickness||__plan2d.wallThicknessM);
+          var halfw=(thickM*__plan2d.scale)/2;
+          // Outline rectangle only
+          ctx.beginPath();
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 1.5;
+          ctx.moveTo(a.x+nxw*halfw,a.y+nyw*halfw);
+          ctx.lineTo(b.x+nxw*halfw,b.y+nyw*halfw);
+          ctx.lineTo(b.x-nxw*halfw,b.y-nyw*halfw);
+          ctx.lineTo(a.x-nxw*halfw,a.y-nyw*halfw);
+          ctx.closePath();
+          ctx.stroke();
+          // Center blue line
+          ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.lineWidth=2; ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+          // Endpoint handles for editing when selected or in window tool
+          if((__plan2d.tool==='window' || (__plan2d.tool==='select' && i===__plan2d.selectedIndex))){
+            var handleR=5;
+            ctx.fillStyle='#38bdf8';
+            ctx.beginPath(); ctx.arc(a.x,a.y,handleR,0,Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(b.x,b.y,handleR,0,Math.PI*2); ctx.fill();
+          }
+          // Persistent window measurement label centered along the window span (stays after finishing drawing)
+          try {
+            // Skip if this very window is being actively dragged; a dedicated live label is drawn later
+            if (!(__plan2d.dragWindow && __plan2d.dragWindow.index === i)){
+              var Lpx = Math.hypot(b.x - a.x, b.y - a.y);
+              if (Lpx >= 20) {
+                // Compute span length in meters using host wall for anchored windows; else world distance
+                var lenM = 0;
+                if (isHostWindow) {
+                  var hostWm = elems[el.host];
+                  var wallLenM = Math.hypot((hostWm.x1 - hostWm.x0), (hostWm.y1 - hostWm.y0)) || 1;
+                  var t0m = Math.max(0, Math.min(1, el.t0||0));
+                  var t1m = Math.max(0, Math.min(1, el.t1||0));
+                  lenM = wallLenM * Math.abs(t1m - t0m);
+                } else {
+                  lenM = Math.hypot((bx - ax), (by - ay));
+                }
+                var txtM = formatMeters(lenM) + ' m';
+                var midxM = (a.x + b.x) * 0.5, midyM = (a.y + b.y) * 0.5;
+                var angM = Math.atan2(b.y - a.y, b.x - a.x);
+                if (angM > Math.PI/2 || angM < -Math.PI/2) angM += Math.PI; // keep upright
+                var padM = 6, maxWM = Math.max(10, Lpx - padM*2), maxHM = 18;
+                ctx.save();
+                ctx.translate(midxM, midyM);
+                ctx.rotate(angM);
+                var baseFontM = 16; ctx.font = baseFontM + 'px sans-serif';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                var twM = ctx.measureText(txtM).width;
+                var scaleM = Math.min(1, maxWM / Math.max(1, twM), maxHM / baseFontM);
+                if (scaleM >= 0.55) {
+                  ctx.scale(scaleM, scaleM);
+                  // Outline for contrast
+                  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(15,23,42,0.7)'; ctx.strokeText(txtM, 0, 0.5);
+                  ctx.fillStyle = '#e5e7eb';
+                  ctx.fillText(txtM, 0, 0.5);
+                }
+                ctx.restore();
+              }
+            }
+          } catch(e) { /* non-fatal measurement draw for windows */ }
+        } else if(el.type==='door'){
+          // Door rendering: compute endpoints (host-anchored or free)
+          var isHostDoor = (typeof el.host==='number');
+          var worldA = null, worldB = null;
+          if(isHostDoor){
+            var hostD = elems[el.host];
+            if(hostD && hostD.type==='wall'){
+              var t0d = Math.max(0, Math.min(1, el.t0||0));
+              var t1d = Math.max(0, Math.min(1, el.t1||0));
+              worldA = { x: hostD.x0 + (hostD.x1-hostD.x0)*t0d, y: hostD.y0 + (hostD.y1-hostD.y0)*t0d };
+              worldB = { x: hostD.x0 + (hostD.x1-hostD.x0)*t1d, y: hostD.y0 + (hostD.y1-hostD.y0)*t1d };
+              a = worldToScreen2D(worldA.x, worldA.y); b = worldToScreen2D(worldB.x, worldB.y);
+            }
+          } else {
+            worldA = { x: el.x0, y: el.y0 }; worldB = { x: el.x1, y: el.y1 };
+          }
+          // Draw door as a jamb line plus a 90-degree swing arc based on hinge + swing
+          ctx.save(); ctx.strokeStyle='#22c55e'; ctx.lineWidth=2;
+          // Jamb line (opening)
+          ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+          // Determine hinge side and swing direction
+          var hinge = (el.meta && el.meta.hinge) || 't0';
+          var swing = (el.meta && el.meta.swing) || 'in'; // 'in' or 'out'
+          var hPt = (hinge==='t0') ? a : b;
+          var other = (hinge==='t0') ? b : a;
+          var ang=Math.atan2(other.y-hPt.y, other.x-hPt.x);
+          var r=Math.hypot(other.x-hPt.x, other.y-hPt.y);
+          // Swing orientation: default arc 90° CCW; flip direction for swing='out'
+          var startAng = ang;
+          var endAng = ang + (swing==='out' ? -Math.PI/2 : Math.PI/2);
+          ctx.beginPath();
+          ctx.arc(hPt.x, hPt.y, r, startAng, endAng, (swing==='out'));
+          ctx.stroke();
+          // Endpoint handles when editing
+          if((__plan2d.tool==='door' || (__plan2d.tool==='select' && i===__plan2d.selectedIndex))){
+            var handleR=5; ctx.fillStyle='#22c55e';
+            ctx.beginPath(); ctx.arc(a.x,a.y,handleR,0,Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(b.x,b.y,handleR,0,Math.PI*2); ctx.fill();
+          }
+          ctx.restore();
+        }
+      }
+      // Stairs are rendered on the overlay canvas only. Removed base-canvas stairs to avoid duplicates.
+
+      // Color-coded overlays for pergola, garage, and balcony using world coords -> plan mapping
+      try {
+        if (__plan2d && __plan2d.active) {
+          // Collect label boxes (screen-space) to draw text later on the labels-2d canvas
+          var labelBoxes = [];
+          // Draw stairs footprint on the base canvas (authoritative rendering)
+          try {
+            if (stairsComponent) {
+              var lvlNow = (typeof currentFloor==='number' ? currentFloor : 0);
+              var stairsLvl = (typeof stairsComponent.level==='number' ? stairsComponent.level : 0);
+              var sgnSt = (__plan2d.yFromWorldZSign || 1);
+              var rotSt = ((stairsComponent.rotation || 0) * Math.PI) / 180;
+              var hwSt = (stairsComponent.width || 0)/2;
+              var hdSt = (stairsComponent.depth || 0)/2;
+              function rotStW(px, pz){ var dx=px - stairsComponent.x, dz=pz - stairsComponent.z; return { x: stairsComponent.x + dx*Math.cos(rotSt) - dz*Math.sin(rotSt), z: stairsComponent.z + dx*Math.sin(rotSt) + dz*Math.cos(rotSt) }; }
+              var s1 = rotStW(stairsComponent.x - hwSt, stairsComponent.z - hdSt);
+              var s2 = rotStW(stairsComponent.x + hwSt, stairsComponent.z - hdSt);
+              var s3 = rotStW(stairsComponent.x + hwSt, stairsComponent.z + hdSt);
+              var s4 = rotStW(stairsComponent.x - hwSt, stairsComponent.z + hdSt);
+              function mapPlanSt(p){ return { x: (p.x - __plan2d.centerX), y: sgnSt * (p.z - __plan2d.centerZ) }; }
+              var sp1 = worldToScreen2D(mapPlanSt(s1).x, mapPlanSt(s1).y);
+              var sp2 = worldToScreen2D(mapPlanSt(s2).x, mapPlanSt(s2).y);
+              var sp3 = worldToScreen2D(mapPlanSt(s3).x, mapPlanSt(s3).y);
+              var sp4 = worldToScreen2D(mapPlanSt(s4).x, mapPlanSt(s4).y);
+              ctx.save();
+              ctx.globalAlpha = (stairsLvl === lvlNow) ? 0.95 : 0.35;
+              ctx.fillStyle = (stairsLvl === lvlNow) ? 'rgba(15,23,42,0.10)' : 'rgba(15,23,42,0.06)';
+              // Match wall stroke weight and use white keylines for consistency in 2D
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = (__plan2d.wallStrokePx || 1.2);
+              ctx.beginPath(); ctx.moveTo(sp1.x, sp1.y); ctx.lineTo(sp2.x, sp2.y); ctx.lineTo(sp3.x, sp3.y); ctx.lineTo(sp4.x, sp4.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+              // Label background for stairs at top-left of its screen-space AABB
+              try {
+                var minXS = Math.min(sp1.x, sp2.x, sp3.x, sp4.x);
+                var minYS = Math.min(sp1.y, sp2.y, sp3.y, sp4.y);
+                var __dpr = window.devicePixelRatio || 1;
+                // Match room label style: 25% smaller base font, semi-bold, centered
+                var padXCss = 11, padYCss = 6, baseFontPxCss = 9, radiusCss = 19;
+                var padX = padXCss * __dpr, padY = padYCss * __dpr, fontSize = baseFontPxCss * __dpr, radius = radiusCss * __dpr;
+                ctx.save(); ctx.font = '600 ' + fontSize + 'px system-ui, sans-serif';
+                var sText = (stairsComponent.name || 'Stairs');
+                var tW = ctx.measureText(sText).width;
+                var bx = Math.round(minXS + 6 * __dpr), by = Math.round(minYS + 6 * __dpr), bw = Math.round(tW + padX*2), bh = Math.round(fontSize + padY*2);
+                radius = Math.min(radius, bh/2);
+                // Clamp box fully inside canvas to avoid being cut off
+                try {
+                  var cEl = document.getElementById('plan2d-canvas');
+                  if (cEl) { var cw=cEl.width||0, ch=cEl.height||0; bx = Math.max(6, Math.min(bx, Math.max(6, cw - bw - 6))); by = Math.max(6, Math.min(by, Math.max(6, ch - bh - 6))); }
+                } catch(e){}
+                // store (not used for drawing now) and draw on base canvas at original location
+                // Use consistent alpha similar to room labels
+                var aVal = 0.95;
+                labelBoxes.push({ x: bx, y: by, w: bw, h: bh, text: sText, a: aVal });
+                // Draw rounded pill background without shadow
+                ctx.globalAlpha = aVal;
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                // rounded rect path
+                ctx.moveTo(bx + radius, by);
+                ctx.lineTo(bx + bw - radius, by);
+                ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + radius);
+                ctx.lineTo(bx + bw, by + bh - radius);
+                ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - radius, by + bh);
+                ctx.lineTo(bx + radius, by + bh);
+                ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - radius);
+                ctx.lineTo(bx, by + radius);
+                ctx.quadraticCurveTo(bx, by, bx + radius, by);
+                ctx.closePath();
+                ctx.fill();
+                // Draw centered text, auto-fit within padding
+                try {
+                  var available = Math.max(0, bw - padX*2);
+                  var fontPxCss = baseFontPxCss; ctx.font = '600 ' + (fontPxCss * __dpr) + 'px system-ui, sans-serif';
+                  var tw = ctx.measureText(sText).width;
+                  if (available > 0 && tw > available) {
+                    var scale = available / Math.max(1, tw);
+                    fontPxCss = Math.max(9, Math.floor(baseFontPxCss * scale));
+                    ctx.font = '600 ' + (fontPxCss * __dpr) + 'px system-ui, sans-serif';
+                  }
+                  var tx = bx + bw/2, ty = by + bh/2;
+                  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                  ctx.fillStyle = '#333333'; ctx.fillText(sText, tx, ty);
+                } catch(e){}
+                ctx.restore();
+              } catch(e) { /* ignore label bg */ }
+              // Draw treads with weighted spacing: 10th interval (landing) is 5x deeper
+              try {
+                var totalDepth = (stairsComponent.depth || 0);
+                var totalSteps = Math.max(1, Math.floor(stairsComponent.steps || 19));
+                var intervals = Math.max(1, totalSteps - 1);
+                var weights = new Array(intervals);
+                for (var wi=0; wi<intervals; wi++) {
+                  // Default each interval weight to 1; make the 10th interval (index 9) wider if it exists
+                  weights[wi] = (wi === 9 ? 5 : 1);
+                }
+                // Sum of weights for normalization
+                var sumW = 0; for (var sw=0; sw<intervals; sw++) sumW += weights[sw];
+                for (var siSt = 1; siSt <= intervals; siSt++) {
+                  // Position this tread line at the end of interval siSt-1
+                  var prevW = 0; for (var pi=0; pi<siSt; pi++) prevW += weights[pi];
+                  var tt = (sumW > 0) ? (prevW / sumW) : (siSt / (intervals+0));
+                  var zW = stairsComponent.z - hdSt + tt * totalDepth;
+                  var aW = rotStW(stairsComponent.x - hwSt, zW); var bW = rotStW(stairsComponent.x + hwSt, zW);
+                  var aS = worldToScreen2D(mapPlanSt(aW).x, mapPlanSt(aW).y);
+                  var bS = worldToScreen2D(mapPlanSt(bW).x, mapPlanSt(bW).y);
+                  ctx.beginPath(); ctx.strokeStyle = 'rgba(100,116,139,0.9)'; ctx.lineWidth = 1; ctx.moveTo(aS.x, aS.y); ctx.lineTo(bS.x, bS.y); ctx.stroke();
+                }
+              } catch(e) { /* ignore */ }
+              ctx.restore();
+            }
+          } catch(e) { /* base stairs draw non-fatal */ }
+
+          var lvlNowC = (typeof currentFloor==='number' ? currentFloor : 0);
+          var sgnC = (__plan2d.yFromWorldZSign || 1);
+          function mapPlanXY(wx, wz){ return worldToScreen2D((wx - __plan2d.centerX), sgnC * (wz - __plan2d.centerZ)); }
+      function drawBox(x, z, w, d, rotDeg, stroke, fill, alpha, labelText) {
+            var rot = ((rotDeg||0) * Math.PI) / 180; var hw=w/2, hd=d/2;
+            function r(px,pz){ var dx=px-x, dz=pz-z; return { x: x + dx*Math.cos(rot) - dz*Math.sin(rot), z: z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+            var c1=r(x-hw,z-hd), c2=r(x+hw,z-hd), c3=r(x+hw,z+hd), c4=r(x-hw,z+hd);
+            var p1=mapPlanXY(c1.x,c1.z), p2=mapPlanXY(c2.x,c2.z), p3=mapPlanXY(c3.x,c3.z), p4=mapPlanXY(c4.x,c4.z);
+            ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = fill;
+      ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.lineTo(p4.x,p4.y); ctx.closePath(); ctx.fill();
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = (__plan2d.wallStrokePx || 1.2); ctx.stroke(); }
+            // Draw a white label background at top-left of the overlay's AABB and remember its box for later text drawing
+            if (labelText) {
+              try {
+                var minX = Math.min(p1.x,p2.x,p3.x,p4.x), minY = Math.min(p1.y,p2.y,p3.y,p4.y);
+                var __dpr2 = window.devicePixelRatio || 1;
+                // Match room label style (25% smaller)
+                var padXCss2 = 11, padYCss2 = 6, baseFontPxCss2 = 9, radiusCss2 = 19;
+                var padX2 = padXCss2 * __dpr2, padY2 = padYCss2 * __dpr2, fontSize2 = baseFontPxCss2 * __dpr2, radius2 = radiusCss2 * __dpr2;
+                ctx.font = '600 ' + fontSize2 + 'px system-ui, sans-serif'; var tW = ctx.measureText(labelText).width;
+                var bx = Math.round(minX + 6 * __dpr2), by = Math.round(minY + 6 * __dpr2), bw = Math.round(tW + padX2*2), bh = Math.round(fontSize2 + padY2*2);
+                radius2 = Math.min(radius2, bh/2);
+                // Clamp inside canvas bounds
+                try { var cEl=document.getElementById('plan2d-canvas'); if(cEl){ var cw=cEl.width||0, ch=cEl.height||0; bx = Math.max(6, Math.min(bx, Math.max(6, cw - bw - 6))); by = Math.max(6, Math.min(by, Math.max(6, ch - bh - 6))); } } catch(e){}
+                // Store info (not used for draw now) and draw on base canvas at original location
+                labelBoxes.push({ x: bx, y: by, w: bw, h: bh, text: labelText, a: 0.95 });
+                // Background pill without shadow
+                ctx.save(); ctx.globalAlpha = 0.95; ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.moveTo(bx + radius2, by);
+                ctx.lineTo(bx + bw - radius2, by);
+                ctx.quadraticCurveTo(bx + bw, by, bx + bw, by + radius2);
+                ctx.lineTo(bx + bw, by + bh - radius2);
+                ctx.quadraticCurveTo(bx + bw, by + bh, bx + bw - radius2, by + bh);
+                ctx.lineTo(bx + radius2, by + bh);
+                ctx.quadraticCurveTo(bx, by + bh, bx, by + bh - radius2);
+                ctx.lineTo(bx, by + radius2);
+                ctx.quadraticCurveTo(bx, by, bx + radius2, by);
+                ctx.closePath();
+                ctx.fill();
+                // Centered text with auto-fit inside padding
+                try {
+                  var available2 = Math.max(0, bw - padX2*2);
+                  var fontPxCss2 = baseFontPxCss2; ctx.font = '600 ' + (fontPxCss2 * __dpr2) + 'px system-ui, sans-serif';
+                  var tw2 = ctx.measureText(labelText).width;
+                  if (available2 > 0 && tw2 > available2) {
+                    var scale2 = available2 / Math.max(1, tw2);
+                    fontPxCss2 = Math.max(9, Math.floor(baseFontPxCss2 * scale2));
+                    ctx.font = '600 ' + (fontPxCss2 * __dpr2) + 'px system-ui, sans-serif';
+                  }
+                  var tx2 = bx + bw/2, ty2 = by + bh/2;
+                  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                  ctx.fillStyle = '#333333'; ctx.fillText(labelText, tx2, ty2);
+                } catch(e){}
+                ctx.restore();
+              } catch(e) { /* ignore */ }
+            }
+            ctx.restore();
+          }
+          // Draw components present on the current level (guard against missing globals)
+          var pergs = Array.isArray(window.pergolaComponents) ? window.pergolaComponents : [];
+          var garages = Array.isArray(window.garageComponents) ? window.garageComponents : [];
+          var balconies = Array.isArray(window.balconyComponents) ? window.balconyComponents : [];
+          var pools = Array.isArray(window.poolComponents) ? window.poolComponents : [];
+          var roofs = Array.isArray(window.roofComponents) ? window.roofComponents : [];
+
+          for (var iPg=0;iPg<pergs.length;iPg++){
+            var per=pergs[iPg]; if(!per) continue; if((per.level||0)!==lvlNowC) continue;
+            // Pergola: draw with a wall-like outline similar to other objects
+            drawBox(per.x, per.z, per.width, per.depth, per.rotation||0, '#10b981', 'rgba(16,185,129,0.15)', 0.95, (per.name||'Pergola'));
+          }
+          for (var iGg=0;iGg<garages.length;iGg++){
+            var gar=garages[iGg]; if(!gar) continue; if((gar.level||0)!==lvlNowC) continue;
+            // Use wall-like outline color to match other room outlines
+            drawBox(gar.x, gar.z, gar.width, gar.depth, gar.rotation||0, '#334155', 'rgba(245,158,11,0.15)', 0.95, (gar.name||'Garage'));
+          }
+          for (var iBl=0;iBl<balconies.length;iBl++){
+            var bal=balconies[iBl]; if(!bal) continue; if((bal.level||1)!==lvlNowC) continue;
+            drawBox(bal.x, bal.z, bal.width, bal.depth, bal.rotation||0, '#6366f1', 'rgba(99,102,241,0.18)', 0.95, (bal.name||'Balcony'));
+          }
+          // Pools (ground floor by default)
+          for (var iPl=0;iPl<pools.length;iPl++){
+            var pol=pools[iPl]; if(!pol) continue; if((pol.level||0)!==lvlNowC) continue;
+            drawBox(pol.x, pol.z, pol.width, pol.depth, pol.rotation||0, '#06b6d4', 'rgba(6,182,212,0.18)', 0.95, (pol.name||'Pool'));
+          }
+          // Roofs (draw on their assigned level; default to ground if unspecified)
+          for (var iRf=0;iRf<roofs.length;iRf++){
+            var rf=roofs[iRf]; if(!rf) continue; if((rf.level||0)!==lvlNowC) continue;
+            // Use a distinctive rose color
+            drawBox(rf.x, rf.z, rf.width, rf.depth, rf.rotation||0, '#f43f5e', 'rgba(244,63,94,0.14)', 0.90, (rf.name||'Roof'));
+          }
+          // 2D Room outlines and labels: draw subtle room footprint plus a small top-left label
+          try {
+            if (Array.isArray(allRooms)){
+              var __dprR = window.devicePixelRatio || 1;
+              var baseFontPxCssRoom = 9; // 25% smaller than 12px
+              var minFontPxCssRoom = 8;  // clamp
+              var padXCssR = 11, padYCssR = 6, radiusCssR = 19;
+              for (var ir=0; ir<allRooms.length; ir++){
+                var rm = allRooms[ir]; if(!rm) continue;
+                var rLvl = (typeof rm.level==='number'? rm.level : 0);
+                if (rLvl !== lvlNowC) continue;
+                var hwR = (rm.width||0)/2, hdR = (rm.depth||0)/2;
+                var c1r = mapPlanXY(rm.x - hwR, rm.z - hdR);
+                var c2r = mapPlanXY(rm.x + hwR, rm.z - hdR);
+                var c3r = mapPlanXY(rm.x + hwR, rm.z + hdR);
+                var c4r = mapPlanXY(rm.x - hwR, rm.z + hdR);
+                // Subtle room footprint fill under walls
+                try {
+                  ctx.save();
+                  // Single alpha for clear but subtle footprint on dark background
+                  ctx.fillStyle = 'rgba(148,163,184,0.18)'; // slate-400 at ~18%
+                  ctx.beginPath();
+                  ctx.moveTo(c1r.x, c1r.y);
+                  ctx.lineTo(c2r.x, c2r.y);
+                  ctx.lineTo(c3r.x, c3r.y);
+                  ctx.lineTo(c4r.x, c4r.y);
+                  ctx.closePath();
+                  ctx.fill();
+                  ctx.restore();
+                } catch(e){}
+                var minXr = Math.min(c1r.x,c2r.x,c3r.x,c4r.x);
+                var minYr = Math.min(c1r.y,c2r.y,c3r.y,c4r.y);
+                var labelTextR = (rm.name || 'Room');
+                var padXR = padXCssR * __dprR, padYR = padYCssR * __dprR;
+                var fontPxR = baseFontPxCssRoom * __dprR;
+                ctx.save();
+                ctx.font = '600 ' + fontPxR + 'px system-ui, sans-serif';
+                var tWR = ctx.measureText(labelTextR).width;
+                var bxR = Math.round(minXr + 6 * __dprR), byR = Math.round(minYr + 6 * __dprR);
+                var bwR = Math.round(tWR + padXR*2), bhR = Math.round((baseFontPxCssRoom * __dprR) + padYR*2);
+                var radiusR = Math.min(radiusCssR * __dprR, bhR/2);
+                try { var cElR=document.getElementById('plan2d-canvas'); if(cElR){ var cwR=cElR.width||0, chR=cElR.height||0; bxR = Math.max(6, Math.min(bxR, Math.max(6, cwR - bwR - 6))); byR = Math.max(6, Math.min(byR, Math.max(6, chR - bhR - 6))); } } catch(e){}
+                ctx.globalAlpha = 0.95; ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.moveTo(bxR + radiusR, byR);
+                ctx.lineTo(bxR + bwR - radiusR, byR);
+                ctx.quadraticCurveTo(bxR + bwR, byR, bxR + bwR, byR + radiusR);
+                ctx.lineTo(bxR + bwR, byR + bhR - radiusR);
+                ctx.quadraticCurveTo(bxR + bwR, byR + bhR, bxR + bwR - radiusR, byR + bhR);
+                ctx.lineTo(bxR + radiusR, byR + bhR);
+                ctx.quadraticCurveTo(bxR, byR + bhR, bxR, byR + bhR - radiusR);
+                ctx.lineTo(bxR, byR + radiusR);
+                ctx.quadraticCurveTo(bxR, byR, bxR + radiusR, byR);
+                ctx.closePath(); ctx.fill();
+                try {
+                  var availableR = Math.max(0, bwR - padXR*2);
+                  var fontCssNow = baseFontPxCssRoom; ctx.font = '600 ' + (fontCssNow * __dprR) + 'px system-ui, sans-serif';
+                  var twNow = ctx.measureText(labelTextR).width;
+                  if (availableR > 0 && twNow > availableR){ var scaleR = availableR / Math.max(1, twNow); fontCssNow = Math.max(minFontPxCssRoom, Math.floor(baseFontPxCssRoom * scaleR)); ctx.font = '600 ' + (fontCssNow * __dprR) + 'px system-ui, sans-serif'; }
+                  var txR = bxR + bwR/2, tyR = byR + bhR/2; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#333333'; ctx.fillText(labelTextR, txR, tyR);
+                } catch(e){}
+                ctx.restore();
+              }
+            }
+          } catch(e) { /* ignore room labels */ }
+          // After drawing backgrounds, draw the label texts on the labels-2d canvas (handled later)
+          __plan2d.__labelBoxes2D = labelBoxes;
+        }
+      } catch(e) { /* overlay draw for components is non-fatal */ }
+
+      // Preview during drag
+      if(__plan2d.start && __plan2d.last){
+        var a=worldToScreen2D(__plan2d.start.x,__plan2d.start.y);
+        var b=worldToScreen2D(__plan2d.last.x,__plan2d.last.y);
+        var dx=b.x-a.x, dy=b.y-a.y;
+        if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x;
+        if(__plan2d.tool==='wall'){
+          var L2=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2)||1;
+          var nx2=-(b.y-a.y)/L2, ny2=(b.x-a.x)/L2; var half2=(__plan2d.wallThicknessM*__plan2d.scale)/2;
+          ctx.beginPath(); ctx.fillStyle='rgba(226,232,240,0.55)'; ctx.strokeStyle='#64748b'; ctx.setLineDash([6,4]);
+          ctx.moveTo(a.x+nx2*half2,a.y+ny2*half2); ctx.lineTo(b.x+nx2*half2,b.y+ny2*half2); ctx.lineTo(b.x-nx2*half2,b.y-ny2*half2); ctx.lineTo(a.x-nx2*half2,a.y-ny2*half2); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+      // (Removed) Live measurement label centered inside the preview wall
+        } else if(__plan2d.tool==='window'){
+          ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.setLineDash([4,3]); ctx.lineWidth=2; ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); ctx.setLineDash([]);
+          // Live window measurement label centered along the preview line (no pill)
+          (function(){
+            var Ls = Math.hypot(b.x-a.x, b.y-a.y); if(Ls < 20) return;
+            var segLenM = Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y);
+            var txt = formatMeters(segLenM) + ' m';
+            var midx=(a.x+b.x)/2, midy=(a.y+b.y)/2; var angle=Math.atan2(b.y-a.y, b.x-a.x); if(angle>Math.PI/2||angle<-Math.PI/2) angle+=Math.PI;
+            var pad=6, maxW=Math.max(10, Ls - pad*2), maxH=18; // thin text-only label
+            ctx.save(); ctx.translate(midx, midy); ctx.rotate(angle);
+            var baseFontSize = 16; ctx.font=baseFontSize+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            var textW=ctx.measureText(txt).width; var scale=Math.min(1, maxW/Math.max(1,textW), maxH/baseFontSize); if(scale<0.55){ ctx.restore(); return; }
+            ctx.scale(scale,scale);
+            // subtle outline for readability over lines
+            ctx.lineWidth = 3; ctx.strokeStyle='rgba(15,23,42,0.7)'; ctx.strokeText(txt,0,0.5);
+            ctx.fillStyle='#e5e7eb'; ctx.fillText(txt,0,0.5);
+            ctx.restore();
+          })();
+        }
+      }
+
+      // No ghost overlay: 2D walls are live-updated from 3D during drag so both views stay in lockstep
+
+      // Live label while dragging a window endpoint (host-anchored)
+      if(__plan2d.dragWindow){
+        try {
+          var dw = __plan2d.dragWindow;
+          var we = __plan2d.elements[dw.index];
+          if(we && we.type==='window' && typeof we.host==='number'){
+            var host = __plan2d.elements[we.host];
+            if(host && host.type==='wall'){
+              // Compute world endpoints from host t0/t1
+              var t0 = Math.max(0, Math.min(1, we.t0||0));
+              var t1 = Math.max(0, Math.min(1, we.t1||0));
+              var wx0 = host.x0 + (host.x1-host.x0)*t0, wy0 = host.y0 + (host.y1-host.y0)*t0;
+              var wx1 = host.x0 + (host.x1-host.x0)*t1, wy1 = host.y0 + (host.y1-host.y0)*t1;
+              var a = worldToScreen2D(wx0, wy0); var b = worldToScreen2D(wx1, wy1);
+              // Pixel-space length for visibility threshold
+              var Lpx = Math.hypot(b.x - a.x, b.y - a.y);
+              if(Lpx >= 20){
+                // Window span in meters along the wall
+                var wallLen = Math.hypot((host.x1-host.x0), (host.y1-host.y0)) || 1;
+                var spanT = Math.abs(t1 - t0);
+                var lenM = wallLen * spanT;
+                var txt = formatMeters(lenM) + ' m';
+                // Midpoint and orientation
+                var midx = (a.x + b.x) * 0.5, midy = (a.y + b.y) * 0.5;
+                var angle = Math.atan2(b.y - a.y, b.x - a.x);
+                if(angle > Math.PI/2 || angle < -Math.PI/2) angle += Math.PI; // keep upright
+                var pad = 6, maxW = Math.max(10, Lpx - pad*2), maxH = 18;
+                ctx.save();
+                ctx.translate(midx, midy);
+                ctx.rotate(angle);
+                var baseFontSize = 16; ctx.font = baseFontSize + 'px sans-serif';
+                ctx.textAlign='center'; ctx.textBaseline='middle';
+                var textW = ctx.measureText(txt).width;
+                var scale = Math.min(1, maxW / Math.max(1, textW), maxH / baseFontSize);
+                if(scale >= 0.55){
+                  ctx.scale(scale, scale);
+                  // subtle outline for readability
+                  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(15,23,42,0.7)'; ctx.strokeText(txt, 0, 0.5);
+                  ctx.fillStyle = '#e5e7eb';
+                  ctx.fillText(txt, 0, 0.5);
+                }
+                ctx.restore();
+              }
+            }
+          }
+        } catch(e) { /* non-fatal */ }
+      }
+      // Hover erase highlight
+      if(__plan2d.tool==='erase' && __plan2d.hoverIndex>=0){ var e=__plan2d.elements[__plan2d.hoverIndex]; var a2=worldToScreen2D(e.x0,e.y0), b2=worldToScreen2D(e.x1,e.y1); ctx.beginPath(); ctx.strokeStyle='#ef4444'; ctx.lineWidth=3; ctx.setLineDash([4,4]); ctx.moveTo(a2.x,a2.y); ctx.lineTo(b2.x,b2.y); ctx.stroke(); ctx.setLineDash([]); }
+      // Hover highlights in Select tool for feedback
+      if(__plan2d.tool==='select'){
+        // Door/window segment hover
+        if(typeof __plan2d.hoverDoorIndex==='number' && __plan2d.hoverDoorIndex>=0){
+          var deh = __plan2d.elements[__plan2d.hoverDoorIndex];
+          if(deh){
+            var ax,ay,bx,by; if(typeof deh.host==='number'){ var host=__plan2d.elements[deh.host]; if(host){ var t0=Math.max(0,Math.min(1,deh.t0||0)), t1=Math.max(0,Math.min(1,deh.t1||0)); ax=host.x0+(host.x1-host.x0)*t0; ay=host.y0+(host.y1-host.y0)*t0; bx=host.x0+(host.x1-host.x0)*t1; by=host.y0+(host.y1-host.y0)*t1; } }
+            if(ax===undefined){ ax=deh.x0; ay=deh.y0; bx=deh.x1; by=deh.y1; }
+            var aS=worldToScreen2D(ax,ay), bS=worldToScreen2D(bx,by); ctx.beginPath(); ctx.strokeStyle='#10b981'; ctx.lineWidth=3; ctx.setLineDash([6,4]); ctx.moveTo(aS.x,aS.y); ctx.lineTo(bS.x,bS.y); ctx.stroke(); ctx.setLineDash([]);
+          }
+        }
+        if(typeof __plan2d.hoverWindowIndex==='number' && __plan2d.hoverWindowIndex>=0){
+          var weH = __plan2d.elements[__plan2d.hoverWindowIndex]; if(weH){ var axw,ayw,bxw,byw; if(typeof weH.host==='number'){ var wh=__plan2d.elements[weH.host]; if(wh){ var t0w=Math.max(0,Math.min(1,weH.t0||0)), t1w=Math.max(0,Math.min(1,weH.t1||0)); axw=wh.x0+(wh.x1-wh.x0)*t0w; ayw=wh.y0+(wh.y1-wh.y0)*t0w; bxw=wh.x0+(wh.x1-wh.x0)*t1w; byw=wh.y0+(wh.y1-wh.y0)*t1w; } } if(axw===undefined){ axw=weH.x0; ayw=weH.y0; bxw=weH.x1; byw=weH.y1; } var aSw=worldToScreen2D(axw,ayw), bSw=worldToScreen2D(bxw,byw); ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.lineWidth=3; ctx.setLineDash([6,4]); ctx.moveTo(aSw.x,aSw.y); ctx.lineTo(bSw.x,bSw.y); ctx.stroke(); ctx.setLineDash([]);} }
+        // Wall subsegment hover
+        if(__plan2d.hoverSubsegment && __plan2d.hoverDoorIndex<0 && __plan2d.hoverWindowIndex<0){ var hs=__plan2d.hoverSubsegment; var aH=worldToScreen2D(hs.ax,hs.ay), bH=worldToScreen2D(hs.bx,hs.by); ctx.beginPath(); ctx.strokeStyle='#f97316'; ctx.lineWidth=4; ctx.setLineDash([8,4]); ctx.moveTo(aH.x,aH.y); ctx.lineTo(bH.x,bH.y); ctx.stroke(); ctx.setLineDash([]); }
+        // Wall endpoint hover: show a small handle at the hovered endpoint for affordance
+        if(__plan2d.hoverWallEnd && typeof __plan2d.hoverWallEnd.index==='number'){
+          try{
+            var wHover = __plan2d.elements[__plan2d.hoverWallEnd.index];
+            if(wHover && wHover.type==='wall'){
+              var pt = (__plan2d.hoverWallEnd.end==='a') ? {x:wHover.x0,y:wHover.y0} : {x:wHover.x1,y:wHover.y1};
+              var pS = worldToScreen2D(pt.x, pt.y);
+              ctx.save();
+              ctx.fillStyle = '#fbbf24'; // amber-400
+              ctx.strokeStyle = 'rgba(15,23,42,0.85)';
+              ctx.lineWidth = 2;
+              ctx.beginPath(); ctx.arc(pS.x, pS.y, 5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+              ctx.restore();
+            }
+          }catch(e){}
+        }
+      }
+      // Selection highlight
+      if(__plan2d.selectedIndex>=0){
+        var se=__plan2d.elements[__plan2d.selectedIndex];
+        var sx0=se.x0, sy0=se.y0, sx1=se.x1, sy1=se.y1;
+        if(se && (se.type==='window' || se.type==='door') && typeof se.host==='number'){
+          var hostSel = __plan2d.elements[se.host];
+          if(hostSel && hostSel.type==='wall'){
+            var tt0=Math.max(0,Math.min(1,se.t0||0)), tt1=Math.max(0,Math.min(1,se.t1||0));
+            sx0 = hostSel.x0 + (hostSel.x1-hostSel.x0)*tt0; sy0 = hostSel.y0 + (hostSel.y1-hostSel.y0)*tt0;
+            sx1 = hostSel.x0 + (hostSel.x1-hostSel.x0)*tt1; sy1 = hostSel.y0 + (hostSel.y1-hostSel.y0)*tt1;
+          }
+        }
+        var sa=worldToScreen2D(sx0,sy0), sb=worldToScreen2D(sx1,sy1);
+        ctx.beginPath(); ctx.strokeStyle='#10b981'; ctx.lineWidth=3; ctx.setLineDash([6,4]); ctx.moveTo(sa.x,sa.y); ctx.lineTo(sb.x,sb.y); ctx.stroke(); ctx.setLineDash([]);
+        // When a wall is selected in Select tool, show explicit draggable endpoint handles
+        if(__plan2d.tool==='select' && se && se.type==='wall'){
+          var handleR = 6;
+          // Draw with a strong fill and subtle outline for visibility over walls
+          ctx.save();
+          ctx.fillStyle = '#f59e0b'; // amber-500
+          ctx.strokeStyle = 'rgba(15,23,42,0.8)';
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(sa.x, sa.y, handleR, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+          ctx.beginPath(); ctx.arc(sb.x, sb.y, handleR, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+          ctx.restore();
+        }
+      }
+      // Draw selected subsegment highlight if present
+      if(__plan2d.selectedSubsegment && typeof __plan2d.selectedSubsegment.wallIndex==='number'){
+        var ss = __plan2d.selectedSubsegment;
+        var aS = worldToScreen2D(ss.ax, ss.ay), bS = worldToScreen2D(ss.bx, ss.by);
+        ctx.save();
+        ctx.beginPath(); ctx.strokeStyle = '#f97316'; ctx.lineWidth = 4; ctx.setLineDash([8,4]);
+        ctx.moveTo(aS.x, aS.y); ctx.lineTo(bS.x, bS.y); ctx.stroke(); ctx.setLineDash([]);
+        ctx.restore();
+      }
+      var ox=ov.getContext('2d'); ox.setTransform(1,0,0,1,0,0); ox.clearRect(0,0,ov.width,ov.height);
+      // Draw guides on overlay: snapped to device pixels
+      try {
+        var s = __plan2d.scale; var w = c.width, h = c.height;
+        function sx(wx){ return worldToScreen2D(wx, 0).x; }
+        function sy(wy){ return worldToScreen2D(0, wy).y; }
+        ox.save();
+        // Existing guides
+        // Prepare label style
+        var dpr = window.devicePixelRatio || 1;
+        ox.font = (10*dpr) + 'px system-ui, sans-serif';
+        ox.fillStyle = '#e5e7eb';
+        var labelPad = Math.floor(3*dpr);
+        var lastLabelEndX = -Infinity;
+        for(var iV=0;iV<(__plan2d.guidesV||[]).length;iV++){
+          var xw = __plan2d.guidesV[iV]; var xs = Math.round(sx(xw)) + 0.5;
+          ox.strokeStyle = (__plan2d.selectedGuide && __plan2d.selectedGuide.dir==='v' && __plan2d.selectedGuide.index===iV) ? '#f59e0b' : 'rgba(56,189,248,0.85)';
+          ox.lineWidth = 1; ox.beginPath(); ox.moveTo(xs,0); ox.lineTo(xs,h); ox.stroke();
+          // Label near top ruler: "x m" with overlap avoidance
+          try {
+            var txt = (typeof formatMeters==='function' ? formatMeters(Math.abs(xw)) + ' m' : (xw.toFixed(2)+' m'));
+            var tw = ox.measureText(txt).width;
+            var bx = xs + 6; var by = Math.floor(4*dpr);
+            if (bx > lastLabelEndX + 6) {
+              // draw simple dark backdrop for readability
+              ox.save();
+              ox.fillStyle = 'rgba(2,6,23,0.55)';
+              ox.fillRect(Math.floor(bx - labelPad), Math.floor(by - labelPad), Math.ceil(tw + labelPad*2), Math.ceil(12*dpr + labelPad*2));
+              ox.fillStyle = '#e5e7eb'; ox.textAlign='left'; ox.textBaseline='top';
+              ox.fillText(txt, bx, by);
+              ox.restore();
+              lastLabelEndX = bx + tw;
+            }
+          } catch(e){}
+        }
+        var lastLabelEndY = -Infinity;
+        for(var iH=0;iH<(__plan2d.guidesH||[]).length;iH++){
+          var yw = __plan2d.guidesH[iH]; var ys = Math.round(sy(yw)) + 0.5;
+          ox.strokeStyle = (__plan2d.selectedGuide && __plan2d.selectedGuide.dir==='h' && __plan2d.selectedGuide.index===iH) ? '#f59e0b' : 'rgba(56,189,248,0.85)';
+          ox.lineWidth = 1; ox.beginPath(); ox.moveTo(0,ys); ox.lineTo(w,ys); ox.stroke();
+          // Label near left ruler: "y m" with overlap avoidance
+          try {
+            var txtH = (typeof formatMeters==='function' ? formatMeters(Math.abs(yw)) + ' m' : (yw.toFixed(2)+' m'));
+            var twH = ox.measureText(txtH).width;
+            var bxH = Math.floor(4*dpr); var byH = ys + 6;
+            if (byH > lastLabelEndY + Math.ceil(12*dpr) + 6) {
+              ox.save();
+              ox.fillStyle = 'rgba(2,6,23,0.55)';
+              ox.fillRect(Math.floor(bxH - labelPad), Math.floor(byH - labelPad), Math.ceil(twH + labelPad*2), Math.ceil(12*dpr + labelPad*2));
+              ox.fillStyle = '#e5e7eb'; ox.textAlign='left'; ox.textBaseline='top';
+              ox.fillText(txtH, bxH, byH);
+              ox.restore();
+              lastLabelEndY = byH + Math.ceil(12*dpr);
+            }
+          } catch(e){}
+        }
+        // Dragging preview
+        if(__plan2d.dragGuide){
+          ox.strokeStyle = '#f59e0b'; ox.setLineDash([6,4]);
+          if(__plan2d.dragGuide.dir==='v'){
+            var xs2 = Math.round(sx(__plan2d.dragGuide.value)) + 0.5; ox.beginPath(); ox.moveTo(xs2,0); ox.lineTo(xs2,h); ox.stroke();
+            // label for preview
+            try { var txt2 = (typeof formatMeters==='function' ? formatMeters(Math.abs(__plan2d.dragGuide.value)) + ' m' : (__plan2d.dragGuide.value.toFixed(2)+' m')); var tw2 = ox.measureText(txt2).width; var bx2 = xs2 + 6; var by2 = Math.floor(4*(window.devicePixelRatio||1)); ox.setLineDash([]); ox.save(); ox.fillStyle='rgba(2,6,23,0.55)'; var lp=Math.floor(3*(window.devicePixelRatio||1)); ox.fillRect(Math.floor(bx2-lp), Math.floor(by2-lp), Math.ceil(tw2+lp*2), Math.ceil(12*(window.devicePixelRatio||1)+lp*2)); ox.fillStyle='#e5e7eb'; ox.textAlign='left'; ox.textBaseline='top'; ox.fillText(txt2, bx2, by2); ox.restore(); ox.setLineDash([6,4]); } catch(e){}
+          } else {
+            var ys2 = Math.round(sy(__plan2d.dragGuide.value)) + 0.5; ox.beginPath(); ox.moveTo(0,ys2); ox.lineTo(w,ys2); ox.stroke();
+            try { var txt3 = (typeof formatMeters==='function' ? formatMeters(Math.abs(__plan2d.dragGuide.value)) + ' m' : (__plan2d.dragGuide.value.toFixed(2)+' m')); var tw3 = ox.measureText(txt3).width; var bx3 = Math.floor(4*(window.devicePixelRatio||1)); var by3 = ys2 + 6; ox.setLineDash([]); ox.save(); ox.fillStyle='rgba(2,6,23,0.55)'; var lp2=Math.floor(3*(window.devicePixelRatio||1)); ox.fillRect(Math.floor(bx3-lp2), Math.floor(by3-lp2), Math.ceil(tw3+lp2*2), Math.ceil(12*(window.devicePixelRatio||1)+lp2*2)); ox.fillStyle='#e5e7eb'; ox.textAlign='left'; ox.textBaseline='top'; ox.fillText(txt3, bx3, by3); ox.restore(); ox.setLineDash([6,4]); } catch(e){}
+          }
+          ox.setLineDash([]);
+        }
+        ox.restore();
+      } catch(_eG) {}
+      // Dedicated 2D labels canvas (draw text here, keep shapes/effects on overlay)
+      var l2c = document.getElementById('labels-2d');
+      var lx = l2c ? l2c.getContext('2d') : ox; // fallback to overlay if missing
+      if (l2c) { lx.setTransform(1,0,0,1,0,0); lx.clearRect(0,0,l2c.width,l2c.height); }
+
+      // Overlays: Stairs indicator (both floors) + small labels
+      (function(){
+        try{
+          var lvl = (typeof currentFloor==='number' ? currentFloor : 0);
+          var cxW = (typeof __plan2d.centerX==='number'? __plan2d.centerX : 0);
+          var czW = (typeof __plan2d.centerZ==='number'? __plan2d.centerZ : 0);
+          var sgn = (__plan2d.yFromWorldZSign||1);
+          function toScreen(wx, wz){ return worldToScreen2D((wx - cxW), sgn * (wz - czW)); }
+          // Compute the exact visual center of a rotated box in screen space
+          function screenCenterOfBox(x, z, w, d, rotDeg){
+            var rot = ((rotDeg||0) * Math.PI) / 180; var hw=(w||0)/2, hd=(d||0)/2;
+            function r(px,pz){ var dx=px-x, dz=pz-z; return { x: x + dx*Math.cos(rot) - dz*Math.sin(rot), z: z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+            var c1=r(x-hw,z-hd), c2=r(x+hw,z-hd), c3=r(x+hw,z+hd), c4=r(x-hw,z+hd);
+            var p1=toScreen(c1.x,c1.z), p3=toScreen(c3.x,c3.z);
+            // For rectangles, the midpoint of opposite corners is the exact center
+            return { x:(p1.x+p3.x)/2, y:(p1.y+p3.y)/2 };
+          }
+          // Debug helpers for label vs overlay center
+          function getBoxScreenPoints(x, z, w, d, rotDeg){
+            var rot = ((rotDeg||0) * Math.PI) / 180; var hw=(w||0)/2, hd=(d||0)/2;
+            function r(px,pz){ var dx=px-x, dz=pz-z; return { x: x + dx*Math.cos(rot) - dz*Math.sin(rot), z: z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+            var c1=r(x-hw,z-hd), c2=r(x+hw,z-hd), c3=r(x+hw,z+hd), c4=r(x-hw,z+hd);
+            return [ toScreen(c1.x,c1.z), toScreen(c2.x,c2.z), toScreen(c3.x,c3.z), toScreen(c4.x,c4.z) ];
+          }
+          function getAABB(pts){ var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; for(var i=0;i<pts.length;i++){ var p=pts[i]; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; } return {minX:minX,minY:minY,maxX:maxY,maxY:maxY}; }
+          var SHOW_2D_LABEL_COORDS = true;
+      if (__plan2d.drawLabelBoxesOnLabelsLayer && l2c) {
+        lx.save();
+        lx.font = '12px sans-serif';
+        lx.textAlign = 'center';
+        lx.textBaseline = 'middle';
+        // Draw white box + centered text on labels layer if explicitly enabled
+        lx.save();
+        var __dprT = window.devicePixelRatio || 1;
+        // Match DOM room-label appearance
+        var baseFontPx = 12, minFontPx = 9;
+        lx.textBaseline = 'middle';
+        var boxes = (__plan2d.__labelBoxes2D || []);
+        for (var li=0; li<boxes.length; li++){
+          var lb = boxes[li] || {};
+          var bx = +lb.x || 0, by = +lb.y || 0, bw = +lb.w || 0, bh = +lb.h || 0;
+          var labelText = (lb.text == null ? '' : String(lb.text));
+          var alpha = (typeof lb.a === 'number' ? lb.a : 0.95);
+      // background pill without shadow
+      lx.save(); lx.globalAlpha = alpha; lx.fillStyle = '#ffffff';
+      var radius = 19 * __dprT;
+          lx.beginPath();
+          lx.moveTo(bx + radius, by);
+          lx.lineTo(bx + bw - radius, by);
+          lx.quadraticCurveTo(bx + bw, by, bx + bw, by + radius);
+          lx.lineTo(bx + bw, by + bh - radius);
+          lx.quadraticCurveTo(bx + bw, by + bh, bx + bw - radius, by + bh);
+          lx.lineTo(bx + radius, by + bh);
+          lx.quadraticCurveTo(bx, by + bh, bx, by + bh - radius);
+          lx.lineTo(bx, by + radius);
+          lx.quadraticCurveTo(bx, by, bx + radius, by);
+          lx.closePath();
+          lx.fill();
+          lx.restore();
+          // text centered with padding fit
+          var padX = 11 * __dprT;
+          var available = Math.max(0, bw - padX * 2);
+          var fontPx = baseFontPx; lx.font = '600 ' + (fontPx * __dprT) + 'px system-ui, sans-serif';
+          var tw = lx.measureText(labelText).width;
+          if (available > 0 && tw > available) {
+            var scale = available / Math.max(1, tw);
+            fontPx = Math.max(minFontPx, Math.floor(baseFontPx * scale));
+            lx.font = '600 ' + (fontPx * __dprT) + 'px system-ui, sans-serif';
+          }
+          lx.textAlign = 'center'; lx.fillStyle = '#333333';
+          var tx = bx + bw / 2, ty = by + bh / 2;
+          lx.fillText(labelText, tx, ty);
+        }
+        lx.restore();
+      }
+      if(__plan2d.debug){
+        try {
+          var dpr = window.devicePixelRatio || 1;
+          ox.save();
+          ox.font = '11px monospace';
+          ox.textAlign = 'left';
+          ox.textBaseline = 'top';
+          ox.fillStyle = 'rgba(0,0,0,0.55)';
+          ox.fillRect(8,8, 280, 40);
+          ox.fillStyle = '#fde68a'; // amber-300
+          var msg1 = 'c: '+c.width+'x'+c.height+'  ov: '+ov.width+'x'+ov.height;
+          var msg2 = 'scale: '+__plan2d.scale+'  dpr: '+dpr.toFixed(2);
+          ox.fillText(msg1, 12, 12);
+          ox.fillText(msg2, 12, 28);
+          ox.restore();
+          if (console && console.debug) console.debug('[2D] c', c.width, c.height, 'ov', ov.width, ov.height, 'scale', __plan2d.scale, 'dpr', dpr);
+        } catch(e){}
+      }
+      // Overlay: Compass disabled (moved to main navigation on the right to always be visible)
+      // Intentionally no-op; the compass is drawn in the main UI instead of the 2D overlay.
+      (function(){ return; })();
+
+      // (Removed) Overlay: corner wall markers
+      } catch(e) {
+        // Non-fatal: overlay/labels rendering issues shouldn't break the main render loop
+        try { console.warn('2D overlay draw error', e); } catch(_) {}
+      }
+    })();
+
+      // (Removed) Overlay: Wall orientation hint during wall drawing
+      // (Removed) Overlay: live window width dimension label during drag or when selected
+
+      // (Removed) Overlay: live wall dimension during drag
+      // (Removed) Overlay: dimension lines for every wall
+    };
+  }
+
+  if (typeof window.plan2dDrawRulers !== 'function') {
+    // Draw top and left rulers: adaptive ticks/labels in meters aligned to pan/zoom
+    window.plan2dDrawRulers = function plan2dDrawRulers(ctxTop, ctxLeft){
+      try{
+        var c=document.getElementById('plan2d-canvas'); if(!c||!ctxTop||!ctxLeft) return;
+        var dpr=window.devicePixelRatio||1; var s=__plan2d.scale; var W=c.width, H=c.height;
+        // Clear backgrounds
+        ctxTop.setTransform(1,0,0,1,0,0); ctxTop.clearRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
+        ctxLeft.setTransform(1,0,0,1,0,0); ctxLeft.clearRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
+        // Backgrounds (match CSS)
+        ctxTop.fillStyle='rgba(15,23,42,0.85)'; ctxTop.fillRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
+        ctxLeft.fillStyle='rgba(15,23,42,0.85)'; ctxLeft.fillRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
+        // Mapping helpers
+        var originX = W/2 + (__plan2d.panX * s);
+        var originY = H/2 - (__plan2d.panY * s);
+        function worldXToPx(wx){ return originX + wx*s; }
+        function worldYToPx(wy){ return originY - wy*s; }
+        // Visible world ranges
+        var minXw = (0 - originX)/s, maxXw = (W - originX)/s;
+        var minYw = (originY - H)/s, maxYw = (originY - 0)/s;
+        // Choose step for ~100px between major ticks
+        function chooseStep(){
+          var targetPx=100; var base = targetPx / Math.max(1e-6, s);
+          var pow = Math.pow(10, Math.floor(Math.log10(Math.max(1e-6, base))));
+          var steps=[1,2,5,10]; var best=steps[0]*pow; for(var i=0;i<steps.length;i++){ var st=steps[i]*pow; if(Math.abs(st-base) < Math.abs(best-base)) best=st; }
+          return best;
+        }
+        var step = chooseStep(); var minor = step/10;
+        // Top ruler ticks
+        ctxTop.save(); ctxTop.translate(0.5,0.5); ctxTop.strokeStyle='#94a3b8';
+        var minorStartX = Math.ceil(minXw/minor)*minor;
+        for(var xm=minorStartX; xm<=maxXw+1e-8; xm+=minor){ var px = Math.round(worldXToPx(xm)); var isMajor = (Math.abs((xm/step)-Math.round(xm/step)) < 1e-6);
+          var len = isMajor ? Math.floor(18*dpr) : Math.floor(10*dpr);
+          ctxTop.beginPath(); ctxTop.moveTo(px, ctxTop.canvas.height-1); ctxTop.lineTo(px, ctxTop.canvas.height-1-len); ctxTop.stroke(); }
+        ctxTop.fillStyle='#e2e8f0'; ctxTop.font=(10*dpr)+'px system-ui, sans-serif'; ctxTop.textAlign='center'; ctxTop.textBaseline='top';
+        var startX = Math.ceil(minXw/step)*step;
+        for(var xw=startX; xw<=maxXw+1e-8; xw+=step){ var px2 = Math.round(worldXToPx(xw)); var label = String((Math.abs(xw)<1e-6)?0:+xw.toFixed(2).replace(/\.00$/,'')); ctxTop.fillText(label, px2, Math.floor(2*dpr)); }
+        ctxTop.restore();
+        // Left ruler ticks
+        ctxLeft.save(); ctxLeft.translate(0.5,0.5); ctxLeft.strokeStyle='#94a3b8';
+        var minorStartY = Math.ceil(minYw/minor)*minor;
+        for(var ym=minorStartY; ym<=maxYw+1e-8; ym+=minor){ var py = Math.round(worldYToPx(ym)); var isMajorY = (Math.abs((ym/step)-Math.round(ym/step)) < 1e-6);
+          var lenY = isMajorY ? Math.floor(18*dpr) : Math.floor(10*dpr);
+          ctxLeft.beginPath(); ctxLeft.moveTo(ctxLeft.canvas.width-1, py); ctxLeft.lineTo(ctxLeft.canvas.width-1-lenY, py); ctxLeft.stroke(); }
+        ctxLeft.fillStyle='#e2e8f0'; ctxLeft.font=(10*dpr)+'px system-ui, sans-serif'; ctxLeft.textAlign='right'; ctxLeft.textBaseline='middle';
+        var startY = Math.ceil(minYw/step)*step;
+        for(var yw=startY; yw<=maxYw+1e-8; yw+=step){ var py2 = Math.round(worldYToPx(yw)); var labelY = String((Math.abs(yw)<1e-6)?0:+yw.toFixed(2).replace(/\.00$/,'')); ctxLeft.fillText(labelY, ctxLeft.canvas.width - Math.floor(2*dpr), py2); }
+        ctxLeft.restore();
+      } catch(_e) { /* non-fatal rulers */ }
+    };
+  }
+
+  if (typeof window.plan2dHitGuideAtScreen !== 'function') {
+    // Hit-test guides near a screen pixel position; returns {dir,index} or null
+    window.plan2dHitGuideAtScreen = function plan2dHitGuideAtScreen(px, py){
+      try{
+        var tol = 6; // px tolerance
+        function sx(wx){ return worldToScreen2D(wx, 0).x; }
+        function sy(wy){ return worldToScreen2D(0, wy).y; }
+        var best=null; var bestD=tol+1;
+        for(var i=0;i<(__plan2d.guidesV||[]).length;i++){ var xs=sx(__plan2d.guidesV[i]); var d=Math.abs(px - xs); if(d<=tol && d<bestD){ best={dir:'v', index:i}; bestD=d; } }
+        for(var j=0;j<(__plan2d.guidesH||[]).length;j++){ var ys=sy(__plan2d.guidesH[j]); var d2=Math.abs(py - ys); if(d2<=tol && d2<bestD){ best={dir:'h', index:j}; bestD=d2; } }
+        return best;
+      } catch(_e){ return null; }
+    };
+  }
 })();
