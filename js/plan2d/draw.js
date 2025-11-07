@@ -795,9 +795,9 @@
         ox.restore();
       } catch(_eG) {}
       // Dedicated 2D labels canvas (draw text here, keep shapes/effects on overlay)
-      var l2c = document.getElementById('labels-2d');
-      var lx = l2c ? l2c.getContext('2d') : ox; // fallback to overlay if missing
-      if (l2c) { lx.setTransform(1,0,0,1,0,0); lx.clearRect(0,0,l2c.width,l2c.height); }
+  var l2c = document.getElementById('labels-2d');
+  var lx = l2c ? l2c.getContext('2d') : ox; // fallback to overlay if missing
+  if (l2c) { lx.setTransform(1,0,0,1,0,0); lx.clearRect(0,0,l2c.width,l2c.height); }
 
       // Overlays: Stairs indicator (both floors) + small labels
       (function(){
@@ -825,83 +825,7 @@
           }
           function getAABB(pts){ var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; for(var i=0;i<pts.length;i++){ var p=pts[i]; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; } return {minX:minX,minY:minY,maxX:maxY,maxY:maxY}; }
           var SHOW_2D_LABEL_COORDS = true;
-      if (__plan2d.drawLabelBoxesOnLabelsLayer && l2c) {
-        lx.save();
-        lx.font = '12px sans-serif';
-        lx.textAlign = 'center';
-        lx.textBaseline = 'middle';
-        // Draw white box + centered text on labels layer if explicitly enabled
-        lx.save();
-        var __dprT = window.devicePixelRatio || 1;
-        // Match DOM room-label appearance
-        var baseFontPx = 12, minFontPx = 9;
-        lx.textBaseline = 'middle';
-        var boxesRaw = (__plan2d.__labelBoxes2D || []);
-        // Filter for a single room label: prefer selected room, else largest area
-        var roomBoxes = [];
-        for(var rbi=0;rbi<boxesRaw.length;rbi++){ var rb=boxesRaw[rbi]; if(rb && rb.kind==='room') roomBoxes.push(rb); }
-        var chosenRoomBox=null;
-        if(roomBoxes.length>0){
-          // Map active room index (set during last draw pass) or selection heuristics
-          var selIdx = (typeof __plan2d.activeRoomIndex==='number'? __plan2d.activeRoomIndex : -1);
-          if(selIdx>=0){ for(var rr=0; rr<roomBoxes.length; rr++){ if(roomBoxes[rr].roomIndex===selIdx){ chosenRoomBox=roomBoxes[rr]; break; } } }
-          if(!chosenRoomBox){ // fallback: largest area
-            for(var la=0; la<roomBoxes.length; la++){ var candidate=roomBoxes[la]; if(!chosenRoomBox || (candidate.area||0) > (chosenRoomBox.area||0)) chosenRoomBox=candidate; }
-          }
-          // Persist chosen index for interaction layer
-          if(chosenRoomBox) { __plan2d.activeRoomIndex = chosenRoomBox.roomIndex; }
-        }
-  // Build final list: ONLY the chosen room label to avoid duplicates
-  var boxes=[];
-  if(chosenRoomBox) boxes.push(chosenRoomBox);
-
-        for (var li=0; li<boxes.length; li++){
-          var lb = boxes[li] || {};
-          var bx = +lb.x || 0, by = +lb.y || 0, bw = +lb.w || 0, bh = +lb.h || 0;
-          var labelText = (lb.text == null ? '' : String(lb.text));
-          var alpha = (typeof lb.a === 'number' ? lb.a : 0.95);
-      // background pill without shadow
-      lx.save(); lx.globalAlpha = alpha; lx.fillStyle = '#ffffff';
-      var radius = 19 * __dprT;
-          lx.beginPath();
-          lx.moveTo(bx + radius, by);
-          lx.lineTo(bx + bw - radius, by);
-          lx.quadraticCurveTo(bx + bw, by, bx + bw, by + radius);
-          lx.lineTo(bx + bw, by + bh - radius);
-          lx.quadraticCurveTo(bx + bw, by + bh, bx + bw - radius, by + bh);
-          lx.lineTo(bx + radius, by + bh);
-          lx.quadraticCurveTo(bx, by + bh, bx, by + bh - radius);
-          lx.lineTo(bx, by + radius);
-          lx.quadraticCurveTo(bx, by, bx + radius, by);
-          lx.closePath();
-          lx.fill();
-          lx.restore();
-          // text centered with padding fit
-          var padX = 11 * __dprT;
-          var available = Math.max(0, bw - padX * 2);
-          var fontPx = baseFontPx; lx.font = '600 ' + (fontPx * __dprT) + 'px system-ui, sans-serif';
-          var tw = lx.measureText(labelText).width;
-          if (available > 0 && tw > available) {
-            var scale = available / Math.max(1, tw);
-            fontPx = Math.max(minFontPx, Math.floor(baseFontPx * scale));
-            lx.font = '600 ' + (fontPx * __dprT) + 'px system-ui, sans-serif';
-          }
-          lx.textAlign = 'center'; lx.fillStyle = '#333333';
-          var tx = bx + bw / 2, ty = by + bh / 2;
-          lx.fillText(labelText, tx, ty);
-          // Edit icon (only for chosen room label)
-          if(lb.kind==='room' && chosenRoomBox && lb.roomIndex===chosenRoomBox.roomIndex){
-            var iconSize = Math.min(14*__dprT, bh*0.7); var padIcon=4*__dprT;
-            var ix = bx + bw - iconSize - padIcon; var iy = by + (bh-iconSize)/2;
-            lx.save(); lx.globalAlpha = 0.9; lx.fillStyle='#1e293b'; lx.beginPath(); lx.rect(ix,iy,iconSize,iconSize); lx.fill();
-            lx.font = (iconSize*0.75)+'px sans-serif'; lx.textAlign='center'; lx.textBaseline='middle'; lx.fillStyle='#f8fafc'; lx.fillText('✎', ix+iconSize/2, iy+iconSize/2+0.5); lx.restore();
-            // Expose hit regions globally (plan space agnostic; operate in screen/canvas coords)
-            __plan2d.roomLabelEditHit = { x: ix, y: iy, w: iconSize, h: iconSize };
-            __plan2d.roomLabelDragHitBox = { x: bx, y: by, w: bw, h: bh, roomIndex: lb.roomIndex };
-          }
-        }
-        lx.restore();
-      }
+      // Labels layer disabled (simplified: no room labels/edit icons)
       if(__plan2d.debug){
         try {
           var dpr = window.devicePixelRatio || 1;

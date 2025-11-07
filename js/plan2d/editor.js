@@ -40,6 +40,29 @@
   function init(){
     try{ wireToolButtons(); }catch(e){}
     try{ wireZoomPan(); }catch(e){}
+    // Floor toggle binding (Ground/First) for the 2D modal
+    try{
+      var bG=document.getElementById('plan2d-floor-ground');
+      var bF=document.getElementById('plan2d-floor-first');
+      function setActive(){ try{ var cur=(typeof window.currentFloor==='number'? window.currentFloor:0); if(bG&&bF){ if(cur===0){ bG.classList.add('active'); bF.classList.remove('active'); } else { bF.classList.add('active'); bG.classList.remove('active'); } } }catch(_){} }
+      function switchFloor(to){ try{
+        // Save current 2D plan before switching
+        try{ plan2dSaveDraft && plan2dSaveDraft((typeof window.currentFloor==='number'? window.currentFloor:0)); }catch(_s){}
+        window.currentFloor = to;
+        // Load draft for new floor or populate if empty
+        try{ plan2dLoadDraft && plan2dLoadDraft(to); }catch(_l){}
+        if((!Array.isArray(__plan2d.elements) || __plan2d.elements.length===0) && typeof window.populatePlan2DFromDesign==='function'){
+          try{ window.populatePlan2DFromDesign(); }catch(_p){}
+        }
+        // Redraw and update scale label state
+        try{ plan2dFitViewToContent && plan2dFitViewToContent(40); }catch(_f){}
+        try{ plan2dDraw && plan2dDraw(); }catch(_d){}
+        setActive();
+      }catch(e){}}
+      if(bG && !bG.__wired){ bG.__wired=true; bG.addEventListener('click', function(){ switchFloor(0); }); }
+      if(bF && !bF.__wired){ bF.__wired=true; bF.addEventListener('click', function(){ switchFloor(1); }); }
+      setActive();
+    }catch(e){}
     try{ if(typeof plan2dBind==='function') plan2dBind(); }catch(e){}
     try{ if(typeof plan2dDraw==='function') plan2dDraw(); }catch(e){}
   }

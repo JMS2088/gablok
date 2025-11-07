@@ -29,11 +29,6 @@
       freezeSyncUntil:0,
       wallStrokePx:1.2,
       debug:false
-      ,activeRoomIndex:-1
-      ,dragRoom:null
-      ,roomLabelEditHit:null
-      ,roomLabelDragHitBox:null
-        ,drawLabelBoxesOnLabelsLayer:true
     };
   }
 
@@ -126,56 +121,30 @@
 
   // Event binding ----------------------------------------------------------
   function plan2dBind(){ var c=document.getElementById('plan2d-canvas'); if(!c) return; if(window.__plan2dResize) return; // already bound
-    window.__plan2dResize = function(){ try { var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var rt=document.getElementById('plan2d-ruler-top'); var rl=document.getElementById('plan2d-ruler-left'); var l2=document.getElementById('labels-2d'); if(!c||!ov) return; var rect=c.getBoundingClientRect(); var dpr=window.devicePixelRatio||1; var W=Math.floor(rect.width*dpr), H=Math.floor(rect.height*dpr); if(c.width!==W||c.height!==H){ c.width=W; c.height=H; } if(ov.width!==W||ov.height!==H){ ov.width=W; ov.height=H; } if(l2 && (l2.width!==W||l2.height!==H)){ l2.width=W; l2.height=H; } if(rt){ var rw=Math.floor(rect.width*dpr), rh=Math.floor(28*dpr); if(rt.width!==rw||rt.height!==rh){ rt.width=rw; rt.height=rh; } } if(rl){ var rw2=Math.floor(28*dpr), rh2=Math.floor(rect.height*dpr); if(rl.width!==rw2||rl.height!==rh2){ rl.width=rw2; rl.height=rh2; } } plan2dDraw(); }catch(e){} };
+    window.__plan2dResize = function(){
+      try {
+        var c=document.getElementById('plan2d-canvas');
+        var ov=document.getElementById('plan2d-overlay');
+        var rt=document.getElementById('plan2d-ruler-top');
+        var rl=document.getElementById('plan2d-ruler-left');
+        var l2=document.getElementById('labels-2d');
+        if(!c||!ov) return;
+        var rect=c.getBoundingClientRect();
+        var dpr=window.devicePixelRatio||1;
+        var W=Math.floor(rect.width*dpr), H=Math.floor(rect.height*dpr);
+        if(c.width!==W||c.height!==H){ c.width=W; c.height=H; }
+        if(ov.width!==W||ov.height!==H){ ov.width=W; ov.height=H; }
+        if(l2 && (l2.width!==W||l2.height!==H)){ l2.width=W; l2.height=H; }
+  // Top ruler width should match drawing width, height fixed 28
+  if(rt){ var drawAreaWidth = Math.floor(rect.width*dpr); var rh=Math.floor(28*dpr); if(rt.width!==drawAreaWidth||rt.height!==rh){ rt.width=drawAreaWidth; rt.height=rh; } }
+  // Left ruler spans full browser height now (fixed), width fixed 28
+  if(rl){ var rw2=Math.floor(28*dpr), rh2=Math.floor((window.innerHeight||rect.height)*dpr); if(rl.width!==rw2||rl.height!==rh2){ rl.width=rw2; rl.height=rh2; } }
+        plan2dDraw();
+      } catch(e){}
+    };
     window.addEventListener('resize', window.__plan2dResize);
 
     c.addEventListener('mousedown', function(ev){ if(!__plan2d.active) return; var rect=c.getBoundingClientRect(); var cx=(ev.clientX-rect.left)*(c.width/rect.width); var cy=(ev.clientY-rect.top)*(c.height/rect.height); var p=screenToWorld2D(cx,cy); __plan2d.mouseDownPosPlan=p; if(__plan2d.tool==='erase'){ plan2dEraseAt(p); return; }
-      // Room label interactions (edit / drag) when Select tool
-      if(__plan2d.tool==='select'){
-        try {
-          var editHit=__plan2d.roomLabelEditHit, dragHit=__plan2d.roomLabelDragHitBox;
-          if(editHit && cx>=editHit.x && cy>=editHit.y && cx<=editHit.x+editHit.w && cy<=editHit.y+editHit.h){
-            // Edit room name
-            var allRooms = (window.allRooms && Array.isArray(window.allRooms))? window.allRooms:[];
-            var idx = (typeof __plan2d.activeRoomIndex==='number'? __plan2d.activeRoomIndex:0);
-            if(idx<0 && allRooms.length>0) idx=0;
-            var rm = allRooms[idx];
-            if(rm){
-              var newName = window.prompt('Room name:', rm.name||'Room');
-              if(newName && newName.trim().length){ rm.name=newName.trim(); plan2dDraw(); }
-            }
-            return; // consume mousedown
-          }
-          if(dragHit && cx>=dragHit.x && cy>=dragHit.y && cx<=dragHit.x+dragHit.w && cy<=dragHit.y+dragHit.h){
-            // Start drag of room (move footprint + associated walls)
-            var allRooms2 = (window.allRooms && Array.isArray(window.allRooms))? window.allRooms:[];
-            var rIndex = dragHit.roomIndex;
-            if(typeof rIndex!=='number') rIndex = (typeof __plan2d.activeRoomIndex==='number'? __plan2d.activeRoomIndex:0);
-            var roomObj = allRooms2[rIndex];
-            if(roomObj){
-              // Collect walls whose both endpoints lie strictly inside the room rectangle
-              var hw = (roomObj.width||0)/2, hd=(roomObj.depth||0)/2;
-              var minX = (roomObj.x - hw), maxX=(roomObj.x + hw);
-              var minZ = (roomObj.z - hd), maxZ=(roomObj.z + hd);
-              var wallsToMove=[];
-              var els = __plan2d.elements||[];
-              for(var wi=0; wi<els.length; wi++){
-                var w=els[wi]; if(!w || w.type!=='wall') continue;
-                // Convert plan y back to world z for containment check
-                var sgn = (__plan2d.yFromWorldZSign||1);
-                var w0z = __plan2d.centerZ + sgn * (w.y0||0);
-                var w1z = __plan2d.centerZ + sgn * (w.y1||0);
-                var w0x = __plan2d.centerX + (w.x0||0);
-                var w1x = __plan2d.centerX + (w.x1||0);
-                if(w0x>minX && w0x<maxX && w1x>minX && w1x<maxX && w0z>minZ && w0z<maxZ && w1z>minZ && w1z<maxZ){ wallsToMove.push(wi); }
-              }
-              __plan2d.dragRoom={ roomIndex:rIndex, startWorld:p, origX:roomObj.x, origZ:roomObj.z, walls:wallsToMove };
-              __plan2d.freezeSyncUntil = Date.now()+1000; // avoid spam sync while dragging
-            }
-            return; // consume mousedown
-          }
-        } catch(_eRoom){ /* ignore */ }
-      }
       if(__plan2d.tool==='wall'){ if(!__plan2d.chainActive){ __plan2d.chainActive=true; __plan2d.chainPoints=[p]; } else { __plan2d.chainPoints.push(p); } plan2dDraw(); return; }
       if(__plan2d.tool==='select'){
         // Hit-test any element near cursor; if none, start panning
@@ -188,25 +157,6 @@
       __plan2d.start=p; __plan2d.last=p; plan2dDraw(); });
 
     c.addEventListener('mousemove', function(ev){ if(!__plan2d.active) return; var rect=c.getBoundingClientRect(); var cx=(ev.clientX-rect.left)*(c.width/rect.width); var cy=(ev.clientY-rect.top)*(c.height/rect.height); __plan2d.mouse={x:cx,y:cy}; var p=screenToWorld2D(cx,cy);
-      // Dragging a room via its label
-      if(__plan2d.dragRoom){
-        try {
-          var sgnR = (__plan2d.yFromWorldZSign||1);
-          var allRoomsR = (window.allRooms && Array.isArray(window.allRooms))? window.allRooms:[];
-          var dr = __plan2d.dragRoom; var roomR = allRoomsR[dr.roomIndex];
-          if(roomR){
-            var dx = p.x - dr.startWorld.x; var dy = p.y - dr.startWorld.y;
-            roomR.x = dr.origX + dx; roomR.z = dr.origZ + dy * sgnR;
-            // Move captured walls in plan space
-            for(var wi=0; wi<dr.walls.length; wi++){
-              var idx=dr.walls[wi]; var w=__plan2d.elements[idx]; if(!w||w.type!=='wall') continue;
-              w.x0 += dx; w.y0 += dy; w.x1 += dx; w.y1 += dy;
-            }
-          }
-        } catch(_eMove){ }
-        plan2dDraw();
-        return;
-      }
       // Panning when dragging on empty space with Select tool
       if(__plan2d.panning){ var s=__plan2d.panning.scale||(__plan2d.scale||50); var dx=cx-__plan2d.panning.mx; var dy=cy-__plan2d.panning.my; __plan2d.panX = (__plan2d.panning.panX0||0) + dx/Math.max(1e-6,s); __plan2d.panY = (__plan2d.panning.panY0||0) - dy/Math.max(1e-6,s); plan2dDraw(); return; }
       if(__plan2d.tool==='erase'){ plan2dHoverErase(p); return; }
@@ -215,7 +165,7 @@
     });
 
   window.addEventListener('mouseup', function(){ if(!__plan2d.active) return; if(__plan2d.panning){ __plan2d.panning=null; plan2dDraw(); return; } if(__plan2d.start && __plan2d.last){ var moved=Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y); if(moved<0.02){ plan2dSelectAt(__plan2d.last); } else { var a=__plan2d.start,b=__plan2d.last; plan2dFinalize(a,b); plan2dAutoSnapAndJoin(); plan2dDraw(); } } __plan2d.start=null; __plan2d.last=null; __plan2d.mouse=null; plan2dDraw(); });
-  window.addEventListener('mouseup', function(){ if(!__plan2d.active) return; if(__plan2d.dragRoom){ __plan2d.dragRoom=null; plan2dEdited(); plan2dDraw(); } });
+  // Remove room drag mouseup listener (simplified)
 
     // Keyboard (selection delete + chain finalize) ------------------------
     if(!window.__plan2dKeydown){ window.__plan2dKeydown=function(ev){ if(!__plan2d.active) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ if(ev.key==='Enter'){ plan2dFinalizeChain(); ev.preventDefault(); ev.stopPropagation(); return; } if(ev.key==='Escape'){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return; } }
@@ -237,13 +187,8 @@
     plan2dCursor();
     // Load drafts + current floor
     try{ loadPlan2dDraftsFromStorage(); plan2dLoadDraft(typeof window.currentFloor==='number'? window.currentFloor:0); }catch(e){}
-    // If empty after drafts, populate from current 3D design for this floor
-    try{
-      if((!Array.isArray(__plan2d.elements) || __plan2d.elements.length===0) && typeof window.populatePlan2DFromDesign==='function'){
-        var okPop = window.populatePlan2DFromDesign();
-        if(okPop){ /* keep as-is; fit below will handle scale */ }
-      }
-    }catch(_pop){}
+    // Always sync walls from 3D design for accuracy (simplified behavior)
+    try{ if(typeof window.populatePlan2DFromDesign==='function'){ window.populatePlan2DFromDesign(); } }catch(_pop){}
     // Initial fit (non-fatal)
     try{ plan2dFitViewToContent(40); }catch(e){}
   // First draw
