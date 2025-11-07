@@ -39,7 +39,17 @@
   function ensurePalette(){ return loadScript('js/ui/roomPalette.js').then(function(){ try{ if(typeof setupPalette==='function') setupPalette(); }catch(e){} return true; }); }
   function ensurePricing(){ return loadScript('js/ui/pricing.js').then(function(){ return true; }); }
   function ensureModals(){ return loadScript('js/ui/modals.js').then(function(){ return true; }); }
-  function ensurePlan2D(){ return loadScript('js/plan2d/editor.js?v=20251101-1').then(function(){ return true; }); }
+  // Ensure 2D editor and its dependencies are loaded in order
+  function ensurePlan2D(){
+    // Load extracted helpers first, then the main editor (which defines behavior and wiring)
+    return loadScript('js/plan2d/geom2d.js')
+      .then(function(){ return loadScript('js/plan2d/snap.js'); })
+      .then(function(){ return loadScript('js/plan2d/walls.js'); })
+      // draw.js is currently a placeholder that will later receive the extracted plan2dDraw
+      .then(function(){ return loadScript('js/plan2d/draw.js'); })
+      .then(function(){ return loadScript('js/plan2d/editor.js?v=20251101-1'); })
+      .then(function(){ return true; });
+  }
 
   // Stubs: renderers (drawX)
   function nudgeRender(){ try { window._needsFullRender = true; if (typeof window.renderLoop==='function') window.renderLoop(); } catch(_e){} }
@@ -77,8 +87,13 @@
   }
   afterFirstPaint(function(){
     // Prefetch commonly used assets but stagger them to avoid bursty connection spikes
-    var urls = ['js/ui/roomPalette.js','js/ui/pricing.js','js/ui/modals.js','js/ui/roofDropdown.js','js/plan2d/editor.js?v=20251101-1','js/plan2d/utils.js',
-      'js/render/drawPergola.js','js/render/drawGarage.js','js/render/drawBalcony.js','js/render/drawStairs.js','js/render/drawPool.js','js/render/drawRoof.js'];
+    var urls = [
+      'js/ui/roomPalette.js','js/ui/pricing.js','js/ui/modals.js','js/ui/roofDropdown.js',
+      // Plan2D modules (helpers first) followed by editor
+      'js/plan2d/geom2d.js','js/plan2d/snap.js','js/plan2d/walls.js','js/plan2d/draw.js','js/plan2d/editor.js?v=20251101-1','js/plan2d/utils.js',
+      // Renderers
+      'js/render/drawPergola.js','js/render/drawGarage.js','js/render/drawBalcony.js','js/render/drawStairs.js','js/render/drawPool.js','js/render/drawRoof.js'
+    ];
     var delay = 0;
     for (var i=0;i<urls.length;i++){
       (function(u, d){ setTimeout(function(){ prefetch(u); }, d); })(urls[i], delay);

@@ -1,146 +1,6 @@
 // ================= 2D FLOOR PLAN EDITOR (IMPLEMENTATION) =================
 // Provides: openPlan2DModal, closePlan2DModal, drawing walls (300mm), windows (thin), erase, clear, export/import.
-
-var __plan2d = {
-  active:false,
-  scale:50,          // px per meter
-  // View pan offsets in meters (world units), applied before scaling
-  panX: 0,
-  panY: 0,
-  wallThicknessM:0.3,
-  // Stroke width (in canvas px) used when outlining walls. Keep dimension overlay in sync.
-  wallStrokePx:1.2,
-  wallHeightM:3.0,
-  // Controls orientation: 2D Y = sign * world Z (1 => North up matches world +Z; -1 flips)
-  yFromWorldZSign: 1,
-  // Persisted plan center in world meters (used to stabilize recentering)
-  centerX: 0,
-  centerZ: 0,
-  // When set (epoch ms), freeze center/scale for populatePlan2DFromDesign() until this time
-  freezeCenterScaleUntil: 0,
-  // Grid snapping step (meters) — finer default for CAD-like precision
-  gridStep: 0.1,
-  elements:[],       // { type:'wall'|'window'|'door', ... }
-  tool:'select',     // current tool: wall | window | door | erase | select (default to Select)
-  start:null,        // world coords of drag start
-  last:null,         // world coords of current mouse during drag
-  mouse:null,        // {x,y} current mouse position in canvas pixels for overlay anchoring
-  hoverIndex:-1,
-  selectedIndex:-1,
-  // Stable reference to the currently selected element object (guards against reindexing)
-  selectedRef:null,
-  // Geometry snapshot of selected element for resilient re-identification
-  selectedSnapshot:null,
-  // Briefly pause 3D→2D repopulate after selection so Delete can act before selection is cleared
-  freezeSyncUntil: 0,
-  // Window editing state (for host-anchored windows)
-  dragWindow:null,   // { index, end:'t0'|'t1' }
-  // Standard sizes
-  doorWidthM:0.92,
-  doorHeightM:2.04,
-  // Window defaults: sill at 1.0m, height 1.5m
-  windowSillM:1.0,
-  windowHeightM:1.5,
-  // Default preview width for windows before sizing
-  windowDefaultWidthM:1.2,
-  // Door editing state (for dragging endpoints)
-  dragDoor:null,      // { index, end:'t0'|'t1'|'a'|'b' }
-  // Whole-door drag state for sliding along wall
-  dragDoorWhole:null, // { index, startMouseT, startT0, startT1, host }
-  // Wall endpoint drag state
-  dragWall:null,       // { index, end:'a'|'b', orient:'h'|'v', other:{x,y} }
-  // Selected wall subsegment between junctions (for targeted deletion)
-  selectedSubsegment:null, // { wallIndex, t0, t1, ax, ay, bx, by }
-  // Debug corner drag offsets for overlay ticks (safe default to avoid undefined lookups)
-  debugCornerOffset: {},
-  // Rendering preference: when false, draw white boxes + text on base canvas at original positions
-  drawLabelBoxesOnLabelsLayer:false,
-  // Pan interaction state
-  panning:false,
-  spacePan:false,
-  panMouse0:null,
-  panAtStart:{x:0,y:0}
-};
-// Rulers & Guides: per-floor persistent guides and transient UI state
-__plan2d.guidesV = __plan2d.guidesV || []; // vertical guides (x in meters)
-__plan2d.guidesH = __plan2d.guidesH || []; // horizontal guides (y in meters)
-__plan2d.selectedGuide = __plan2d.selectedGuide || null; // { dir:'v'|'h', index:number }
-__plan2d.hoverGuide = __plan2d.hoverGuide || null;       // { dir:'v'|'h', index:number }
-__plan2d.dragGuide = __plan2d.dragGuide || null;         // { dir:'v'|'h', index?:number, value:number, isNew:boolean }
-
-// --- 2D tracing utilities (opt-in via ?trace2d=1 or localStorage 'gablok_trace2d'=1) ---
-(function(){
-  function qs2d(name){ try { var m = String(location.search||'').match(new RegExp('[?&]'+name+'=([^&]+)')); return m ? decodeURIComponent(m[1]) : null; } catch(_) { return null; } }
-  try {
-    if (typeof window.__trace2d === 'undefined') {
-      var qFlag = qs2d('trace2d');
-      var lsFlag = null; try { lsFlag = localStorage.getItem('gablok_trace2d'); } catch(_ls){}
-      window.__trace2d = !!( (qFlag && qFlag!=='0' && qFlag!=='false') || (lsFlag && lsFlag!=='0' && lsFlag!=='false') );
-    }
-    if (!window.__log2d) {
-      window.__log2d = function(){ try { if (!window.__trace2d) return; var args = Array.prototype.slice.call(arguments); args.unshift('[2D]'); console.log.apply(console, args); } catch(_e){} };
-    }
-  } catch(_e) {}
-})();
-
-// --- Global Delete key safety net (capture-phase) ---
-// Ensures Delete works across repeated 2D editor opens by attaching a single, persistent
-// document-level listener that routes to the 2D deletion routine when 2D is active.
-(function(){
-  try {
-    if (!window.__plan2dGlobalKeys){
-      window.__plan2dGlobalKeys = true;
-      function __ensureDedupState(){
-        if (!window.__plan2d) return;
-        if (typeof __plan2d.__lastDeleteEventAt !== 'number') __plan2d.__lastDeleteEventAt = 0;
-        if (typeof __plan2d.__lastDeleteKeydownAt !== 'number') __plan2d.__lastDeleteKeydownAt = 0;
-        if (typeof __plan2d.__lastDeleteHandledAt !== 'number') __plan2d.__lastDeleteHandledAt = 0;
-        if (typeof __plan2d.__handlingDelete !== 'boolean') __plan2d.__handlingDelete = false;
-      }
-      function __isDelete(ev){ return !!(ev && (ev.key==='Delete' || ev.key==='Backspace' || ev.code==='Delete' || ev.keyCode===46 || ev.keyCode===8)); }
-      function __maybeGlobalDelete(ev){
-        try {
-          if (!window.__plan2d || !__plan2d.active) return;
-          if (!__isDelete(ev)) return;
-          __ensureDedupState();
-          var now = Date.now();
-          if (ev.repeat) { ev.preventDefault(); ev.stopPropagation(); return; }
-          // Keyup only as fallback when no recent keydown was seen
-          var isUp = (ev.type === 'keyup');
-          var recentKeydown = (__plan2d.__lastDeleteKeydownAt && (now - __plan2d.__lastDeleteKeydownAt) < 800);
-          var recentHandled = (__plan2d.__lastDeleteHandledAt && (now - __plan2d.__lastDeleteHandledAt) < 600);
-          if (isUp && (recentKeydown || recentHandled)) { ev.preventDefault(); ev.stopPropagation(); return; }
-          if (__plan2d.__lastDeleteEventAt && (now - __plan2d.__lastDeleteEventAt) < 500) { ev.preventDefault(); ev.stopPropagation(); return; }
-          __plan2d.__lastDeleteEventAt = now; if (ev.type==='keydown') __plan2d.__lastDeleteKeydownAt = now;
-          if (__plan2d.__handlingDelete) { ev.preventDefault(); ev.stopPropagation(); return; }
-          __plan2d.__handlingDelete = true;
-          try {
-            if (typeof window.plan2dDeleteSelection === 'function'){
-              var did = window.plan2dDeleteSelection();
-              if (did) __plan2d.__lastDeleteHandledAt = now;
-              ev.preventDefault(); ev.stopPropagation();
-              try { if (window.__log2d) __log2d('Global Delete handled (safety net)', did); } catch(_l){}
-              return;
-            }
-          } finally { __plan2d.__handlingDelete = false; }
-        } catch(_e) {}
-      }
-      document.addEventListener('keydown', __maybeGlobalDelete, true);
-      document.addEventListener('keyup', __maybeGlobalDelete, true);
-    }
-  } catch(_eg){}
-})();
-
-// Per-floor 2D drafts so in-progress edits persist across floor switches within the 2D editor
-var __plan2dDrafts = { 0: null, 1: null };
-
-// Persist 2D drafts across reloads so in-progress edits survive page refresh
-function loadPlan2dDraftsFromStorage(){
-  try {
-    var raw = localStorage.getItem('gablok_plan2dDrafts_v1');
-    if (!raw) return false;
-    var data = JSON.parse(raw);
-    if (data && (typeof data === 'object') && ('0' in data || '1' in data)) {
+// Wall subsegment and hit-test helpers moved to js/plan2d/walls.js
       __plan2dDrafts = data;
       return true;
     }
@@ -670,9 +530,7 @@ function plan2dSwitchFloorInEditor(newLevel){
   try { plan2dDraw(); updatePlan2DInfo(); } catch(e){}
 }
 
-// Screen mapping: X right = +X (world), Y up = +Y in plan space. World Z maps to plan Y with a configurable sign.
-function worldToScreen2D(wx,wy){ var c=document.getElementById('plan2d-canvas'); if(!c)return {x:0,y:0}; var s=__plan2d.scale; var ox=c.width/2 + (__plan2d.panX*s), oy=c.height/2 - (__plan2d.panY*s); return { x: ox + wx*s, y: oy - wy*s }; }
-function screenToWorld2D(px,py){ var c=document.getElementById('plan2d-canvas'); if(!c)return {x:0,y:0}; var s=__plan2d.scale; var ox=c.width/2 + (__plan2d.panX*s), oy=c.height/2 - (__plan2d.panY*s); return { x: (px - ox)/s, y: (oy - py)/s }; }
+// Screen mapping helpers moved to js/plan2d/geom2d.js
 
 function plan2dBind(){
   // Ensure key events reach the editor reliably
@@ -3055,16 +2913,7 @@ function plan2dSnapY(v){
   } catch(e){}
   return plan2dSnap(v);
 }
-function plan2dSnapPoint(p){ return { x: plan2dSnapX(p.x), y: plan2dSnapY(p.y) }; }
-function plan2dSnapTOnWall(wall, t){
-  t = Math.max(0, Math.min(1, t||0));
-  var x0=wall.x0,y0=wall.y0,x1=wall.x1,y1=wall.y1;
-  var dx=x1-x0, dy=y1-y0; var len=Math.hypot(dx,dy)||1; var dirx=dx/len, diry=dy/len;
-  var wx = x0 + dirx * (t*len), wy = y0 + diry * (t*len);
-  var sp = plan2dSnapPoint({x:wx,y:wy});
-  var denom = dx*dx+dy*dy||1; var tt=((sp.x-x0)*dx+(sp.y-y0)*dy)/denom; return Math.max(0, Math.min(1, tt));
-}
-function plan2dEq(a,b,t){ return Math.abs(a-b) <= (t||0.05); }
+// Snapping helpers moved to js/plan2d/snap.js
 function plan2dAutoSnapAndJoin(){
   var els = __plan2d.elements||[];
   // 1) Snap endpoints to grid and enforce axis alignment for walls
@@ -3136,101 +2985,7 @@ function plan2dAutoSnapAndJoin(){
 }
 
 // Hit-test near wall endpoints for dragging
-function plan2dHitWallEndpoint(p, tol){
-  var best=null; var bestD=(typeof tol==='number'? tol : 0.30);
-  var els=__plan2d.elements||[];
-  for(var i=0;i<els.length;i++){
-    var e=els[i]; if(!e||e.type!=='wall') continue;
-    var d0=Math.hypot(p.x-e.x0, p.y-e.y0); if(d0<bestD){ bestD=d0; best={index:i, end:'a'}; }
-    var d1=Math.hypot(p.x-e.x1, p.y-e.y1); if(d1<bestD){ bestD=d1; best={index:i, end:'b'}; }
-  }
-  return best;
-}
-// Hit-test near window endpoints for dragging
-function plan2dHitWindowEndpoint(p, tol){
-  var best=null; var bestD=tol||0.15;
-  for(var i=0;i<__plan2d.elements.length;i++){
-    var e=__plan2d.elements[i]; if(e.type!=='window' || typeof e.host!=='number') continue;
-    var host=__plan2d.elements[e.host]; if(!host || host.type!=='wall') continue;
-    var t0=Math.max(0,Math.min(1,e.t0||0)), t1=Math.max(0,Math.min(1,e.t1||0));
-    var ax=host.x0+(host.x1-host.x0)*t0, ay=host.y0+(host.y1-host.y0)*t0;
-    var bx=host.x0+(host.x1-host.x0)*t1, by=host.y0+(host.y1-host.y0)*t1;
-    var d0=Math.hypot(p.x-ax, p.y-ay), d1=Math.hypot(p.x-bx, p.y-by);
-    if(d0<bestD){ bestD=d0; best={index:i, end:'t0'}; }
-    if(d1<bestD){ bestD=d1; best={index:i, end:'t1'}; }
-  }
-  return best;
-}
-
-// Hit-test near door endpoints for dragging
-function plan2dHitDoorEndpoint(p, tol){
-  var best=null; var bestD=tol||0.15;
-  for(var i=0;i<__plan2d.elements.length;i++){
-    var e=__plan2d.elements[i]; if(e.type!=='door') continue;
-    var ax, ay, bx, by;
-    if(typeof e.host==='number'){
-      var host = __plan2d.elements[e.host]; if(!host || host.type!=='wall') continue;
-      var t0=Math.max(0,Math.min(1,e.t0||0)), t1=Math.max(0,Math.min(1,e.t1||0));
-      ax = host.x0+(host.x1-host.x0)*t0; ay = host.y0+(host.y1-host.y0)*t0;
-      bx = host.x0+(host.x1-host.x0)*t1; by = host.y0+(host.y1-host.y0)*t1;
-      var d0=Math.hypot(p.x-ax, p.y-ay), d1=Math.hypot(p.x-bx, p.y-by);
-      if(d0<bestD){ bestD=d0; best={index:i, end:'t0'}; }
-      if(d1<bestD){ bestD=d1; best={index:i, end:'t1'}; }
-    } else {
-      ax=e.x0; ay=e.y0; bx=e.x1; by=e.y1;
-      var d0f=Math.hypot(p.x-ax, p.y-ay), d1f=Math.hypot(p.x-bx, p.y-by);
-      if(d0f<bestD){ bestD=d0f; best={index:i, end:'a'}; }
-      if(d1f<bestD){ bestD=d1f; best={index:i, end:'b'}; }
-    }
-  }
-  return best;
-}
-
-// Hit-test near a door segment (for sliding along host wall)
-function plan2dHitDoorSegment(p, tol){
-  var best = null; var bestD = (typeof tol==='number'? tol : 0.12);
-  for(var i=0;i<__plan2d.elements.length;i++){
-    var e = __plan2d.elements[i]; if(e.type!=='door' || typeof e.host!=='number') continue;
-    var host = __plan2d.elements[e.host]; if(!host || host.type!=='wall') continue;
-    var t0=Math.max(0,Math.min(1,e.t0||0)), t1=Math.max(0,Math.min(1,e.t1||0));
-    var ax=host.x0+(host.x1-host.x0)*t0, ay=host.y0+(host.y1-host.y0)*t0;
-    var bx=host.x0+(host.x1-host.x0)*t1, by=host.y0+(host.y1-host.y0)*t1;
-    // Distance from point to segment
-    var dx=bx-ax, dy=by-ay; var denom=(dx*dx+dy*dy)||1; var tt=((p.x-ax)*dx+(p.y-ay)*dy)/denom; tt=Math.max(0,Math.min(1,tt)); var cx=ax+tt*dx, cy=ay+tt*dy; var d=Math.hypot(p.x-cx, p.y-cy);
-    if(d < bestD){ bestD = d; best = { index:i, t:tt }; }
-  }
-  return best;
-}
-// Hit-test near a window segment (for click-to-select)
-function plan2dHitWindowSegment(p, tol){
-  var best = null; var bestD = (typeof tol==='number'? tol : 0.15);
-  for(var i=0;i<__plan2d.elements.length;i++){
-    var e = __plan2d.elements[i]; if(e.type!=='window') continue;
-    var ax, ay, bx, by;
-    if(typeof e.host==='number'){
-      var host = __plan2d.elements[e.host]; if(!host || host.type!=='wall') continue;
-      var t0=Math.max(0,Math.min(1,e.t0||0)), t1=Math.max(0,Math.min(1,e.t1||0));
-      ax = host.x0+(host.x1-host.x0)*t0; ay = host.y0+(host.y1-host.y0)*t0;
-      bx = host.x0+(host.x1-host.x0)*t1; by = host.y0+(host.y1-host.y0)*t1;
-    } else {
-      ax=e.x0; ay=e.y0; bx=e.x1; by=e.y1;
-    }
-    var dx=bx-ax, dy=by-ay; var denom=(dx*dx+dy*dy)||1; var tt=((p.x-ax)*dx+(p.y-ay)*dy)/denom; tt=Math.max(0,Math.min(1,tt)); var cx=ax+tt*dx, cy=ay+tt*dy; var d=Math.hypot(p.x-cx, p.y-cy);
-    if(d < bestD){ bestD = d; best = { index:i, t:tt }; }
-  }
-  return best;
-}
-// Find nearest wall element to point p within tolerance (meters)
-function plan2dFindNearestWall(p, tol){
-  var bestIdx = -1; var bestD = (typeof tol==='number' ? tol : 0.25);
-  for(var i=0;i<__plan2d.elements.length;i++){
-    var e=__plan2d.elements[i]; if(e.type!=='wall') continue;
-    var d = (function(px,py,w){ var dx=w.x1-w.x0, dy=w.y1-w.y0; var denom=(dx*dx+dy*dy)||1; var t=((px-w.x0)*dx+(py-w.y0)*dy)/denom; t=Math.max(0,Math.min(1,t)); var cx=w.x0+t*dx, cy=w.y0+t*dy; return Math.hypot(px-cx, py-cy); })(p.x,p.y,e);
-    if(d < bestD){ bestD = d; bestIdx = i; }
-  }
-  if(bestIdx>=0) return { index: bestIdx, dist: bestD };
-  return null;
-}
+// Hit-tests moved to js/plan2d/walls.js
 function updatePlan2DInfo(){ var cnt=document.getElementById('plan2d-count'); if(cnt) cnt.textContent=__plan2d.elements.length; }
 function plan2dExport(){ try{ var data=JSON.stringify(__plan2d.elements); var blob=new Blob([data],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='plan2d.json'; a.click(); URL.revokeObjectURL(a.href); updateStatus('2D plan exported'); }catch(e){ updateStatus('Export failed'); } }
 // ================= END 2D FLOOR PLAN EDITOR =================
