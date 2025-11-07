@@ -1,5 +1,11 @@
 // Plan2D wall subsegment modeling and hit-tests
 (function(){
+  // Basic projection helper used across draw and interactions
+  if (typeof window.plan2dProjectParamOnWall !== 'function') window.plan2dProjectParamOnWall = function plan2dProjectParamOnWall(p, wall){
+    try{
+      var x0=wall.x0,y0=wall.y0,x1=wall.x1,y1=wall.y1; var dx=x1-x0, dy=y1-y0; var denom=dx*dx+dy*dy || 1; var t=((p.x-x0)*dx+(p.y-y0)*dy)/denom; return Math.max(0, Math.min(1, t));
+    }catch(e){ return 0; }
+  };
   if (typeof window.plan2dComputeWallIntersections !== 'function') window.plan2dComputeWallIntersections = function plan2dComputeWallIntersections(elems){
     var walls = [];
     for(var i=0;i<elems.length;i++){ var e=elems[i]; if(e && e.type==='wall' && e.wallRole!=='nonroom') walls.push({i:i, e:e}); }

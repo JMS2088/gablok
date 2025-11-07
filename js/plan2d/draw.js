@@ -559,27 +559,9 @@
                 var tWR = ctx.measureText(labelTextR).width;
                 var bxR = Math.round(minXr + 6 * __dprR), byR = Math.round(minYr + 6 * __dprR);
                 var bwR = Math.round(tWR + padXR*2), bhR = Math.round((baseFontPxCssRoom * __dprR) + padYR*2);
-                var radiusR = Math.min(radiusCssR * __dprR, bhR/2);
                 try { var cElR=document.getElementById('plan2d-canvas'); if(cElR){ var cwR=cElR.width||0, chR=cElR.height||0; bxR = Math.max(6, Math.min(bxR, Math.max(6, cwR - bwR - 6))); byR = Math.max(6, Math.min(byR, Math.max(6, chR - bhR - 6))); } } catch(e){}
-                ctx.globalAlpha = 0.95; ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.moveTo(bxR + radiusR, byR);
-                ctx.lineTo(bxR + bwR - radiusR, byR);
-                ctx.quadraticCurveTo(bxR + bwR, byR, bxR + bwR, byR + radiusR);
-                ctx.lineTo(bxR + bwR, byR + bhR - radiusR);
-                ctx.quadraticCurveTo(bxR + bwR, byR + bhR, bxR + bwR - radiusR, byR + bhR);
-                ctx.lineTo(bxR + radiusR, byR + bhR);
-                ctx.quadraticCurveTo(bxR, byR + bhR, bxR, byR + bhR - radiusR);
-                ctx.lineTo(bxR, byR + radiusR);
-                ctx.quadraticCurveTo(bxR, byR, bxR + radiusR, byR);
-                ctx.closePath(); ctx.fill();
-                try {
-                  var availableR = Math.max(0, bwR - padXR*2);
-                  var fontCssNow = baseFontPxCssRoom; ctx.font = '600 ' + (fontCssNow * __dprR) + 'px system-ui, sans-serif';
-                  var twNow = ctx.measureText(labelTextR).width;
-                  if (availableR > 0 && twNow > availableR){ var scaleR = availableR / Math.max(1, twNow); fontCssNow = Math.max(minFontPxCssRoom, Math.floor(baseFontPxCssRoom * scaleR)); ctx.font = '600 ' + (fontCssNow * __dprR) + 'px system-ui, sans-serif'; }
-                  var txR = bxR + bwR/2, tyR = byR + bhR/2; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#333333'; ctx.fillText(labelTextR, txR, tyR);
-                } catch(e){}
+                // Defer drawing of room labels to the labels-2d layer and only keep one visible later
+                try { labelBoxes.push({ x: bxR, y: byR, w: bwR, h: bhR, text: labelTextR, a: 0.95, kind:'room', roomIndex: ir, area: Math.max(0,(rm.width||0)) * Math.max(0,(rm.depth||0)) }); } catch(_elb){}
                 ctx.restore();
               }
             }
@@ -854,7 +836,25 @@
         // Match DOM room-label appearance
         var baseFontPx = 12, minFontPx = 9;
         lx.textBaseline = 'middle';
-        var boxes = (__plan2d.__labelBoxes2D || []);
+        var boxesRaw = (__plan2d.__labelBoxes2D || []);
+        // Filter for a single room label: prefer selected room, else largest area
+        var roomBoxes = [];
+        for(var rbi=0;rbi<boxesRaw.length;rbi++){ var rb=boxesRaw[rbi]; if(rb && rb.kind==='room') roomBoxes.push(rb); }
+        var chosenRoomBox=null;
+        if(roomBoxes.length>0){
+          // Map active room index (set during last draw pass) or selection heuristics
+          var selIdx = (typeof __plan2d.activeRoomIndex==='number'? __plan2d.activeRoomIndex : -1);
+          if(selIdx>=0){ for(var rr=0; rr<roomBoxes.length; rr++){ if(roomBoxes[rr].roomIndex===selIdx){ chosenRoomBox=roomBoxes[rr]; break; } } }
+          if(!chosenRoomBox){ // fallback: largest area
+            for(var la=0; la<roomBoxes.length; la++){ var candidate=roomBoxes[la]; if(!chosenRoomBox || (candidate.area||0) > (chosenRoomBox.area||0)) chosenRoomBox=candidate; }
+          }
+          // Persist chosen index for interaction layer
+          if(chosenRoomBox) { __plan2d.activeRoomIndex = chosenRoomBox.roomIndex; }
+        }
+  // Build final list: ONLY the chosen room label to avoid duplicates
+  var boxes=[];
+  if(chosenRoomBox) boxes.push(chosenRoomBox);
+
         for (var li=0; li<boxes.length; li++){
           var lb = boxes[li] || {};
           var bx = +lb.x || 0, by = +lb.y || 0, bw = +lb.w || 0, bh = +lb.h || 0;
@@ -889,6 +889,16 @@
           lx.textAlign = 'center'; lx.fillStyle = '#333333';
           var tx = bx + bw / 2, ty = by + bh / 2;
           lx.fillText(labelText, tx, ty);
+          // Edit icon (only for chosen room label)
+          if(lb.kind==='room' && chosenRoomBox && lb.roomIndex===chosenRoomBox.roomIndex){
+            var iconSize = Math.min(14*__dprT, bh*0.7); var padIcon=4*__dprT;
+            var ix = bx + bw - iconSize - padIcon; var iy = by + (bh-iconSize)/2;
+            lx.save(); lx.globalAlpha = 0.9; lx.fillStyle='#1e293b'; lx.beginPath(); lx.rect(ix,iy,iconSize,iconSize); lx.fill();
+            lx.font = (iconSize*0.75)+'px sans-serif'; lx.textAlign='center'; lx.textBaseline='middle'; lx.fillStyle='#f8fafc'; lx.fillText('✎', ix+iconSize/2, iy+iconSize/2+0.5); lx.restore();
+            // Expose hit regions globally (plan space agnostic; operate in screen/canvas coords)
+            __plan2d.roomLabelEditHit = { x: ix, y: iy, w: iconSize, h: iconSize };
+            __plan2d.roomLabelDragHitBox = { x: bx, y: by, w: bw, h: bh, roomIndex: lb.roomIndex };
+          }
         }
         lx.restore();
       }

@@ -47,7 +47,8 @@
       .then(function(){ return loadScript('js/plan2d/walls.js'); })
       // draw.js is currently a placeholder that will later receive the extracted plan2dDraw
       .then(function(){ return loadScript('js/plan2d/draw.js'); })
-      .then(function(){ return loadScript('js/plan2d/editor.js?v=20251101-1'); })
+      .then(function(){ return loadScript('js/plan2d/editor-core.js'); })
+      .then(function(){ return loadScript('js/plan2d/editor.js?v=20251101-2'); })
       .then(function(){ return true; });
   }
 
@@ -75,8 +76,8 @@
   if (typeof window.hideShare !== 'function') window.hideShare = function(){ ensureModals().then(function(){ try{ hideShare(); }catch(e){} }); };
   if (typeof window.copyShareUrl !== 'function') window.copyShareUrl = function(){ ensureModals().then(function(){ try{ copyShareUrl(); }catch(e){} }); };
 
-  if (typeof window.openPlan2DModal !== 'function') window.openPlan2DModal = function(){ ensurePlan2D().then(function(){ try{ openPlan2DModal(); }catch(e){} }); };
-  if (typeof window.closePlan2DModal !== 'function') window.closePlan2DModal = function(){ ensurePlan2D().then(function(){ try{ closePlan2DModal(); }catch(e){} }); };
+  if (typeof window.openPlan2DModal !== 'function') window.openPlan2DModal = function(){ ensurePlan2D().then(function(){ try{ if (typeof window.openPlan2DModal==='function') window.openPlan2DModal(); }catch(e){} }); };
+  if (typeof window.closePlan2DModal !== 'function') window.closePlan2DModal = function(){ ensurePlan2D().then(function(){ try{ if (typeof window.closePlan2DModal==='function') window.closePlan2DModal(); }catch(e){} }); };
 
   // Stage some prefetching after first frame/idling to improve next-use latency
   function prefetch(url){
@@ -90,7 +91,7 @@
     var urls = [
       'js/ui/roomPalette.js','js/ui/pricing.js','js/ui/modals.js','js/ui/roofDropdown.js',
       // Plan2D modules (helpers first) followed by editor
-      'js/plan2d/geom2d.js','js/plan2d/snap.js','js/plan2d/walls.js','js/plan2d/draw.js','js/plan2d/editor.js?v=20251101-1','js/plan2d/utils.js',
+  'js/plan2d/geom2d.js','js/plan2d/snap.js','js/plan2d/walls.js','js/plan2d/draw.js','js/plan2d/editor-core.js','js/plan2d/editor.js?v=20251101-2','js/plan2d/utils.js',
       // Renderers
       'js/render/drawPergola.js','js/render/drawGarage.js','js/render/drawBalcony.js','js/render/drawStairs.js','js/render/drawPool.js','js/render/drawRoof.js'
     ];
