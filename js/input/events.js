@@ -119,10 +119,15 @@
           }
           // Prefer current floor items by considering them first
           for (var i=0;i<(allRooms||[]).length;i++){ if((allRooms[i].level||0)===(currentFloor||0)) consider(allRooms[i]); }
-          if (stairsComponent && (stairsComponent.level||0)===(currentFloor||0)) consider(stairsComponent);
+          // Stairs: consider all on current floor (multi-support)
+          try { var scArr0 = window.stairsComponents || []; if (Array.isArray(scArr0)) { for (var si0=0; si0<scArr0.length; si0++){ var so0=scArr0[si0]; if(!so0) continue; if((so0.level||0)===(currentFloor||0)) consider(so0); } } else if (stairsComponent && (stairsComponent.level||0)===(currentFloor||0)) consider(stairsComponent); } catch(_s0){}
           ['pergolaComponents','garageComponents','poolComponents','roofComponents','balconyComponents','furnitureItems'].forEach(function(k){ var arr=window[k]||[]; for(var i=0;i<arr.length;i++){ var o=arr[i]; if(!o) continue; if((o.level||0)===(currentFloor||0)) consider(o); }});
           // If nothing on current floor, consider all
-          if (!bestId){ (allRooms||[]).forEach(consider); if(stairsComponent) consider(stairsComponent); ['pergolaComponents','garageComponents','poolComponents','roofComponents','balconyComponents','furnitureItems'].forEach(function(k){ var arr=window[k]||[]; for(var i=0;i<arr.length;i++) consider(arr[i]); }); }
+          if (!bestId){
+            (allRooms||[]).forEach(consider);
+            try { var scArr1 = window.stairsComponents || []; if (Array.isArray(scArr1) && scArr1.length){ for (var si1=0; si1<scArr1.length; si1++){ consider(scArr1[si1]); } } else if (stairsComponent) { consider(stairsComponent); } } catch(_s1){}
+            ['pergolaComponents','garageComponents','poolComponents','roofComponents','balconyComponents','furnitureItems'].forEach(function(k){ var arr=window[k]||[]; for(var i=0;i<arr.length;i++) consider(arr[i]); });
+          }
           var thresh = 180*180; // px^2
           if (bestId && bestD <= thresh) { if (window.__hoverRoomId !== bestId){ window.__hoverRoomId = bestId; renderLoop(); } }
           else if (window.__hoverRoomId) { window.__hoverRoomId = null; renderLoop(); }
@@ -172,6 +177,8 @@
           
           // Set global flag to prevent 2D->3D auto-apply during 3D drag
           window.__dragging3DRoom = true;
+          // Track which room is actively dragged for targeted purge in solid rebuilds
+          try { window.__activelyDraggedRoomId = target.id; } catch(_ad) {}
           console.log('🟢 START 3D DRAG - Flag set:', window.__dragging3DRoom, 'Room:', target.name || target.id);
           
           // Capture original opening positions for rectangular rooms (before poly check)
@@ -334,17 +341,18 @@
           __maybeRebuildRoomStripsThrottled();
         }
       } else if (mouse.dragType === 'stairs' && mouse.dragInfo) {
-        if (stairsComponent) {
+        var stairsObj = findObjectById && mouse.dragInfo && mouse.dragInfo.roomId ? findObjectById(mouse.dragInfo.roomId) : (window.stairsComponent||null);
+        if (stairsObj) {
           var dx = e.clientX - mouse.dragInfo.startX;
           var dy = e.clientY - mouse.dragInfo.startY;
           var movement = worldMovement(dx, dy);
           var newX = mouse.dragInfo.originalX + movement.x;
           var newZ = mouse.dragInfo.originalZ + movement.z;
-          var snap = applySnap({x: newX, z: newZ, width: stairsComponent.width, depth: stairsComponent.depth, level: stairsComponent.level, id: stairsComponent.id, type: 'stairs'});
-          stairsComponent.x = snap.x;
-          stairsComponent.z = snap.z;
+          var snap = applySnap({x: newX, z: newZ, width: stairsObj.width, depth: stairsObj.depth, level: stairsObj.level, id: stairsObj.id, type: 'stairs'});
+          stairsObj.x = snap.x;
+          stairsObj.z = snap.z;
           currentSnapGuides = snap.guides;
-          updateStatus('Moving ' + stairsComponent.name + '...');
+          updateStatus('Moving ' + (stairsObj.name||'Stairs') + '...');
         }
       } else if (mouse.dragType === 'pergola' && mouse.dragInfo) {
         var pergola = findObjectById(mouse.dragInfo.roomId);
@@ -797,6 +805,7 @@
       // This prevents applyPlan2DTo3D from rebuilding rooms immediately after drag
       setTimeout(function() {
         window.__dragging3DRoom = false;
+        try { window.__activelyDraggedRoomId = null; } catch(_ad2) {}
         console.log('🔴 END 3D DRAG - Flag cleared after 200ms:', window.__dragging3DRoom);
       }, 200);
       
@@ -848,13 +857,28 @@
           return;
         }
         
-        if (stairsComponent && stairsComponent.id === selectedRoomId) {
-          stairsComponent = null;
-          selectedRoomId = null;
-          updateStatus('Stairs deleted');
-          try { __log3d('Deleted stairs'); } catch(_l4){}
-          return;
-        }
+        // Stairs deletion: support multiple; remove matching stairs by id
+        try {
+          var delIdx = -1; var scArrD = window.stairsComponents || [];
+          if (Array.isArray(scArrD) && scArrD.length){ for (var sdi=0; sdi<scArrD.length; sdi++){ var sObj=scArrD[sdi]; if (sObj && sObj.id === selectedRoomId) { delIdx = sdi; break; } } }
+          if (delIdx > -1) {
+            var delS = scArrD[delIdx]; scArrD.splice(delIdx,1);
+            try { window.stairsComponents = scArrD; } catch(_keep){}
+            if (window.stairsComponent && window.stairsComponent.id === selectedRoomId){ window.stairsComponent = scArrD.length ? scArrD[scArrD.length-1] : null; }
+            selectedRoomId = null;
+            updateStatus((delS && delS.name ? delS.name : 'Stairs') + ' deleted');
+            try { __log3d('Deleted stairs'); } catch(_l4){}
+            try { if (typeof window.updateLevelMenuStates==='function') window.updateLevelMenuStates(); } catch(_u){}
+            return;
+          } else if (stairsComponent && stairsComponent.id === selectedRoomId) {
+            stairsComponent = null;
+            selectedRoomId = null;
+            updateStatus('Stairs deleted');
+            try { __log3d('Deleted stairs'); } catch(_l4){}
+            try { if (typeof window.updateLevelMenuStates==='function') window.updateLevelMenuStates(); } catch(_u){}
+            return;
+          }
+        } catch(_delS){}
         
         var pergolaIndex = -1;
         for (var i = 0; i < pergolaComponents.length; i++) {

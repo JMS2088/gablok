@@ -133,6 +133,7 @@
   // remove any previously generated perimeter strips even if they don't match
   // the current footprint (prevents "ghost" solids at old positions during drags).
   if (typeof window.__lastPerimeterEdges === 'undefined') window.__lastPerimeterEdges = null;
+  if (typeof window.__activelyDraggedRoomId === 'undefined') window.__activelyDraggedRoomId = null;
 
   // Utility: deduplicate wallStrips by unordered endpoints and level. Prefer
   // the most recently added perimeter-derived strip (tagged) over older ones.
@@ -164,11 +165,75 @@
   };
 
   // Remove previously generated perimeter strips (created from rooms)
+  // Enhanced: also remove ANY strips that coincide with current room/garage perimeter edges,
+  // even if they are not tagged. This ensures the Render button (Lines) reliably clears solids
+  // for rectangles and polygons across both floors, preventing stale untagged duplicates.
   if (typeof window.removeRoomPerimeterStrips === 'undefined') window.removeRoomPerimeterStrips = function(){
     try {
       var tag = window.__roomStripTag || '__fromRooms';
       if (!Array.isArray(window.wallStrips)) return;
-      window.wallStrips = window.wallStrips.filter(function(ws){ return !(ws && ws[tag]); });
+      // Build edge-key set for all current room perimeters and garage (sans door edge), per level
+      function kf(v){ return Math.round((+v||0)*1000)/1000; }
+      function edgeKeyWithLevel(level,x0,z0,x1,z1){
+        var a = kf(x0)+","+kf(z0), b = kf(x1)+","+kf(z1);
+        var u = (a<b)? (a+"|"+b) : (b+"|"+a);
+        return (level||0)+"#"+u;
+      }
+      var perimeterKeys = Object.create(null);
+      try {
+        // Rooms (rect and polygon)
+        var rooms = Array.isArray(window.allRooms) ? window.allRooms : [];
+        for (var i=0;i<rooms.length;i++){
+          var r = rooms[i]; if(!r) continue; var lev=(r.level||0);
+          if (Array.isArray(r.footprint) && r.footprint.length>=2){
+            var pts=r.footprint;
+            for (var k=0;k<pts.length;k++){
+              var A=pts[k], B=pts[(k+1)%pts.length]; if(!A||!B) continue;
+              perimeterKeys[ edgeKeyWithLevel(lev, A.x,A.z, B.x,B.z) ] = true;
+            }
+          } else {
+            var hw=(r.width||0)/2, hd=(r.depth||0)/2; if(hw>0 && hd>0){
+              var xL=(r.x||0)-hw, xR=(r.x||0)+hw, zT=(r.z||0)-hd, zB=(r.z||0)+hd;
+              var edges = [ [xL,zT,xR,zT], [xR,zT,xR,zB], [xR,zB,xL,zB], [xL,zB,xL,zT] ];
+              for (var e=0;e<edges.length;e++){
+                var E=edges[e]; perimeterKeys[ edgeKeyWithLevel(lev, E[0],E[1],E[2],E[3]) ] = true;
+              }
+            }
+          }
+        }
+        // Garages (exclude front/door edge)
+        var garages = Array.isArray(window.garageComponents)? window.garageComponents: [];
+        for (var g=0; g<garages.length; g++){
+          var gar = garages[g]; if(!gar) continue; var levG=(gar.level||0);
+          var hwg=(gar.width||0)/2, hdg=(gar.depth||0)/2, rot=((gar.rotation||0)*Math.PI)/180;
+          function RG(px,pz){ var dx=px-(gar.x||0), dz=pz-(gar.z||0); return { x:(gar.x||0)+dx*Math.cos(rot)-dz*Math.sin(rot), z:(gar.z||0)+dx*Math.sin(rot)+dz*Math.cos(rot) }; }
+          var p1=RG((gar.x||0)-hwg,(gar.z||0)-hdg), p2=RG((gar.x||0)+hwg,(gar.z||0)-hdg), p3=RG((gar.x||0)+hwg,(gar.z||0)+hdg), p4=RG((gar.x||0)-hwg,(gar.z||0)+hdg);
+          var edgesG=[ [p1,p2], [p2,p3], [p3,p4], [p4,p1] ];
+          // Exclude longest edge as door/front; keep others
+          var maxLen=-1, longestIdx=-1;
+          for (var gi=0; gi<edgesG.length; gi++){ var A0=edgesG[gi][0], B0=edgesG[gi][1]; var L=Math.hypot(B0.x-A0.x, B0.z-A0.z); if(L>maxLen){maxLen=L; longestIdx=gi;} }
+          for (var gi2=0; gi2<edgesG.length; gi2++){ if (gi2===longestIdx) continue; var A1=edgesG[gi2][0], B1=edgesG[gi2][1]; perimeterKeys[ edgeKeyWithLevel(levG, A1.x,A1.z, B1.x,B1.z) ] = true; }
+        }
+      } catch(_eKeys) {}
+      // Optionally include previously saved perimeter edges to catch ghosts from old positions
+      try {
+        var prev = window.__lastPerimeterEdges || null; if (prev){ Object.keys(prev).forEach(function(k){ perimeterKeys[k]=true; }); }
+      } catch(_ePrev) {}
+      // Filter out: any tagged strip OR any strip whose edge matches a perimeter key
+      window.wallStrips = window.wallStrips.filter(function(ws){
+        try {
+          if (!ws) return false;
+          if (ws[tag]) return false;
+          var lev=(ws.level||0);
+          var k = edgeKeyWithLevel(lev, ws.x0, ws.z0, ws.x1, ws.z1);
+          if (perimeterKeys[k]) return false;
+          return true;
+        } catch(_eF) { return true; }
+      });
+      // Persist and re-render
+      if (typeof window.dedupeWallStrips==='function') window.dedupeWallStrips();
+      if (typeof window.saveProjectSilently==='function') window.saveProjectSilently();
+      if (typeof window.renderLoop==='function') window.renderLoop();
     } catch(_e) {}
   };
 
@@ -236,6 +301,32 @@
           return !perimeterKeys[key];
         });
       } catch(_eFilt) {}
+      // If a room is actively dragged, also purge any strips within its expanded bbox on that level (safety against key mismatches)
+      try {
+        var dragId = window.__activelyDraggedRoomId || null;
+        if (dragId) {
+          var theRoom = null; for (var ri2=0; ri2<window.allRooms.length; ri2++){ var rr=window.allRooms[ri2]; if(rr && rr.id===dragId){ theRoom=rr; break; } }
+          if (theRoom) {
+            var levD = (theRoom.level||0);
+            var minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+            if (Array.isArray(theRoom.footprint) && theRoom.footprint.length>0){
+              for (var pi=0; pi<theRoom.footprint.length; pi++){ var p=theRoom.footprint[pi]; if(!p) continue; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z; }
+            } else {
+              var hw=(theRoom.width||0)/2, hd=(theRoom.depth||0)/2; minX=(theRoom.x||0)-hw; maxX=(theRoom.x||0)+hw; minZ=(theRoom.z||0)-hd; maxZ=(theRoom.z||0)+hd;
+            }
+            var pad = 0.8; // 80cm padding
+            minX-=pad; maxX+=pad; minZ-=pad; maxZ+=pad;
+            function inside(x,z){ return x>=minX && x<=maxX && z>=minZ && z<=maxZ; }
+            window.wallStrips = (window.wallStrips||[]).filter(function(ws){
+              if (!ws) return false;
+              if ((ws.level||0)!==levD) return true; // keep different level
+              var inA = inside(ws.x0||0, ws.z0||0), inB = inside(ws.x1||0, ws.z1||0);
+              // Drop strips fully within bbox; keep others
+              return !(inA && inB);
+            });
+          }
+        }
+      } catch(_eDragPurge) {}
       // Also remove previously tagged strips to be safe
       window.removeRoomPerimeterStrips();
       // Helper: check if a strip for this edge (unordered endpoints) already exists
@@ -648,16 +739,16 @@
       var alpha = (typeof window.__uiFadeAlpha==='number') ? (0.85 * window.__uiFadeAlpha) : 0.85;
       ctx.save();
       ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-      // Base circle
-      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='rgba(15,23,42,0.55)'; ctx.fill(); ctx.strokeStyle='rgba(148,163,184,0.35)'; ctx.lineWidth=1; ctx.stroke();
-      // Cross hairs
-      ctx.strokeStyle='rgba(203,213,225,0.9)';
+      // Base circle (white background)
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='#ffffff'; ctx.fill(); ctx.strokeStyle='#000000'; ctx.lineWidth=1; ctx.stroke();
+      // Cross hairs (black)
+      ctx.strokeStyle='#000000';
       ctx.beginPath(); ctx.moveTo(cx-r+4,cy); ctx.lineTo(cx+r-4,cy); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(cx,cy-r+4); ctx.lineTo(cx,cy+r-4); ctx.stroke();
-  // Cardinal labels: flip N/S based on 2D orientation sign to match 2D compass
-  ctx.fillStyle = 'rgba(226,232,240,0.95)';
-  var fontPx3D = 8; // fixed 8px per request
-  ctx.font = 'bold ' + fontPx3D + 'px system-ui, sans-serif';
+      // Cardinal labels: flip N/S based on 2D orientation sign to match 2D compass (black letters)
+      ctx.fillStyle = '#000000';
+      var fontPx3D = 8; // fixed 8px
+      ctx.font = 'bold ' + fontPx3D + 'px system-ui, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       var nY = (sgn===1) ? (cy - r + 10) : (cy + r - 10);
       var sY = (sgn===1) ? (cy + r - 10) : (cy - r + 10);
@@ -665,11 +756,11 @@
       ctx.fillText('S', cx, sY);
       ctx.fillText('E', cx + r - 10, cy);
       ctx.fillText('W', cx - r + 10, cy);
-      // North arrow: match 2D compass (up if sgn=1, down if sgn=-1)
+      // North arrow: match 2D compass (black fill)
       ctx.beginPath();
       if (sgn === 1) { ctx.moveTo(cx, cy - r + 6); ctx.lineTo(cx - 5, cy - r + 14); ctx.lineTo(cx + 5, cy - r + 14); }
       else { ctx.moveTo(cx, cy + r - 6); ctx.lineTo(cx - 5, cy + r - 14); ctx.lineTo(cx + 5, cy + r - 14); }
-      ctx.closePath(); ctx.fillStyle='#3b82f6'; ctx.fill();
+      ctx.closePath(); ctx.fillStyle='#000000'; ctx.fill();
       ctx.restore();
     };
   }
@@ -694,27 +785,43 @@
         var r = Math.max(14, Math.min(28, Math.floor(Math.min(cssW, cssH)/2 - 4)));
         var x = (cssW/2), y = (cssH/2);
         var sgn = (window.__plan2d && (window.__plan2d.yFromWorldZSign===-1 || window.__plan2d.yFromWorldZSign===1)) ? window.__plan2d.yFromWorldZSign : 1;
-        // Base circle
-        cx.beginPath(); cx.arc(x,y,r,0,Math.PI*2); cx.fillStyle='rgba(15,23,42,0.55)'; cx.fill(); cx.strokeStyle='rgba(148,163,184,0.35)'; cx.lineWidth=1; cx.stroke();
-        // Cross hairs
-        cx.strokeStyle='rgba(203,213,225,0.9)';
+    // Base circle (white background)
+    cx.beginPath(); cx.arc(x,y,r,0,Math.PI*2); cx.fillStyle='#ffffff'; cx.fill(); cx.strokeStyle='#000000'; cx.lineWidth=1; cx.stroke();
+    // Cross hairs (black)
+    cx.strokeStyle='#000000';
         cx.beginPath(); cx.moveTo(x-r+4,y); cx.lineTo(x+r-4,y); cx.stroke();
         cx.beginPath(); cx.moveTo(x,y-r+4); cx.lineTo(x,y+r-4); cx.stroke();
-  // Labels (flip N/S with sign) - fixed 8px per request
-  cx.fillStyle='rgba(226,232,240,0.95)'; var fontPxNav = 8; cx.font='bold ' + fontPxNav + 'px system-ui, sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
+    // Labels (flip N/S with sign) - fixed 8px (black letters)
+    cx.fillStyle='#000000'; var fontPxNav = 8; cx.font='bold ' + fontPxNav + 'px system-ui, sans-serif'; cx.textAlign='center'; cx.textBaseline='middle';
         var nY = (sgn===1) ? (y - r + 10) : (y + r - 10);
         var sY = (sgn===1) ? (y + r - 10) : (y - r + 10);
         cx.fillText('N', x, nY);
         cx.fillText('S', x, sY);
         cx.fillText('E', x + r - 10, y);
         cx.fillText('W', x - r + 10, y);
-        // Arrow
+    // North arrow (static) to show absolute North regardless of camera (black fill)
         cx.beginPath();
         var tip = Math.max(4, Math.floor(r*0.22));
         var base = Math.max(3, Math.floor(r*0.18));
-        if (sgn === 1) { cx.moveTo(x, y - r + tip); cx.lineTo(x - base, y - r + tip + (base*1.6)); cx.lineTo(x + base, y - r + tip + (base*1.6)); }
-        else { cx.moveTo(x, y + r - tip); cx.lineTo(x - base, y + r - tip - (base*1.6)); cx.lineTo(x + base, y + r - tip - (base*1.6)); }
-        cx.closePath(); cx.fillStyle='#3b82f6'; cx.fill();
+    if (sgn === 1) { cx.moveTo(x, y - r + tip); cx.lineTo(x - base, y - r + tip + (base*1.6)); cx.lineTo(x + base, y - r + tip + (base*1.6)); }
+    else { cx.moveTo(x, y + r - tip); cx.lineTo(x - base, y + r - tip - (base*1.6)); cx.lineTo(x + base, y + r - tip - (base*1.6)); }
+    cx.closePath(); cx.fillStyle='#000000'; cx.fill();
+
+        // Camera heading needle: rotate with camera.yaw so users see direction of view
+        try {
+          var yaw = (window.camera && typeof camera.yaw==='number') ? camera.yaw : 0;
+          // Map yaw to screen angle: yaw=0 (looking +Z) -> up if sgn=1, down if sgn=-1
+          var baseAngle = (sgn===1 ? -Math.PI/2 : Math.PI/2);
+          var ang = baseAngle + yaw * sgn;
+          var len = Math.max(6, r - 6);
+          var x2 = x + Math.cos(ang) * len;
+          var y2 = y + Math.sin(ang) * len;
+          cx.strokeStyle = '#000000';
+          cx.lineWidth = 2;
+          cx.beginPath(); cx.moveTo(x, y); cx.lineTo(x2, y2); cx.stroke();
+          // small cap circle at center (black)
+          cx.beginPath(); cx.arc(x, y, 2.2, 0, Math.PI*2); cx.fillStyle = '#000000'; cx.fill();
+        } catch(_hd) {}
         cx.restore();
       } catch(_e) { /* non-fatal */ }
     };
@@ -733,8 +840,16 @@
     try {
       // Rooms
       for (var i=0;i<(allRooms||[]).length;i++){ var r=allRooms[i]; if(!r) continue; if((r.level||0)!==level) continue; fps.push({x:r.x||0, z:r.z||0, w:r.width||0, d:r.depth||0}); }
-      // Stairs
-      if (stairsComponent && (stairsComponent.level||0)===level) fps.push({x:stairsComponent.x||0, z:stairsComponent.z||0, w:stairsComponent.width||0, d:stairsComponent.depth||0});
+      // Stairs (all)
+      try {
+        var scArr = window.stairsComponents || [];
+        for (var si=0; si<scArr.length; si++){
+          var sc = scArr[si]; if(!sc) continue; if ((sc.level||0)!==level) continue;
+          fps.push({x:sc.x||0, z:sc.z||0, w:sc.width||0, d:sc.depth||0});
+        }
+        // Back-compat singleton
+        if ((!Array.isArray(scArr) || scArr.length===0) && stairsComponent && (stairsComponent.level||0)===level) fps.push({x:stairsComponent.x||0, z:stairsComponent.z||0, w:stairsComponent.width||0, d:stairsComponent.depth||0});
+      } catch(_sfp){}
       // Arrays
       function addArray(arr){ for (var j=0;j<(arr||[]).length;j++){ var o=arr[j]; if(!o) continue; var lv=(o.level!=null? o.level : 0); if(lv!==level) continue; fps.push({x:o.x||0, z:o.z||0, w:o.width||0, d:o.depth||0}); } }
       addArray(pergolaComponents); addArray(garageComponents); addArray(poolComponents); addArray(roofComponents); addArray(balconyComponents);
@@ -816,7 +931,7 @@
       return { x: nx, z: nz, guides: guides };
     } catch(e){ return { x: pos.x, z: pos.z, guides: [] }; }
   };
-  if (typeof window.findObjectById === 'undefined') window.findObjectById = function(id){ if(!id) return null; var arrs=[allRooms, pergolaComponents, garageComponents, poolComponents, roofComponents, balconyComponents, furnitureItems]; for(var ai=0; ai<arrs.length; ai++){ var A=arrs[ai]||[]; for(var i=0;i<A.length;i++){ if(A[i]&&A[i].id===id) return A[i]; } } if(stairsComponent&&stairsComponent.id===id) return stairsComponent; return null; };
+  if (typeof window.findObjectById === 'undefined') window.findObjectById = function(id){ if(!id) return null; var arrs=[allRooms, (window.stairsComponents||[]), pergolaComponents, garageComponents, poolComponents, roofComponents, balconyComponents, furnitureItems]; for(var ai=0; ai<arrs.length; ai++){ var A=arrs[ai]||[]; for(var i=0;i<A.length;i++){ if(A[i]&&A[i].id===id) return A[i]; } } if(stairsComponent&&stairsComponent.id===id) return stairsComponent; return null; };
   if (typeof window.findHandle === 'undefined') window.findHandle = function(mx, my){
     try {
         var dpr = window.devicePixelRatio || 1; mx *= dpr; my *= dpr;
@@ -1749,8 +1864,10 @@
         } catch(__eWSAll) {}
         // Draw other components when their renderers are (lazily) available
         try {
-          if (window.stairsComponent && typeof drawStairs === 'function') {
-            drawStairs(window.stairsComponent);
+          if (typeof drawStairs === 'function') {
+            var scArr2 = window.stairsComponents || [];
+            if (Array.isArray(scArr2) && scArr2.length>0){ for (var sdi=0; sdi<scArr2.length; sdi++){ var sObj=scArr2[sdi]; if(!sObj) continue; drawStairs(sObj); } }
+            else if (window.stairsComponent) { drawStairs(window.stairsComponent); }
           }
         } catch(_eS) {}
         try {
@@ -1895,13 +2012,20 @@
 
   // Component creation helpers (only if missing)
   if (typeof window.addStairs === 'undefined') window.addStairs = function(){
+    // Multi-stairs: create a new stairs component each time
+    try { if (typeof window.stairsComponents === 'undefined') window.stairsComponents = []; } catch(_init){}
     var id='stairs_'+Date.now(); var lvl=(typeof currentFloor==='number'? currentFloor:0);
     // Design spec: 19 steps over 4 meters total run; keep default height 3.0m
     var w=1.2,d=4.0; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'stairs'});
-    stairsComponent={ id:id, name:'Stairs', x:s.x, z:s.z, width:w, depth:d, height:3.0, steps:19, type:'stairs', rotation:0, level:lvl };
-  window.selectedRoomId = id; if(typeof updateStatus==='function') updateStatus('Added Stairs');
-  try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
-    try { focusCameraOnObject(stairsComponent); } catch(_e) {}
+    var stair={ id:id, name:'Stairs', x:s.x, z:s.z, width:w, depth:d, height:3.0, steps:19, type:'stairs', rotation:0, level:lvl };
+    try { window.stairsComponents.push(stair); } catch(_push){}
+    // Back-compat: point singleton reference to the most recent
+    window.stairsComponent = stair;
+    window.selectedRoomId = id; if(typeof updateStatus==='function') updateStatus('Added Stairs');
+    try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
+    try { focusCameraOnObject(stair); } catch(_e) {}
+    // Refresh menus (now a no-op for stairs)
+    try { if (typeof window.updateLevelMenuStates === 'function') window.updateLevelMenuStates(); } catch(_u2){}
     _needsFullRender=true; startRender();
   };
   function newId(prefix){ return prefix+'_'+Date.now()+Math.random().toString(36).slice(2); }

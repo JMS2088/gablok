@@ -52,12 +52,26 @@
         breakdown.totalCost += cost;
       }
     }
-    if (window.stairsComponent) {
-      var sArea = Math.max(0, (stairsComponent.width||0)*(stairsComponent.depth||0));
-      var sRate = (window.PRICING && PRICING.stairsPerSqm) || 300;
-      var sCost = sArea * sRate;
-      breakdown.components.push({ name:'Stairs', area:sArea, cost:sCost }); breakdown.totalCost += sCost;
-    }
+    // Stairs: support multiple; fallback to singleton
+    (function(){
+      try {
+        var arr = window.stairsComponents || [];
+        var rate = (window.PRICING && PRICING.stairsPerSqm) || 300;
+        if (Array.isArray(arr) && arr.length){
+          for (var k=0; k<arr.length; k++){
+            var s = arr[k]; if(!s) continue;
+            var sAreaK = Math.max(0, (s.width||0)*(s.depth||0));
+            var sCostK = sAreaK * rate;
+            breakdown.components.push({ name:'Stairs', area:sAreaK, cost:sCostK }); breakdown.totalCost += sCostK;
+          }
+        } else if (window.stairsComponent) {
+          var sArea = Math.max(0, (stairsComponent.width||0)*(stairsComponent.depth||0));
+          var sRate = rate;
+          var sCost = sArea * sRate;
+          breakdown.components.push({ name:'Stairs', area:sArea, cost:sCost }); breakdown.totalCost += sCost;
+        }
+      } catch(_s){}
+    })();
     addBoxComponent(window.pergolaComponents, 'Pergola', 'pergolaPerSqm');
     addBoxComponent(window.garageComponents, 'Garage', 'garagePerSqm');
     addBoxComponent(window.poolComponents, 'Pool', 'poolPerSqm');

@@ -118,9 +118,20 @@ function __wireAppUi(){
       var map = { '0':'Ground Floor', '1':'First Floor', 'stairs':'+ Stairs', 'pergola':'+ Pergola', 'garage':'+ Garage', 'roof':'+ Roof', 'pool':'+ Pool', 'balcony':'+ Balcony' };
       if(btnText) btnText.textContent = map[String(v)] || 'Level';
     }
+    // Expose a helper to enable/disable add items dynamically based on state (e.g., singleton stairs)
+    // With multi-stairs support, ensure "+ Stairs" is always enabled
+    function updateLevelMenuStates(){
+      try {
+        if (!list) return;
+        var stairsItem = list.querySelector('.dropdown-item[data-value="stairs"]');
+        if (stairsItem){ stairsItem.classList.remove('disabled'); stairsItem.removeAttribute('title'); }
+      } catch(_e){}
+    }
+    try { window.updateLevelMenuStates = updateLevelMenuStates; } catch(_g){}
     if(btn){ btn.addEventListener('click', function(e){ e.stopPropagation(); if(dd.classList.contains('open')) close(); else open(); }); }
     if(list){ list.addEventListener('click', function(e){
       var item=e.target.closest('.dropdown-item'); if(!item || item.classList.contains('separator')) return;
+      if (item.classList.contains('disabled')) return; // ignore disabled actions
       var val=item.getAttribute('data-value');
       // Handle special add actions directly to avoid creation during generic switchLevel()
       var addMap = {
@@ -136,6 +147,8 @@ function __wireAppUi(){
         // Normalize selector to the current floor after creation/focus
         if(nativeSel){ nativeSel.value = String(typeof currentFloor==='number' ? currentFloor : 0); }
         setLabelFromValue(nativeSel ? nativeSel.value : '0');
+        // Refresh states (kept as a no-op for stairs)
+        try { updateLevelMenuStates(); } catch(_u){}
         close();
         return;
       }
@@ -149,6 +162,8 @@ function __wireAppUi(){
     document.addEventListener('keydown', function(ev){ if(ev.key==='Escape') close(); });
     // Initialize label from current state
     if(nativeSel){ setLabelFromValue(nativeSel.value || '0'); }
+    // Initialize dynamic states (disable stairs if already present)
+    try { updateLevelMenuStates(); } catch(_i){}
   })();
 
   // Main Actions Dropdown (Info/Share/Export/Import) wiring

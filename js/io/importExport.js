@@ -104,7 +104,12 @@
         x: cx, z: cz, width: L, depth: (w.thickness || 0.3), rotation: rot
       }, 0, (w.height || 3.0), 'wallstrip');
     });
-    if (stairsComponent) pushBox(stairsComponent, 0, stairsComponent.height, 'stairs');
+    // Stairs: multiple supported; fallback to singleton
+    (function(){ try {
+      var scArr = window.stairsComponents || [];
+      if (Array.isArray(scArr) && scArr.length){ for (var si=0; si<scArr.length; si++){ var s=scArr[si]; if(!s) continue; pushBox(s, 0, s.height, 'stairs'); } }
+      else if (stairsComponent) pushBox(stairsComponent, 0, stairsComponent.height, 'stairs');
+    } catch(_s){ if (stairsComponent) pushBox(stairsComponent, 0, stairsComponent.height, 'stairs'); } })();
     pergolaComponents.forEach(function(p) {
       pushBox(p, 0, p.totalHeight, 'pergola');
     });

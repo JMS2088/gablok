@@ -156,6 +156,8 @@
                   window.mouse.down = true;
                   // Block 2D->3D auto-apply while dragging in 3D via label to avoid duplication
                   window.__dragging3DRoom = true;
+                  // Track which room is actively dragged for targeted purge
+                  try { window.__activelyDraggedRoomId = box.id; } catch(_adLbl) {}
                   try { console.log('🟢 START 3D DRAG (label) - Flag set:', window.__dragging3DRoom, 'Room:', box.name || box.id); } catch(_log){}
                   try { if (canvas) canvas.style.cursor = 'grabbing'; } catch(_e){}
                   // Kick an immediate perimeter rebuild in solid mode so the render follows from the first frame
@@ -318,8 +320,14 @@
 
   // Rooms
       for (var i=0;i<(allRooms||[]).length;i++) placeLabelFor(allRooms[i]);
-      // Stairs (single)
-      if (window.stairsComponent) placeLabelFor(window.stairsComponent);
+      // Stairs (multiple supported; fallback to singleton)
+      (function(){
+        try {
+          var scArr = window.stairsComponents || [];
+          if (Array.isArray(scArr) && scArr.length){ for (var si=0; si<scArr.length; si++){ placeLabelFor(scArr[si]); } }
+          else if (window.stairsComponent) { placeLabelFor(window.stairsComponent); }
+        } catch(_e) { if (window.stairsComponent) placeLabelFor(window.stairsComponent); }
+      })();
       // Other components
       var ARR = [ 'pergolaComponents', 'garageComponents', 'poolComponents', 'roofComponents', 'balconyComponents', 'furnitureItems' ];
       for (var ai=0; ai<ARR.length; ai++){

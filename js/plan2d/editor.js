@@ -450,7 +450,13 @@ function openPlan2DModal(){
         var header=document.getElementById('plan2d-header'); var nav=document.getElementById('controls');
         if(!header || !nav) return;
         var r=nav.getBoundingClientRect();
-        var mirroredPad = Math.max(0, Math.round(r.left + r.width + 20));
+        // Use the left offset of the main nav as the mirrored padding reference.
+        // The previous logic (left + width) could grow excessively and push the
+        // header contents (including the floor toggle) off-screen on smaller viewports.
+        var basePad = Math.round(r.left);
+        // Clamp to a sensible range so content remains visible across layouts.
+        var maxPad = Math.floor((window.innerWidth||1200) * 0.12); // up to ~12% of viewport
+        var mirroredPad = Math.max(12, Math.min(basePad, Math.max(24, maxPad)));
         header.style.paddingLeft = mirroredPad + 'px';
         header.style.paddingRight = mirroredPad + 'px';
       }catch(_e){}

@@ -146,15 +146,26 @@ function populatePlan2DFromDesign(){
       });
     }
   }
-  // Include stairs footprint in bounds only on their level (avoid shifting first floor centering)
-  if (stairsComponent && (stairsComponent.level||0) === lvl) {
-    var s = stairsComponent; var hwS = (s.width||0)/2, hdS = (s.depth||0)/2;
-    // Account for rotation when computing extents
-    var rot = ((s.rotation||0) * Math.PI) / 180;
-    function r(px, pz){ var dx=px-s.x, dz=pz-s.z; return { x: s.x + dx*Math.cos(rot) - dz*Math.sin(rot), z: s.z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
-    var p1=r(s.x-hwS, s.z-hdS), p2=r(s.x+hwS, s.z-hdS), p3=r(s.x+hwS, s.z+hdS), p4=r(s.x-hwS, s.z+hdS);
-    rects.push({ name:'Stairs', minX: Math.min(p1.x,p2.x,p3.x,p4.x), maxX: Math.max(p1.x,p2.x,p3.x,p4.x), minZ: Math.min(p1.z,p2.z,p3.z,p4.z), maxZ: Math.max(p1.z,p2.z,p3.z,p4.z), type:'stairs' });
-  }
+  // Include stairs footprints in bounds only on their level (avoid shifting first floor centering)
+  (function(){ try {
+    var scArrL = window.stairsComponents || [];
+    if (Array.isArray(scArrL) && scArrL.length){
+      for (var sLi=0; sLi<scArrL.length; sLi++){
+        var s = scArrL[sLi]; if(!s || (s.level||0)!==lvl) continue;
+        var hwS = (s.width||0)/2, hdS = (s.depth||0)/2;
+        var rot = ((s.rotation||0) * Math.PI) / 180;
+        function r(px, pz){ var dx=px-s.x, dz=pz-s.z; return { x: s.x + dx*Math.cos(rot) - dz*Math.sin(rot), z: s.z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+        var p1=r(s.x-hwS, s.z-hdS), p2=r(s.x+hwS, s.z-hdS), p3=r(s.x+hwS, s.z+hdS), p4=r(s.x-hwS, s.z+hdS);
+        rects.push({ name:'Stairs', minX: Math.min(p1.x,p2.x,p3.x,p4.x), maxX: Math.max(p1.x,p2.x,p3.x,p4.x), minZ: Math.min(p1.z,p2.z,p3.z,p4.z), maxZ: Math.max(p1.z,p2.z,p3.z,p4.z), type:'stairs', cx:s.x, cz:s.z, w:(s.width||0), d:(s.depth||0), rotation:(s.rotation||0) });
+      }
+    } else if (stairsComponent && (stairsComponent.level||0) === lvl) {
+      var s = stairsComponent; var hwS = (s.width||0)/2, hdS = (s.depth||0)/2;
+      var rot = ((s.rotation||0) * Math.PI) / 180;
+      function r(px, pz){ var dx=px-s.x, dz=pz-s.z; return { x: s.x + dx*Math.cos(rot) - dz*Math.sin(rot), z: s.z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+      var p1=r(s.x-hwS, s.z-hdS), p2=r(s.x+hwS, s.z-hdS), p3=r(s.x+hwS, s.z+hdS), p4=r(s.x-hwS, s.z+hdS);
+      rects.push({ name:'Stairs', minX: Math.min(p1.x,p2.x,p3.x,p4.x), maxX: Math.max(p1.x,p2.x,p3.x,p4.x), minZ: Math.min(p1.z,p2.z,p3.z,p4.z), maxZ: Math.max(p1.z,p2.z,p3.z,p4.z), type:'stairs', cx:s.x, cz:s.z, w:(s.width||0), d:(s.depth||0), rotation:(s.rotation||0) });
+    }
+  } catch(_sl){}})();
   if (rects.length === 0) {
     // If no room/component rectangles, still try to populate from existing 3D wall strips on this floor
     try {
@@ -264,8 +275,15 @@ function populatePlan2DFromDesign(){
     gMinX=Math.min(gMinX, b1.x,b2.x,b3.x,b4.x); gMaxX=Math.max(gMaxX, b1.x,b2.x,b3.x,b4.x);
     gMinZ=Math.min(gMinZ, b1.z,b2.z,b3.z,b4.z); gMaxZ=Math.max(gMaxZ, b1.z,b2.z,b3.z,b4.z);
   }
-  // Stairs (single location)
-  if (stairsComponent){ var s=stairsComponent; var hwS=s.width/2, hdS=s.depth/2; var rot=((s.rotation||0)*Math.PI)/180; function r(px,pz){ var dx=px-s.x, dz=pz-s.z; return {x:s.x+dx*Math.cos(rot)-dz*Math.sin(rot), z:s.z+dx*Math.sin(rot)+dz*Math.cos(rot)}; } var gp1=r(s.x-hwS, s.z-hdS), gp2=r(s.x+hwS, s.z-hdS), gp3=r(s.x+hwS, s.z+hdS), gp4=r(s.x-hwS, s.z+hdS); gMinX=Math.min(gMinX, gp1.x,gp2.x,gp3.x,gp4.x); gMaxX=Math.max(gMaxX, gp1.x,gp2.x,gp3.x,gp4.x); gMinZ=Math.min(gMinZ, gp1.z,gp2.z,gp3.z,gp4.z); gMaxZ=Math.max(gMaxZ, gp1.z,gp2.z,gp3.z,gp4.z); }
+  // Stairs (global bounds; multiple supported)
+  (function(){ try {
+    var scArrG = window.stairsComponents || [];
+    if (Array.isArray(scArrG) && scArrG.length){
+      for (var sg=0; sg<scArrG.length; sg++){
+        var s=scArrG[sg]; if(!s) continue; var hwS=(s.width||0)/2, hdS=(s.depth||0)/2; var rot=((s.rotation||0)*Math.PI)/180; function r(px,pz){ var dx=px-s.x, dz=pz-s.z; return {x:s.x+dx*Math.cos(rot)-dz*Math.sin(rot), z:s.z+dx*Math.sin(rot)+dz*Math.cos(rot)}; } var gp1=r(s.x-hwS, s.z-hdS), gp2=r(s.x+hwS, s.z-hdS), gp3=r(s.x+hwS, s.z+hdS), gp4=r(s.x-hwS, s.z+hdS); gMinX=Math.min(gMinX, gp1.x,gp2.x,gp3.x,gp4.x); gMaxX=Math.max(gMaxX, gp1.x,gp2.x,gp3.x,gp4.x); gMinZ=Math.min(gMinZ, gp1.z,gp2.z,gp3.z,gp4.z); gMaxZ=Math.max(gMaxZ, gp1.z,gp2.z,gp3.z,gp4.z);
+      }
+    } else if (stairsComponent){ var s=stairsComponent; var hwS=s.width/2, hdS=s.depth/2; var rot=((s.rotation||0)*Math.PI)/180; function r(px,pz){ var dx=px-s.x, dz=pz-s.z; return {x:s.x+dx*Math.cos(rot)-dz*Math.sin(rot), z:s.z+dx*Math.sin(rot)+dz*Math.cos(rot)}; } var gp1=r(s.x-hwS, s.z-hdS), gp2=r(s.x+hwS, s.z-hdS), gp3=r(s.x+hwS, s.z+hdS), gp4=r(s.x-hwS, s.z+hdS); gMinX=Math.min(gMinX, gp1.x,gp2.x,gp3.x,gp4.x); gMaxX=Math.max(gMaxX, gp1.x,gp2.x,gp3.x,gp4.x); gMinZ=Math.min(gMinZ, gp1.z,gp2.z,gp3.z,gp4.z); gMaxZ=Math.max(gMaxZ, gp1.z,gp2.z,gp3.z,gp4.z); }
+  } catch(_sg){}})();
   var gcx = (isFinite(gMinX)&&isFinite(gMaxX)) ? (gMinX+gMaxX)/2 : (minX+maxX)/2;
   var gcz = (isFinite(gMinZ)&&isFinite(gMaxZ)) ? (gMinZ+gMaxZ)/2 : (minZ+maxZ)/2;
   // Use global center so both floors share the same origin

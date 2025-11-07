@@ -16,7 +16,8 @@
  * - `camera` - Camera position/orientation
  * - `allRooms` - Array of room objects
  * - `wallStrips` - Array of standalone wall segments
- * - `stairsComponent` - Stairs object (nullable)
+ * - `stairsComponent` - Stairs object (nullable, legacy alias of the most-recent stair)
+ * - `stairsComponents` - Array of stairs objects (multi-stairs)
  * - `pergolaComponents` - Array of pergola objects
  * - `garageComponents` - Array of garage objects
  * - `poolComponents` - Array of pool objects
@@ -66,7 +67,9 @@
         },
         rooms: allRooms || [],
         wallStrips: wallStrips || [],
-        stairs: stairsComponent || null,
+  stairs: stairsComponent || null,
+  // Multi-stairs persistence (backward compatible)
+  stairsList: (Array.isArray(window.stairsComponents) ? window.stairsComponents : (stairsComponent ? [stairsComponent] : [])),
         pergolas: pergolaComponents || [],
         garages: garageComponents || [],
         pools: poolComponents || [],
@@ -93,7 +96,20 @@
       camera = Object.assign(camera, data.camera || {});
       allRooms = Array.isArray(data.rooms) ? data.rooms : [];
       wallStrips = Array.isArray(data.wallStrips) ? data.wallStrips : [];
+      // Restore stairs (multi first, fallback to single)
+      try {
+        window.stairsComponents = Array.isArray(data.stairsList) ? data.stairsList : [];
+      } catch(_sl) { window.stairsComponents = []; }
       stairsComponent = data.stairs || null;
+      // If only singleton present, mirror into array; if array present, set alias to last for compatibility
+      try {
+        if ((!Array.isArray(window.stairsComponents) || window.stairsComponents.length===0) && stairsComponent) {
+          window.stairsComponents = [stairsComponent];
+        }
+        if (Array.isArray(window.stairsComponents) && window.stairsComponents.length) {
+          stairsComponent = window.stairsComponents[window.stairsComponents.length-1];
+        }
+      } catch(_sa){}
       pergolaComponents = Array.isArray(data.pergolas) ? data.pergolas : [];
       garageComponents = Array.isArray(data.garages) ? data.garages : [];
       poolComponents = Array.isArray(data.pools) ? data.pools : [];
@@ -111,6 +127,8 @@
       // Run a global dedupe pass after restore
       dedupeAllEntities();
       renderLoop();
+      // Refresh Level menu states (e.g., disable '+ Stairs' if present)
+      try { if (typeof window.updateLevelMenuStates === 'function') window.updateLevelMenuStates(); } catch(_u){}
     } catch (e) {
       console.error('Restore failed', e);
     }
@@ -181,7 +199,8 @@
       // Reset scene data
       allRooms = [];
       wallStrips = [];
-      stairsComponent = null;
+  stairsComponent = null;
+  try { window.stairsComponents = []; } catch(_rs){}
       pergolaComponents = [];
       garageComponents = [];
       poolComponents = [];
@@ -218,8 +237,10 @@
         if (el) el.style.display = 'none';
       });
 
-      // Re-render and notify
-      renderLoop && renderLoop();
+  // Re-render and notify
+  renderLoop && renderLoop();
+  // Refresh Level menu states (re-enable '+ Stairs')
+  try { if (typeof window.updateLevelMenuStates === 'function') window.updateLevelMenuStates(); } catch(_u2){}
       updateStatus && updateStatus('Reset project');
     } catch (e) {
       console.warn('resetAll failed', e);
@@ -245,7 +266,9 @@
       }
 
       allRooms = dedupeById(allRooms);
-      pergolaComponents = dedupeById(pergolaComponents);
+  // Stairs (multi) then others
+  try { if (Array.isArray(window.stairsComponents)) window.stairsComponents = dedupeById(window.stairsComponents); } catch(_ddS){}
+  pergolaComponents = dedupeById(pergolaComponents);
       garageComponents = dedupeById(garageComponents);
       poolComponents = dedupeById(poolComponents);
       roofComponents = dedupeById(roofComponents);
