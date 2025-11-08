@@ -46,28 +46,7 @@
   #plan2d-canvas:focus, #plan2d-overlay:focus { outline: none !important; }
   #plan2d-canvas, #plan2d-overlay { -webkit-tap-highlight-color: transparent; }
 
-  /* Match 2D Plan toolbar buttons to main navigation secondary button style */
-  #plan2d-content button.secondary {
-    background: #ffffff !important;
-    color: #000000 !important;
-    border: 1px solid #ccc !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    font-weight: 400 !important;
-  }
-  /* Hover state matches dropdown rollover: brand blue background, white text */
-  #plan2d-content button.secondary:hover {
-    background-color: #007acc !important;
-    color: #ffffff !important;
-    border-color: #007acc !important;
-    box-shadow: 0 3px 12px rgba(0,122,204,0.35) !important;
-  }
-  /* Active tool state: same as hover to signal selection */
-  #plan2d-content button.secondary.active {
-    background-color: #007acc !important;
-    color: #ffffff !important;
-    border-color: #007acc !important;
-    box-shadow: 0 0 0 3px rgba(0,122,204,0.18) !important;
-  }
+  /* Removed specialized 2D secondary overrides to unify with global styles */
   .dropdown-button .caret svg path { stroke: #333; }
   .dropdown.open .dropdown-button { border-color: #007acc; box-shadow: 0 0 0 3px rgba(0,122,204,0.12); }
 
@@ -247,7 +226,8 @@
     min-height: unset; /* remove forced 44px */
     display: inline-flex;
     align-items: center;
-    padding: 10px 16px; /* mirror global button padding */
+    justify-content: center; /* center text/content horizontally */
+    padding: 10px 14px; /* unified horizontal padding (same left/right) */
   }
 
   /* Opening controls row (moved from inline styles) */
@@ -282,7 +262,8 @@
     min-height: unset;
     display: inline-flex;
     align-items: center;
-    padding: 10px 16px;
+    justify-content: center; /* center text/content horizontally */
+    padding: 10px 14px; /* unified horizontal padding */
   }
   /* Ensure each toolbar child expands to fill its grid cell */
   #plan2d-toolbar-right > * { min-width: 0; }
@@ -293,9 +274,9 @@
   #plan2d-wall-group {
     display: flex; flex-direction: column; align-items: center; gap: 4px;
   }
-  #plan2d-wall-group #plan2d-scale { font-size: 11px; color: #ffffff; line-height: 1; }
-  /* Force scale label container text ("Scale:" and value) to white */
-  #plan2d-wall-group > div { color: #ffffff; }
+  #plan2d-wall-group #plan2d-scale { font-size: 10px; color: #ffffff; line-height: 1; }
+  /* Force scale label container text ("Scale:" and value) to white and set unified 10px size */
+  #plan2d-wall-group > div { color: #ffffff; font-size: 10px; line-height: 1; }
 
   /* Hide the inline file input used by Import JSON trigger */
   #plan2d-import-file { display: none; }
