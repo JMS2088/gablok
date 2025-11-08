@@ -911,10 +911,12 @@
   }
   if (typeof window.createInitialRoom === 'undefined') {
     window.createInitialRoom = function(){
-      if(Array.isArray(allRooms)&&allRooms.length>0) return;
-      var r=createRoom(0,0,0); allRooms.push(r); selectedRoomId=r.id;
-      // Immediately reflect in 2D
-      try { if (typeof populatePlan2DFromDesign==='function') { populatePlan2DFromDesign(); if (window.__plan2d && __plan2d.active && typeof plan2dDraw==='function') plan2dDraw(); } } catch(_e2d) {}
+      // Intentionally left as a no-op. Previous behavior auto-created an initial room
+      // on startup when no drafts existed. Requirement update: opening the app or
+      // switching to the first floor with no data must show an entirely blank 3D and 2D state.
+      // Keeping the function defined avoids reference errors where startup code
+      // still guards and invokes createInitialRoom().
+      return; // no auto seeding
     };
   }
   if (typeof window.addNewRoom === 'undefined') {

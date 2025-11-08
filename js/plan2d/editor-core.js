@@ -44,21 +44,32 @@
   window.savePlan2dDraftsToStorage = window.savePlan2dDraftsToStorage || savePlan2dDraftsToStorage;
 
   function plan2dSaveDraft(floor){
-    try { if(typeof floor!=='number') floor=0; window.__plan2dDrafts[floor] = JSON.parse(JSON.stringify(__plan2d.elements)); savePlan2dDraftsToStorage(); } catch(e){}
+    try {
+      if(typeof floor!=='number') floor=0;
+      var payload = {
+        elements: JSON.parse(JSON.stringify(__plan2d.elements||[])),
+        guidesV: JSON.parse(JSON.stringify(__plan2d.guidesV||[])),
+        guidesH: JSON.parse(JSON.stringify(__plan2d.guidesH||[]))
+      };
+      window.__plan2dDrafts[floor] = payload;
+      savePlan2dDraftsToStorage();
+    } catch(e){}
   }
   function plan2dLoadDraft(floor){
     try {
       if(typeof floor!=='number') floor=0;
-      var arr = window.__plan2dDrafts[floor];
-      if(Array.isArray(arr)){
-        // Deep clone the stored draft
-        __plan2d.elements = JSON.parse(JSON.stringify(arr));
-        plan2dSetSelection(-1);
+      var data = window.__plan2dDrafts[floor];
+      if(data && typeof data==='object'){
+        __plan2d.elements = JSON.parse(JSON.stringify(data.elements||[]));
+        __plan2d.guidesV = JSON.parse(JSON.stringify(data.guidesV||[]));
+        __plan2d.guidesH = JSON.parse(JSON.stringify(data.guidesH||[]));
       } else {
-        // Explicitly clear elements when no draft exists for this floor so previous floor's walls don't leak
         __plan2d.elements = [];
-        plan2dSetSelection(-1);
+        __plan2d.guidesV = [];
+        __plan2d.guidesH = [];
       }
+      __plan2d.selectedGuide=null; __plan2d.dragGuide=null;
+      plan2dSetSelection(-1);
     } catch(e){ /* non-fatal */ }
   }
   window.plan2dSaveDraft = window.plan2dSaveDraft || plan2dSaveDraft;
@@ -229,10 +240,49 @@
     };
     window.addEventListener('resize', window.__plan2dResize);
 
+    // Allow pulling new guides from rulers
+    try {
+      var rt=document.getElementById('plan2d-ruler-top');
+      var rl=document.getElementById('plan2d-ruler-left');
+      if(rt){ rt.addEventListener('mousedown', function(ev){ if(!__plan2d.active) return; if(__plan2d.zoomLocked) return; try{
+          var crect=c.getBoundingClientRect();
+          var cx=(ev.clientX-crect.left)*(c.width/crect.width);
+          // Use canvas mid-height for world mapping (x only matters)
+          var cy=(c.height||0)/2;
+          var wx = screenToWorld2D(cx, cy).x;
+          var idx = (__plan2d.guidesV||(__plan2d.guidesV=[])).push(plan2dSnap(wx)) - 1;
+          __plan2d.selectedGuide = { dir:'v', index: idx };
+          __plan2d.dragGuide = { dir:'v', index: idx, value: __plan2d.guidesV[idx], startScreen:{x:cx,y:cy}, origValue: __plan2d.guidesV[idx] };
+          plan2dDraw();
+        }catch(_rt){} }); }
+      if(rl){ rl.addEventListener('mousedown', function(ev){ if(!__plan2d.active) return; if(__plan2d.zoomLocked) return; try{
+          var crect=c.getBoundingClientRect();
+          var cy=(ev.clientY-crect.top)*(c.height/crect.height);
+          var cx=(c.width||0)/2;
+          var wy = screenToWorld2D(cx, cy).y;
+          var idxH = (__plan2d.guidesH||(__plan2d.guidesH=[])).push(plan2dSnap(wy)) - 1;
+          __plan2d.selectedGuide = { dir:'h', index: idxH };
+          __plan2d.dragGuide = { dir:'h', index: idxH, value: __plan2d.guidesH[idxH], startScreen:{x:cx,y:cy}, origValue: __plan2d.guidesH[idxH] };
+          plan2dDraw();
+        }catch(_rl){} }); }
+    } catch(_bindRulers){}
+
     c.addEventListener('mousedown', function(ev){ if(!__plan2d.active) return; 
       // Lock interactions during initial eased zoom to prevent flashes/jumps
       if(__plan2d.zoomLocked){ ev.preventDefault(); ev.stopPropagation(); return; }
       var rect=c.getBoundingClientRect(); var cx=(ev.clientX-rect.left)*(c.width/rect.width); var cy=(ev.clientY-rect.top)*(c.height/rect.height); var p=screenToWorld2D(cx,cy); __plan2d.mouseDownPosPlan=p; 
+      // Guide selection / drag start (always available regardless of tool)
+      try {
+        var hitGuide = (typeof plan2dHitGuideAtScreen==='function') ? plan2dHitGuideAtScreen(cx, cy) : null;
+        if(hitGuide){
+          __plan2d.selectedGuide = { dir: hitGuide.dir, index: hitGuide.index };
+          // Begin dragging existing guide
+          var gv = (hitGuide.dir==='v'? __plan2d.guidesV[hitGuide.index] : __plan2d.guidesH[hitGuide.index]);
+          __plan2d.dragGuide = { dir: hitGuide.dir, index: hitGuide.index, value: gv, startScreen:{x:cx,y:cy}, origValue: gv };
+          plan2dDraw();
+          return; // don't start other interactions
+        }
+      }catch(_gsel){}
       // Spacebar panning: if space held, start panning regardless of tool and do not modify drawing state
       if(__plan2d.spacePanActive){ if(!__plan2d.zoomLocked){ __plan2d.panning={ mx:cx, my:cy, panX0:__plan2d.panX||0, panY0:__plan2d.panY||0, scale: __plan2d.scale||50 }; plan2dDraw(); } return; }
       if(__plan2d.tool==='erase'){ plan2dEraseAt(p); return; }
@@ -295,6 +345,29 @@
       __plan2d.start=p; __plan2d.last=p; plan2dDraw(); });
 
     c.addEventListener('mousemove', function(ev){ if(!__plan2d.active) return; if(__plan2d.zoomLocked){ return; } var rect=c.getBoundingClientRect(); var cx=(ev.clientX-rect.left)*(c.width/rect.width); var cy=(ev.clientY-rect.top)*(c.height/rect.height); __plan2d.mouse={x:cx,y:cy}; var p=screenToWorld2D(cx,cy);
+      // Dragging a guide
+      if(__plan2d.dragGuide){
+        try {
+          if(__plan2d.dragGuide.dir==='v'){
+            // Convert screen x to world x
+            var wx = screenToWorld2D(cx, cy).x; // only x matters
+            // Optional snap to nearby guides (excluding itself) for stability
+            var snapTol = 0.02; var closest = null; var guides = __plan2d.guidesV||[];
+            for(var i=0;i<guides.length;i++){ if(i===__plan2d.dragGuide.index) continue; var d=Math.abs(guides[i]-wx); if(d<snapTol && (closest==null || d<closest.d)){ closest={v:guides[i],d:d}; } }
+            if(closest) wx = closest.v;
+            __plan2d.dragGuide.value = plan2dSnap(wx);
+            __plan2d.guidesV[__plan2d.dragGuide.index] = __plan2d.dragGuide.value;
+          } else {
+            var wy = screenToWorld2D(cx, cy).y; var snapTolH = 0.02; var closestH = null; var gH = __plan2d.guidesH||[];
+            for(var j=0;j<gH.length;j++){ if(j===__plan2d.dragGuide.index) continue; var d2=Math.abs(gH[j]-wy); if(d2<snapTolH && (closestH==null || d2<closestH.d)){ closestH={v:gH[j],d:d2}; } }
+            if(closestH) wy = closestH.v;
+            __plan2d.dragGuide.value = plan2dSnap(wy);
+            __plan2d.guidesH[__plan2d.dragGuide.index] = __plan2d.dragGuide.value;
+          }
+          plan2dDraw();
+        }catch(_gdrag){}
+        return;
+      }
       // Panning when dragging on empty space with Select tool
       if(__plan2d.panning){ var s=__plan2d.panning.scale||(__plan2d.scale||50); var dx=cx-__plan2d.panning.mx; var dy=cy-__plan2d.panning.my; __plan2d.panX = (__plan2d.panning.panX0||0) + dx/Math.max(1e-6,s); __plan2d.panY = (__plan2d.panning.panY0||0) - dy/Math.max(1e-6,s); plan2dDraw(); return; }
       // Dragging a wall endpoint
@@ -377,12 +450,30 @@
       return;
     });
 
+    // Window-level mousemove to continue guide dragging even when cursor is over rulers or outside canvas
+    if(!window.__plan2dMousemove){ window.__plan2dMousemove = function(ev){ if(!__plan2d.active) return; if(!__plan2d.dragGuide) return; try{
+        var crect=c.getBoundingClientRect();
+        var cx=(ev.clientX-crect.left)*(c.width/crect.width);
+        var cy=(ev.clientY-crect.top)*(c.height/crect.height);
+        if(__plan2d.dragGuide.dir==='v'){
+          var wx = screenToWorld2D(cx, cy).x; __plan2d.dragGuide.value = plan2dSnap(wx); __plan2d.guidesV[__plan2d.dragGuide.index] = __plan2d.dragGuide.value;
+        } else {
+          var wy = screenToWorld2D(cx, cy).y; __plan2d.dragGuide.value = plan2dSnap(wy); __plan2d.guidesH[__plan2d.dragGuide.index] = __plan2d.dragGuide.value;
+        }
+        plan2dDraw();
+      }catch(_wm){} };
+      window.addEventListener('mousemove', window.__plan2dMousemove, true);
+    }
+
     // Finish current wall chain with double-click for a predictable UX
     c.addEventListener('dblclick', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.zoomLocked) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; plan2dDraw(); } }catch(_e){} });
   // Also allow right-click to end the chain without adding a point
   c.addEventListener('contextmenu', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.zoomLocked) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ ev.preventDefault(); __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; plan2dDraw(); } }catch(_e){} });
 
   window.addEventListener('mouseup', function(){ if(!__plan2d.active) return; 
+    if(__plan2d.dragGuide){
+      try{ plan2dEdited(); }catch(_gdone){}
+      __plan2d.dragGuide=null; plan2dDraw(); return; }
     if(__plan2d.panning){ __plan2d.panning=null; plan2dDraw(); return; }
     // Finish wall endpoint drag
     if(__plan2d.dragWall){
@@ -401,7 +492,20 @@
     // Toggle performance HUD with 'P'
     if(ev.key==='p' || ev.key==='P'){ __plan2d.perfHUD = !__plan2d.perfHUD; try{ plan2dDraw(); }catch(_){} ev.preventDefault(); ev.stopPropagation(); return; }
     if(__plan2d.tool==='wall' && __plan2d.chainActive){ if(ev.key==='Enter'){ plan2dFinalizeChain(); ev.preventDefault(); ev.stopPropagation(); return; } if(ev.key==='Escape'){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return; } }
-    if(ev.key==='Delete' || ev.key==='Backspace'){ if(__plan2d.selectedIndex>=0){ plan2dEraseElementAt(__plan2d.selectedIndex); plan2dSetSelection(-1); plan2dDraw(); plan2dEdited(); } ev.preventDefault(); ev.stopPropagation(); return; }
+    if(ev.key==='Delete' || ev.key==='Backspace'){ 
+      // Delete selected guide first if any
+      if(__plan2d.selectedGuide){
+        try {
+          if(__plan2d.selectedGuide.dir==='v'){
+            if(Array.isArray(__plan2d.guidesV) && __plan2d.selectedGuide.index>=0 && __plan2d.selectedGuide.index<__plan2d.guidesV.length){ __plan2d.guidesV.splice(__plan2d.selectedGuide.index,1); }
+          } else if(__plan2d.selectedGuide.dir==='h'){
+            if(Array.isArray(__plan2d.guidesH) && __plan2d.selectedGuide.index>=0 && __plan2d.selectedGuide.index<__plan2d.guidesH.length){ __plan2d.guidesH.splice(__plan2d.selectedGuide.index,1); }
+          }
+        }catch(_gdel){}
+        __plan2d.selectedGuide=null; __plan2d.dragGuide=null; plan2dDraw(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return;
+      }
+      if(__plan2d.selectedIndex>=0){ plan2dEraseElementAt(__plan2d.selectedIndex); plan2dSetSelection(-1); plan2dDraw(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return; }
+    }
   }; document.addEventListener('keydown', window.__plan2dKeydown, true); }
   if(!window.__plan2dKeyup){ window.__plan2dKeyup=function(ev){ if(!__plan2d.active) return; if(ev.code==='Space'){ __plan2d.spacePanActive=false; if(__plan2d.panning){ /* end current panning gracefully */ __plan2d.panning=null; } try{ plan2dCursor && plan2dCursor(); }catch(_){} ev.preventDefault(); ev.stopPropagation(); } }; document.addEventListener('keyup', window.__plan2dKeyup, true); }
   }
