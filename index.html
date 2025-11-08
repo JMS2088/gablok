@@ -569,11 +569,14 @@
 // Render mode toggle for free-standing walls: Lines (default) vs Solid (300mm)
 document.addEventListener('DOMContentLoaded', () => {
 	try {
-		if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'solid';
+		// Ensure initial mode defaults to 'line' (outline) unless explicitly restored
+		if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'line';
 		var btn = document.getElementById('btn-render-walls');
 		function refreshBtn() {
 			if (!btn) return;
 			btn.textContent = (window.__wallRenderMode === 'solid') ? 'Render: Solid' : 'Render: Lines';
+			// Provide a visual pressed/active style when solid mode is enabled
+			if (window.__wallRenderMode === 'solid') btn.classList.add('active'); else btn.classList.remove('active');
 		}
 		function setMode(mode){
 			try {
@@ -592,6 +595,8 @@ document.addEventListener('DOMContentLoaded', () => {
 				var next = (window.__wallRenderMode === 'solid') ? 'line' : 'solid';
 				setMode(next);
 			});
+			// If the engine already set a default (line), reflect it; otherwise enforce line
+			if (window.__wallRenderMode !== 'solid' && window.__wallRenderMode !== 'line') window.__wallRenderMode = 'line';
 			refreshBtn();
 		}
 	} catch(_eR) {}

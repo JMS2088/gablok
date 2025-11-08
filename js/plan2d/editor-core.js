@@ -116,6 +116,67 @@
   function plan2dFitViewToContent(marginPx){ try{ var c=document.getElementById('plan2d-canvas'); if(!c) return false; var b=plan2dComputeBounds(); if(!b) return false; var dpr=window.devicePixelRatio||1; var W=c.width,H=c.height; var contentW=Math.max(0.01,b.maxX-b.minX); var contentH=Math.max(0.01,b.maxY-b.minY); var margin=Math.max(0,(marginPx||40)*dpr); var sX=(W-2*margin)/contentW; var sY=(H-2*margin)/contentH; var sNew=Math.max(10,Math.min(800,Math.min(sX,sY))); __plan2d.scale=sNew; var cx=(b.minX+b.maxX)*0.5; var cy=(b.minY+b.maxY)*0.5; __plan2d.panX=-cx; __plan2d.panY=-cy; plan2dDraw(); return true; }catch(e){ return false; } }
   window.plan2dFitViewToContent = window.plan2dFitViewToContent || plan2dFitViewToContent;
 
+  // Animated initial fit (eased zoom) -------------------------------------
+  // Provides a smooth eased transition when the 2D modal is first opened instead of a jarring jump.
+  // Only runs once per modal open; subsequent population retries may still call the instant fit if needed.
+  function plan2dAnimateInitialFit(marginPx, opts){
+    try{
+      if(!__plan2d.active) return false;
+      if(__plan2d.initialZoomDone){ return plan2dFitViewToContent(marginPx); }
+      var c=document.getElementById('plan2d-canvas'); if(!c) return false;
+      var b=plan2dComputeBounds(); if(!b){ return plan2dFitViewToContent(marginPx); }
+      var dpr=window.devicePixelRatio||1; var W=c.width,H=c.height; if(!W||!H) return false;
+      var contentW=Math.max(0.01,b.maxX-b.minX); var contentH=Math.max(0.01,b.maxY-b.minY);
+      var margin=Math.max(0,(marginPx||40)*dpr);
+      var sX=(W-2*margin)/contentW; var sY=(H-2*margin)/contentH; var targetScale=Math.max(10,Math.min(800,Math.min(sX,sY)));
+      var cx=(b.minX+b.maxX)*0.5; var cy=(b.minY+b.maxY)*0.5; var targetPanX=-cx; var targetPanY=-cy;
+      var duration = (opts && opts.durationMs) ? opts.durationMs : 600; // ms
+      var easeName = (opts && opts.easing) || 'easeOutCubic';
+      // Starting values: either current scale (if already near) or a gentle under-zoom to highlight motion.
+      var startScale = __plan2d.scale || 50;
+      // If current scale is very different, clamp start to 60% of target for a nicer motion; else keep as-is.
+      if(startScale > targetScale * 0.95 || startScale < targetScale * 0.4){ startScale = targetScale * 0.6; }
+      var startPanX = __plan2d.panX || 0; var startPanY = __plan2d.panY || 0;
+      // Easing functions (t in [0,1])
+      var easings = {
+        easeOutCubic: function(t){ return 1 - Math.pow(1 - t, 3); },
+        easeInOutQuad: function(t){ return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2; }
+      };
+      var ease = easings[easeName] || easings.easeOutCubic;
+      // Lock interactive zoom/pan during animation to avoid jumping.
+      __plan2d.zoomLocked = true;
+      var anim = { start: performance.now(), duration: duration, canceled:false };
+      __plan2d.__initialAnim = anim;
+      var reveal = !!(opts && opts.revealCanvas);
+      var revealed=false;
+      function step(){
+        if(anim.canceled){ return; }
+        // Abort if user starts drawing or panning mid-animation (respect user intent)
+        if(__plan2d.userDrawingActive || __plan2d.panning){ anim.canceled=true; __plan2d.zoomLocked=false; plan2dFitViewToContent(marginPx); __plan2d.initialZoomDone=true; return; }
+        var now = performance.now(); var t = (now - anim.start)/anim.duration; if(t >= 1){ t = 1; }
+        var k = ease(t);
+        __plan2d.scale = startScale + (targetScale - startScale) * k;
+        __plan2d.panX = startPanX + (targetPanX - startPanX) * k;
+        __plan2d.panY = startPanY + (targetPanY - startPanY) * k;
+        if(reveal && !revealed){
+          try{
+            var ov=document.getElementById('plan2d-overlay');
+            var l2=document.getElementById('labels-2d');
+            c.style.visibility='visible'; if(ov) ov.style.visibility='visible'; if(l2) l2.style.visibility='visible';
+          }catch(_rv){}
+          revealed=true;
+        }
+        // Update scale label live for feedback
+        try{ var scl=document.getElementById('plan2d-scale'); if(scl){ scl.textContent='1:'+Math.round(100*(100/__plan2d.scale))/100; } }catch(_sl){}
+        plan2dDraw();
+        if(t < 1){ requestAnimationFrame(step); } else { __plan2d.zoomLocked=false; __plan2d.initialZoomDone=true; }
+      }
+      requestAnimationFrame(step);
+      return true;
+    }catch(e){ return false; }
+  }
+  window.plan2dAnimateInitialFit = window.plan2dAnimateInitialFit || plan2dAnimateInitialFit;
+
   // Flip vertical axis (mirror) -------------------------------------------
   function plan2dFlipVertical(){ try{ var els=__plan2d.elements||[]; for(var i=0;i<els.length;i++){ var e=els[i]; if(!e) continue; if(e.type==='wall'){ e.y0=-(e.y0||0); e.y1=-(e.y1||0); } else if(e.type==='window' || e.type==='door'){ if(typeof e.host!=='number'){ e.y0=-(e.y0||0); e.y1=-(e.y1||0); } } } __plan2d.yFromWorldZSign = (__plan2d.yFromWorldZSign===1? -1:1); plan2dSetSelection(-1); __plan2d.dragWindow=__plan2d.dragDoor=__plan2d.dragDoorWhole=__plan2d.dragWall=null; __plan2d.start=null; __plan2d.last=null; plan2dDraw(); plan2dEdited(); }catch(e){} }
   window.plan2dFlipVertical = window.plan2dFlipVertical || plan2dFlipVertical;
@@ -150,9 +211,12 @@
     };
     window.addEventListener('resize', window.__plan2dResize);
 
-    c.addEventListener('mousedown', function(ev){ if(!__plan2d.active) return; var rect=c.getBoundingClientRect(); var cx=(ev.clientX-rect.left)*(c.width/rect.width); var cy=(ev.clientY-rect.top)*(c.height/rect.height); var p=screenToWorld2D(cx,cy); __plan2d.mouseDownPosPlan=p; 
+    c.addEventListener('mousedown', function(ev){ if(!__plan2d.active) return; 
+      // Lock interactions during initial eased zoom to prevent flashes/jumps
+      if(__plan2d.zoomLocked){ ev.preventDefault(); ev.stopPropagation(); return; }
+      var rect=c.getBoundingClientRect(); var cx=(ev.clientX-rect.left)*(c.width/rect.width); var cy=(ev.clientY-rect.top)*(c.height/rect.height); var p=screenToWorld2D(cx,cy); __plan2d.mouseDownPosPlan=p; 
       // Spacebar panning: if space held, start panning regardless of tool and do not modify drawing state
-      if(__plan2d.spacePanActive){ __plan2d.panning={ mx:cx, my:cy, panX0:__plan2d.panX||0, panY0:__plan2d.panY||0, scale: __plan2d.scale||50 }; plan2dDraw(); return; }
+      if(__plan2d.spacePanActive){ if(!__plan2d.zoomLocked){ __plan2d.panning={ mx:cx, my:cy, panX0:__plan2d.panX||0, panY0:__plan2d.panY||0, scale: __plan2d.scale||50 }; plan2dDraw(); } return; }
       if(__plan2d.tool==='erase'){ plan2dEraseAt(p); return; }
       // Wall endpoint drag start (Select tool only)
       if(__plan2d.tool==='select'){
@@ -212,7 +276,7 @@
       // selection gesture (fallback)
       __plan2d.start=p; __plan2d.last=p; plan2dDraw(); });
 
-    c.addEventListener('mousemove', function(ev){ if(!__plan2d.active) return; var rect=c.getBoundingClientRect(); var cx=(ev.clientX-rect.left)*(c.width/rect.width); var cy=(ev.clientY-rect.top)*(c.height/rect.height); __plan2d.mouse={x:cx,y:cy}; var p=screenToWorld2D(cx,cy);
+    c.addEventListener('mousemove', function(ev){ if(!__plan2d.active) return; if(__plan2d.zoomLocked){ return; } var rect=c.getBoundingClientRect(); var cx=(ev.clientX-rect.left)*(c.width/rect.width); var cy=(ev.clientY-rect.top)*(c.height/rect.height); __plan2d.mouse={x:cx,y:cy}; var p=screenToWorld2D(cx,cy);
       // Panning when dragging on empty space with Select tool
       if(__plan2d.panning){ var s=__plan2d.panning.scale||(__plan2d.scale||50); var dx=cx-__plan2d.panning.mx; var dy=cy-__plan2d.panning.my; __plan2d.panX = (__plan2d.panning.panX0||0) + dx/Math.max(1e-6,s); __plan2d.panY = (__plan2d.panning.panY0||0) - dy/Math.max(1e-6,s); plan2dDraw(); return; }
       // Dragging a wall endpoint
@@ -269,13 +333,36 @@
       }
       if(__plan2d.tool==='erase'){ plan2dHoverErase(p); return; }
       if(__plan2d.start){ __plan2d.last=p; plan2dDraw(); return; }
-      plan2dDraw();
+      // For wall chain drawing and opening previews, redraw continuously
+      if((__plan2d.tool==='wall' && __plan2d.chainActive) || __plan2d.tool==='window' || __plan2d.tool==='door'){ plan2dDraw(); return; }
+      // Select tool hover feedback: recompute hover targets, draw only on change to avoid flicker
+      if(__plan2d.tool==='select'){
+        try{
+          var prevDoor = __plan2d.hoverDoorIndex, prevWindow = __plan2d.hoverWindowIndex, prevSeg = __plan2d.hoverSubsegment, prevEnd = __plan2d.hoverWallEnd && __plan2d.hoverWallEnd.index;
+          var hitDoor = (typeof plan2dHitDoorSegment==='function') ? plan2dHitDoorSegment(p, 0.12) : null;
+          __plan2d.hoverDoorIndex = hitDoor && typeof hitDoor.index==='number' ? hitDoor.index : -1;
+          var hitWin = (typeof plan2dHitWindowSegment==='function') ? plan2dHitWindowSegment(p, 0.15) : null;
+          __plan2d.hoverWindowIndex = hitWin && typeof hitWin.index==='number' ? hitWin.index : -1;
+          // Only compute wall subsegment if not hovering a door/window to reduce visual noise
+          __plan2d.hoverSubsegment = null;
+          if(__plan2d.hoverDoorIndex<0 && __plan2d.hoverWindowIndex<0){
+            __plan2d.hoverSubsegment = (typeof plan2dHitWallSubsegment==='function') ? plan2dHitWallSubsegment(p, 0.15) : null;
+          }
+          // Endpoint affordance
+          __plan2d.hoverWallEnd = (typeof plan2dHitWallEndpoint==='function') ? plan2dHitWallEndpoint(p, 0.30) : null;
+          var changed = (prevDoor !== __plan2d.hoverDoorIndex) || (prevWindow !== __plan2d.hoverWindowIndex) || (prevSeg !== __plan2d.hoverSubsegment) || ((prevEnd||-2) !== (__plan2d.hoverWallEnd && __plan2d.hoverWallEnd.index));
+          if(changed){ plan2dDraw(); }
+          return;
+        }catch(_hv){ /* fallback: no redraw to avoid flicker */ return; }
+      }
+      // Default: no-op on idle mouse move to avoid unnecessary redraws that can cause flashing
+      return;
     });
 
     // Finish current wall chain with double-click for a predictable UX
-    c.addEventListener('dblclick', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; plan2dDraw(); } }catch(_e){} });
+    c.addEventListener('dblclick', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.zoomLocked) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; plan2dDraw(); } }catch(_e){} });
   // Also allow right-click to end the chain without adding a point
-  c.addEventListener('contextmenu', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ ev.preventDefault(); __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; plan2dDraw(); } }catch(_e){} });
+  c.addEventListener('contextmenu', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.zoomLocked) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ ev.preventDefault(); __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; plan2dDraw(); } }catch(_e){} });
 
   window.addEventListener('mouseup', function(){ if(!__plan2d.active) return; 
     if(__plan2d.panning){ __plan2d.panning=null; plan2dDraw(); return; }
@@ -329,10 +416,29 @@
     try{ loadPlan2dDraftsFromStorage(); plan2dLoadDraft(typeof window.currentFloor==='number'? window.currentFloor:0); }catch(e){}
     // Always sync walls from 3D design for accuracy (simplified behavior)
     try{ if(typeof window.populatePlan2DFromDesign==='function'){ window.populatePlan2DFromDesign(); } }catch(_pop){}
-    // Initial fit (non-fatal)
-    try{ plan2dFitViewToContent(40); }catch(e){}
-  // First draw
-  plan2dDraw();
+    // Hide canvases until we have content + animation starts to avoid initial single-room flash
+    try{
+      var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var l2=document.getElementById('labels-2d');
+      if(c){ c.style.visibility='hidden'; }
+      if(ov){ ov.style.visibility='hidden'; }
+      if(l2){ l2.style.visibility='hidden'; }
+    }catch(_vh){}
+    // Defer initial animation until elements exist or fallback after timeout
+    try{
+      var attempts=0; var maxAttempts=8; // ~8 * 80ms = ~640ms grace
+      (function waitForContent(){
+        try{
+          var have = Array.isArray(__plan2d.elements) && __plan2d.elements.length>0;
+          if(have || attempts>=maxAttempts){
+            // Run animated fit (reveal canvases in first frame). If bounds still missing fallback to instant & reveal.
+            var ok = plan2dAnimateInitialFit(40,{revealCanvas:true});
+            if(!ok){ plan2dFitViewToContent(40); try{ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var l2=document.getElementById('labels-2d'); if(c) c.style.visibility='visible'; if(ov) ov.style.visibility='visible'; if(l2) l2.style.visibility='visible'; }catch(_rvI){} }
+            return;
+          }
+          attempts++; setTimeout(waitForContent, 80);
+        }catch(_wf){ attempts++; setTimeout(waitForContent, 80); }
+      })();
+    }catch(_def){}
     // Refresh scale label
     try{ var scl=document.getElementById('plan2d-scale'); if(scl) scl.textContent='1:'+Math.round(100*(__plan2d.scale? (100/__plan2d.scale):1))/100; }catch(_s){}
     // Wire close button if not already done
@@ -341,8 +447,8 @@
     try{ if(window.updateStatus) updateStatus('2D editor opened'); }catch(e){}
   // Trigger multiple resize passes: once now and once on next frame to guarantee correct CSS->canvas sizing
   try{ if(typeof window.__plan2dResize==='function') window.__plan2dResize(); requestAnimationFrame(function(){ try{ window.__plan2dResize && window.__plan2dResize(); }catch(_r2){} }); }catch(_r){}
-    // Force redraw one more time so rulers align after resize
-    try{ plan2dDraw(); }catch(_rd){}
+  // Force a sizing pass (draw will occur after animation reveal)
+  // (No explicit plan2dDraw here to avoid empty flash)
     // Populate retries after boot settles: if no elements yet, try again and fit (multi-pass)
     try{
       var retryDelays = [120, 320, 800];
@@ -355,7 +461,10 @@
             if (typeof window.populatePlan2DFromDesign==='function') { window.populatePlan2DFromDesign(); }
             var now = Array.isArray(__plan2d.elements) ? __plan2d.elements.length : 0;
             if ((had===0 && now>0)) {
-              try{ if(!__plan2d.userDrawingActive){ plan2dFitViewToContent && plan2dFitViewToContent(40); } }catch(_f){}
+              try{ if(!__plan2d.userDrawingActive){
+                // If initial zoom already done we use instant fit; else animate.
+                if(__plan2d.initialZoomDone){ plan2dFitViewToContent && plan2dFitViewToContent(40); } else { plan2dAnimateInitialFit && plan2dAnimateInitialFit(40); }
+              } }catch(_f){}
               try{ plan2dDraw && plan2dDraw(); }catch(_d){}
             } else if (now===0) {
               // Ensure tools are usable even with empty plan: default to Wall tool for convenience
@@ -372,7 +481,7 @@
           var had = Array.isArray(__plan2d.elements) ? __plan2d.elements.length : 0;
           if (typeof window.populatePlan2DFromDesign==='function') window.populatePlan2DFromDesign();
           var now = Array.isArray(__plan2d.elements) ? __plan2d.elements.length : 0;
-          if (now>0 && had===0){ try{ plan2dFitViewToContent && plan2dFitViewToContent(40); }catch(_f){} }
+          if (now>0 && had===0){ try{ if(__plan2d.initialZoomDone){ plan2dFitViewToContent && plan2dFitViewToContent(40); } else { plan2dAnimateInitialFit && plan2dAnimateInitialFit(40); } }catch(_f){} }
           try{ plan2dDraw && plan2dDraw(); }catch(_d){}
         }catch(_eFr){}
       };

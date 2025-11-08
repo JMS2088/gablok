@@ -26,6 +26,8 @@
     var c=document.getElementById('plan2d-canvas'); if(!c) return;
     c.addEventListener('wheel', function(ev){
       if(!__plan2d.active) return;
+      // Suppress wheel zoom during eased initial fit or any locked zoom animation
+      if(__plan2d.zoomLocked){ ev.preventDefault(); ev.stopPropagation(); return; }
       // Mouse-centered zoom: keep the world point under the cursor fixed while scaling
       var rect=c.getBoundingClientRect();
       var px=(ev.clientX-rect.left)*(c.width/rect.width);

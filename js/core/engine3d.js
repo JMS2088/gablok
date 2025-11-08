@@ -118,9 +118,9 @@
   // ---- Scene data ----
   if (typeof window.allRooms === 'undefined') window.allRooms = [];
   if (typeof window.wallStrips === 'undefined') window.wallStrips = [];
-  // Wall render mode: default to 'solid' so walls appear as solid strips (no mid-height keyline)
-  // Users can toggle to 'line' via the toolbar if desired.
-  if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'solid';
+  // Wall render mode: default to 'line' so initial view shows lightweight outlines.
+  // Users can toggle to 'solid' via the toolbar if they want filled wall solids.
+  if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'line';
   if (typeof window.__roomWallThickness === 'undefined') window.__roomWallThickness = 0.0;
   if (typeof window.__roomStripTag === 'undefined') window.__roomStripTag = '__fromRooms';
   // Corner code overlay (for diagnosing problem corners)
@@ -490,6 +490,7 @@
       window.__wallRenderMode = m;
       // When user presses Render (solid), enable corner codes so endpoints are labeled on screen
       if (m === 'solid') { window.__showCornerCodes = true; }
+      else { window.__showCornerCodes = false; }
       // Simplified: do not run 2D→3D applies here. Just rebuild from existing 3D state for ALL rooms/garages across floors.
       // This guarantees that pressing Render applies to ground and first floor together, without duplication or missed floors.
       if (m === 'solid') {
@@ -500,6 +501,8 @@
         if (typeof window.removeRoomPerimeterStrips === 'function') window.removeRoomPerimeterStrips();
       }
       if (typeof window.updateStatus === 'function') window.updateStatus('Walls: ' + (m==='solid' ? 'Solid 300mm' : 'Lines'));
+      // Force an immediate full render so mode change is visible even if nothing else changed this frame
+      try { window._needsFullRender = true; } catch(_eFlag) {}
       if (typeof window.renderLoop === 'function') window.renderLoop();
     } catch(_e) {}
   };
