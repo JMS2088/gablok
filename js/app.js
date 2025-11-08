@@ -58,10 +58,17 @@ function switchLevel(){
         if (typeof findObjectById === 'function' && selectedRoomId) {
           var obj = findObjectById(selectedRoomId);
           if (!obj || (typeof obj.level === 'number' && obj.level !== newFloor)) {
-            selectedRoomId = null;
+            if (typeof window.selectObject==='function') { window.selectObject(null, { noRender: true }); }
+            else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eM0) {} }
           }
         }
       } catch(_sel){ /* non-fatal */ }
+      // Keep selection consistent via unified helper (ensures measurement panel instant update)
+      try {
+        if (selectedRoomId && typeof window.selectObject === 'function') {
+          window.selectObject(selectedRoomId, { noRender: true });
+        }
+      } catch(_selH) {}
       renderLoop && renderLoop();
       updateStatus && updateStatus('Switched to ' + (currentFloor===0 ? 'Ground' : 'First') + ' Floor');
       // Keep render style consistent across floors: if solid mode is active, rebuild room perimeter strips
@@ -590,7 +597,9 @@ function commitFloorplanRooms(){
     allRooms.push(room); created++;
   }
   saveProjectSilently();
-  selectedRoomId = null;
+  // Clear selection using unified helper for immediate measurement panel refresh
+  if (typeof window.selectObject==='function') { window.selectObject(null, { noRender: true }); }
+  else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU) {} }
   renderLoop();
   updateStatus('Added ' + created + ' room(s) from floorplan');
   closeFloorplanModal();

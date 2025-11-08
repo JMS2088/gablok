@@ -224,8 +224,12 @@
             }
           } catch(_polyCapErr) {}
           mouse.down = true;
-          selectedRoomId = handle.roomId;
-          try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
+          if (typeof window.selectObject==='function') {
+            window.selectObject(handle.roomId, { noRender: true });
+          } else {
+            selectedRoomId = handle.roomId;
+            try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
+          }
           canvas.style.cursor = 'grabbing';
           updateStatus('Resizing...');
 
@@ -263,7 +267,9 @@
       var hitIdx = hitTestWallStrips(mouseX, mouseY);
       if (hitIdx !== -1) {
         selectedWallStripIndex = hitIdx;
-        selectedRoomId = null; // clear any object selection
+        // Clear object selection via unified helper so the measurements panel reflects wall mode instantly
+        if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
+        else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMw) {} }
         // Ensure measurements panel is visible for wall edits, too
         try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
         // Ensure keyboard events (Delete) reach us
@@ -832,7 +838,9 @@
         if (rpm && rpm.style.display === 'block') {
           hideRoomPalette();
         } else {
-          selectedRoomId = null;
+          // Use unified helper so measurements panel clears instantly
+          if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
+          else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMu) {} }
           selectedWallStripIndex = -1;
           updateStatus('Selection cleared');
         }
@@ -851,7 +859,8 @@
         if (roomIndex > -1 && allRooms.length > 1) {
           var room = allRooms[roomIndex];
           allRooms.splice(roomIndex, 1);
-          selectedRoomId = null;
+          if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
+          else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMs) {} }
           updateStatus(room.name + ' deleted');
           try { __log3d('Deleted room'); } catch(_l3){}
           return;
@@ -865,14 +874,16 @@
             var delS = scArrD[delIdx]; scArrD.splice(delIdx,1);
             try { window.stairsComponents = scArrD; } catch(_keep){}
             if (window.stairsComponent && window.stairsComponent.id === selectedRoomId){ window.stairsComponent = scArrD.length ? scArrD[scArrD.length-1] : null; }
-            selectedRoomId = null;
+            if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
+            else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMd1) {} }
             updateStatus((delS && delS.name ? delS.name : 'Stairs') + ' deleted');
             try { __log3d('Deleted stairs'); } catch(_l4){}
             try { if (typeof window.updateLevelMenuStates==='function') window.updateLevelMenuStates(); } catch(_u){}
             return;
           } else if (stairsComponent && stairsComponent.id === selectedRoomId) {
             stairsComponent = null;
-            selectedRoomId = null;
+            if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
+            else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMd2) {} }
             updateStatus('Stairs deleted');
             try { __log3d('Deleted stairs'); } catch(_l4){}
             try { if (typeof window.updateLevelMenuStates==='function') window.updateLevelMenuStates(); } catch(_u){}
@@ -891,7 +902,8 @@
         if (pergolaIndex > -1) {
           var pergola = pergolaComponents[pergolaIndex];
           pergolaComponents.splice(pergolaIndex, 1);
-          selectedRoomId = null;
+          if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
+          else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMp) {} }
           updateStatus(pergola.name + ' deleted');
           try { __log3d('Deleted pergola'); } catch(_l5){}
           return;
@@ -908,7 +920,8 @@
         if (balconyIndex > -1) {
           var balcony = balconyComponents[balconyIndex];
           balconyComponents.splice(balconyIndex, 1);
-          selectedRoomId = null;
+          if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
+          else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMb) {} }
           updateStatus(balcony.name + ' deleted');
           try { __log3d('Deleted balcony'); } catch(_l6){}
           return;
@@ -925,7 +938,8 @@
         if (garageIndex > -1) {
           var garage = garageComponents[garageIndex];
           garageComponents.splice(garageIndex, 1);
-          selectedRoomId = null;
+          if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
+          else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMg) {} }
           updateStatus(garage.name + ' deleted');
           try { __log3d('Deleted garage'); } catch(_l7){}
           return;

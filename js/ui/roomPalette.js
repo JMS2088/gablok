@@ -96,8 +96,10 @@
     if (!modal || !title) return;
     var room = findObjectById(roomId);
     if (!room || room.type === 'roof') return;
-    paletteOpenForId = roomId;
-    window.selectedRoomId = roomId;
+  paletteOpenForId = roomId;
+  // Use unified selection so Object Measurements reflects this room immediately
+  if (typeof window.selectObject==='function') { window.selectObject(roomId, { noRender: true }); }
+  else { window.selectedRoomId = roomId; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU) {} }
     title.textContent = room.name || 'Room';
     // Hide roof dropdown while open
     var dd = document.getElementById('roof-type-dropdown'); if (dd) dd.style.display = 'none';

@@ -117,11 +117,6 @@
             e.preventDefault();
             e.stopPropagation();
             try {
-              // Preserve selection
-              window.selectedRoomId = box.id;
-              // Ensure measurements panel stays visible on selection
-              try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
-              // If the item lives on a different floor, switch currentFloor directly (avoid switchLevel() which clears selection)
               var lvl = (typeof box.level === 'number' && isFinite(box.level)) ? box.level : 0;
               if (typeof window.currentFloor === 'number' && window.currentFloor !== lvl) {
                 window.currentFloor = lvl;
@@ -130,7 +125,9 @@
                   var btnText = document.getElementById('levelButtonText'); if (btnText) btnText.textContent = (lvl === 1 ? 'First Floor' : 'Ground Floor');
                 } catch(_ui) {}
               }
+              if (typeof window.selectObject==='function') window.selectObject(box.id, { noRender: true });
               if (typeof updateStatus==='function') updateStatus((box.name||'Item')+' selected');
+              // Trigger a render after immediate UI updates
               if (typeof renderLoop==='function') renderLoop();
             } catch(_) {}
           });
@@ -156,8 +153,7 @@
               if (!dragActive && (Math.abs(dx) > 3 || Math.abs(dy) > 3)){
                 // Start actual drag now
                 try {
-                  window.selectedRoomId = box.id;
-                  try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
+                  if (typeof window.selectObject==='function') window.selectObject(box.id, { noRender: true });
                   window.mouse.dragType = dragTypeFor(box);
                   window.mouse.dragInfo = { roomId: box.id, startX: cx, startY: cy, originalX: box.x, originalZ: box.z };
                   window.mouse.down = true;
@@ -182,8 +178,7 @@
               // If no drag occurred, treat as a tap selection
               if (!dragActive){
                 try {
-                  window.selectedRoomId = box.id;
-                  if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible();
+                  if (typeof window.selectObject==='function') window.selectObject(box.id, { noRender: true });
                   if (typeof updateStatus==='function') updateStatus((box.name||'Item')+' selected');
                   if (typeof renderLoop==='function') renderLoop();
                 } catch(_sel){}

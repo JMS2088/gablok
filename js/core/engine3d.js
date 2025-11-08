@@ -908,7 +908,10 @@
       var r=createRoom(camera.targetX,camera.targetZ,currentFloor||0);
       var spot=findFreeSpot(r); r.x=spot.x; r.z=spot.z;
       try { var s=applySnap({x:r.x,z:r.z,width:r.width,depth:r.depth,level:r.level,id:r.id,type:'room'}); r.x=s.x; r.z=s.z; } catch(_e) {}
-      allRooms.push(r); selectedRoomId=r.id; updateStatus('Added room'); _needsFullRender=true; startRender();
+      allRooms.push(r);
+      if (typeof window.selectObject==='function') { window.selectObject(r.id, { noRender: true }); }
+      else { selectedRoomId=r.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU) {} }
+      updateStatus('Added room'); _needsFullRender=true; startRender();
     };
   }
 
@@ -1684,6 +1687,22 @@
       }
     } catch(e) { /* non-fatal */ }
   };
+  // Unified selection helper: immediately refresh measurements & labels without waiting for next frame
+  if (typeof window.selectObject === 'undefined') {
+    window.selectObject = function selectObject(id, opts){
+      try {
+        if (id == null) { window.selectedRoomId = null; }
+        else { window.selectedRoomId = id; }
+        // Keep measurements panel visible and update instantly
+        try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_eV) {}
+        try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eM) {}
+        // Update labels right away so Edit/Rotate buttons react instantly
+        try { if (typeof updateLabels==='function') updateLabels(); } catch(_eL) {}
+        // Optionally skip render (caller may already schedule) via opts.noRender
+        if (!(opts && opts.noRender)) { try { if (typeof renderLoop==='function') renderLoop(); } catch(_eR) {} }
+      } catch(_eSel) { /* non-fatal */ }
+    };
+  }
   // Ensure measurements panel is shown (overrides any inline style from other UIs)
   if (typeof window.ensureMeasurementsVisible === 'undefined') {
     window.ensureMeasurementsVisible = function ensureMeasurementsVisible(){
@@ -2022,9 +2041,11 @@
     var stair={ id:id, name:'Stairs', x:s.x, z:s.z, width:w, depth:d, height:3.0, steps:19, type:'stairs', rotation:0, level:lvl };
     try { window.stairsComponents.push(stair); } catch(_push){}
     // Back-compat: point singleton reference to the most recent
-    window.stairsComponent = stair;
-    window.selectedRoomId = id; if(typeof updateStatus==='function') updateStatus('Added Stairs');
-    try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
+  window.stairsComponent = stair;
+  if (typeof window.selectObject==='function') { window.selectObject(id, { noRender: true }); }
+  else { window.selectedRoomId = id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMs) {} }
+  if(typeof updateStatus==='function') updateStatus('Added Stairs');
+  try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     try { focusCameraOnObject(stair); } catch(_e) {}
     // Refresh menus (now a no-op for stairs)
     try { if (typeof window.updateLevelMenuStates === 'function') window.updateLevelMenuStates(); } catch(_u2){}
@@ -2034,21 +2055,30 @@
   if (typeof window.addPergola === 'undefined') window.addPergola = function(){
     var lvl=0, w=3, d=3; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'pergola'});
     var p={ id:newId('pergola'), name:'Pergola', x:s.x, z:s.z, width:w, depth:d, height:2.2, totalHeight:2.2, legWidth:0.25, slatCount:8, slatWidth:0.12, level:lvl, type:'pergola', rotation:0 };
-  (window.pergolaComponents||[]).push(p); window.selectedRoomId=p.id; updateStatus('Added Pergola');
+  (window.pergolaComponents||[]).push(p);
+  if (typeof window.selectObject==='function') { window.selectObject(p.id, { noRender: true }); }
+  else { window.selectedRoomId=p.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMp) {} }
+  updateStatus('Added Pergola');
   try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     try { focusCameraOnObject(p); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   if (typeof window.addGarage === 'undefined') window.addGarage = function(){
     var lvl=0, w=3.2, d=5.5; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'garage'});
     var g={ id:newId('garage'), name:'Garage', x:s.x, z:s.z, width:w, depth:d, height:2.6, level:lvl, type:'garage', rotation:0 };
-  (window.garageComponents||[]).push(g); window.selectedRoomId=g.id; updateStatus('Added Garage');
+  (window.garageComponents||[]).push(g);
+  if (typeof window.selectObject==='function') { window.selectObject(g.id, { noRender: true }); }
+  else { window.selectedRoomId=g.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMg) {} }
+  updateStatus('Added Garage');
   try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     try { focusCameraOnObject(g); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   if (typeof window.addPool === 'undefined') window.addPool = function(){
     var lvl=0, w=4, d=2; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'pool'});
     var p={ id:newId('pool'), name:'Pool', x:s.x, z:s.z, width:w, depth:d, height:1.5, level:lvl, type:'pool', rotation:0 };
-  (window.poolComponents||[]).push(p); window.selectedRoomId=p.id; updateStatus('Added Pool');
+  (window.poolComponents||[]).push(p);
+  if (typeof window.selectObject==='function') { window.selectObject(p.id, { noRender: true }); }
+  else { window.selectedRoomId=p.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMpl) {} }
+  updateStatus('Added Pool');
   try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     try { focusCameraOnObject(p); } catch(_e) {}
     _needsFullRender=true; startRender(); };
@@ -2096,7 +2126,10 @@
     // Place roof atop first floor if present, else above ground floor rooms
     var baseY = (typeof computeRoofBaseHeight==='function') ? computeRoofBaseHeight() : 3.0;
     var r={ id:newId('roof'), name:'Roof', x:s.x, z:s.z, width:Math.max(0.5,fp.width), depth:Math.max(0.5,fp.depth), baseHeight:baseY, height:1.2, level:lvl, type:'roof', roofType:'flat', rotation:0, autoBase:true, autoFit:true };
-  (window.roofComponents||[]).push(r); window.selectedRoomId=r.id; updateStatus('Added Roof');
+  (window.roofComponents||[]).push(r);
+  if (typeof window.selectObject==='function') { window.selectObject(r.id, { noRender: true }); }
+  else { window.selectedRoomId=r.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMr) {} }
+  updateStatus('Added Roof');
   try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     // Lazy-load the roof UI dropdown when a roof is first added
     try { if (typeof window.loadScript==='function') { window.loadScript('js/ui/roofDropdown.js?v=20251026-1'); } } catch(_e) {}
@@ -2105,7 +2138,10 @@
   if (typeof window.addBalcony === 'undefined') window.addBalcony = function(){
     var lvl=1, w=2.5, d=1.5; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'balcony'});
     var b={ id:newId('balcony'), name:'Balcony', x:s.x, z:s.z, width:w, depth:d, height:3.0, totalHeight:3.0, wallThickness:0.12, wallHeight:1.0, legWidth:0.18, floorThickness:0.1, slatCount:8, slatWidth:0.12, roofHeight:0.25, level:lvl, type:'balcony', rotation:0 };
-  (window.balconyComponents||[]).push(b); window.selectedRoomId=b.id; updateStatus('Added Balcony');
+  (window.balconyComponents||[]).push(b);
+  if (typeof window.selectObject==='function') { window.selectObject(b.id, { noRender: true }); }
+  else { window.selectedRoomId=b.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMb) {} }
+  updateStatus('Added Balcony');
   try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     try { focusCameraOnObject(b); } catch(_e) {}
     _needsFullRender=true; startRender(); };

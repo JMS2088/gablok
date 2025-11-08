@@ -290,7 +290,10 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
         // Also clear any standalone strips for this level and rebuild below if needed
         wallStrips = wallStrips.filter(function(ws){ return (ws.level||0)!==targetLevel ? true : false; });
-        saveProjectSilently(); selectedRoomId=null; renderLoop();
+  saveProjectSilently();
+  if (typeof window.selectObject==='function') { window.selectObject(null, { noRender:true }); }
+  else { selectedRoomId=null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU1) {} }
+  renderLoop();
         if(!quiet) updateStatus('Cleared ' + (targetLevel===0?'ground':'first') + ' floor 3D rooms (no walls in 2D)');
         __emitApplySummary({ action: 'cleared-no-walls', roomsRect: 0, roomsPoly: 0, strips: 0 });
         return;
@@ -774,7 +777,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   // Persist strips. In nonDestructive mode (and not stripsOnly), do NOT clear current object selection.
   saveProjectSilently();
   if (!nonDestructive || stripsOnly) {
-    selectedRoomId = null;
+  if (typeof window.selectObject==='function') { window.selectObject(null, { noRender:true }); }
+  else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU2) {} }
   }
   selectedWallStripIndex = -1;
   renderLoop();
@@ -1334,7 +1338,11 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       if (Array.isArray(rrA.openings)) openingsCountLevel += rrA.openings.length;
     }
   } catch(_eCount) { openingsCountLevel = 0; }
-  saveProjectSilently(); if(!Array.isArray(elemsSnapshot)) { selectedRoomId=null; } renderLoop(); if(!quiet && !Array.isArray(elemsSnapshot)) updateStatus((roomsFound.length||polyRooms.length)? ('Applied 2D plan to 3D (rooms + openings: '+ openingsCountLevel +')') : 'No closed rooms found (auto-snap enabled)');
+  saveProjectSilently(); if(!Array.isArray(elemsSnapshot)) {
+    if (typeof window.selectObject==='function') { window.selectObject(null, { noRender:true }); }
+    else { selectedRoomId=null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU3) {} }
+  }
+  renderLoop(); if(!quiet && !Array.isArray(elemsSnapshot)) updateStatus((roomsFound.length||polyRooms.length)? ('Applied 2D plan to 3D (rooms + openings: '+ openingsCountLevel +')') : 'No closed rooms found (auto-snap enabled)');
   try { __emitApplySummary({ action: 'rooms-applied', roomsRect: roomsFound.length||0, roomsPoly: polyRooms.length||0, strips: (Array.isArray(merged2)? merged2.length : 0), openings: openingsCountLevel }); } catch(_f) {}
   } catch(e){ console.error('applyPlan2DTo3D failed', e); updateStatus('Apply to 3D failed'); }
 }
