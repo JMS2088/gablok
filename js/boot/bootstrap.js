@@ -133,4 +133,19 @@
     try { window.dispatchEvent(new CustomEvent('gablok:boot-ready')); } catch(e){}
     try { if (document.readyState !== 'loading' && typeof window.startApp==='function' && !window.__appStarted) { window.__appStarted = true; window.startApp(); } } catch(e){}
   })();
+  // Wire Floor Plan button (robust against early clicks before modules are ready)
+  (function(){
+    try{
+      var btn = document.getElementById('btn-floorplan');
+      if(!btn) return;
+      if(btn.__wiredFloorPlan) return; btn.__wiredFloorPlan=true;
+      btn.addEventListener('click', function(){
+        // If 2D modules loaded, open immediately; else wait for boot-ready event
+        if(typeof window.openPlan2DModal === 'function'){ window.openPlan2DModal(); return; }
+        var opened=false;
+        function tryOpen(){ if(opened) return; if(typeof window.openPlan2DModal==='function'){ opened=true; window.openPlan2DModal(); window.removeEventListener('gablok:boot-ready', tryOpen); } }
+        window.addEventListener('gablok:boot-ready', tryOpen);
+      });
+    }catch(e){ console.warn('Floor plan button wiring failed', e); }
+  })();
 })();

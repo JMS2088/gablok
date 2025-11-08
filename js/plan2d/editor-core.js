@@ -290,6 +290,18 @@
     __plan2d.active=true;
     // Show modal container
     try{ var page=document.getElementById('plan2d-page'); if(page) page.style.display='block'; }catch(_d){}
+    // Move global #controls bar inside the 2D header for unified navigation (keep identical styling)
+    try {
+      var controls = document.getElementById('controls');
+      var hdr = document.getElementById('plan2d-header');
+      if (controls && hdr && !controls.__movedInto2D) {
+        // Preserve original parent and next sibling for restoration
+        controls.__origParent = controls.parentNode;
+        controls.__origNext = controls.nextSibling;
+        hdr.insertBefore(controls, hdr.firstChild);
+        controls.__movedInto2D = true;
+      }
+    } catch(e){}
     plan2dBind();
     plan2dCursor();
     // Load drafts + current floor
@@ -320,6 +332,18 @@
     __plan2d.chainPoints=[];
     // Hide modal container
     try{ var page=document.getElementById('plan2d-page'); if(page) page.style.display='none'; }catch(_d){}
+    // Restore global #controls bar to its original location
+    try {
+      var controls = document.getElementById('controls');
+      if (controls && controls.__movedInto2D) {
+        var parent = controls.__origParent;
+        var next = controls.__origNext;
+        if (parent) {
+          if (next) parent.insertBefore(controls, next); else parent.appendChild(controls);
+        }
+        controls.__movedInto2D = false;
+      }
+    } catch(e){}
     plan2dDraw();
     try{ if(window.updateStatus) updateStatus('2D editor closed'); }catch(e){}
   }
