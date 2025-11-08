@@ -149,6 +149,26 @@
       // Spacebar panning: if space held, start panning regardless of tool and do not modify drawing state
       if(__plan2d.spacePanActive){ __plan2d.panning={ mx:cx, my:cy, panX0:__plan2d.panX||0, panY0:__plan2d.panY||0, scale: __plan2d.scale||50 }; plan2dDraw(); return; }
       if(__plan2d.tool==='erase'){ plan2dEraseAt(p); return; }
+      // Wall endpoint drag start (Select tool only)
+      if(__plan2d.tool==='select'){
+        try {
+          var hitEnd = plan2dHitWallEndpoint && plan2dHitWallEndpoint(p, 0.30);
+          if(hitEnd && typeof hitEnd.index==='number'){
+            var w = __plan2d.elements[hitEnd.index];
+            if(w && w.type==='wall'){
+              __plan2d.dragWall = {
+                index: hitEnd.index,
+                end: hitEnd.end, // 'a' or 'b'
+                other: (hitEnd.end==='a'? {x: w.x1, y: w.y1} : {x: w.x0, y: w.y0}),
+                orig: (hitEnd.end==='a'? {x: w.x0, y: w.y0} : {x: w.x1, y: w.y1})
+              };
+              plan2dSetSelection(hitEnd.index);
+              plan2dDraw();
+              return; // do not start selection gesture
+            }
+          }
+        }catch(_we){}
+      }
       if(__plan2d.tool==='wall'){
         // Improved wall tool: create a segment immediately on second click instead of waiting for Enter.
         // Start a chain on first click; each subsequent click adds a wall from last point -> new point (axis aligned & snapped).
@@ -188,6 +208,39 @@
     c.addEventListener('mousemove', function(ev){ if(!__plan2d.active) return; var rect=c.getBoundingClientRect(); var cx=(ev.clientX-rect.left)*(c.width/rect.width); var cy=(ev.clientY-rect.top)*(c.height/rect.height); __plan2d.mouse={x:cx,y:cy}; var p=screenToWorld2D(cx,cy);
       // Panning when dragging on empty space with Select tool
       if(__plan2d.panning){ var s=__plan2d.panning.scale||(__plan2d.scale||50); var dx=cx-__plan2d.panning.mx; var dy=cy-__plan2d.panning.my; __plan2d.panX = (__plan2d.panning.panX0||0) + dx/Math.max(1e-6,s); __plan2d.panY = (__plan2d.panning.panY0||0) - dy/Math.max(1e-6,s); plan2dDraw(); return; }
+      // Dragging a wall endpoint
+      if(__plan2d.dragWall){
+        try {
+          var dw = __plan2d.dragWall;
+          var w = __plan2d.elements[dw.index];
+          if(w && w.type==='wall'){
+            // Current raw position
+            var nx = p.x, ny = p.y;
+            // If Shift held, quantize direction to 45° increments
+            if(ev.shiftKey){
+              var ox = dw.other.x, oy = dw.other.y;
+              var dx = nx - ox, dy = ny - oy;
+              var len = Math.hypot(dx,dy) || 0;
+              if(len > 1e-6){
+                var ang = Math.atan2(dy,dx);
+                var step = Math.PI/4; // 45°
+                var q = Math.round(ang/step)*step; // quantized angle
+                // preserve length; recompute snapped vector
+                dx = len * Math.cos(q);
+                dy = len * Math.sin(q);
+                nx = ox + dx;
+                ny = oy + dy;
+              }
+            }
+            // Grid snap ALWAYS after quantization for consistency
+            nx = plan2dSnap(nx); ny = plan2dSnap(ny);
+            if(dw.end==='a'){ w.x0 = nx; w.y0 = ny; } else { w.x1 = nx; w.y1 = ny; }
+            // Live draw only (defer applyPlan2DTo3D until mouseup to reduce churn)
+            plan2dDraw();
+          }
+        }catch(_dwMove){}
+        return;
+      }
       if(__plan2d.tool==='erase'){ plan2dHoverErase(p); return; }
       if(__plan2d.start){ __plan2d.last=p; plan2dDraw(); return; }
       plan2dDraw();
@@ -198,9 +251,16 @@
   // Also allow right-click to end the chain without adding a point
   c.addEventListener('contextmenu', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ ev.preventDefault(); __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); } }catch(_e){} });
 
-  window.addEventListener('mouseup', function(){ if(!__plan2d.active) return; if(__plan2d.panning){ __plan2d.panning=null; plan2dDraw(); return; } if(__plan2d.start && __plan2d.last){ var moved=Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y); if(moved<0.02){ plan2dSelectAt(__plan2d.last); } else { var a=__plan2d.start,b=__plan2d.last; if(__plan2d.tool!=='wall'){ // drag-create still applies for window/door
-          plan2dFinalize(a,b); plan2dAutoSnapAndJoin(); plan2dDraw(); }
-        } } __plan2d.start=null; __plan2d.last=null; __plan2d.mouse=null; plan2dDraw(); });
+  window.addEventListener('mouseup', function(){ if(!__plan2d.active) return; 
+    if(__plan2d.panning){ __plan2d.panning=null; plan2dDraw(); return; }
+    // Finish wall endpoint drag
+    if(__plan2d.dragWall){
+      try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); plan2dEdited(); }catch(_endDrag){}
+      __plan2d.dragWall=null; plan2dDraw(); return;
+    }
+    if(__plan2d.start && __plan2d.last){ var moved=Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y); if(moved<0.02){ plan2dSelectAt(__plan2d.last); } else { var a=__plan2d.start,b=__plan2d.last; if(__plan2d.tool!=='wall'){ // drag-create still applies for window/door
+          plan2dFinalize(a,b); plan2dAutoSnapAndJoin(); plan2dDraw(); } } }
+    __plan2d.start=null; __plan2d.last=null; __plan2d.mouse=null; plan2dDraw(); });
   // Remove room drag mouseup listener (simplified)
 
     // Keyboard (selection delete + chain finalize) ------------------------
