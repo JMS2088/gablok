@@ -45,8 +45,20 @@
             if(isFinite(keepPanY)) __plan2d.panY=keepPanY;
           }catch(_rst){}
           try{ if(typeof plan2dDraw==='function') plan2dDraw(); }catch(_drw){}
+          // Auto-close 2D editor and return to 3D view after successful apply
+          try {
+            if(typeof window.closePlan2DModal==='function') {
+              // Defer close one frame to let any status updates render
+              requestAnimationFrame(function(){ try{ window.closePlan2DModal(); }catch(_cE){} });
+            } else {
+              // Fallback: hide page directly
+              var pg = document.getElementById('plan2d-page'); if(pg) pg.style.display='none';
+            }
+          }catch(_close2d){}
         } else if(typeof window.applyPlan2DTo3D==='function') {
           window.applyPlan2DTo3D(undefined,{allowRooms:true,quiet:false,level:(typeof window.currentFloor==='number'? window.currentFloor:0)});
+          // If 2D not active (defensive), ensure page hidden
+          try{ var pg2=document.getElementById('plan2d-page'); if(pg2) pg2.style.display='none'; }catch(_pghide){}
         }
       } catch(_){}
     }); }
