@@ -68,6 +68,10 @@
   { label: 'Keyboard router', url: 'js/input/keyboard.js?v=20251104-1', critical: true },
   { label: 'Plan apply', url: 'js/core/plan-apply.js?v=20251101-7', critical: true },
   { label: 'Plan populate', url: 'js/core/plan-populate.js?v=20251101-4', critical: true },
+    // Plan2D foundational helpers must come BEFORE core/draw/editor wires
+    { label: 'Plan2D geom', url: 'js/plan2d/geom2d.js?v=20251108-2', critical: false },
+    { label: 'Plan2D walls', url: 'js/plan2d/walls.js?v=20251108-2', critical: false },
+    { label: 'Plan2D snap', url: 'js/plan2d/snap.js?v=20251108-2', critical: false },
     { label: 'Plan2D core', url: 'js/plan2d/editor-core.js?v=20251108-1', critical: false },
     { label: 'Plan2D draw', url: 'js/plan2d/draw.js?v=20251108-1', critical: false },
     { label: 'Plan2D editor wiring', url: 'js/plan2d/editor.js?v=20251108-1', critical: false },

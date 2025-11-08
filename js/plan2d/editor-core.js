@@ -180,6 +180,8 @@
         var pt = { x: plan2dSnap(p.x), y: plan2dSnap(p.y) };
         if(!__plan2d.chainActive){
           __plan2d.chainActive=true; __plan2d.chainPoints=[pt];
+          // Mark user drawing session start: suppress population recentering/auto-fit while actively placing walls
+          __plan2d.userDrawingActive = true;
         } else {
           var prev = __plan2d.chainPoints[__plan2d.chainPoints.length-1];
           if(prev){
@@ -221,6 +223,9 @@
           if(w && w.type==='wall'){
             // Current raw position
             var nx = p.x, ny = p.y;
+            // Previous endpoint world coords (for dirty rectangle)
+            var prevX = (dw.end==='a'? w.x0 : w.x1);
+            var prevY = (dw.end==='a'? w.y0 : w.y1);
             // If Shift held, quantize direction to 45° increments
             if(ev.shiftKey){
               var ox = dw.other.x, oy = dw.other.y;
@@ -240,6 +245,22 @@
             // Grid snap ALWAYS after quantization for consistency
             nx = plan2dSnap(nx); ny = plan2dSnap(ny);
             if(dw.end==='a'){ w.x0 = nx; w.y0 = ny; } else { w.x1 = nx; w.y1 = ny; }
+            // Mark dirty region (union of previous and new endpoint + other endpoint)
+            try {
+              var oxp = dw.other.x, oyp = dw.other.y;
+              var minX = Math.min(prevX, nx, oxp), maxX = Math.max(prevX, nx, oxp);
+              var minY = Math.min(prevY, ny, oyp), maxY = Math.max(prevY, ny, oyp);
+              var dr = __plan2d.dirtyRect;
+              if(!dr){
+                __plan2d.dirtyRect = {minX:minX, maxX:maxX, minY:minY, maxY:maxY};
+              } else {
+                dr.minX = Math.min(dr.minX, minX);
+                dr.maxX = Math.max(dr.maxX, maxX);
+                dr.minY = Math.min(dr.minY, minY);
+                dr.maxY = Math.max(dr.maxY, maxY);
+              }
+              __plan2d.__incremental = true;
+            }catch(_dr){}
             // Live draw only (defer applyPlan2DTo3D until mouseup to reduce churn)
             plan2dDraw();
           }
@@ -252,9 +273,9 @@
     });
 
     // Finish current wall chain with double-click for a predictable UX
-    c.addEventListener('dblclick', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); } }catch(_e){} });
+    c.addEventListener('dblclick', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; plan2dDraw(); } }catch(_e){} });
   // Also allow right-click to end the chain without adding a point
-  c.addEventListener('contextmenu', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ ev.preventDefault(); __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); } }catch(_e){} });
+  c.addEventListener('contextmenu', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ ev.preventDefault(); __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; plan2dDraw(); } }catch(_e){} });
 
   window.addEventListener('mouseup', function(){ if(!__plan2d.active) return; 
     if(__plan2d.panning){ __plan2d.panning=null; plan2dDraw(); return; }
@@ -322,6 +343,48 @@
   try{ if(typeof window.__plan2dResize==='function') window.__plan2dResize(); requestAnimationFrame(function(){ try{ window.__plan2dResize && window.__plan2dResize(); }catch(_r2){} }); }catch(_r){}
     // Force redraw one more time so rulers align after resize
     try{ plan2dDraw(); }catch(_rd){}
+    // Populate retries after boot settles: if no elements yet, try again and fit (multi-pass)
+    try{
+      var retryDelays = [120, 320, 800];
+      retryDelays.forEach(function(delay){
+        setTimeout(function(){
+          try{
+            // Skip auto-populate/fit while user is actively drawing to avoid jumpy view resets
+            if(__plan2d.userDrawingActive){ return; }
+            var had = Array.isArray(__plan2d.elements) ? __plan2d.elements.length : 0;
+            if (typeof window.populatePlan2DFromDesign==='function') { window.populatePlan2DFromDesign(); }
+            var now = Array.isArray(__plan2d.elements) ? __plan2d.elements.length : 0;
+            if ((had===0 && now>0)) {
+              try{ if(!__plan2d.userDrawingActive){ plan2dFitViewToContent && plan2dFitViewToContent(40); } }catch(_f){}
+              try{ plan2dDraw && plan2dDraw(); }catch(_d){}
+            } else if (now===0) {
+              // Ensure tools are usable even with empty plan: default to Wall tool for convenience
+              try{ __plan2d.tool = 'wall'; plan2dCursor && plan2dCursor(); plan2dDraw && plan2dDraw(); }catch(_t){}
+            }
+          }catch(_pr){}
+        }, delay);
+      });
+    }catch(_prS){}
+    // Also sync once after the first 3D frame if we opened too early
+    try{
+      var onFirstRender = function(){
+        try{
+          var had = Array.isArray(__plan2d.elements) ? __plan2d.elements.length : 0;
+          if (typeof window.populatePlan2DFromDesign==='function') window.populatePlan2DFromDesign();
+          var now = Array.isArray(__plan2d.elements) ? __plan2d.elements.length : 0;
+          if (now>0 && had===0){ try{ plan2dFitViewToContent && plan2dFitViewToContent(40); }catch(_f){} }
+          try{ plan2dDraw && plan2dDraw(); }catch(_d){}
+        }catch(_eFr){}
+      };
+      window.addEventListener('gablok:first-render', onFirstRender, { once:true });
+    }catch(_eEv){}
+    // Live keep-in-sync whenever 3D changes apply: coalesce events within a frame
+    try{
+      if (!window.__plan2dSyncApplyHandler) {
+        var pending=false; window.__plan2dSyncApplyHandler = function(){ if(!__plan2d.active) return; if(pending) return; pending=true; requestAnimationFrame(function(){ try{ pending=false; if(__plan2d.userDrawingActive){ return; } if(typeof window.populatePlan2DFromDesign==='function') { window.populatePlan2DFromDesign(); plan2dDraw && plan2dDraw(); } }catch(_e){ pending=false; } }); };
+        window.addEventListener('gablok:apply-summary', window.__plan2dSyncApplyHandler);
+      }
+    }catch(_eSync){}
   }
   function closePlan2DModal(){
     if(!__plan2d.active) return;

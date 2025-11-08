@@ -3,13 +3,31 @@
 (function(){
   // Coalesced draw scheduling: multiple calls collapse into one animation frame.
   var __plan2dDrawPending = false;
-  function plan2dDrawImmediate(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); var ovCtx=ov.getContext('2d'); var ox=ovCtx; ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height); ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height);
+  function plan2dDrawImmediate(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); var ovCtx=ov.getContext('2d'); var ox=ovCtx; ctx.setTransform(1,0,0,1,0,0);
+    // Incremental redraw: if a dirtyRect is present and flagged incremental, only clear that region with padding
+    var useDirty = !!(__plan2d.__incremental && __plan2d.dirtyRect);
+    var clearPadPx = 40; // pad in pixels for stroke/joins
+    if(useDirty){
+      try{
+        // Convert world bbox to screen bbox
+        var aS = worldToScreen2D(__plan2d.dirtyRect.minX, __plan2d.dirtyRect.minY);
+        var bS = worldToScreen2D(__plan2d.dirtyRect.maxX, __plan2d.dirtyRect.maxY);
+        var minSX = Math.min(aS.x, bS.x) - clearPadPx;
+        var minSY = Math.min(aS.y, bS.y) - clearPadPx;
+        var wSX = Math.abs(bS.x - aS.x) + clearPadPx*2;
+        var hSY = Math.abs(bS.y - aS.y) + clearPadPx*2;
+        ctx.clearRect(minSX, minSY, wSX, hSY);
+        ovCtx.setTransform(1,0,0,1,0,0);
+        ovCtx.clearRect(minSX, minSY, wSX, hSY);
+      }catch(_cdr){ ctx.clearRect(0,0,c.width,c.height); ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height); useDirty=false; }
+    } else {
+      ctx.clearRect(0,0,c.width,c.height); ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height);
+    }
     var perfSections = __plan2d.__perfSections = { grid:0, walls:0, openings:0, labels:0, overlay:0, total:0 };
     var tStart = (performance&&performance.now)?performance.now():Date.now();
-      // Rulers (drawn on separate canvases)
+      // Rulers (drawn on separate canvases). Skip on incremental frames to save work.
       try {
-        var rt=document.getElementById('plan2d-ruler-top'); var rl=document.getElementById('plan2d-ruler-left');
-        if(rt && rl){ plan2dDrawRulers(rt.getContext('2d'), rl.getContext('2d')); }
+        if(!useDirty){ var rt=document.getElementById('plan2d-ruler-top'); var rl=document.getElementById('plan2d-ruler-left'); if(rt && rl){ plan2dDrawRulers(rt.getContext('2d'), rl.getContext('2d')); } }
       } catch(_eR) {}
       // CAD-style grid: major 1 m and minor 0.1 m lines aligned to device pixels; include pan offsets
       var step=__plan2d.scale, w=c.width, h=c.height; 
@@ -46,7 +64,20 @@
             gctx.restore();
             gridCache.scale=step; gridCache.panX=__plan2d.panX; gridCache.panY=__plan2d.panY; gridCache.w=w; gridCache.h=h;
           }
-          ctx.drawImage(gridCache.canvas,0,0);
+          // For incremental frames, only draw the slice that intersects the dirty rect
+          if(useDirty){
+            try{
+              var aS = worldToScreen2D(__plan2d.dirtyRect.minX, __plan2d.dirtyRect.minY);
+              var bS = worldToScreen2D(__plan2d.dirtyRect.maxX, __plan2d.dirtyRect.maxY);
+              var minSX = Math.min(aS.x, bS.x) - clearPadPx;
+              var minSY = Math.min(aS.y, bS.y) - clearPadPx;
+              var wSX = Math.abs(bS.x - aS.x) + clearPadPx*2;
+              var hSY = Math.abs(bS.y - aS.y) + clearPadPx*2;
+              ctx.drawImage(gridCache.canvas, Math.max(0,minSX), Math.max(0,minSY), Math.max(0,Math.min(wSX, c.width - minSX)), Math.max(0,Math.min(hSY, c.height - minSY)), Math.max(0,minSX), Math.max(0,minSY), Math.max(0,Math.min(wSX, c.width - minSX)), Math.max(0,Math.min(hSY, c.height - minSY)));
+            }catch(_dg){ ctx.drawImage(gridCache.canvas,0,0); }
+          } else {
+            ctx.drawImage(gridCache.canvas,0,0);
+          }
         } catch(e){ /* grid fallback */ }
       })();
       perfSections.grid = ((performance&&performance.now)?performance.now():Date.now()) - tStart;
@@ -95,20 +126,45 @@
         }
         __wallIntersections = cache.intersections;
       }catch(_cInt){ __wallIntersections = plan2dComputeWallIntersections(elems); }
+      // Robust endpoint connectivity map (skip any undefined/invalid entries to avoid TypeErrors)
       var startConn=new Array(elems.length).fill(false), endConn=new Array(elems.length).fill(false);
       (function(){
         function key(x,y){ return (Math.round(x*1000))+','+(Math.round(y*1000)); }
         var map={};
         for(var i=0;i<elems.length;i++){
-          var e=elems[i]; if(e.type!=='wall') continue;
+          var e=elems[i];
+          if(!e || e.type!=='wall') continue; // Defensive: skip holes or non-walls
+          // Validate numeric endpoints (NaN walls can arise from partial edits)
+          if(!isFinite(e.x0)||!isFinite(e.y0)||!isFinite(e.x1)||!isFinite(e.y1)) continue;
           var ks=key(e.x0,e.y0), ke=key(e.x1,e.y1);
           (map[ks]||(map[ks]=[])).push({i:i,end:'s'});
           (map[ke]||(map[ke]=[])).push({i:i,end:'e'});
         }
-        Object.keys(map).forEach(function(k){ var arr=map[k]; if(arr.length>1){ for(var j=0;j<arr.length;j++){ if(arr[j].end==='s') startConn[arr[j].i]=true; else endConn[arr[j].i]=true; } } });
+        Object.keys(map).forEach(function(k){ var arr=map[k]; if(arr.length>1){ for(var j=0;j<arr.length;j++){ var ent=arr[j]; if(!ent) continue; if(ent.end==='s') startConn[ent.i]=true; else endConn[ent.i]=true; } } });
       })();
+      // If incremental, only draw elements that intersect dirty rect (expanded by thickness)
+      var drawAll = !useDirty;
+      var dirtyW = __plan2d.dirtyRect;
+      function wallIntersectsDirty(el){
+        if(!dirtyW) return true;
+        var minX = Math.min(el.x0, el.x1), maxX = Math.max(el.x0, el.x1);
+        var minY = Math.min(el.y0, el.y1), maxY = Math.max(el.y0, el.y1);
+        // expand by wall thickness to catch edges
+        var pad = (el.thickness||__plan2d.wallThicknessM)||0.3;
+        minX -= pad; maxX += pad; minY -= pad; maxY += pad;
+        return !(maxX < dirtyW.minX || dirtyW.maxX < minX || maxY < dirtyW.minY || dirtyW.maxY < minY);
+      }
       for(var i=0;i<elems.length;i++){
         var el=elems[i];
+        if(!el){ continue; } // Defensive: skip holes/undefined to avoid x0 access errors
+        if(!drawAll){ if(el.type==='wall'){ if(!wallIntersectsDirty(el)) continue; } else {
+            // For doors/windows anchored to a wall, check host wall bbox; else check element endpoints
+            if(typeof el.host==='number' && elems[el.host] && elems[el.host].type==='wall'){ if(!wallIntersectsDirty(elems[el.host])) continue; }
+            else {
+              var minXo=Math.min(el.x0,el.x1), maxXo=Math.max(el.x0,el.x1); var minYo=Math.min(el.y0,el.y1), maxYo=Math.max(el.y0,el.y1);
+              if(dirtyW && (maxXo < dirtyW.minX || dirtyW.maxX < minXo || maxYo < dirtyW.minY || dirtyW.maxY < minYo)) continue;
+            }
+        } }
         var ax=el.x0, ay=el.y0, bx=el.x1, by=el.y1;
         // Compute dynamic endpoints for host-anchored windows
         var isHostWindow = (el.type==='window' && typeof el.host==='number');
@@ -755,7 +811,20 @@
         ctx.moveTo(aS.x, aS.y); ctx.lineTo(bS.x, bS.y); ctx.stroke(); ctx.setLineDash([]);
         ctx.restore();
       }
-      var ox=ov.getContext('2d'); ox.setTransform(1,0,0,1,0,0); ox.clearRect(0,0,ov.width,ov.height);
+      var ox=ov.getContext('2d'); ox.setTransform(1,0,0,1,0,0);
+      if(useDirty){
+        try{
+          var aSd = worldToScreen2D(__plan2d.dirtyRect.minX, __plan2d.dirtyRect.minY);
+          var bSd = worldToScreen2D(__plan2d.dirtyRect.maxX, __plan2d.dirtyRect.maxY);
+          var minSX2 = Math.min(aSd.x, bSd.x) - clearPadPx;
+          var minSY2 = Math.min(aSd.y, bSd.y) - clearPadPx;
+          var wSX2 = Math.abs(bSd.x - aSd.x) + clearPadPx*2;
+          var hSY2 = Math.abs(bSd.y - aSd.y) + clearPadPx*2;
+          ox.clearRect(minSX2, minSY2, wSX2, hSY2);
+        }catch(_cdo){ ox.clearRect(0,0,ov.width,ov.height); }
+      } else {
+        ox.clearRect(0,0,ov.width,ov.height);
+      }
       // Draw guides on overlay: snapped to device pixels
       try {
         var s = __plan2d.scale; var w = c.width, h = c.height;
@@ -912,6 +981,8 @@
         plan2dDrawImmediate();
         var t1=(window.performance? performance.now(): Date.now());
         __plan2d.__lastDrawMs = t1 - t0;
+        // After an incremental frame, clear the flag so next full draw can happen when needed
+        if(__plan2d.__incremental){ __plan2d.__incremental=false; }
         if(__plan2d.perfHUD){
           try{
             var ov=document.getElementById('plan2d-overlay');

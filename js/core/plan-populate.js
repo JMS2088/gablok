@@ -2,6 +2,32 @@
 // Populate the 2D Floor Plan from the current 3D model for the currently selected floor
 // Extracted from app.js for modularity; loaded by bootstrap before app core.
 function populatePlan2DFromDesign(){
+  // Defensive guards: create local safe views of 3D globals so we don't crash if not yet initialised
+  var lvlSafe = (typeof window.currentFloor === 'number') ? window.currentFloor : 0;
+  var allRooms = Array.isArray(window.allRooms) ? window.allRooms : [];
+  var wallStrips = Array.isArray(window.wallStrips) ? window.wallStrips : [];
+  var garageComponents = Array.isArray(window.garageComponents) ? window.garageComponents : [];
+  var pergolaComponents = Array.isArray(window.pergolaComponents) ? window.pergolaComponents : [];
+  var balconyComponents = Array.isArray(window.balconyComponents) ? window.balconyComponents : [];
+  var poolComponents = Array.isArray(window.poolComponents) ? window.poolComponents : [];
+  var roofComponents = Array.isArray(window.roofComponents) ? window.roofComponents : [];
+  var stairsComponents = Array.isArray(window.stairsComponents) ? window.stairsComponents : [];
+  var stairsComponent = (typeof window.stairsComponent === 'object' && window.stairsComponent) ? window.stairsComponent : null;
+  var currentFloor = lvlSafe;
+  // Diagnostics: capture snapshot of source counts for debugging missing-wall issues
+  try {
+    if (!window.__plan2dDiag) window.__plan2dDiag = {};
+    window.__plan2dDiag.lastPopulate = {
+      at: Date.now(),
+      floor: currentFloor,
+      allRooms: allRooms.length,
+      wallStrips: wallStrips.length,
+      wallStripsByLevel: (function(){ var m={}; for(var i=0;i<wallStrips.length;i++){ var ws=wallStrips[i]; if(!ws) continue; var lv=ws.level||0; m[lv]=(m[lv]||0)+1; } return m; })(),
+      existingElements: (Array.isArray(__plan2d.elements)? __plan2d.elements.length : 0),
+      retriesFlag: true
+    };
+    if (typeof console !== 'undefined' && console.debug){ console.debug('[PLAN2D POPULATE DIAG] floor='+currentFloor+' rooms='+allRooms.length+' wallStrips='+wallStrips.length, window.__plan2dDiag.lastPopulate.wallStripsByLevel); }
+  } catch(_eDiag0) {}
   // Prefer reconstructing from user wall strips (non-room-tagged) when present on this floor.
   // This preserves multi-segment layouts and avoids collapsing into coarse room rectangles.
   try {
@@ -324,11 +350,17 @@ function populatePlan2DFromDesign(){
     var scaleX = (c.width>0) ? (c.width/(fitWm||1)) : __plan2d.scale;
     var scaleY = (c.height>0) ? (c.height/(fitHm||1)) : __plan2d.scale;
     var newScale = Math.max(10, Math.min(140, Math.floor(Math.min(scaleX, scaleY)))); // clamp sensible range
-    if (__freezeScale) { newScale = __plan2d.scale || newScale; }
-    if (isFinite(newScale) && newScale>0) __plan2d.scale = newScale;
+    // Suppress scale changes while user is in an active drawing chain to avoid view "jump" on second click
+    if (__freezeScale || (__plan2d && __plan2d.userDrawingActive)) { newScale = __plan2d.scale || newScale; }
+    if (isFinite(newScale) && newScale>0) {
+      // Only update scale if not in userDrawingActive (double-guard) to prevent any subtle fractional recenter
+      if(!(__plan2d && __plan2d.userDrawingActive)) {
+        __plan2d.scale = newScale;
+      }
+    }
   }
-  // Note: We continue even if canvas doesn't exist, to ensure __plan2d.elements is updated
-  // This is critical for keeping 2D plan in sync with 3D changes when editor is not visible
+  // Note: We continue even if canvas doesn't exist, to ensure __plan2d.elements is updated.
+  // While userDrawingActive is true we do not mutate pan offsets or scale to keep the interactive view stable.
 
   // Preserve existing windows/doors before clearing elements so they survive room resizing
   var preservedOpenings = [];
@@ -620,6 +652,38 @@ function populatePlan2DFromDesign(){
       }
     }
   } catch(e) { /* reattach openings failed - non-critical */ }
+
+  // FINAL SAFETY NET: if after all logic there are still zero elements while source data exists, synthesize a minimal representation
+  try {
+    if ((!Array.isArray(__plan2d.elements) || __plan2d.elements.length===0) && (allRooms.length>0 || wallStrips.length>0)) {
+      if (typeof console !== 'undefined' && console.warn) console.warn('[PLAN2D POPULATE SAFETY] No elements produced; synthesizing minimal walls');
+      __plan2d.elements = [];
+      var sgnF = (__plan2d.yFromWorldZSign||1);
+      if (allRooms.length){
+        var r0 = allRooms[0]; var hw=r0.width/2, hd=r0.depth/2;
+        var cxRoom = r0.x, czRoom = r0.z; // keep global center stable
+        if (!isFinite(__plan2d.centerX)) __plan2d.centerX = cxRoom;
+        if (!isFinite(__plan2d.centerZ)) __plan2d.centerZ = czRoom;
+        var cxP = __plan2d.centerX, czP = __plan2d.centerZ;
+        function add(x0,z0,x1,z1){ __plan2d.elements.push({type:'wall', x0: x0-cxP, y0: sgnF*(z0-czP), x1: x1-cxP, y1: sgnF*(z1-czP), thickness: (__plan2d.wallThicknessM||0.3), synthesized:true }); }
+        add(r0.x-hw, r0.z-hd, r0.x+hw, r0.z-hd);
+        add(r0.x+hw, r0.z-hd, r0.x+hw, r0.z+hd);
+        add(r0.x+hw, r0.z+hd, r0.x-hw, r0.z+hd);
+        add(r0.x-hw, r0.z+hd, r0.x-hw, r0.z-hd);
+      } else {
+        // Use first 4 wall strips (or all) mapped relative to first endpoint average
+        var base = wallStrips[0]; var cxS = (base.x0+base.x1)/2; var czS = (base.z0+base.z1)/2;
+        if (!isFinite(__plan2d.centerX)) __plan2d.centerX = cxS;
+        if (!isFinite(__plan2d.centerZ)) __plan2d.centerZ = czS;
+        var cxP2 = __plan2d.centerX, czP2 = __plan2d.centerZ;
+        for (var ss=0; ss<wallStrips.length && ss<200; ss++){
+          var wsS = wallStrips[ss]; if(!wsS) continue;
+          __plan2d.elements.push({ type:'wall', x0: wsS.x0 - cxP2, y0: sgnF*(wsS.z0 - czP2), x1: wsS.x1 - cxP2, y1: sgnF*(wsS.z1 - czP2), thickness: (wsS.thickness||__plan2d.wallThicknessM||0.3), synthesized:true });
+        }
+      }
+      try { if(typeof plan2dDraw==='function') plan2dDraw(); } catch(_drwSynth){}
+    }
+  } catch(_eSynth) {}
 
   return true;
 }
