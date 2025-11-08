@@ -249,6 +249,10 @@
   #plan2d-opening-inline select {
     padding: 4px 6px; font-size: 12px;
   }
+  /* Make the Window Type dropdown match the width of the buttons above */
+  #plan2d-window-type {
+    width: 100%; /* expands to the width of the side overlay, which is dictated by the widest button */
+  }
   /* Default hidden, JS will toggle to show when relevant */
   #plan2d-window-type,
   #plan2d-door-swing,
@@ -257,14 +261,26 @@
   /* 2D plan top-right toolbar: 35px from top/right, styles in CSS not inline */
   #plan2d-toolbar-right {
     position: absolute; top: 35px; right: 35px;
-    display: flex; gap: 12px; align-items: flex-start; /* top-align all buttons including taller Wall group */
+    /* Evenly spaced, equal-width controls */
+    display: grid;
+    grid-auto-flow: column;          /* lay out children in columns */
+    grid-auto-columns: 1fr;          /* each child gets equal width */
+    gap: 12px;                       /* uniform gaps between items */
+    align-items: stretch;            /* make all items equal height */
   }
+  /* Ensure each toolbar child expands to fill its grid cell */
+  #plan2d-toolbar-right > * { min-width: 0; }
+  #plan2d-toolbar-right > button { width: 100%; }
+  #plan2d-wall-group { width: 100%; }
 
   /* Wall tool group (button + scale label) moved from inline */
   #plan2d-wall-group {
     display: flex; flex-direction: column; align-items: center; gap: 4px;
   }
   #plan2d-wall-group #plan2d-scale { font-size: 11px; color: #ffffff; line-height: 1; }
+
+  /* Hide the inline file input used by Import JSON trigger */
+  #plan2d-import-file { display: none; }
   
   #measurements.visible { display: block; }
   
