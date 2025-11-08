@@ -99,6 +99,8 @@
       __plan2d.__version = (typeof __plan2d.__version==='number' ? __plan2d.__version+1 : 1);
       if(__plan2d.__cache){ __plan2d.__cache.intersections = null; __plan2d.__cache.version = -1; }
       __plan2d.__userEdited = true; // mark this draft as user-modified so reopen skips auto-populate
+      // Disable future auto-fit after first user edit; require manual Fit button to re-enable
+      if(typeof __plan2d.autoFitEnabled==='undefined' || __plan2d.autoFitEnabled===true){ __plan2d.autoFitEnabled=false; }
     } catch(_v){}
     // optional non-destructive 3D sync, guarded to avoid spam during drags
     try {
@@ -128,6 +130,38 @@
     plan2dSetSelection(best); plan2dDraw(); }
   window.plan2dSelectAt = window.plan2dSelectAt || plan2dSelectAt;
 
+  // Preferable wall pick for placing openings near cursor, robust to overlaps.
+  function plan2dFindPlacementWall(p, tolPx){
+    try{
+      var els = __plan2d.elements||[]; var bestIdx=-1;
+      var tolW = plan2dWorldTolForPixels(typeof tolPx==='number'? tolPx : 18);
+      var bestPenalty=Infinity, bestDist=Infinity, bestLen=0;
+      for(var i=0;i<els.length;i++){
+        var w = els[i]; if(!w || w.type!=='wall') continue;
+        var dx=w.x1-w.x0, dy=w.y1-w.y0; var len=Math.hypot(dx,dy)||1;
+        // distance point -> segment centerline
+        var denom=(dx*dx+dy*dy)||1; var t=((p.x-w.x0)*dx+(p.y-w.y0)*dy)/denom; t=Math.max(0,Math.min(1,t));
+        var cx=w.x0+t*dx, cy=w.y0+t*dy; var d=Math.hypot(p.x-cx, p.y-cy);
+        if(d > tolW) continue;
+        // Penalty if placing near an existing opening midpoint on this wall (avoid stacking on overlaps)
+        var penalty = 0; var openingsNear=0;
+        for(var j=0;j<els.length;j++){
+          var e=els[j]; if(!e) continue;
+          if((e.type==='window'||e.type==='door') && typeof e.host==='number' && e.host===i){
+            var a=Math.min(e.t0||0,e.t1||0), b=Math.max(e.t0||0,e.t1||0); var mid=(a+b)/2; if(Math.abs(mid - t) < 0.08) { openingsNear++; }
+          }
+        }
+        penalty += openingsNear; // integer
+        // Tie-breakers: smaller distance, then longer wall for stability
+        if(penalty < bestPenalty || (penalty===bestPenalty && (d<bestDist || (Math.abs(d-bestDist)<1e-6 && len>bestLen)))){
+          bestPenalty=penalty; bestDist=d; bestIdx=i; bestLen=len;
+        }
+      }
+      return (bestIdx>=0)? { index: bestIdx, dist: bestDist } : null;
+    }catch(_e){ return null; }
+  }
+  window.plan2dFindPlacementWall = window.plan2dFindPlacementWall || plan2dFindPlacementWall;
+
   // Element creation -------------------------------------------------------
   function plan2dFinalize(a,b){ if(!a||!b) return; var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='door'){ __plan2d.elements.push({type:'door',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:0.9,meta:{hinge:'left',swing:'in'}}); } plan2dEdited(); }
   window.plan2dFinalize = window.plan2dFinalize || plan2dFinalize;
@@ -148,7 +182,13 @@
   // Bounds & view ----------------------------------------------------------
   function plan2dComputeBounds(){ var els=__plan2d.elements||[]; var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; for(var i=0;i<els.length;i++){ var e=els[i]; if(!e) continue; var include=function(x,y){ minX=Math.min(minX,x); maxX=Math.max(maxX,x); minY=Math.min(minY,y); maxY=Math.max(maxY,y); }; if(e.type==='wall'){ include(e.x0,e.y0); include(e.x1,e.y1); } else if(e.type==='door' || e.type==='window'){ if(typeof e.host==='number'){ var host=els[e.host]; if(host && host.type==='wall'){ var ax=host.x0+(host.x1-host.x0)*(e.t0||0), ay=host.y0+(host.y1-host.y0)*(e.t0||0); var bx=host.x0+(host.x1-host.x0)*(e.t1||0), by=host.y0+(host.y1-host.y0)*(e.t1||0); include(ax,ay); include(bx,by); } } else { include(e.x0,e.y0); include(e.x1,e.y1); } } } if(!isFinite(minX)||!isFinite(maxX)||!isFinite(minY)||!isFinite(maxY)) return null; return {minX,minY,maxX,maxY}; }
   window.plan2dComputeBounds = window.plan2dComputeBounds || plan2dComputeBounds;
-  function plan2dFitViewToContent(marginPx){ try{ var c=document.getElementById('plan2d-canvas'); if(!c) return false; var b=plan2dComputeBounds(); if(!b) return false; var dpr=window.devicePixelRatio||1; var W=c.width,H=c.height; var contentW=Math.max(0.01,b.maxX-b.minX); var contentH=Math.max(0.01,b.maxY-b.minY); var margin=Math.max(0,(marginPx||40)*dpr); var sX=(W-2*margin)/contentW; var sY=(H-2*margin)/contentH; var sNew=Math.max(10,Math.min(800,Math.min(sX,sY))); __plan2d.scale=sNew; var cx=(b.minX+b.maxX)*0.5; var cy=(b.minY+b.maxY)*0.5; __plan2d.panX=-cx; __plan2d.panY=-cy; plan2dDraw(); return true; }catch(e){ return false; } }
+  function plan2dFitViewToContent(marginPx, opts){
+    try{
+      // Respect auto-fit disable unless explicitly forced
+      if(__plan2d && __plan2d.autoFitEnabled===false && !(opts && opts.force)) return false;
+      var c=document.getElementById('plan2d-canvas'); if(!c) return false; var b=plan2dComputeBounds(); if(!b) return false; var dpr=window.devicePixelRatio||1; var W=c.width,H=c.height; var contentW=Math.max(0.01,b.maxX-b.minX); var contentH=Math.max(0.01,b.maxY-b.minY); var margin=Math.max(0,(marginPx||40)*dpr); var sX=(W-2*margin)/contentW; var sY=(H-2*margin)/contentH; var sNew=Math.max(10,Math.min(800,Math.min(sX,sY))); __plan2d.scale=sNew; var cx=(b.minX+b.maxX)*0.5; var cy=(b.minY+b.maxY)*0.5; __plan2d.panX=-cx; __plan2d.panY=-cy; plan2dDraw(); return true;
+    }catch(e){ return false; }
+  }
   window.plan2dFitViewToContent = window.plan2dFitViewToContent || plan2dFitViewToContent;
 
   // Animated initial fit (eased zoom) -------------------------------------
@@ -368,12 +408,15 @@
         try {
           if(ev.shiftKey){ /* allow legacy drag gesture */ }
           else {
-            var near = (typeof plan2dFindNearestWall==='function') ? plan2dFindNearestWall(p, 0.35) : null;
+            // Use improved placement wall finder (robust to overlapping walls)
+            var near = (typeof plan2dFindPlacementWall==='function') ? plan2dFindPlacementWall(p, 22) : ((typeof plan2dFindNearestWall==='function') ? plan2dFindNearestWall(p, 0.35) : null);
             if(near && typeof near.index==='number'){
               var wall = __plan2d.elements[near.index];
               if(wall && wall.type==='wall'){
                 // Freeze center/scale briefly so adding multiple openings doesn't refit/zoom the view each time.
                 try{ __plan2d.freezeCenterScaleUntil = Date.now() + 400; }catch(_frz){}
+                // Auto-fit disable since user has begun interactive placement session
+                __plan2d.autoFitEnabled=false;
                 var tCenter = (typeof plan2dProjectParamOnWall==='function') ? plan2dProjectParamOnWall(p, wall) : 0.5;
                 var wdx = wall.x1-wall.x0, wdy = wall.y1-wall.y0; var wLen = Math.hypot(wdx,wdy)||1;
                 var openingWidth = (__plan2d.tool==='door' ? (__plan2d.doorWidthM||0.92) : (__plan2d.windowDefaultWidthM||1.2));
@@ -381,10 +424,16 @@
                 var t0 = Math.max(0, Math.min(1, tCenter-halfT));
                 var t1 = Math.max(0, Math.min(1, tCenter+halfT));
                 if(t1 < t0){ var tmp=t0; t0=t1; t1=tmp; }
+                // Clamp opening to avoid full 0-length collapse on tiny walls
+                if(Math.abs(t1 - t0) < 0.01){ var mid=(t0+t1)/2; t0=Math.max(0, mid-0.005); t1=Math.min(1, mid+0.005); }
                 var el = { type: (__plan2d.tool==='door' ? 'door':'window'), host: near.index, t0: t0, t1: t1, thickness: (__plan2d.tool==='door'? (__plan2d.doorWidthM||0.92): (__plan2d.wallThicknessM||0.30)) };
                 if(__plan2d.tool==='door'){ el.meta={hinge:'left',swing:'in'}; }
                 __plan2d.elements.push(el);
+                // Ensure full redraw so the new window appears immediately (avoid stale dirtyRect region)
+                try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clr){}
                 plan2dEdited();
+                // Optionally select the newly added element for instant handle visibility
+                try{ var newIdx=__plan2d.elements.length-1; plan2dSetSelection && plan2dSetSelection(newIdx); }catch(_selNew){}
                 plan2dDraw();
                 return; // placed; stop
               }
@@ -558,17 +607,17 @@
     if(__plan2d.panning){ __plan2d.panning=null; plan2dDraw(); return; }
     // Finish wall endpoint drag
     if(__plan2d.dragWall){
-      try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); plan2dEdited(); }catch(_endDrag){}
+      try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); __plan2d.freezeCenterScaleUntil = Date.now() + 600; plan2dEdited(); }catch(_endDrag){}
       __plan2d.dragWall=null; plan2dDraw(); return;
     }
     // Finish window endpoint drag
     if(__plan2d.dragWindow){
-      try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); plan2dEdited(); }catch(_endW){}
+      try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); __plan2d.freezeCenterScaleUntil = Date.now() + 600; plan2dEdited(); }catch(_endW){}
       __plan2d.dragWindow=null; plan2dDraw(); return;
     }
     // Finish door endpoint drag
     if(__plan2d.dragDoor){
-      try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); plan2dEdited(); }catch(_endD){}
+      try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); __plan2d.freezeCenterScaleUntil = Date.now() + 600; plan2dEdited(); }catch(_endD){}
       __plan2d.dragDoor=null; plan2dDraw(); return;
     }
     if(__plan2d.start && __plan2d.last){ var moved=Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y); if(moved<0.02){ plan2dSelectAt(__plan2d.last); } else { var a=__plan2d.start,b=__plan2d.last; if(__plan2d.tool!=='wall'){ // drag-create still applies for window/door

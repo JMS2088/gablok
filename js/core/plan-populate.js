@@ -379,10 +379,9 @@ function populatePlan2DFromDesign(){
       (__plan2d && __plan2d.freezeCenterScaleUntil && Date.now() < __plan2d.freezeCenterScaleUntil)
     ) { newScale = __plan2d.scale || newScale; }
     if (isFinite(newScale) && newScale>0) {
-      // Only update scale if not in userDrawingActive (double-guard) to prevent any subtle fractional recenter
-      if(!(__plan2d && __plan2d.userDrawingActive)) {
-        __plan2d.scale = newScale;
-      }
+      // Only update scale if not in userDrawingActive and not within freeze window
+      var allowScaleUpdate = !(__plan2d && __plan2d.userDrawingActive) && !(__plan2d && __plan2d.freezeCenterScaleUntil && Date.now() < __plan2d.freezeCenterScaleUntil);
+      if(allowScaleUpdate) { __plan2d.scale = newScale; }
     }
   }
   // Note: We continue even if canvas doesn't exist, to ensure __plan2d.elements is updated.

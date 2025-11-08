@@ -13,7 +13,7 @@
       });
     });
     // Fit, Flip, Clear, Export, Import, Apply buttons
-    var fit=document.getElementById('plan2d-fit'); if(fit && !fit.__wired){ fit.__wired=true; fit.addEventListener('click', function(){ try{ plan2dFitViewToContent && plan2dFitViewToContent(40); }catch(_){} }); }
+  var fit=document.getElementById('plan2d-fit'); if(fit && !fit.__wired){ fit.__wired=true; fit.addEventListener('click', function(){ try{ if(__plan2d){ __plan2d.autoFitEnabled=true; } plan2dFitViewToContent && plan2dFitViewToContent(40,{force:true}); }catch(_){} }); }
     var flip=document.getElementById('plan2d-flip-y'); if(flip && !flip.__wired){ flip.__wired=true; flip.addEventListener('click', function(){ try{ plan2dFlipVertical && plan2dFlipVertical(); }catch(_){} }); }
     var clear=document.getElementById('plan2d-clear'); if(clear && !clear.__wired){ clear.__wired=true; clear.addEventListener('click', function(){ try{ plan2dClear && plan2dClear(); }catch(_){} }); }
     var exp=document.getElementById('plan2d-export'); if(exp && !exp.__wired){ exp.__wired=true; exp.addEventListener('click', function(){ try{ plan2dExport && plan2dExport(); }catch(_){} }); }
@@ -58,9 +58,17 @@
         window.plan2dSetSelection.__patchedForOpeningControls=true;
       }
     }catch(_patchSel){}
-    if(winType && !winType.__wired){ winType.__wired=true; winType.addEventListener('change', function(){ try{ var idx=__plan2d.selectedIndex; if(idx>=0){ var el=__plan2d.elements[idx]; if(el && el.type==='window'){ if(winType.value==='full'){ el.sillM=0; el.heightM=(__plan2d.wallHeightM||3.0); } else { el.sillM=(__plan2d.windowSillM||1.0); el.heightM=(__plan2d.windowHeightM||1.5); } plan2dEdited(); plan2dDraw(); refreshOpeningControls(); } } }catch(_chW){} }); }
-    if(doorSwing && !doorSwing.__wired){ doorSwing.__wired=true; doorSwing.addEventListener('change', function(){ try{ var idx=__plan2d.selectedIndex; if(idx>=0){ var el=__plan2d.elements[idx]; if(el && el.type==='door'){ el.meta = el.meta || { hinge:'t0', swing:'in' }; el.meta.swing = doorSwing.value==='out' ? 'out' : 'in'; plan2dEdited(); plan2dDraw(); refreshOpeningControls(); } } }catch(_chDS){} }); }
-    if(doorHinge && !doorHinge.__wired){ doorHinge.__wired=true; doorHinge.addEventListener('change', function(){ try{ var idx=__plan2d.selectedIndex; if(idx>=0){ var el=__plan2d.elements[idx]; if(el && el.type==='door'){ el.meta = el.meta || { hinge:'t0', swing:'in' }; el.meta.hinge = (doorHinge.value==='t1') ? 't1':'t0'; plan2dEdited(); plan2dDraw(); refreshOpeningControls(); } } }catch(_chDH){} }); }
+  if(winType && !winType.__wired){ winType.__wired=true; winType.addEventListener('change', function(){ try{ var idx=__plan2d.selectedIndex; if(idx>=0){ var el=__plan2d.elements[idx]; if(el && el.type==='window'){
+        // Freeze view so dropdown edits don't trigger zoom/fit from downstream sync
+        try{ __plan2d.freezeCenterScaleUntil = Date.now() + 800; __plan2d.autoFitEnabled=false; }catch(_fzW){}
+        if(winType.value==='full'){ el.sillM=0; el.heightM=(__plan2d.wallHeightM||3.0); } else { el.sillM=(__plan2d.windowSillM||1.0); el.heightM=(__plan2d.windowHeightM||1.5); }
+        plan2dEdited(); plan2dDraw(); refreshOpeningControls(); } } }catch(_chW){} }); }
+  if(doorSwing && !doorSwing.__wired){ doorSwing.__wired=true; doorSwing.addEventListener('change', function(){ try{ var idx=__plan2d.selectedIndex; if(idx>=0){ var el=__plan2d.elements[idx]; if(el && el.type==='door'){
+        try{ __plan2d.freezeCenterScaleUntil = Date.now() + 800; __plan2d.autoFitEnabled=false; }catch(_fzDS){}
+        el.meta = el.meta || { hinge:'t0', swing:'in' }; el.meta.swing = doorSwing.value==='out' ? 'out' : 'in'; plan2dEdited(); plan2dDraw(); refreshOpeningControls(); } } }catch(_chDS){} }); }
+  if(doorHinge && !doorHinge.__wired){ doorHinge.__wired=true; doorHinge.addEventListener('change', function(){ try{ var idx=__plan2d.selectedIndex; if(idx>=0){ var el=__plan2d.elements[idx]; if(el && el.type==='door'){
+        try{ __plan2d.freezeCenterScaleUntil = Date.now() + 800; __plan2d.autoFitEnabled=false; }catch(_fzDH){}
+        el.meta = el.meta || { hinge:'t0', swing:'in' }; el.meta.hinge = (doorHinge.value==='t1') ? 't1':'t0'; plan2dEdited(); plan2dDraw(); refreshOpeningControls(); } } }catch(_chDH){} }); }
     // Initial state hidden
     refreshOpeningControls();
   }

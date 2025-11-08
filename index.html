@@ -521,21 +521,7 @@
 				</div>
 				<button id="plan2d-tool-window" class="secondary" title="Draw Windows (thin line)">Window</button>
 				<button id="plan2d-tool-door" class="secondary" title="Draw Doors">Door</button>
-				<!-- Opening property controls (dynamic visibility) -->
-				<div id="plan2d-opening-controls" style="display:flex; flex-direction:row; gap:6px; align-items:flex-start;">
-					<select id="plan2d-window-type" class="secondary" title="Window Type" style="display:none; padding:4px 6px; font-size:12px;">
-						<option value="standard">Window: Standard</option>
-						<option value="full">Window: Full Height</option>
-					</select>
-					<select id="plan2d-door-swing" class="secondary" title="Door Swing" style="display:none; padding:4px 6px; font-size:12px;">
-						<option value="in">Door: Swing In</option>
-						<option value="out">Door: Swing Out</option>
-					</select>
-					<select id="plan2d-door-hinge" class="secondary" title="Door Hinge Side" style="display:none; padding:4px 6px; font-size:12px;">
-						<option value="t0">Door: Hinge Left</option>
-						<option value="t1">Door: Hinge Right</option>
-					</select>
-				</div>
+				<!-- Opening property controls moved below Import JSON -->
 				<button id="plan2d-tool-erase" class="secondary" title="Erase elements">Erase</button>
 				<!-- View utilities: fit and flip orientation -->
 				<button id="plan2d-fit" class="secondary" title="Fit view to current 2D content">Fit</button>
@@ -552,10 +538,25 @@
 		<canvas id="plan2d-overlay" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block;"></canvas>
 		<canvas id="labels-2d" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block;"></canvas>
 		<!-- Floating side overlay (left-hand menu) restored -->
-		<div id="plan2d-side-overlay" style="position:absolute; right:8px; top:40px; z-index:4; display:flex; flex-direction:column; gap:8px; background:rgba(15,23,42,0.85); border:1px solid rgba(148,163,184,0.35); border-radius:10px; padding:10px; backdrop-filter: blur(2px);">
+		<div id="plan2d-side-overlay" style="position:absolute; right:10px; top:10px; z-index:4; display:flex; flex-direction:column; gap:8px; background:rgba(15,23,42,0.85); border:1px solid rgba(148,163,184,0.35); border-radius:10px; padding:10px; backdrop-filter: blur(2px);">
 			<button id="plan2d-apply-3d" title="Apply this floor plan to the 3D design">Apply to 3D</button>
 			<button id="plan2d-export" title="Export plan JSON">Export JSON</button>
 			<button id="plan2d-import" class="secondary" title="Import plan JSON">Import JSON</button>
+			<!-- Opening dropdowns relocated here: inline row just below Import JSON -->
+			<div id="plan2d-opening-inline" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:4px;">
+				<select id="plan2d-window-type" class="secondary" title="Window Type" style="display:none; padding:4px 6px; font-size:12px;">
+					<option value="standard">Window: Standard</option>
+					<option value="full">Window: Full Height</option>
+				</select>
+				<select id="plan2d-door-swing" class="secondary" title="Door Swing" style="display:none; padding:4px 6px; font-size:12px;">
+					<option value="in">Door: Swing In</option>
+					<option value="out">Door: Swing Out</option>
+				</select>
+				<select id="plan2d-door-hinge" class="secondary" title="Door Hinge Side" style="display:none; padding:4px 6px; font-size:12px;">
+					<option value="t0">Door: Hinge Left</option>
+					<option value="t1">Door: Hinge Right</option>
+				</select>
+			</div>
 			<input type="file" id="plan2d-import-file" accept="application/json" style="display:none;">
 		</div>
 	</div>
