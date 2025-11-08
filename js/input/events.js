@@ -260,6 +260,27 @@
             console.warn('Face start compute failed:', err);
           }
           return;
+        } else if (handle.type === 'wall-move' && typeof handle.wallIndex === 'number') {
+          // Begin dragging a freestanding wall strip
+          var w = (window.wallStrips && window.wallStrips[handle.wallIndex]) ? window.wallStrips[handle.wallIndex] : null;
+          if (w) {
+            mouse.dragType = 'wall-strip';
+            mouse.dragInfo = {
+              wallIndex: handle.wallIndex,
+              startX: e.clientX,
+              startY: e.clientY,
+              originalX0: w.x0, originalZ0: w.z0,
+              originalX1: w.x1, originalZ1: w.z1,
+              level: w.level||0
+            };
+            window.selectedWallStripIndex = handle.wallIndex;
+            if (typeof window.selectObject==='function') window.selectObject(null, { noRender:true });
+            updateStatus('Moving wall...');
+            mouse.down = true;
+            canvas.style.cursor = 'grabbing';
+            renderLoop();
+            return;
+          }
         }
       }
       
@@ -723,6 +744,24 @@
 
           renderLoop();
         }
+      } else if (mouse.dragType === 'wall-strip' && mouse.dragInfo && typeof mouse.dragInfo.wallIndex === 'number') {
+        var wsIdx = mouse.dragInfo.wallIndex;
+        var wArr = window.wallStrips || [];
+        var wObj = wArr[wsIdx];
+        if (wObj) {
+          var dx = e.clientX - mouse.dragInfo.startX;
+          var dy = e.clientY - mouse.dragInfo.startY;
+          var mv = worldMovement(dx, dy);
+          // Translate both endpoints uniformly (keep length and orientation)
+          wObj.x0 = mouse.dragInfo.originalX0 + mv.x;
+          wObj.z0 = mouse.dragInfo.originalZ0 + mv.z;
+          wObj.x1 = mouse.dragInfo.originalX1 + mv.x;
+          wObj.z1 = mouse.dragInfo.originalZ1 + mv.z;
+          updateStatus('Moving wall...');
+          // Mark need for full render (no rebuild needed; free wall)
+          try { window._needsFullRender = true; } catch(_nf) {}
+          renderLoop();
+        }
       } else if (mouse.dragType === 'camera' && mouse.down) {
         var dx = e.clientX - mouse.lastX;
         var dy = e.clientY - mouse.lastY;
@@ -742,6 +781,13 @@
     document.addEventListener('mouseup', function() {
       // If we just finished resizing OR moving a room, sync to 2D and save
       if ((mouse.dragType === 'handle' || mouse.dragType === 'room' || mouse.dragType === 'balcony') && mouse.dragInfo && mouse.dragInfo.roomId) {
+      // Wall strip drag end
+      if (mouse.dragType === 'wall-strip' && mouse.dragInfo && typeof mouse.dragInfo.wallIndex === 'number') {
+        updateStatus('Wall moved');
+        // Persist project after move
+        try { if (typeof saveProjectSilently==='function') saveProjectSilently(); } catch(_spw) {}
+        renderLoop();
+      }
         try {
           // Ensure final 2D grouped walls match the final 3D room pose
           try { var rmFinal = findObjectById(mouse.dragInfo.roomId); if (rmFinal) updatePlan2DWallsForRoom(rmFinal); } catch(_cf) {}

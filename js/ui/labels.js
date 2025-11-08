@@ -392,6 +392,24 @@
   function drawSelectedHandlesUnified(){
     try {
       if (!window.canvas || !window.ctx) return;
+      // If a wall strip is selected, draw a center drag handle for moving it
+      if (typeof window.selectedWallStripIndex === 'number' && window.selectedWallStripIndex > -1 && Array.isArray(window.wallStrips) && window.wallStrips[window.selectedWallStripIndex]) {
+        if (!Array.isArray(window.resizeHandles)) window.resizeHandles = [];
+        window.resizeHandles.length = 0;
+        var ws = window.wallStrips[window.selectedWallStripIndex];
+        var yMidW = (typeof ws.baseY==='number' ? ws.baseY : ((ws.level||0)*3.5)) + Math.min(Math.max(0.1, ws.height||3.0)*0.5, 1.2);
+        var cx = ((ws.x0||0) + (ws.x1||0)) / 2;
+        var cz = ((ws.z0||0) + (ws.z1||0)) / 2;
+        var p = (typeof window.project3D==='function') ? window.project3D(cx, yMidW, cz) : null; if (!p) { window.resizeHandles = []; return; }
+        var baseR = (typeof window.HANDLE_RADIUS==='number'? window.HANDLE_RADIUS : 14);
+        var r = (typeof window.computeHandleRadius==='function') ? window.computeHandleRadius(p, baseR) : baseR;
+        // Draw handle as a teal dot with label 'M'
+        window.ctx.save(); var prevGA = window.ctx.globalAlpha; window.ctx.globalAlpha = prevGA * 1.0;
+        if (typeof window.drawHandle==='function') window.drawHandle(p, 'move', 'M', true, r);
+        window.ctx.restore();
+        window.resizeHandles.push({ screenX: p.x - r, screenY: p.y - r, width: r*2, height: r*2, type: 'wall-move', wallIndex: window.selectedWallStripIndex });
+        return; // Only draw wall handle in this mode
+      }
       var sid = window.selectedRoomId; if (!sid) { window.resizeHandles = []; return; }
       var o = (typeof window.findObjectById==='function') ? window.findObjectById(sid) : null; if (!o) { window.resizeHandles = []; return; }
       if (!Array.isArray(window.resizeHandles)) window.resizeHandles = [];

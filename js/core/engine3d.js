@@ -965,7 +965,28 @@
     } catch(e) {}
     return null;
   };
-  if (typeof window.hitTestWallStrips === 'undefined') window.hitTestWallStrips = function(){ return -1; };
+  if (typeof window.hitTestWallStrips === 'undefined') window.hitTestWallStrips = function(mxCss, myCss){
+    try {
+      var dpr = window.devicePixelRatio || 1;
+      var mx = (mxCss||0) * dpr, my = (myCss||0) * dpr;
+      var lvl = (typeof currentFloor==='number') ? currentFloor : 0;
+      var bestIdx = -1, bestD2 = Infinity;
+      for (var i=0; i<(wallStrips||[]).length; i++){
+        var ws = wallStrips[i]; if(!ws) continue; if ((ws.level||0)!==lvl) continue;
+        var yMid = (typeof ws.baseY==='number' ? ws.baseY : (ws.level||0)*3.5) + Math.min(Math.max(0.1, ws.height||3.0)*0.5, 1.2);
+        var p0 = project3D(ws.x0||0, yMid, ws.z0||0);
+        var p1 = project3D(ws.x1||0, yMid, ws.z1||0);
+        if (!p0 || !p1) continue;
+        // distance point->segment in screen space
+        var vx = p1.x - p0.x, vy = p1.y - p0.y; var L2 = vx*vx + vy*vy; if (L2 < 1e-3) continue;
+        var ux = mx - p0.x, uy = my - p0.y; var u = (ux*vx + uy*vy) / L2; if (u < 0) u = 0; if (u > 1) u = 1;
+        var qx = p0.x + u*vx, qy = p0.y + u*vy; var dx = mx - qx, dy = my - qy; var d2 = dx*dx + dy*dy;
+        if (d2 < bestD2){ bestD2 = d2; bestIdx = i; }
+      }
+      var thresh = 14 * dpr; // px
+      return (bestIdx>-1 && bestD2 <= (thresh*thresh)) ? bestIdx : -1;
+    } catch(e){ return -1; }
+  };
   if (typeof window.drawWallStrip === 'undefined') window.drawWallStrip = function(ws){
     try {
       if (!ws) return;
@@ -1481,6 +1502,46 @@
     ctx.restore();
     drewFace = true;
   }
+      // End caps: draw flat end faces for walls that do not connect to another wall at the endpoint,
+      // or when they butt into another wall mid-segment (T-junction). This makes isolated or terminating
+      // walls appear with a clean flat end in solid render mode.
+      var __dotStart = (-tvec.x) * (__fwd[0]||0) + (-tvec.z) * (__fwd[2]||0);
+      var __dotEnd   = ( tvec.x) * (__fwd[0]||0) + ( tvec.z) * (__fwd[2]||0);
+      var __fillCapStart = __shade(__dotStart);
+      var __fillCapEnd   = __shade(__dotEnd);
+      var canStartCap = (pD && pA && pAt && pDt);
+      var canEndCap   = (pB && pC && pCt && pBt);
+      // Determine if neighboring strip connects at endpoints to skip caps for true corners
+      function hasNeighborAt(wx, wz){
+        try {
+          var EPS = 1e-3;
+          var arr = window.wallStrips || [];
+          for (var ii=0; ii<arr.length; ii++){
+            var s = arr[ii]; if(!s || s===ws) continue;
+            if ((s.level||0) !== (ws.level||0)) continue; // same level only
+            var d0 = Math.hypot((s.x0||0) - wx, (s.z0||0) - wz);
+            var d1 = Math.hypot((s.x1||0) - wx, (s.z1||0) - wz);
+            if (d0 < EPS || d1 < EPS) return true;
+          }
+        } catch(_eN) {}
+        return false;
+      }
+      var __startHasNeighbor = hasNeighborAt(x0, z0) || startIsT;
+      var __endHasNeighbor   = hasNeighborAt(x1, z1) || endIsT;
+      // Start cap (D->A->At->Dt)
+      if (canStartCap && (!__startHasNeighbor || startIsT)){
+        ctx.beginPath();
+        ctx.moveTo(pD.x, pD.y); ctx.lineTo(pA.x, pA.y); ctx.lineTo(pAt.x, pAt.y); ctx.lineTo(pDt.x, pDt.y); ctx.closePath();
+        ctx.fillStyle = __fillCapStart; ctx.fill();
+        drewFace = true;
+      }
+      // End cap (B->C->Ct->Bt)
+      if (canEndCap && (!__endHasNeighbor || endIsT)){
+        ctx.beginPath();
+        ctx.moveTo(pB.x, pB.y); ctx.lineTo(pC.x, pC.y); ctx.lineTo(pCt.x, pCt.y); ctx.lineTo(pBt.x, pBt.y); ctx.closePath();
+        ctx.fillStyle = __fillCapEnd; ctx.fill();
+        drewFace = true;
+      }
       // Fallback: if no face could be drawn (all four-point faces invalid), draw a centerline at mid-height
       if (!drewFace) {
         var yMid = baseY + Math.min(h*0.5, 1.2);
@@ -1585,6 +1646,63 @@
         }
         window.__cornerCodeMap = out;
       } catch(_eCCB) { window.__cornerCodeMap = {}; }
+    };
+  }
+  // Precompute exterior miter snap points for corners so walls meet perfectly on the first render pass (no second pass needed)
+  if (typeof window.computeExteriorCornerSnaps === 'undefined') {
+    window.computeExteriorCornerSnaps = function(){
+      try {
+        var ws = Array.isArray(window.wallStrips) ? window.wallStrips : [];
+        var lvl = (typeof window.currentFloor==='number') ? window.currentFloor : 0;
+        // Build corner map: key -> list of endpoint infos
+        function kf(v){ return Math.round((+v||0)*100)/100; } // cm
+        function keyFor(level,x,z){ return level + '|' + kf(x) + '|' + kf(z); }
+        var map = Object.create(null);
+        for (var i=0; i<ws.length; i++){
+          var s = ws[i]; if (!s) continue; if ((s.level||0)!==lvl) continue;
+          var x0=s.x0||0, z0=s.z0||0, x1=s.x1||0, z1=s.z1||0;
+          var dx = x1-x0, dz = z1-z0; var L = Math.hypot(dx,dz)||1; var tx=dx/L, tz=dz/L;
+          var t0 = { x: tx, z: tz }, t1 = { x: -tx, z: -tz };
+          var n = { x: -tz, z: tx };
+          var hw = Math.max(0.02, (s.thickness||0.3)/2);
+          var intLeft = (typeof s.__interiorLeft==='boolean') ? s.__interiorLeft : ((typeof s.__outerFaceLeft==='boolean') ? (!s.__outerFaceLeft) : null);
+          var e0 = { key: keyFor((s.level||0), x0, z0), corner:{x:x0,z:z0}, dir: t0, norm:n, hw:hw, intLeft:intLeft };
+          var e1 = { key: keyFor((s.level||0), x1, z1), corner:{x:x1,z:z1}, dir: t1, norm:n, hw:hw, intLeft:intLeft };
+          if (!map[e0.key]) map[e0.key]=[]; map[e0.key].push(e0);
+          if (!map[e1.key]) map[e1.key]=[]; map[e1.key].push(e1);
+        }
+        // 2D line intersection utility
+        function intersect(p,d,q,e){ var den = d.x * (-e.z) - d.z * (-e.x); if (Math.abs(den) < 1e-6) return null; var rx=q.x-p.x, rz=q.z-p.z; var a=(rx*(-e.z)-rz*(-e.x))/den; return { x: p.x + a*d.x, z: p.z + a*d.z }; }
+        // Reset snap map for this frame
+        try { window.__extCornerSnap = {}; } catch(_eR) { window.__extCornerSnap = {}; }
+        // For each corner with two or more strips, compute exterior intersection using each strip's exterior offset line
+        var keys = Object.keys(map);
+        for (var ki=0; ki<keys.length; ki++){
+          var key = keys[ki]; var arr = map[key]||[]; if (arr.length < 2) continue;
+          // Choose two with the largest angle (most orthogonal) to avoid colinear cases
+          var bestI=-1,bestJ=-1,bestAng=-1;
+          function ang(u,v){ var dot = u.dir.x*v.dir.x + u.dir.z*v.dir.z; var ll = Math.max(1e-6, Math.hypot(u.dir.x,u.dir.z)*Math.hypot(v.dir.x,v.dir.z)); var c = Math.max(-1, Math.min(1, dot/ll)); return Math.acos(c); }
+          for (var i1=0; i1<arr.length; i1++){
+            for (var j1=i1+1; j1<arr.length; j1++){
+              var a = ang(arr[i1], arr[j1]); if (a > bestAng){ bestAng=a; bestI=i1; bestJ=j1; }
+            }
+          }
+          if (bestI<0 || bestJ<0) continue;
+          var A = arr[bestI], B = arr[bestJ];
+          // Both must have interior/exterior info; else skip to avoid wrong snap for free walls
+          if (A.intLeft==null || B.intLeft==null) continue;
+          var exSignA = A.intLeft ? -1 : 1; // exterior is right when interior is left
+          var exSignB = B.intLeft ? -1 : 1;
+          var pA = { x: A.corner.x + A.norm.x * exSignA * A.hw, z: A.corner.z + A.norm.z * exSignA * A.hw };
+          var pB = { x: B.corner.x + B.norm.x * exSignB * B.hw, z: B.corner.z + B.norm.z * exSignB * B.hw };
+          var iP = intersect(pA, A.dir, pB, B.dir);
+          if (iP) {
+            // Store in snap map using drawWallStrip's keying convention (×100 rounding)
+            var snapKey = (lvl) + '|' + Math.round(A.corner.x*100) + '|' + Math.round(A.corner.z*100) + '|ext';
+            window.__extCornerSnap[snapKey] = { x: iP.x, z: iP.z };
+          }
+        }
+      } catch(e){ /* non-fatal */ }
     };
   }
   if (typeof window.updatePerfStatsOverlay === 'undefined') window.updatePerfStatsOverlay = function(){};
@@ -1912,6 +2030,8 @@
         // Draw interior wall strips (extruded 2D walls)
         try {
           if (window.__showCornerCodes && typeof window.computeCornerCodes==='function') { window.computeCornerCodes(); }
+          // Ensure exterior miter snaps are ready before the very first draw in this frame
+          try { if (typeof window.computeExteriorCornerSnaps==='function') window.computeExteriorCornerSnaps(); } catch(_eSnapPre) {}
           var __ws = window.wallStrips || [];
           for (var __wsi=0; __wsi<__ws.length; __wsi++){
             try { if (typeof drawWallStrip==='function') drawWallStrip(__ws[__wsi]); } catch(__eWs) {}
