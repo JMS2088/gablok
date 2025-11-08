@@ -60,16 +60,33 @@
       var bF=document.getElementById('plan2d-floor-first');
       function setActive(){ try{ var cur=(typeof window.currentFloor==='number'? window.currentFloor:0); if(bG&&bF){ if(cur===0){ bG.classList.add('active'); bF.classList.remove('active'); } else { bF.classList.add('active'); bG.classList.remove('active'); } } }catch(_){} }
       function switchFloor(to){ try{
-        // Save current 2D plan before switching
+        // Save current 2D plan before switching (persist draft for prior floor)
         try{ plan2dSaveDraft && plan2dSaveDraft((typeof window.currentFloor==='number'? window.currentFloor:0)); }catch(_s){}
         window.currentFloor = to;
-        // Load draft for new floor or populate if empty
+        // Load draft for new floor if it exists
         try{ plan2dLoadDraft && plan2dLoadDraft(to); }catch(_l){}
-        if((!Array.isArray(__plan2d.elements) || __plan2d.elements.length===0) && typeof window.populatePlan2DFromDesign==='function'){
-          try{ window.populatePlan2DFromDesign(); }catch(_p){}
+        var hadDraft = Array.isArray(__plan2d.elements) && __plan2d.elements.length>0;
+        if(!hadDraft){
+          // Only auto-populate from 3D if there is source content on this floor.
+          var hasSource=false;
+          try {
+            var rooms=Array.isArray(window.allRooms)?window.allRooms:[];
+            for(var i=0;i<rooms.length;i++){ var r=rooms[i]; if(r && (r.level||0)===to){ hasSource=true; break; } }
+            if(!hasSource){
+              var strips=Array.isArray(window.wallStrips)?window.wallStrips:[];
+              for(var j=0;j<strips.length;j++){ var ws=strips[j]; if(ws && (ws.level||0)===to){ hasSource=true; break; } }
+            }
+          } catch(_src){}
+          if(hasSource && typeof window.populatePlan2DFromDesign==='function'){
+            try{ window.populatePlan2DFromDesign(); hadDraft = Array.isArray(__plan2d.elements) && __plan2d.elements.length>0; }catch(_p){}
+          } else {
+            // Ensure blank state for floors with no content (e.g. First floor before any rooms added)
+            __plan2d.elements = []; try{ plan2dSetSelection && plan2dSetSelection(-1); }catch(_sel){}
+            // Maintain existing pan/scale; do NOT fit view on an empty floor
+          }
         }
-        // Redraw and update scale label state
-        try{ plan2dFitViewToContent && plan2dFitViewToContent(40); }catch(_f){}
+        // Fit only if there is content; otherwise keep current scale/pan for empty grid.
+        if(hadDraft){ try{ plan2dFitViewToContent && plan2dFitViewToContent(40); }catch(_f){} }
         try{ plan2dDraw && plan2dDraw(); }catch(_d){}
         setActive();
       }catch(e){}}

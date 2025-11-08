@@ -47,7 +47,19 @@
     try { if(typeof floor!=='number') floor=0; window.__plan2dDrafts[floor] = JSON.parse(JSON.stringify(__plan2d.elements)); savePlan2dDraftsToStorage(); } catch(e){}
   }
   function plan2dLoadDraft(floor){
-    try { if(typeof floor!=='number') floor=0; var arr = window.__plan2dDrafts[floor]; if(Array.isArray(arr)){ __plan2d.elements = JSON.parse(JSON.stringify(arr)); plan2dSetSelection(-1); } } catch(e){}
+    try {
+      if(typeof floor!=='number') floor=0;
+      var arr = window.__plan2dDrafts[floor];
+      if(Array.isArray(arr)){
+        // Deep clone the stored draft
+        __plan2d.elements = JSON.parse(JSON.stringify(arr));
+        plan2dSetSelection(-1);
+      } else {
+        // Explicitly clear elements when no draft exists for this floor so previous floor's walls don't leak
+        __plan2d.elements = [];
+        plan2dSetSelection(-1);
+      }
+    } catch(e){ /* non-fatal */ }
   }
   window.plan2dSaveDraft = window.plan2dSaveDraft || plan2dSaveDraft;
   window.plan2dLoadDraft = window.plan2dLoadDraft || plan2dLoadDraft;
@@ -420,8 +432,19 @@
     plan2dCursor();
     // Load drafts + current floor
     try{ loadPlan2dDraftsFromStorage(); plan2dLoadDraft(typeof window.currentFloor==='number'? window.currentFloor:0); }catch(e){}
-    // Always sync walls from 3D design for accuracy (simplified behavior)
-    try{ if(typeof window.populatePlan2DFromDesign==='function'){ window.populatePlan2DFromDesign(); } }catch(_pop){}
+    // Conditionally sync walls from 3D: only when the current floor actually has source content
+    try{
+      if(typeof window.populatePlan2DFromDesign==='function'){
+        var lvlNow = (typeof window.currentFloor==='number'? window.currentFloor:0);
+        var hasRooms=false, hasStrips=false;
+        try{
+          var rms = Array.isArray(window.allRooms)? window.allRooms: [];
+          for(var i=0;i<rms.length;i++){ var r=rms[i]; if(r && (r.level||0)===lvlNow){ hasRooms=true; break; } }
+          if(!hasRooms){ var wsArr = Array.isArray(window.wallStrips)? window.wallStrips: []; for(var j=0;j<wsArr.length;j++){ var w=wsArr[j]; if(w && (w.level||0)===lvlNow){ hasStrips=true; break; } } }
+        }catch(_s){}
+        if(hasRooms || hasStrips){ window.populatePlan2DFromDesign(); }
+      }
+    }catch(_pop){}
     // Hide canvases until we have content + animation starts to avoid initial single-room flash
     try{
       var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var l2=document.getElementById('labels-2d');
