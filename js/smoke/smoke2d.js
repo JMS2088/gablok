@@ -8,8 +8,9 @@
   var flag2d = qs('smoke2d');
   var flagApply = qs('smokeApply');
   var flagTest = qs('test2d');
+  var flagVanish = qs('vanish'); // ?vanish=1 triggers repeated open/close & floor switch vanish diagnostics
   // If none of the known flags are present, do nothing
-  if ((!flag2d || flag2d === '0' || flag2d === 'false') && (!flagApply || flagApply === '0' || flagApply === 'false') && (!flagTest || flagTest === '0' || flagTest === 'false')) return;
+  if ((!flag2d || flag2d === '0' || flag2d === 'false') && (!flagApply || flagApply === '0' || flagApply === 'false') && (!flagTest || flagTest === '0' || flagTest === 'false') && (!flagVanish || flagVanish === '0' || flagVanish === 'false')) return;
   function setStatus(msg){ try{ var s=document.getElementById('status'); if(s) s.textContent = msg; }catch(e){} }
   // Lightweight reporter with retry and global hook for manual use
   function report(msg){
@@ -69,6 +70,73 @@
           window.__plan2d.elements.push({ type:'window', host: idxRight, t0: 0.5 - wHalf, t1: 0.5 + wHalf, thickness: wt, sillM:(window.__plan2d.windowSillM||1.0), heightM:(window.__plan2d.windowHeightM||1.5) });
           try { window.plan2dDraw && window.plan2dDraw(); } catch(_d){}
           return { ok:true };
+        }
+
+        // Vanish diagnostic: open/close 2D multiple times & floor switches to detect element loss
+        if (flagVanish && flagVanish !== '0' && flagVanish !== 'false'){
+          (function(){
+            var cycles = +(qs('cycles')||'4'); if(!isFinite(cycles)||cycles<1) cycles=4; // number of open/close cycles
+            var delayOpen = +(qs('openDelay')||'250'); // ms between open and close
+            var delayBetween = +(qs('cycleDelay')||'200'); // ms between cycles
+            var floorSwitches = +(qs('switches')||'2'); if(!isFinite(floorSwitches)||floorSwitches<0) floorSwitches=2;
+            function log(msg){ try{ console.log('[VANISH]', msg); report('vanish:'+msg); }catch(_l){} }
+            function ensureFirstFloorRoom(){
+              try {
+                // If no room on level 1, create a dummy one (simple rectangle) using createRoom if available
+                var rooms = Array.isArray(window.allRooms)? window.allRooms : [];
+                var hasLvl1 = rooms.some(function(r){ return r && (r.level||0)===1; });
+                if(!hasLvl1 && typeof window.createRoom==='function'){
+                  var r = window.createRoom(5,5,1); r.width=4; r.depth=3; r.name='Smoke1F';
+                  log('createdFirstFloorRoom');
+                }
+              } catch(e){ log('createRoomError:'+ (e&&e.message)); }
+            }
+            ensureFirstFloorRoom();
+            var snapHistory = [];
+            function capture(label){
+              try {
+                var count = (window.__plan2d && Array.isArray(window.__plan2d.elements))? window.__plan2d.elements.length : -1;
+                var floor = (typeof window.currentFloor==='number'? window.currentFloor:0);
+                var diag = window.__plan2dDiag || {};
+                var entry = { t: Date.now(), label: label, floor: floor, count: count, start: diag.lastPopulateStart, end: diag.lastPopulateEnd, open: diag.lastOpenSnapshot, switch: diag.lastFloorSwitch };
+                snapHistory.push(entry);
+                log(label+' floor='+floor+' count='+count);
+                // If count unexpectedly 0 while rooms exist for that floor, flag
+                try {
+                  var rooms = Array.isArray(window.allRooms)? window.allRooms:[];
+                  var hasRooms = rooms.some(function(r){ return r && (r.level||0)===floor; });
+                  if(count===0 && hasRooms){ log('ALERT: vanishDetected floor='+floor+' roomsPresent='+hasRooms); }
+                }catch(_rv){}
+              }catch(_cap){}
+            }
+            function floorSwitchSeq(cb){
+              var seq=0; function step(){
+                if(seq>=floorSwitches){ cb(); return; }
+                seq++;
+                var target = (typeof window.currentFloor==='number' ? (window.currentFloor===0?1:0) : 1);
+                try { if(typeof window.plan2dSwitchFloorInEditor==='function'){ window.plan2dSwitchFloorInEditor(target); } else { window.currentFloor=target; if(typeof window.populatePlan2DFromDesign==='function'){ window.populatePlan2DFromDesign(); } } }catch(_sw){}
+                setTimeout(function(){ capture('afterSwitch'+seq); step(); }, 120);
+              }
+              step();
+            }
+            function runCycle(n){
+              if(n>cycles){
+                // Final report dump (aggregated JSON for server-side capture if needed)
+                try { report('vanish:done cycles='+cycles); report('vanish:data:'+encodeURIComponent(JSON.stringify(snapHistory.slice(-15)))); }catch(_rep){}
+                setStatus('Vanish smoke: complete '+cycles+' cycles');
+                return;
+              }
+              // Open modal
+              try { window.openPlan2DModal(); }catch(_o){}
+              setTimeout(function(){ capture('opened'+n); floorSwitchSeq(function(){
+                // Close modal
+                try { window.closePlan2DModal && window.closePlan2DModal(); }catch(_c){}
+                setTimeout(function(){ capture('closed'+n); setTimeout(function(){ runCycle(n+1); }, delayBetween); }, 60);
+              }); }, delayOpen);
+            }
+            // Kick off
+            setTimeout(function(){ runCycle(1); }, 400);
+          })();
         }
 
         // Programmatic keyboard event for Delete
@@ -300,7 +368,7 @@
         }
 
         // Auto-close to avoid blocking manual testing unless explicitly kept open
-        if (!qs('keep2d')){
+        if (!qs('keep2d') && !(flagVanish && flagVanish!=='0' && flagVanish!=='false')){
           setTimeout(function(){ try { window.closePlan2DModal && window.closePlan2DModal(); } catch(_e){} }, 900);
         }
       }, 600);
