@@ -352,7 +352,8 @@
             }
             // Move the Edit button to the right of the rotate button, aligned center
             var editHalf = 22;
-            var ebCenterLeft = Math.round(rotCenterLeft + rRad + gapAfterRotate + editHalf);
+            // Move the Edit button 8px closer to the label (leftwards) relative to rotate button
+            var ebCenterLeft = Math.round(rotCenterLeft + rRad + gapAfterRotate + editHalf - 8);
             eb.style.left = ebCenterLeft + 'px';
             eb.style.top = Math.round(top) + 'px';
           } catch(_posRot){}
