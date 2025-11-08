@@ -26,11 +26,23 @@
     var c=document.getElementById('plan2d-canvas'); if(!c) return;
     c.addEventListener('wheel', function(ev){
       if(!__plan2d.active) return;
+      // Mouse-centered zoom: keep the world point under the cursor fixed while scaling
+      var rect=c.getBoundingClientRect();
+      var px=(ev.clientX-rect.left)*(c.width/rect.width);
+      var py=(ev.clientY-rect.top)*(c.height/rect.height);
+      var worldBefore = screenToWorld2D(px,py);
       var delta = (ev.deltaY < 0 ? 1.1 : 1/1.1);
       var old = __plan2d.scale || 100;
       var next = Math.max(10, Math.min(800, old * delta));
       if(next !== old){
         __plan2d.scale = next;
+        // Recompute pan so worldBefore maps back to same screen px, solving label/button drift
+        var s = __plan2d.scale;
+        var ox = c.width/2; var oy = c.height/2;
+        // screenX = ox + (panX + wx)*s  => panX = (px - ox)/s - wx
+        // screenY = oy - (panY + wy)*s  => panY = (oy - py)/s - wy
+        __plan2d.panX = (px - ox)/s - worldBefore.x;
+        __plan2d.panY = (oy - py)/s - worldBefore.y;
         if(typeof plan2dDraw==='function') plan2dDraw();
         try{ var scl=document.getElementById('plan2d-scale'); if(scl) scl.textContent='1:'+Math.round(100* (100/__plan2d.scale))/100; }catch(_s){}
       }

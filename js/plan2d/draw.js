@@ -347,8 +347,8 @@
               ctx.strokeStyle = '#ffffff';
               ctx.lineWidth = (__plan2d.wallStrokePx || 1.2);
               ctx.beginPath(); ctx.moveTo(sp1.x, sp1.y); ctx.lineTo(sp2.x, sp2.y); ctx.lineTo(sp3.x, sp3.y); ctx.lineTo(sp4.x, sp4.y); ctx.closePath(); ctx.fill(); ctx.stroke();
-              // Label background for stairs at top-left of its screen-space AABB
-              try {
+              // Label backgrounds disabled in 2D plan: skip drawing name pills/text
+              try { if(false){
                 var minXS = Math.min(sp1.x, sp2.x, sp3.x, sp4.x);
                 var minYS = Math.min(sp1.y, sp2.y, sp3.y, sp4.y);
                 var __dpr = window.devicePixelRatio || 1;
@@ -400,7 +400,7 @@
                   ctx.fillStyle = '#333333'; ctx.fillText(sText, tx, ty);
                 } catch(e){}
                 ctx.restore();
-              } catch(e) { /* ignore label bg */ }
+              }} catch(e) { /* ignore label bg */ }
               // Draw treads with weighted spacing: 10th interval (landing) is 5x deeper
               try {
                 var totalDepth = (stairsComponent.depth || 0);
@@ -439,8 +439,8 @@
             ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = fill;
       ctx.beginPath(); ctx.moveTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.lineTo(p4.x,p4.y); ctx.closePath(); ctx.fill();
       if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = (__plan2d.wallStrokePx || 1.2); ctx.stroke(); }
-            // Draw a white label background at top-left of the overlay's AABB and remember its box for later text drawing
-            if (labelText) {
+            // 2D name labels are disabled
+            if (false && labelText) {
               try {
                 var minX = Math.min(p1.x,p2.x,p3.x,p4.x), minY = Math.min(p1.y,p2.y,p3.y,p4.y);
                 var __dpr2 = window.devicePixelRatio || 1;

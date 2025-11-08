@@ -28,7 +28,8 @@
       mouseDownPosPlan:null,
       freezeSyncUntil:0,
       wallStrokePx:1.2,
-      debug:false
+      debug:false,
+      spacePanActive:false
     };
   }
 
@@ -144,8 +145,36 @@
     };
     window.addEventListener('resize', window.__plan2dResize);
 
-    c.addEventListener('mousedown', function(ev){ if(!__plan2d.active) return; var rect=c.getBoundingClientRect(); var cx=(ev.clientX-rect.left)*(c.width/rect.width); var cy=(ev.clientY-rect.top)*(c.height/rect.height); var p=screenToWorld2D(cx,cy); __plan2d.mouseDownPosPlan=p; if(__plan2d.tool==='erase'){ plan2dEraseAt(p); return; }
-      if(__plan2d.tool==='wall'){ if(!__plan2d.chainActive){ __plan2d.chainActive=true; __plan2d.chainPoints=[p]; } else { __plan2d.chainPoints.push(p); } plan2dDraw(); return; }
+    c.addEventListener('mousedown', function(ev){ if(!__plan2d.active) return; var rect=c.getBoundingClientRect(); var cx=(ev.clientX-rect.left)*(c.width/rect.width); var cy=(ev.clientY-rect.top)*(c.height/rect.height); var p=screenToWorld2D(cx,cy); __plan2d.mouseDownPosPlan=p; 
+      // Spacebar panning: if space held, start panning regardless of tool and do not modify drawing state
+      if(__plan2d.spacePanActive){ __plan2d.panning={ mx:cx, my:cy, panX0:__plan2d.panX||0, panY0:__plan2d.panY||0, scale: __plan2d.scale||50 }; plan2dDraw(); return; }
+      if(__plan2d.tool==='erase'){ plan2dEraseAt(p); return; }
+      if(__plan2d.tool==='wall'){
+        // Improved wall tool: create a segment immediately on second click instead of waiting for Enter.
+        // Start a chain on first click; each subsequent click adds a wall from last point -> new point (axis aligned & snapped).
+        var pt = { x: plan2dSnap(p.x), y: plan2dSnap(p.y) };
+        if(!__plan2d.chainActive){
+          __plan2d.chainActive=true; __plan2d.chainPoints=[pt];
+        } else {
+          var prev = __plan2d.chainPoints[__plan2d.chainPoints.length-1];
+          if(prev){
+            var ax = prev.x, ay = prev.y, bx = pt.x, by = pt.y;
+            // axis alignment (preserve dominant axis)
+            if(Math.abs(bx-ax) >= Math.abs(by-ay)) by = ay; else bx = ax;
+            var segLen = Math.hypot(bx-ax, by-ay);
+            if(segLen >= 0.05){
+              __plan2d.elements.push({type:'wall', x0:ax, y0:ay, x1:bx, y1:by, thickness:__plan2d.wallThicknessM});
+              plan2dEdited();
+            }
+            // Add the (potentially adjusted) endpoint for the continuing chain preview
+            __plan2d.chainPoints.push({x:bx, y:by});
+            // Auto-snap & join after each new segment for immediate feedback
+            try{ plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); }catch(_sj){}
+          }
+        }
+        plan2dDraw();
+        return;
+      }
       if(__plan2d.tool==='select'){
         // Hit-test any element near cursor; if none, start panning
         var best=-1, bestDist=0.18; for(var i=0;i<__plan2d.elements.length;i++){ var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; } }
@@ -164,17 +193,28 @@
       plan2dDraw();
     });
 
-  window.addEventListener('mouseup', function(){ if(!__plan2d.active) return; if(__plan2d.panning){ __plan2d.panning=null; plan2dDraw(); return; } if(__plan2d.start && __plan2d.last){ var moved=Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y); if(moved<0.02){ plan2dSelectAt(__plan2d.last); } else { var a=__plan2d.start,b=__plan2d.last; plan2dFinalize(a,b); plan2dAutoSnapAndJoin(); plan2dDraw(); } } __plan2d.start=null; __plan2d.last=null; __plan2d.mouse=null; plan2dDraw(); });
+    // Finish current wall chain with double-click for a predictable UX
+    c.addEventListener('dblclick', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); } }catch(_e){} });
+  // Also allow right-click to end the chain without adding a point
+  c.addEventListener('contextmenu', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ ev.preventDefault(); __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); } }catch(_e){} });
+
+  window.addEventListener('mouseup', function(){ if(!__plan2d.active) return; if(__plan2d.panning){ __plan2d.panning=null; plan2dDraw(); return; } if(__plan2d.start && __plan2d.last){ var moved=Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y); if(moved<0.02){ plan2dSelectAt(__plan2d.last); } else { var a=__plan2d.start,b=__plan2d.last; if(__plan2d.tool!=='wall'){ // drag-create still applies for window/door
+          plan2dFinalize(a,b); plan2dAutoSnapAndJoin(); plan2dDraw(); }
+        } } __plan2d.start=null; __plan2d.last=null; __plan2d.mouse=null; plan2dDraw(); });
   // Remove room drag mouseup listener (simplified)
 
     // Keyboard (selection delete + chain finalize) ------------------------
-    if(!window.__plan2dKeydown){ window.__plan2dKeydown=function(ev){ if(!__plan2d.active) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ if(ev.key==='Enter'){ plan2dFinalizeChain(); ev.preventDefault(); ev.stopPropagation(); return; } if(ev.key==='Escape'){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return; } }
-        if(ev.key==='Delete' || ev.key==='Backspace'){ if(__plan2d.selectedIndex>=0){ plan2dEraseElementAt(__plan2d.selectedIndex); plan2dSetSelection(-1); plan2dDraw(); plan2dEdited(); } ev.preventDefault(); ev.stopPropagation(); return; }
-    }; document.addEventListener('keydown', window.__plan2dKeydown, true); }
+  if(!window.__plan2dKeydown){ window.__plan2dKeydown=function(ev){ if(!__plan2d.active) return; 
+    // Spacebar hold => temporary pan mode (do not toggle repeatedly on auto-repeat)
+    if(ev.code==='Space'){ if(!__plan2d.spacePanActive){ __plan2d.spacePanActive=true; try{ var cEl=document.getElementById('plan2d-canvas'); if(cEl) cEl.style.cursor='grab'; }catch(_){} } ev.preventDefault(); ev.stopPropagation(); }
+    if(__plan2d.tool==='wall' && __plan2d.chainActive){ if(ev.key==='Enter'){ plan2dFinalizeChain(); ev.preventDefault(); ev.stopPropagation(); return; } if(ev.key==='Escape'){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return; } }
+    if(ev.key==='Delete' || ev.key==='Backspace'){ if(__plan2d.selectedIndex>=0){ plan2dEraseElementAt(__plan2d.selectedIndex); plan2dSetSelection(-1); plan2dDraw(); plan2dEdited(); } ev.preventDefault(); ev.stopPropagation(); return; }
+  }; document.addEventListener('keydown', window.__plan2dKeydown, true); }
+  if(!window.__plan2dKeyup){ window.__plan2dKeyup=function(ev){ if(!__plan2d.active) return; if(ev.code==='Space'){ __plan2d.spacePanActive=false; if(__plan2d.panning){ /* end current panning gracefully */ __plan2d.panning=null; } try{ plan2dCursor && plan2dCursor(); }catch(_){} ev.preventDefault(); ev.stopPropagation(); } }; document.addEventListener('keyup', window.__plan2dKeyup, true); }
   }
   window.plan2dBind = window.plan2dBind || plan2dBind;
 
-  function plan2dUnbind(){ try{ if(window.__plan2dResize){ window.removeEventListener('resize', window.__plan2dResize); window.__plan2dResize=null; } if(window.__plan2dKeydown){ try{ document.removeEventListener('keydown', window.__plan2dKeydown, true); }catch(e){} window.__plan2dKeydown=null; } }catch(e){} }
+  function plan2dUnbind(){ try{ if(window.__plan2dResize){ window.removeEventListener('resize', window.__plan2dResize); window.__plan2dResize=null; } if(window.__plan2dKeydown){ try{ document.removeEventListener('keydown', window.__plan2dKeydown, true); }catch(e){} window.__plan2dKeydown=null; } if(window.__plan2dKeyup){ try{ document.removeEventListener('keyup', window.__plan2dKeyup, true); }catch(e){} window.__plan2dKeyup=null; } }catch(e){} }
   window.plan2dUnbind = window.plan2dUnbind || plan2dUnbind;
 
   // Modal open/close -------------------------------------------------------

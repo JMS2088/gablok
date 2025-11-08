@@ -19,6 +19,13 @@
   window.updateLabels = function updateLabels(){
     try {
       var container = document.getElementById('labels-3d'); if(!container) return;
+      // When the 2D floor plan is active, remove all DOM labels/buttons from the 2D area.
+      try {
+        if (window.__plan2d && __plan2d.active) {
+          while (container.firstChild) container.removeChild(container.firstChild);
+          return;
+        }
+      } catch(_hide2d) {}
       var nowT = (performance && performance.now)? performance.now(): Date.now();
       if (!window.__labelCache) window.__labelCache = Object.create(null);
       var focusId = null;
@@ -187,8 +194,27 @@
             document.addEventListener('touchmove', onMove, { passive:false });
             document.addEventListener('touchend', onTouchEnd);
           }
-          el.addEventListener('mousedown', function(e){ e.preventDefault(); e.stopPropagation(); beginPotentialDrag(e.clientX, e.clientY); });
-          el.addEventListener('touchstart', function(e){ try{ var t=e.touches&&e.touches[0]; if(t){ beginPotentialDrag(t.clientX, t.clientY); e.preventDefault(); e.stopPropagation(); } }catch(_e){} }, { passive:false });
+          // Disable drag-by-label when the 2D floor plan is active; allow normal click selection to proceed.
+          el.addEventListener('mousedown', function(e){
+            try{
+              if (window.__plan2d && __plan2d.active) {
+                // Do not prevent default so the click handler can still select the room if needed.
+                return;
+              }
+            }catch(_pd){}
+            e.preventDefault(); e.stopPropagation();
+            beginPotentialDrag(e.clientX, e.clientY);
+          });
+          el.addEventListener('touchstart', function(e){
+            try{
+              if (window.__plan2d && __plan2d.active) {
+                // While 2D is active, ignore drag starts from labels.
+                return;
+              }
+              var t=e.touches&&e.touches[0];
+              if(t){ beginPotentialDrag(t.clientX, t.clientY); e.preventDefault(); e.stopPropagation(); }
+            }catch(_e){}
+          }, { passive:false });
           container.appendChild(el);
         } else {
           var newTxt = (box.name || 'Room');
@@ -198,8 +224,24 @@
     var left = targetLeft, top = targetTop;
         var objA = (typeof window.getObjectUiAlpha === 'function') ? window.getObjectUiAlpha(box.id) : 1.0;
         var globalA = Math.max(0, Math.min(1, (window.__uiFadeAlpha||1.0)));
-  var cssLeft = Math.round(left), cssTop = Math.round(top);
-  el.style.left = cssLeft + 'px'; el.style.top = cssTop + 'px';
+        var cssLeft = Math.round(left), cssTop = Math.round(top);
+        el.style.left = cssLeft + 'px'; el.style.top = cssTop + 'px';
+        // Refined scaling: keep labels near a consistent UI size and damp extreme zoom effects.
+        // Measure pixels per meter, then ease toward 1.0 so close zoom does not explode size.
+        var meterPx = 60; // fallback baseline (approx 1m ~ 60px)
+        try {
+          var p2 = project3D(anchorPos.x + 1, anchorPos.y, anchorPos.z);
+          if (p2 && typeof p2.x === 'number' && typeof p2.y === 'number') {
+            meterPx = Math.max(1, Math.hypot(p2.x - p.x, p2.y - p.y));
+          }
+        } catch(_pm) {}
+        var baseMeterPx = 60;
+        var rawScale = meterPx / baseMeterPx;
+        // Ease function: compress deviation (s-curve) then clamp narrowly
+        var eased = 1 + (rawScale - 1) * 0.25; // only 25% of raw delta applied
+        var scaleWorld = Math.max(0.85, Math.min(1.25, eased));
+        el.__scaleWorld = scaleWorld;
+        el.style.transform = 'translate(-50%, -50%) scale(' + scaleWorld.toFixed(4) + ')';
         // Labels must always be visible and clickable.
         // Policy: when viewing first floor, fade ground-floor labels slightly;
         // additionally, apply a distance-based fade so far labels recede a bit.
@@ -242,12 +284,15 @@
         try {
           if (!el.__w || !el.__h) { var rectM = el.getBoundingClientRect(); el.__w = rectM.width; el.__h = rectM.height; }
           var rect = { width: el.__w, height: el.__h };
-          var gap = 12; // base gap between pill and button
-          var offsetRight = 25; // default extra shift
-          var editLeft = Math.round(left + (rect.width/2) + gap + offsetRight);
+          var sW = el.__scaleWorld || 1;
+          // Buttons keep global style: do NOT scale size, only adjust position mildly.
+          var gap = 12; // constant gap
+          var offsetRight = 25; // constant extra shift
+          var editLeft = Math.round(left + (rect.width * sW / 2) + gap + offsetRight);
           var editTop = Math.round(top); // center aligned vertically
           eb.style.left = editLeft + 'px';
           eb.style.top = editTop + 'px';
+          eb.style.transform = 'translate(-50%, -50%)';
         } catch(_e) {
           eb.style.left = Math.round(left + 32 + 25) + 'px';
           eb.style.top = Math.round(top) + 'px';
@@ -292,13 +337,15 @@
             rb.title = 'Rotate 45°';
             // Inline layout: [Label] [Rotate 360] [Edit]
             var rSize = 32, rRad = rSize/2; // rotate button is 32x32
-            var gapInline = 10, gapAfterRotate = 12; // spacing between items
+            var gapInline = 10, gapAfterRotate = 12; // base spacing between items
             var rect2 = { width: (el.__w||60), height: (el.__h||22) };
-            // Center of rotate button: to the right of the label pill
-            var rotCenterLeft = Math.round(left + (rect2.width/2) + gapInline + rRad);
+            var sW = el.__scaleWorld || 1;
+            // Position uses damped label scale horizontally but button itself keeps base size.
+            var rotCenterLeft = Math.round(left + (rect2.width * sW / 2) + gapInline + rRad);
             var rotCenterTop = Math.round(top);
             rb.style.left = rotCenterLeft + 'px';
             rb.style.top = rotCenterTop + 'px';
+            rb.style.transform = 'translate(-50%, -50%)';
             // Show Rotate only for the selected item; keep visible (no inactivity fade)
             var selId3 = (typeof window.selectedRoomId==='string' || typeof window.selectedRoomId==='number') ? window.selectedRoomId : null;
             if (selId3 && selId3 === box.id) {
@@ -309,7 +356,7 @@
               rb.style.pointerEvents = 'none';
             }
             // Move the Edit button to the right of the rotate button, aligned center
-            var editHalf = 22; // room-edit-btn min width is 44px; use half for center offset
+            var editHalf = 22;
             var ebCenterLeft = Math.round(rotCenterLeft + rRad + gapAfterRotate + editHalf);
             eb.style.left = ebCenterLeft + 'px';
             eb.style.top = Math.round(top) + 'px';
