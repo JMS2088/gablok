@@ -833,6 +833,13 @@
       try { __log3d('keydown', { key:e.key, code:e.code, keyCode:e.keyCode, which:e.which, target:(e.target&&e.target.tagName), active2D:(window.__plan2d && __plan2d.active) }); } catch(_l){}
       // When 2D editor is active, ignore 3D keyboard shortcuts entirely
       try { if (window.__plan2d && __plan2d.active) { __log3d('keydown ignored (2D active)'); return; } } catch(_e) {}
+      // If user is typing in an input/textarea (e.g., Object Measurements panel), do not hijack Delete/Backspace
+      try {
+        var ae = document.activeElement;
+        var tag = (ae && ae.tagName ? ae.tagName.toLowerCase() : '');
+        var editing = (tag === 'input' || tag === 'textarea' || (ae && ae.isContentEditable));
+        if (editing) return; // allow native text deletion and editing
+      } catch(_foc) {}
       if (e.key === 'Escape') {
         var rpm = document.getElementById('room-palette-modal');
         if (rpm && rpm.style.display === 'block') {
