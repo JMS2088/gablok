@@ -498,10 +498,10 @@
 <!-- Elevate 2D plan modal above all other UI (previous duplicate used z-index 12000) -->
 <div id="plan2d-page" style="display:none; position:fixed; inset:0; z-index:12000;">
 	<div id="plan2d-content" style="position:absolute; inset:0; width: 100%; height: 100vh; background:repeating-linear-gradient(0deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px), repeating-linear-gradient(90deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px); display:flex; flex-direction:column; overflow:hidden;">
-		<div id="plan2d-header" style="display:flex; align-items:center; gap:14px; padding:4px 8px; background:transparent; border-bottom:none; position:relative; z-index:3;">
+		<div id="plan2d-header" style="display:flex; align-items:center; gap:14px; padding:4px 8px; background:transparent; border-bottom:none; position:relative; z-index:2;">
 				<!-- Removed duplicate subset nav: unified main #controls is dynamically relocated here -->
 			<!-- Centered floor toggle absolutely relative to full header width -->
-			<div style="position:absolute; top:21px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; z-index:5; pointer-events:auto;">
+			<div style="position:absolute; top:36px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; z-index:1; pointer-events:auto;">
 				<div class="plan2d-floor-toggle" role="group" aria-label="Switch Floor" style="display:flex; gap:4px; background:rgba(15,23,42,0.85); padding:6px 10px; border:1px solid rgba(148,163,184,0.35); border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.4);">
 					<button id="plan2d-floor-ground" type="button" title="Switch to Ground Floor">Ground</button>
 					<button id="plan2d-floor-first" type="button" title="Switch to First Floor">First</button>
@@ -520,7 +520,6 @@
 				<button id="plan2d-tool-window" class="secondary" title="Draw Windows (thin line)">Window</button>
 				<button id="plan2d-tool-door" class="secondary" title="Draw Doors">Door</button>
 				<button id="plan2d-tool-erase" class="secondary" title="Erase elements">Erase</button>
-				<button id="plan2d-delete-selected" class="secondary" title="Delete selected (Del/Backspace)">Delete</button>
 				<!-- View utilities: fit and flip orientation -->
 				<button id="plan2d-fit" class="secondary" title="Fit view to current 2D content">Fit</button>
 				<button id="plan2d-flip-y" class="secondary" title="Flip vertical to mirror 3D orientation">Flip Y</button>
@@ -529,8 +528,8 @@
 			</div>
 		</div>
 	<!-- Absolute-positioned rulers and stage to match resize logic and restore left-side overlay -->
-	<canvas id="plan2d-ruler-top" style="position:absolute; top:0; left:28px; right:0; height:28px; background:#0f172a; display:block; border-bottom:1px solid rgba(148,163,184,0.35);"></canvas>
-	<canvas id="plan2d-ruler-left" style="position:absolute; top:28px; left:0; bottom:0; width:28px; background:#0f172a; display:block; border-right:1px solid rgba(148,163,184,0.35);"></canvas>
+	<canvas id="plan2d-ruler-top" style="position:absolute; top:0; left:28px; right:0; height:28px; background:#0f172a; display:block; box-shadow:none; border:none;"></canvas>
+	<canvas id="plan2d-ruler-left" style="position:absolute; top:28px; left:0; bottom:0; width:28px; background:#0f172a; display:block; box-shadow:none; border:none;"></canvas>
 	<div id="plan2d-stage" style="position:absolute; top:28px; left:28px; right:0; bottom:0;">
 		<canvas id="plan2d-canvas" style="position:absolute; inset:0; width:100%; height:100%; background:#0b1220; display:block; cursor:crosshair;"></canvas>
 		<canvas id="plan2d-overlay" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block;"></canvas>

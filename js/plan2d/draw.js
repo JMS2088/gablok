@@ -25,9 +25,20 @@
     }
     var perfSections = __plan2d.__perfSections = { grid:0, walls:0, openings:0, labels:0, overlay:0, total:0 };
     var tStart = (performance&&performance.now)?performance.now():Date.now();
-      // Rulers (drawn on separate canvases). Skip on incremental frames to save work.
+      // Rulers (top/left): resize if needed, then redraw every frame to avoid vanish/flicker.
       try {
-        if(!useDirty){ var rt=document.getElementById('plan2d-ruler-top'); var rl=document.getElementById('plan2d-ruler-left'); if(rt && rl){ plan2dDrawRulers(rt.getContext('2d'), rl.getContext('2d')); } }
+        var rt=document.getElementById('plan2d-ruler-top');
+        var rl=document.getElementById('plan2d-ruler-left');
+        if(rt && rl){
+          var dpr = window.devicePixelRatio || 1;
+          var rtb = rt.getBoundingClientRect();
+          var rlb = rl.getBoundingClientRect();
+          var targetTopW = Math.round(rtb.width * dpr), targetTopH = Math.round(rtb.height * dpr);
+          var targetLeftW = Math.round(rlb.width * dpr), targetLeftH = Math.round(rlb.height * dpr);
+          if(rt.width !== targetTopW || rt.height !== targetTopH){ rt.width = targetTopW; rt.height = targetTopH; }
+          if(rl.width !== targetLeftW || rl.height !== targetLeftH){ rl.width = targetLeftW; rl.height = targetLeftH; }
+          plan2dDrawRulers(rt.getContext('2d'), rl.getContext('2d'));
+        }
       } catch(_eR) {}
       // CAD-style grid: major 1 m and minor 0.1 m lines aligned to device pixels; include pan offsets
       var step=__plan2d.scale, w=c.width, h=c.height; 
@@ -44,23 +55,46 @@
             var gctx = gridCache.canvas.getContext('2d');
             gctx.setTransform(1,0,0,1,0,0);
             gctx.clearRect(0,0,w,h);
-            gctx.save(); gctx.translate(0.5,0.5); gctx.lineWidth=1;
-            var minorStep=step/10;
-            if(minorStep>=8){
+            gctx.save(); gctx.lineWidth=1; // We'll manually place strokes at 0.5 for crisp 1px lines
+            // World-based grid iteration so lines always pass exactly through world integer coordinates (0,0 axis included)
+            var worldLeft = screenToWorld2D(0,0).x;
+            var worldRight = screenToWorld2D(w,0).x;
+            var worldTop = screenToWorld2D(0,0).y; // y increases upward in world, screenToWorld2D accounts for inversion
+            var worldBottom = screenToWorld2D(0,h).y;
+            // Minor (0.1m) lines when sufficiently spaced in pixels
+            var minorStepWorld = 0.1;
+            var minorStepPx = step * minorStepWorld;
+            if(minorStepPx >= 8){
               gctx.strokeStyle='rgba(255,255,255,0.04)';
-              var startXm = originX % minorStep; if(startXm<0) startXm+=minorStep;
-              for(var xm=startXm; xm<w; xm+=minorStep){ var xx=Math.round(xm); gctx.beginPath(); gctx.moveTo(xx,0); gctx.lineTo(xx,h); gctx.stroke(); }
-              var startYm = originY % minorStep; if(startYm<0) startYm+=minorStep;
-              for(var ym=startYm; ym<h; ym+=minorStep){ var yy=Math.round(ym); gctx.beginPath(); gctx.moveTo(0,yy); gctx.lineTo(w,yy); gctx.stroke(); }
+              var startMinorX = Math.ceil(worldLeft/minorStepWorld)*minorStepWorld;
+              for(var wx=startMinorX; wx<=worldRight; wx+=minorStepWorld){
+                if(Math.abs(wx - Math.round(wx)) < 1e-6) continue;
+                var sx = worldToScreen2D(wx,0).x + 0.5; // crisp line
+                gctx.beginPath(); gctx.moveTo(sx,0); gctx.lineTo(sx,h); gctx.stroke();
+              }
+              var startMinorY = Math.ceil(worldBottom/minorStepWorld)*minorStepWorld;
+              for(var wy=startMinorY; wy<=worldTop; wy+=minorStepWorld){
+                if(Math.abs(wy - Math.round(wy)) < 1e-6) continue;
+                var sy = worldToScreen2D(0,wy).y + 0.5;
+                gctx.beginPath(); gctx.moveTo(0,sy); gctx.lineTo(w,sy); gctx.stroke();
+              }
             }
+            // Major (1m) lines
             gctx.strokeStyle='rgba(255,255,255,0.10)';
-            var startX = originX % step; if(startX<0) startX+=step;
-            for(var x=startX; x<w; x+=step){ var x0=Math.round(x); gctx.beginPath(); gctx.moveTo(x0,0); gctx.lineTo(x0,h); gctx.stroke(); }
-            var startY = originY % step; if(startY<0) startY+=step;
-            for(var y=startY; y<h; y+=step){ var y0=Math.round(y); gctx.beginPath(); gctx.moveTo(0,y0); gctx.lineTo(w,y0); gctx.stroke(); }
+            var startMajorX = Math.ceil(worldLeft);
+            for(var mx=startMajorX; mx<=worldRight; mx+=1){
+              var sxM = worldToScreen2D(mx,0).x + 0.5;
+              gctx.beginPath(); gctx.moveTo(sxM,0); gctx.lineTo(sxM,h); gctx.stroke();
+            }
+            var startMajorY = Math.ceil(worldBottom);
+            for(var my=startMajorY; my<=worldTop; my+=1){
+              var syM = worldToScreen2D(0,my).y + 0.5;
+              gctx.beginPath(); gctx.moveTo(0,syM); gctx.lineTo(w,syM); gctx.stroke();
+            }
             gctx.strokeStyle='rgba(255,255,255,0.16)';
-            gctx.beginPath(); gctx.moveTo(Math.round(originX),0); gctx.lineTo(Math.round(originX),h); gctx.stroke();
-            gctx.beginPath(); gctx.moveTo(0,Math.round(originY)); gctx.lineTo(w,Math.round(originY)); gctx.stroke();
+            // Central axes (world 0,0) pixel-perfect (use +0.5 since we avoided global 0.5 translate)
+            gctx.beginPath(); gctx.moveTo(originX + 0.5,0); gctx.lineTo(originX + 0.5,h); gctx.stroke();
+            gctx.beginPath(); gctx.moveTo(0,originY + 0.5); gctx.lineTo(w,originY + 0.5); gctx.stroke();
             gctx.restore();
             gridCache.scale=step; gridCache.panX=__plan2d.panX; gridCache.panY=__plan2d.panY; gridCache.w=w; gridCache.h=h;
           }
@@ -1016,12 +1050,11 @@
       try{
         var c=document.getElementById('plan2d-canvas'); if(!c||!ctxTop||!ctxLeft) return;
         var dpr=window.devicePixelRatio||1; var s=__plan2d.scale; var W=c.width, H=c.height;
-        // Clear backgrounds
-        ctxTop.setTransform(1,0,0,1,0,0); ctxTop.clearRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
-        ctxLeft.setTransform(1,0,0,1,0,0); ctxLeft.clearRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
-        // Backgrounds (match CSS)
-        ctxTop.fillStyle='rgba(15,23,42,0.85)'; ctxTop.fillRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
-        ctxLeft.fillStyle='rgba(15,23,42,0.85)'; ctxLeft.fillRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
+  // Avoid full clear each frame; paint background via fillRect only (no flash/mask effect)
+  ctxTop.setTransform(1,0,0,1,0,0);
+  ctxLeft.setTransform(1,0,0,1,0,0);
+  ctxTop.fillStyle='#0f172a'; ctxTop.fillRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
+  ctxLeft.fillStyle='#0f172a'; ctxLeft.fillRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
         // Mapping helpers
         var originX = W/2 + (__plan2d.panX * s);
         var originY = H/2 - (__plan2d.panY * s);
