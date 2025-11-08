@@ -282,14 +282,15 @@
           var sW = el.__scaleWorld || 1;
           // Buttons keep global style: do NOT scale size, only adjust position mildly.
           var gap = 12; // constant gap
-          var offsetRight = 25; // constant extra shift
+          // Offset reduced by 8px per request (was 25)
+          var offsetRight = 17; // constant extra shift (adjusted)
           var editLeft = Math.round(left + (rect.width * sW / 2) + gap + offsetRight);
           var editTop = Math.round(top); // center aligned vertically
           eb.style.left = editLeft + 'px';
           eb.style.top = editTop + 'px';
           eb.style.transform = 'translate(-50%, -50%)';
         } catch(_e) {
-          eb.style.left = Math.round(left + 32 + 25) + 'px';
+          eb.style.left = Math.round(left + 32 + 17) + 'px';
           eb.style.top = Math.round(top) + 'px';
         }
         // Show Edit only for the selected object; keep visible (no inactivity fade)
