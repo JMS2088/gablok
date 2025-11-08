@@ -218,6 +218,10 @@
           var dirx = wdx0 / wLen0, diry = wdy0 / wLen0;
           var thick = (el.thickness||__plan2d.wallThicknessM);
           var halfW = thick/2;
+          // Cross-floor dimming: walls from other levels get reduced alpha.
+          var lvlCur = (typeof window.currentFloor==='number'? window.currentFloor:0);
+          var alphaFactor = 1.0;
+          if(typeof el.roomLevel==='number' && el.roomLevel !== lvlCur){ alphaFactor = 0.25; }
           // Build void spans (windows and doors) in t-space [0,1]
           var spans = [];
           for(var wi=0; wi<elems.length; wi++){
@@ -865,7 +869,7 @@
         function sx(wx){ return worldToScreen2D(wx, 0).x; }
         function sy(wy){ return worldToScreen2D(0, wy).y; }
         ox.save();
-        // Existing guides
+          ctx.strokeStyle = 'rgba(51,65,85,'+alphaFactor.toFixed(2)+')'; // slate-700 with alpha
         // Prepare label style
         var dpr = window.devicePixelRatio || 1;
         ox.font = (10*dpr) + 'px system-ui, sans-serif';

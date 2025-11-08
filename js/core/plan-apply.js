@@ -101,6 +101,19 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     try { return JSON.parse(JSON.stringify(base)); }
     catch(_e){ var cloned=[]; for (var i=0;i<base.length;i++){ var el=base[i]; cloned.push(el? Object.assign({}, el): el); } return cloned; }
   })();
+  // Filter: ignore walls tagged from other floors to avoid cross-level leakage when 2D view shows both floors
+  try {
+    var filtered=[]; var tLvl = targetLevel;
+    for (var fi=0; fi<elemsSrc.length; fi++){
+      var elF = elemsSrc[fi];
+      if(!elF){ continue; }
+      if(elF.type==='wall' && typeof elF.roomLevel==='number'){
+        if(elF.roomLevel !== tLvl){ continue; }
+      }
+      filtered.push(elF);
+    }
+    elemsSrc = filtered;
+  } catch(_filt){}
   var __groupedRooms = [];
     // Phase -1: Respect room groups to avoid splitting user-added rooms when walls touch.
     // If walls carry a groupId like 'room:<id>' (created when 2D is populated from existing 3D rooms),

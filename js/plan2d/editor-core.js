@@ -49,7 +49,8 @@
       var payload = {
         elements: JSON.parse(JSON.stringify(__plan2d.elements||[])),
         guidesV: JSON.parse(JSON.stringify(__plan2d.guidesV||[])),
-        guidesH: JSON.parse(JSON.stringify(__plan2d.guidesH||[]))
+        guidesH: JSON.parse(JSON.stringify(__plan2d.guidesH||[])),
+        userEdited: !!__plan2d.__userEdited
       };
       window.__plan2dDrafts[floor] = payload;
       savePlan2dDraftsToStorage();
@@ -63,10 +64,12 @@
         __plan2d.elements = JSON.parse(JSON.stringify(data.elements||[]));
         __plan2d.guidesV = JSON.parse(JSON.stringify(data.guidesV||[]));
         __plan2d.guidesH = JSON.parse(JSON.stringify(data.guidesH||[]));
+        __plan2d.__userEdited = !!data.userEdited;
       } else {
         __plan2d.elements = [];
         __plan2d.guidesV = [];
         __plan2d.guidesH = [];
+        __plan2d.__userEdited = false;
       }
       __plan2d.selectedGuide=null; __plan2d.dragGuide=null;
       plan2dSetSelection(-1);
@@ -89,6 +92,7 @@
     try {
       __plan2d.__version = (typeof __plan2d.__version==='number' ? __plan2d.__version+1 : 1);
       if(__plan2d.__cache){ __plan2d.__cache.intersections = null; __plan2d.__cache.version = -1; }
+      __plan2d.__userEdited = true; // mark this draft as user-modified so reopen skips auto-populate
     } catch(_v){}
     // optional non-destructive 3D sync, guarded to avoid spam during drags
     try {
@@ -534,21 +538,19 @@
     } catch(e){}
     plan2dBind();
     plan2dCursor();
-    // Load drafts + current floor
+    // Load draft (guides) for current floor
     try{ loadPlan2dDraftsFromStorage(); plan2dLoadDraft(typeof window.currentFloor==='number'? window.currentFloor:0); }catch(e){}
-    // Conditionally sync walls from 3D: only when the current floor actually has source content
+    // Always populate from 3D for the active floor when source exists (simplifies and stabilizes toggles)
     try{
-      if(typeof window.populatePlan2DFromDesign==='function'){
-        var lvlNow = (typeof window.currentFloor==='number'? window.currentFloor:0);
-        var hasRooms=false, hasStrips=false;
-        try{
-          var rms = Array.isArray(window.allRooms)? window.allRooms: [];
-          for(var i=0;i<rms.length;i++){ var r=rms[i]; if(r && (r.level||0)===lvlNow){ hasRooms=true; break; } }
-          if(!hasRooms){ var wsArr = Array.isArray(window.wallStrips)? window.wallStrips: []; for(var j=0;j<wsArr.length;j++){ var w=wsArr[j]; if(w && (w.level||0)===lvlNow){ hasStrips=true; break; } } }
-        }catch(_s){}
-        if(hasRooms || hasStrips){ window.populatePlan2DFromDesign(); }
-      }
-    }catch(_pop){}
+      var lvlNow = (typeof window.currentFloor==='number'? window.currentFloor:0);
+      var hasRooms=false, hasStrips=false;
+      try{
+        var rms = Array.isArray(window.allRooms)? window.allRooms: [];
+        for(var i=0;i<rms.length;i++){ var r=rms[i]; if(r && (r.level||0)===lvlNow){ hasRooms=true; break; } }
+        if(!hasRooms){ var wsArr = Array.isArray(window.wallStrips)? window.wallStrips: []; for(var j=0;j<wsArr.length;j++){ var w=wsArr[j]; if(w && (w.level||0)===lvlNow){ hasStrips=true; break; } } }
+      }catch(_src){}
+      if((hasRooms||hasStrips) && typeof window.populatePlan2DFromDesign==='function'){ window.populatePlan2DFromDesign(); __plan2d.__userEdited=false; }
+    }catch(_popAlways){}
     // Hide canvases until we have content + animation starts to avoid initial single-room flash
     try{
       var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var l2=document.getElementById('labels-2d');
@@ -614,7 +616,7 @@
   }
   function closePlan2DModal(){
     if(!__plan2d.active) return;
-    __plan2d.active=false;
+  __plan2d.active=false;
     plan2dUnbind();
     plan2dSetSelection(-1);
     __plan2d.chainActive=false;

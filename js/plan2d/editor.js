@@ -66,24 +66,18 @@
         // Load draft for new floor if it exists
         try{ plan2dLoadDraft && plan2dLoadDraft(to); }catch(_l){}
         var hadDraft = Array.isArray(__plan2d.elements) && __plan2d.elements.length>0;
-        if(!hadDraft){
-          // Only auto-populate from 3D if there is source content on this floor.
-          var hasSource=false;
-          try {
-            var rooms=Array.isArray(window.allRooms)?window.allRooms:[];
-            for(var i=0;i<rooms.length;i++){ var r=rooms[i]; if(r && (r.level||0)===to){ hasSource=true; break; } }
-            if(!hasSource){
-              var strips=Array.isArray(window.wallStrips)?window.wallStrips:[];
-              for(var j=0;j<strips.length;j++){ var ws=strips[j]; if(ws && (ws.level||0)===to){ hasSource=true; break; } }
-            }
-          } catch(_src){}
-          if(hasSource && typeof window.populatePlan2DFromDesign==='function'){
-            try{ window.populatePlan2DFromDesign(); hadDraft = Array.isArray(__plan2d.elements) && __plan2d.elements.length>0; }catch(_p){}
-          } else {
-            // Ensure blank state for floors with no content (e.g. First floor before any rooms added)
-            __plan2d.elements = []; try{ plan2dSetSelection && plan2dSetSelection(-1); }catch(_sel){}
-            // Maintain existing pan/scale; do NOT fit view on an empty floor
-          }
+        // Always repopulate from 3D for target floor if source exists; discard stale cross-floor draft walls.
+        var hasSource=false; try {
+          var rooms=Array.isArray(window.allRooms)?window.allRooms:[];
+          for(var i=0;i<rooms.length;i++){ var r=rooms[i]; if(r && (r.level||0)===to){ hasSource=true; break; } }
+          if(!hasSource){ var strips=Array.isArray(window.wallStrips)?window.wallStrips:[]; for(var j=0;j<strips.length;j++){ var ws=strips[j]; if(ws && (ws.level||0)===to){ hasSource=true; break; } } }
+        }catch(_src2){}
+        if(hasSource && typeof window.populatePlan2DFromDesign==='function'){
+          try{ window.populatePlan2DFromDesign(); hadDraft = Array.isArray(__plan2d.elements) && __plan2d.elements.length>0; __plan2d.__userEdited=false; }catch(_pp){}
+          try { window.__plan2dDiag = window.__plan2dDiag||{}; window.__plan2dDiag.lastFloorSwitch = { at:Date.now(), to:to, elements: (__plan2d.elements?__plan2d.elements.length:0) }; if(console&&console.debug) console.debug('[PLAN2D FLOOR SWITCH] to', to, 'elements', (__plan2d.elements?__plan2d.elements.length:0)); }catch(_dbgFS){}
+        } else {
+          __plan2d.elements = []; try{ plan2dSetSelection && plan2dSetSelection(-1); }catch(_sel2){}
+          try { window.__plan2dDiag = window.__plan2dDiag||{}; window.__plan2dDiag.lastFloorSwitch = { at:Date.now(), to:to, elements:0, empty:true }; if(console&&console.debug) console.debug('[PLAN2D FLOOR SWITCH] to', to, 'EMPTY (no source)'); }catch(_dbgFS0){}
         }
         // Fit only if there is content; otherwise keep current scale/pan for empty grid.
         if(hadDraft){ try{ plan2dFitViewToContent && plan2dFitViewToContent(40); }catch(_f){} }
@@ -99,3 +93,10 @@
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
+
+// Expose floor switch helper globally for external callers (e.g., app.js sync while 2D active)
+try { if(typeof window.plan2dSwitchFloorInEditor!=='function'){ window.plan2dSwitchFloorInEditor = function(to){ try { if(typeof to!=='number') to=0; if(window.__plan2d && __plan2d.active){ var fn=(function(){ var bG=document.getElementById('plan2d-floor-ground'); /* reused in closure above */ return null; })(); }
+    // Fallback: reuse the click handlers by dispatching
+    if(to===0){ var g=document.getElementById('plan2d-floor-ground'); if(g) g.click(); else { window.currentFloor=0; if(typeof plan2dLoadDraft==='function'){ plan2dLoadDraft(0); } if(typeof populatePlan2DFromDesign==='function'){ populatePlan2DFromDesign(); plan2dDraw && plan2dDraw(); } } }
+    else { var f=document.getElementById('plan2d-floor-first'); if(f) f.click(); else { window.currentFloor=1; if(typeof plan2dLoadDraft==='function'){ plan2dLoadDraft(1); } if(typeof populatePlan2DFromDesign==='function'){ populatePlan2DFromDesign(); plan2dDraw && plan2dDraw(); } } }
+  }catch(_eFS){} }; } }catch(_eExpose){}
