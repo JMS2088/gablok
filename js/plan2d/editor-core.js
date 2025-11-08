@@ -82,6 +82,7 @@
   function plan2dSetSelection(idx){
     __plan2d.selectedIndex = (typeof idx==='number'? idx : -1);
     __plan2d.selectedSubsegment = null;
+    try{ if(typeof window.onPlan2DSelectionChange==='function'){ window.onPlan2DSelectionChange(__plan2d.selectedIndex); } }catch(_selHook){}
   }
   window.plan2dSetSelection = window.plan2dSetSelection || plan2dSetSelection;
 
@@ -287,6 +288,23 @@
           return; // don't start other interactions
         }
       }catch(_gsel){}
+      // Window/Door endpoint drag start: allow resizing via select tool or direct tool click
+      try{
+        if(typeof plan2dHitWindowEndpoint==='function'){
+          var hw = plan2dHitWindowEndpoint(p, 0.18);
+          if(hw && typeof hw.index==='number'){
+            __plan2d.dragWindow = { index: hw.index, end: hw.end }; plan2dSetSelection(hw.index); plan2dDraw(); return;
+          }
+        }
+      }catch(_hw){}
+      try{
+        if(typeof plan2dHitDoorEndpoint==='function'){
+          var hd = plan2dHitDoorEndpoint(p, 0.18);
+          if(hd && typeof hd.index==='number'){
+            __plan2d.dragDoor = { index: hd.index, end: hd.end }; plan2dSetSelection(hd.index); plan2dDraw(); return;
+          }
+        }
+      }catch(_hd){}
       // Spacebar panning: if space held, start panning regardless of tool and do not modify drawing state
       if(__plan2d.spacePanActive){ if(!__plan2d.zoomLocked){ __plan2d.panning={ mx:cx, my:cy, panX0:__plan2d.panX||0, panY0:__plan2d.panY||0, scale: __plan2d.scale||50 }; plan2dDraw(); } return; }
       if(__plan2d.tool==='erase'){ plan2dEraseAt(p); return; }
@@ -377,6 +395,19 @@
       __plan2d.start=p; __plan2d.last=p; plan2dDraw(); });
 
     c.addEventListener('mousemove', function(ev){ if(!__plan2d.active) return; if(__plan2d.zoomLocked){ return; } var rect=c.getBoundingClientRect(); var cx=(ev.clientX-rect.left)*(c.width/rect.width); var cy=(ev.clientY-rect.top)*(c.height/rect.height); __plan2d.mouse={x:cx,y:cy}; var p=screenToWorld2D(cx,cy);
+      // Window/door endpoint dragging: update t0/t1 while dragging
+      if(__plan2d.dragWindow){
+        try{
+          var dw = __plan2d.dragWindow; var we = __plan2d.elements[dw.index]; if(we && we.type==='window' && typeof we.host==='number'){ var host = __plan2d.elements[we.host]; if(host && host.type==='wall'){ var t = (typeof plan2dProjectParamOnWall==='function') ? plan2dProjectParamOnWall(p, host) : 0.5; if(dw.end==='t0' || dw.end==='a' || dw.end==='t0'){ we.t0 = Math.max(0, Math.min(1, t)); } else { we.t1 = Math.max(0, Math.min(1, t)); } if(we.t1 < we.t0){ var tmp=we.t0; we.t0=we.t1; we.t1=tmp; dw.end = (dw.end==='t0'?'t1':'t0'); } plan2dDraw(); } }
+        }catch(_dwMove){}
+        return;
+      }
+      if(__plan2d.dragDoor){
+        try{
+          var ddw = __plan2d.dragDoor; var de = __plan2d.elements[ddw.index]; if(de && de.type==='door' && typeof de.host==='number'){ var hostD = __plan2d.elements[de.host]; if(hostD && hostD.type==='wall'){ var t2 = (typeof plan2dProjectParamOnWall==='function') ? plan2dProjectParamOnWall(p, hostD) : 0.5; if(ddw.end==='t0' || ddw.end==='a' || ddw.end==='t0'){ de.t0 = Math.max(0, Math.min(1, t2)); } else { de.t1 = Math.max(0, Math.min(1, t2)); } if(de.t1 < de.t0){ var tmp2=de.t0; de.t0=de.t1; de.t1=tmp2; ddw.end = (ddw.end==='t0'?'t1':'t0'); } plan2dDraw(); } }
+        }catch(_ddMove){}
+        return;
+      }
       // Dragging a guide
       if(__plan2d.dragGuide){
         try {
@@ -512,6 +543,16 @@
       try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); plan2dEdited(); }catch(_endDrag){}
       __plan2d.dragWall=null; plan2dDraw(); return;
     }
+    // Finish window endpoint drag
+    if(__plan2d.dragWindow){
+      try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); plan2dEdited(); }catch(_endW){}
+      __plan2d.dragWindow=null; plan2dDraw(); return;
+    }
+    // Finish door endpoint drag
+    if(__plan2d.dragDoor){
+      try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); plan2dEdited(); }catch(_endD){}
+      __plan2d.dragDoor=null; plan2dDraw(); return;
+    }
     if(__plan2d.start && __plan2d.last){ var moved=Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y); if(moved<0.02){ plan2dSelectAt(__plan2d.last); } else { var a=__plan2d.start,b=__plan2d.last; if(__plan2d.tool!=='wall'){ // drag-create still applies for window/door
           plan2dFinalize(a,b); plan2dAutoSnapAndJoin(); plan2dDraw(); } } }
     __plan2d.start=null; __plan2d.last=null; __plan2d.mouse=null; plan2dDraw(); });
@@ -538,7 +579,22 @@
       }
       if(__plan2d.selectedIndex>=0){ plan2dEraseElementAt(__plan2d.selectedIndex); plan2dSetSelection(-1); plan2dDraw(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return; }
     }
+    // Toggle window full height (floor-to-ceiling) when 'F' pressed and a window is selected
+    if(ev.key==='f' || ev.key==='F'){
+      try{
+        if(__plan2d.selectedIndex>=0){ var sel = __plan2d.elements[__plan2d.selectedIndex]; if(sel && sel.type==='window'){
+          var isFull = (typeof sel.sillM==='number' && sel.sillM===0 && typeof sel.heightM==='number' && sel.heightM === (__plan2d.wallHeightM||3.0));
+          if(!isFull){ sel.sillM = 0; sel.heightM = (__plan2d.wallHeightM||3.0); }
+          else { sel.sillM = (__plan2d.windowSillM||1.0); sel.heightM = (__plan2d.windowHeightM||1.5); }
+          plan2dEdited(); plan2dDraw();
+        } }
+      }catch(_tf){}
+      ev.preventDefault(); ev.stopPropagation(); return;
+    }
   }; document.addEventListener('keydown', window.__plan2dKeydown, true); }
+
+  // Helper to toggle full-height on selected window (can be called from UI dropdown)
+  try{ window.toggleSelectedWindowFullHeight = function(){ try{ if(__plan2d.selectedIndex>=0){ var sel = __plan2d.elements[__plan2d.selectedIndex]; if(sel && sel.type==='window'){ var isFull = (typeof sel.sillM==='number' && sel.sillM===0 && typeof sel.heightM==='number' && sel.heightM === (__plan2d.wallHeightM||3.0)); if(!isFull){ sel.sillM = 0; sel.heightM = (__plan2d.wallHeightM||3.0); } else { sel.sillM = (__plan2d.windowSillM||1.0); sel.heightM = (__plan2d.windowHeightM||1.5); } plan2dEdited(); plan2dDraw(); } } }catch(e){} }; }catch(_g){}
   if(!window.__plan2dKeyup){ window.__plan2dKeyup=function(ev){ if(!__plan2d.active) return; if(ev.code==='Space'){ __plan2d.spacePanActive=false; if(__plan2d.panning){ /* end current panning gracefully */ __plan2d.panning=null; } try{ plan2dCursor && plan2dCursor(); }catch(_){} ev.preventDefault(); ev.stopPropagation(); } }; document.addEventListener('keyup', window.__plan2dKeyup, true); }
   }
   window.plan2dBind = window.plan2dBind || plan2dBind;

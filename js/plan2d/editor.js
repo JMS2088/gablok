@@ -21,6 +21,48 @@
     if(imp && !imp.__wired){ imp.__wired=true; imp.addEventListener('click', function(){ if(file) file.click(); }); }
     if(file && !file.__wired){ file.__wired=true; file.addEventListener('change', function(ev){ try{ var f=ev.target.files && ev.target.files[0]; if(!f) return; var r=new FileReader(); r.onload=function(){ try{ plan2dImport && plan2dImport(r.result); }catch(_){} }; r.readAsText(f); }catch(_){} finally { try{ ev.target.value=''; }catch(_){} } }); }
     var apply=document.getElementById('plan2d-apply-3d'); if(apply && !apply.__wired){ apply.__wired=true; apply.addEventListener('click', function(){ try{ if(typeof window.applyPlan2DTo3D==='function'){ window.applyPlan2DTo3D(undefined,{allowRooms:true,quiet:false,level:(typeof window.currentFloor==='number'? window.currentFloor:0)}); } }catch(_){} }); }
+
+    // Opening property dropdowns wiring (window type + door swing + door hinge)
+    var winType=document.getElementById('plan2d-window-type');
+    var doorSwing=document.getElementById('plan2d-door-swing');
+    var doorHinge=document.getElementById('plan2d-door-hinge');
+    function refreshOpeningControls(){
+      try{
+        var idx = __plan2d.selectedIndex;
+        var el = (typeof idx==='number' && idx>=0)? __plan2d.elements[idx] : null;
+        if(el && el.type==='window'){
+          if(winType){ winType.style.display='inline-block';
+            var isFull = (el.sillM===0 && el.heightM === (__plan2d.wallHeightM||3.0));
+            winType.value = isFull ? 'full' : 'standard';
+          }
+          if(doorSwing) doorSwing.style.display='none';
+          if(doorHinge) doorHinge.style.display='none';
+        } else if(el && el.type==='door'){
+          if(winType) winType.style.display='none';
+          if(doorSwing){ doorSwing.style.display='inline-block'; doorSwing.value = (el.meta && el.meta.swing) ? el.meta.swing : 'in'; }
+          if(doorHinge){ doorHinge.style.display='inline-block'; doorHinge.value = (el.meta && el.meta.hinge) ? el.meta.hinge : 't0'; }
+        } else {
+          if(winType) winType.style.display='none';
+          if(doorSwing) doorSwing.style.display='none';
+          if(doorHinge) doorHinge.style.display='none';
+        }
+      }catch(_rOC){}
+    }
+    // Provide external hook used by core to signal selection updates
+    try{ window.onPlan2DSelectionChange = function(){ refreshOpeningControls(); }; }catch(_exh){}
+    // Expose for selection changes (editor-core sets selection); patch plan2dSetSelection to call refresh.
+    try{
+      if(typeof window.plan2dSetSelection==='function' && !window.plan2dSetSelection.__patchedForOpeningControls){
+        var origSelFn = window.plan2dSetSelection;
+        window.plan2dSetSelection = function(idx){ origSelFn(idx); refreshOpeningControls(); };
+        window.plan2dSetSelection.__patchedForOpeningControls=true;
+      }
+    }catch(_patchSel){}
+    if(winType && !winType.__wired){ winType.__wired=true; winType.addEventListener('change', function(){ try{ var idx=__plan2d.selectedIndex; if(idx>=0){ var el=__plan2d.elements[idx]; if(el && el.type==='window'){ if(winType.value==='full'){ el.sillM=0; el.heightM=(__plan2d.wallHeightM||3.0); } else { el.sillM=(__plan2d.windowSillM||1.0); el.heightM=(__plan2d.windowHeightM||1.5); } plan2dEdited(); plan2dDraw(); refreshOpeningControls(); } } }catch(_chW){} }); }
+    if(doorSwing && !doorSwing.__wired){ doorSwing.__wired=true; doorSwing.addEventListener('change', function(){ try{ var idx=__plan2d.selectedIndex; if(idx>=0){ var el=__plan2d.elements[idx]; if(el && el.type==='door'){ el.meta = el.meta || { hinge:'t0', swing:'in' }; el.meta.swing = doorSwing.value==='out' ? 'out' : 'in'; plan2dEdited(); plan2dDraw(); refreshOpeningControls(); } } }catch(_chDS){} }); }
+    if(doorHinge && !doorHinge.__wired){ doorHinge.__wired=true; doorHinge.addEventListener('change', function(){ try{ var idx=__plan2d.selectedIndex; if(idx>=0){ var el=__plan2d.elements[idx]; if(el && el.type==='door'){ el.meta = el.meta || { hinge:'t0', swing:'in' }; el.meta.hinge = (doorHinge.value==='t1') ? 't1':'t0'; plan2dEdited(); plan2dDraw(); refreshOpeningControls(); } } }catch(_chDH){} }); }
+    // Initial state hidden
+    refreshOpeningControls();
   }
   function wireZoomPan(){
     var c=document.getElementById('plan2d-canvas'); if(!c) return;

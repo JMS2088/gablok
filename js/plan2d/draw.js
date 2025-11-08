@@ -839,6 +839,22 @@
           ctx.beginPath(); ctx.arc(sb.x, sb.y, handleR, 0, Math.PI*2); ctx.fill(); ctx.stroke();
           ctx.restore();
         }
+        // Opening (window/door) endpoint handles for resize
+        if(__plan2d.tool==='select' && se && (se.type==='window' || se.type==='door')){
+          try {
+            var or = 5; // radius
+            ctx.save();
+            // Differentiate window vs door color theme
+            var fillCol = (se.type==='window') ? '#38bdf8' : '#22c55e';
+            var strokeCol = 'rgba(15,23,42,0.85)';
+            ctx.fillStyle = fillCol; ctx.strokeStyle = strokeCol; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(sa.x, sa.y, or, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.arc(sb.x, sb.y, or, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            // Draw small direction tick to hint drag axis (line between handles already present)
+            ctx.lineWidth = 1.5; ctx.strokeStyle = strokeCol; ctx.beginPath(); ctx.moveTo(sa.x, sa.y); ctx.lineTo(sb.x, sb.y); ctx.stroke();
+            ctx.restore();
+          } catch(_opH){}
+        }
       }
       // Draw selected subsegment highlight if present
       if(__plan2d.selectedSubsegment && typeof __plan2d.selectedSubsegment.wallIndex==='number'){
