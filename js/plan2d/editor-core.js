@@ -519,124 +519,90 @@
   window.plan2dUnbind = window.plan2dUnbind || plan2dUnbind;
 
   // Modal open/close -------------------------------------------------------
+  // Rewritten clean openPlan2DModal (previous version became corrupted during patch operations)
   function openPlan2DModal(){
-    if(__plan2d.active) return;
-    __plan2d.active=true;
-    // Show modal container
-    try{ var page=document.getElementById('plan2d-page'); if(page) page.style.display='block'; }catch(_d){}
-    // Move global #controls bar inside the 2D header for unified navigation (keep identical styling)
     try {
-      var controls = document.getElementById('controls');
-      var hdr = document.getElementById('plan2d-header');
-      if (controls && hdr && !controls.__movedInto2D) {
-        // Preserve original parent and next sibling for restoration
-        controls.__origParent = controls.parentNode;
-        controls.__origNext = controls.nextSibling;
-        hdr.insertBefore(controls, hdr.firstChild);
-        controls.__movedInto2D = true;
+      if(__plan2d.active) return false;
+      __plan2d.active=true;
+      var floor = (typeof window.currentFloor==='number'? window.currentFloor:0);
+      // Show modal container
+      try{ var page=document.getElementById('plan2d-page'); if(page) page.style.display='block'; }catch(_d){}
+      // Move controls into header
+      try {
+        var controls = document.getElementById('controls');
+        var hdr = document.getElementById('plan2d-header');
+        if (controls && hdr && !controls.__movedInto2D) {
+          controls.__origParent = controls.parentNode;
+          controls.__origNext = controls.nextSibling;
+          hdr.insertBefore(controls, hdr.firstChild);
+          controls.__movedInto2D = true;
+        }
+      } catch(e){}
+      plan2dBind(); plan2dCursor();
+      // Load drafts from storage and bring in guides/elements for this floor
+      try { loadPlan2dDraftsFromStorage(); plan2dLoadDraft(floor); }catch(_ld){}
+      var draft = window.__plan2dDrafts && window.__plan2dDrafts[floor];
+      var shouldPopulate = true;
+      if(draft && draft.userEdited){
+        // Only skip populate if draft actually has elements
+        if(Array.isArray(draft.elements) && draft.elements.length>0){
+          shouldPopulate=false;
+          if(console && console.log) console.log('[PLAN2D OPEN] Using user-edited draft floor', floor, 'elements=', draft.elements.length);
+        } else {
+          if(console && console.warn) console.warn('[PLAN2D OPEN] Empty user-edited draft ignored; will populate');
+        }
       }
-    } catch(e){}
-    plan2dBind();
-    plan2dCursor();
-    // Load draft (guides) for current floor
-    try{ loadPlan2dDraftsFromStorage(); plan2dLoadDraft(typeof window.currentFloor==='number'? window.currentFloor:0); }catch(e){}
-    // Always populate from 3D for the active floor when source exists (simplifies and stabilizes toggles)
-    try{
-      var lvlNow = (typeof window.currentFloor==='number'? window.currentFloor:0);
-      var hasRooms=false, hasStrips=false;
+      if(shouldPopulate && typeof populatePlan2DFromDesign==='function'){
+        var ok=false; try{ ok=!!populatePlan2DFromDesign(); }catch(_pp){ ok=false; }
+        if(console && console.log) console.log('[PLAN2D OPEN] Auto-populate floor', floor, 'ok=', ok, 'elements=', (__plan2d.elements?__plan2d.elements.length:0));
+        try { window.__plan2dDiag = window.__plan2dDiag||{}; window.__plan2dDiag.lastOpenSnapshot = { at:Date.now(), floor:floor, elements:(__plan2d.elements?__plan2d.elements.length:0) }; }catch(_snap){}
+      }
+      // Fallback: if still empty but 3D source exists, populate now
+      try {
+        if((!Array.isArray(__plan2d.elements) || __plan2d.elements.length===0) && typeof populatePlan2DFromDesign==='function'){
+          var source=false; var rooms=Array.isArray(window.allRooms)?window.allRooms:[]; for(var i=0;i<rooms.length;i++){ var r=rooms[i]; if(r && (r.level||0)===floor){ source=true; break; } }
+          if(!source){ var strips=Array.isArray(window.wallStrips)?window.wallStrips:[]; for(var j=0;j<strips.length;j++){ var ws=strips[j]; if(ws && (ws.level||0)===floor){ source=true; break; } } }
+          if(source){ if(console && console.warn) console.warn('[PLAN2D OPEN] Fallback populate (initial empty) floor', floor); try{ populatePlan2DFromDesign(); }catch(_pf){} }
+        }
+      }catch(_fb){}
+      // Simple: make canvases visible, fit instantly (no animation), and draw
       try{
-        var rms = Array.isArray(window.allRooms)? window.allRooms: [];
-        for(var i=0;i<rms.length;i++){ var r=rms[i]; if(r && (r.level||0)===lvlNow){ hasRooms=true; break; } }
-        if(!hasRooms){ var wsArr = Array.isArray(window.wallStrips)? window.wallStrips: []; for(var j=0;j<wsArr.length;j++){ var w=wsArr[j]; if(w && (w.level||0)===lvlNow){ hasStrips=true; break; } } }
-      }catch(_src){}
-      if((hasRooms||hasStrips) && typeof window.populatePlan2DFromDesign==='function'){ window.populatePlan2DFromDesign(); __plan2d.__userEdited=false; }
-    }catch(_popAlways){}
-    // Hide canvases until we have content + animation starts to avoid initial single-room flash
-    try{
-      var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var l2=document.getElementById('labels-2d');
-      if(c){ c.style.visibility='hidden'; }
-      if(ov){ ov.style.visibility='hidden'; }
-      if(l2){ l2.style.visibility='hidden'; }
-    }catch(_vh){}
-    // Simple one-shot initial fit: try immediately, then a single delayed retry once.
-    try{
-      var didAnimate=false;
-      var tryInitialFit=function(){
-        try{
-          if(didAnimate || !__plan2d.active) return;
-          var b=plan2dComputeBounds();
-          if(b){
-            // Pre-center pan and animate scale-only once
-            var cx=(b.minX+b.maxX)*0.5; var cy=(b.minY+b.maxY)*0.5;
-            __plan2d.panX = -cx; __plan2d.panY = -cy;
-            // Desired initial scale: show label "1:0.69" => scale = 100/0.69 ≈ 144.93
-            var desiredScale = 100/0.69; // clamp happens inside animate
-            var ok = plan2dAnimateInitialFit(40,{revealCanvas:true, lockPan:true, targetScale: desiredScale});
-            if(!ok){
-              // Fallback: instant fit and reveal
-              // Use fixed scale fallback too for consistency
-              __plan2d.scale = Math.max(10, Math.min(800, desiredScale));
-              try{ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var l2=document.getElementById('labels-2d'); if(c) c.style.visibility='visible'; if(ov) ov.style.visibility='visible'; if(l2) l2.style.visibility='visible'; }catch(_rvI){}
-              try{ plan2dDraw && plan2dDraw(); }catch(_dd){}
-            }
-            didAnimate=true;
-            return;
-          }
-          // No content yet: reveal empty stage and default to Wall tool for immediate use
-          try{
-            var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var l2=document.getElementById('labels-2d');
-            if(c) c.style.visibility='visible'; if(ov) ov.style.visibility='visible'; if(l2) l2.style.visibility='visible';
-          }catch(_rvE){}
-          try{ __plan2d.tool='wall'; plan2dCursor && plan2dCursor(); }catch(_tw){}
-          try{ plan2dDraw && plan2dDraw(); }catch(_dw){}
-        }catch(_tif){}
-      };
-      // Attempt immediately after populate; if that didn't animate, try once more shortly after.
-      tryInitialFit();
-      if(!didAnimate){ setTimeout(tryInitialFit, 200); }
-    }catch(_def){}
-    // Refresh scale label
-    try{ var scl=document.getElementById('plan2d-scale'); if(scl) scl.textContent='1:'+Math.round(100*(__plan2d.scale? (100/__plan2d.scale):1))/100; }catch(_s){}
-    // Wire close button if not already done
-    try{ var btnClose=document.getElementById('plan2d-close'); if(btnClose && !btnClose.__wired){ btnClose.__wired=true; btnClose.addEventListener('click', function(){ closePlan2DModal(); }); } }catch(_c){}
-    // Status
-    try{ if(window.updateStatus) updateStatus('2D editor opened'); }catch(e){}
-  // Trigger multiple resize passes: once now and once on next frame to guarantee correct CSS->canvas sizing
-  try{ if(typeof window.__plan2dResize==='function') window.__plan2dResize(); requestAnimationFrame(function(){ try{ window.__plan2dResize && window.__plan2dResize(); }catch(_r2){} }); }catch(_r){}
-  // Force a sizing pass (draw will occur after animation reveal)
-  // (No explicit plan2dDraw here to avoid empty flash)
-    // Simplified: no multi-pass populate retries, no extra fit/animate triggers
-    // Live keep-in-sync whenever 3D changes apply: coalesce events within a frame
-    try{
-      if (!window.__plan2dSyncApplyHandler) {
-        var pending=false; window.__plan2dSyncApplyHandler = function(){ if(!__plan2d.active) return; if(pending) return; pending=true; requestAnimationFrame(function(){ try{ pending=false; if(__plan2d.userDrawingActive){ return; } if(typeof window.populatePlan2DFromDesign==='function') { window.populatePlan2DFromDesign(); plan2dDraw && plan2dDraw(); } }catch(_e){ pending=false; } }); };
-        window.addEventListener('gablok:apply-summary', window.__plan2dSyncApplyHandler);
-      }
-    }catch(_eSync){}
+        var c=document.getElementById('plan2d-canvas');
+        var ov=document.getElementById('plan2d-overlay');
+        var l2=document.getElementById('labels-2d');
+        if(c) c.style.visibility='visible'; if(ov) ov.style.visibility='visible'; if(l2) l2.style.visibility='visible';
+      }catch(_vis){}
+      try{
+        // If there's content, fit to content; otherwise just draw the empty grid and set tool to wall
+        var hasContent = Array.isArray(__plan2d.elements) && __plan2d.elements.length>0;
+        if(hasContent){ plan2dFitViewToContent(40); }
+        else { __plan2d.tool='wall'; }
+        plan2dDraw && plan2dDraw();
+      }catch(_fit){}
+      // Scale label refresh
+      try{ var scl=document.getElementById('plan2d-scale'); if(scl) scl.textContent='1:'+Math.round(100*(100/(__plan2d.scale||100)))/100; }catch(_slbl){}
+      // Close button wiring
+      try{ var btnClose=document.getElementById('plan2d-close'); if(btnClose && !btnClose.__wired){ btnClose.__wired=true; btnClose.addEventListener('click', function(){ closePlan2DModal(); }); } }catch(_cbtn){}
+      try{ if(window.updateStatus) updateStatus('2D editor opened'); }catch(_sts){}
+  // Resize pass once to ensure correct canvas backing size
+  try{ if(typeof window.__plan2dResize==='function') window.__plan2dResize(); }catch(_rpass){}
+      // Live sync listener
+      try{ if(!window.__plan2dSyncApplyHandler){ var pending=false; window.__plan2dSyncApplyHandler=function(){ if(!__plan2d.active) return; if(pending) return; pending=true; requestAnimationFrame(function(){ try{ pending=false; if(__plan2d.userDrawingActive) return; if(typeof window.populatePlan2DFromDesign==='function'){ window.populatePlan2DFromDesign(); plan2dDraw && plan2dDraw(); } }catch(_sync){ pending=false; } }); }; window.addEventListener('gablok:apply-summary', window.__plan2dSyncApplyHandler); } }catch(_lsync){}
+      return true;
+    } catch(err){ if(console && console.error) console.error('[PLAN2D OPEN ERROR]', err); return false; }
   }
   function closePlan2DModal(){
-    if(!__plan2d.active) return;
-  __plan2d.active=false;
-    plan2dUnbind();
-    plan2dSetSelection(-1);
-    __plan2d.chainActive=false;
-    __plan2d.chainPoints=[];
-    // Hide modal container
-    try{ var page=document.getElementById('plan2d-page'); if(page) page.style.display='none'; }catch(_d){}
-    // Restore global #controls bar to its original location
     try {
-      var controls = document.getElementById('controls');
-      if (controls && controls.__movedInto2D) {
-        var parent = controls.__origParent;
-        var next = controls.__origNext;
-        if (parent) {
-          if (next) parent.insertBefore(controls, next); else parent.appendChild(controls);
-        }
-        controls.__movedInto2D = false;
-      }
-    } catch(e){}
-    plan2dDraw();
-    try{ if(window.updateStatus) updateStatus('2D editor closed'); }catch(e){}
+      if(!__plan2d.active) return;
+      __plan2d.active=false;
+      plan2dUnbind();
+      plan2dSetSelection(-1);
+      __plan2d.chainActive=false; __plan2d.chainPoints=[];
+      try{ var page=document.getElementById('plan2d-page'); if(page) page.style.display='none'; }catch(_d){}
+      try{ var controls=document.getElementById('controls'); if(controls && controls.__movedInto2D){ var parent=controls.__origParent; var next=controls.__origNext; if(parent){ if(next) parent.insertBefore(controls,next); else parent.appendChild(controls);} controls.__movedInto2D=false; } }catch(_rest){}
+      plan2dDraw();
+      try{ if(window.updateStatus) updateStatus('2D editor closed'); }catch(_st){}
+    } catch(e) { if(console && console.error) console.error('[PLAN2D CLOSE ERROR]', e); }
   }
   // Always assign real handlers (do NOT guard with existing value) so loader stub gets replaced
   window.openPlan2DModal = openPlan2DModal;
