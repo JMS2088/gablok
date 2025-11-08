@@ -1,3 +1,4 @@
+  :root { --btn-gap: 12px; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; font-family: system-ui, sans-serif; background:#ffffff; }
   
@@ -6,8 +7,10 @@
     /* Remove surrounding background panel */
     background: transparent; backdrop-filter: none;
     padding: 0; border-radius: 0; box-shadow: none;
-    display: flex; gap: 12px; align-items: center;
+    display: flex; gap: var(--btn-gap); align-items: center;
   }
+  /* Normalize child margins so spacing relies solely on container gap */
+  #controls > * { margin: 0; }
 
   /* Custom dropdown (forces white/black regardless of native UI) */
   .dropdown { position: relative; display: inline-block; }
@@ -216,10 +219,11 @@
   /* 2D plan right-side overlay: match main controls container (transparent, no panel) */
   #plan2d-side-overlay {
     position: absolute; right: 35px; top: 110px; z-index: 4; /* pushed down from standard 35px to 110px per user request */
-    display: flex; flex-direction: column; gap: 12px;
+    display: flex; flex-direction: column; gap: var(--btn-gap);
     background: transparent; border: 0; border-radius: 0; padding: 0;
     backdrop-filter: none;
   }
+  #plan2d-side-overlay > * { margin: 0; }
   /* Make right-hand side overlay buttons the same height as main navigation */
   #plan2d-side-overlay > button {
     /* Match Floor Plan button height: rely on shared padding (10px vertical) */
@@ -229,13 +233,21 @@
     justify-content: center; /* center text/content horizontally */
     padding: 10px 14px; /* unified horizontal padding (same left/right) */
   }
+  /* Make key overlay buttons 25px wider total (≈ +12px left/right) */
+  #plan2d-apply-3d,
+  #plan2d-export,
+  #plan2d-import {
+    width: 170px;            /* fixed width to prevent jumping */
+    padding-left: 16px;      /* restore comfortable inner spacing */
+    padding-right: 16px;
+  }
 
   /* Opening controls row (moved from inline styles) */
   #plan2d-opening-inline {
-    display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px;
+    display: flex; flex-direction: column; gap: 8px; align-items: stretch; margin-top: 6px;
   }
   #plan2d-opening-inline select {
-    padding: 4px 6px; font-size: 12px;
+    padding: 4px 6px; font-size: 12px; width: 100%;
   }
   /* Make the Window Type dropdown match the width of the buttons above */
   #plan2d-window-type {
@@ -252,10 +264,13 @@
     /* Evenly spaced, equal-width controls */
     display: grid;
     grid-auto-flow: column;          /* lay out children in columns */
-    grid-auto-columns: 1fr;          /* each child gets equal width */
-    gap: 12px;                       /* uniform gaps between items */
+    grid-auto-columns: max-content;  /* size to content for consistent visual gaps */
+    gap: var(--btn-gap);             /* uniform gaps between items */
+    justify-content: start;          /* avoid distributing extra space */
     align-items: start;              /* align tops so Wall group does not push buttons down */
   }
+  /* Normalize child margins so spacing relies solely on grid gap */
+  #plan2d-toolbar-right > * { margin: 0; }
   /* Make the 2D toolbar buttons match main navigation height (~44px) */
   #plan2d-toolbar-right > button {
     /* Match Floor Plan button height by removing fixed 44px and using shared padding */
@@ -265,10 +280,10 @@
     justify-content: center; /* center text/content horizontally */
     padding: 10px 14px; /* unified horizontal padding */
   }
-  /* Ensure each toolbar child expands to fill its grid cell */
+  /* Allow natural widths; rely on grid gap for spacing */
   #plan2d-toolbar-right > * { min-width: 0; }
-  #plan2d-toolbar-right > button { width: 100%; }
-  #plan2d-wall-group { width: 100%; }
+  #plan2d-toolbar-right > button { width: auto; }
+  #plan2d-wall-group { width: auto; }
 
   /* Wall tool group (button + scale label) moved from inline */
   #plan2d-wall-group {

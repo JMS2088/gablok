@@ -326,7 +326,57 @@
               ctx.fillText(txt, 0, 0.5);
               ctx.restore();
             })();
-      // Live preview: carve a temporary gap where a door/window would be placed before element creation
+            // Overlay live preview keylines for pending door/window placement on this wall
+            try {
+              if(__plan2d.mouse && !__plan2d.dragWindow && !__plan2d.dragDoor && !__plan2d.dragDoorWhole && !__plan2d.start){
+                var mPt = __plan2d.mouse; // screen-space
+                var pW = screenToWorld2D(mPt.x, mPt.y);
+                var near2 = plan2dFindNearestWall(pW, 0.3);
+                if(near2 && typeof near2.index==='number' && near2.index===i){
+                  var tHover2 = plan2dProjectParamOnWall(pW, el);
+                  if(__plan2d.tool==='window'){
+                    var wPrev = (__plan2d.windowDefaultWidthM||1.2);
+                    var halfTw2 = (wPrev/2)/wLen0; var t0w2=tHover2-halfTw2, t1w2=tHover2+halfTw2;
+                    if(t1w2>t0w2){
+                      t0w2=Math.max(0,t0w2); t1w2=Math.min(1,t1w2);
+                      if(t1w2>t0w2+1e-6){
+                        var wx0 = origAx + dirx*(t0w2*wLen0), wy0 = origAy + diry*(t0w2*wLen0);
+                        var wx1 = origAx + dirx*(t1w2*wLen0), wy1 = origAy + diry*(t1w2*wLen0);
+                        var wa = worldToScreen2D(wx0, wy0), wb = worldToScreen2D(wx1, wy1);
+                        var dx=wb.x-wa.x, dy=wb.y-wa.y; var L=Math.sqrt(dx*dx+dy*dy)||1; var nxp=-dy/L, nyp=dx/L; var halfPxW=(thick*__plan2d.scale)/2;
+                        ctx.save();
+                        // Window keylines: blue rectangle + center line
+                        ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.lineWidth=1.5;
+                        ctx.moveTo(wa.x+nxp*halfPxW,wa.y+nyp*halfPxW);
+                        ctx.lineTo(wb.x+nxp*halfPxW,wb.y+nyp*halfPxW);
+                        ctx.lineTo(wb.x-nxp*halfPxW,wb.y-nyp*halfPxW);
+                        ctx.lineTo(wa.x-nxp*halfPxW,wa.y-nyp*halfPxW);
+                        ctx.closePath(); ctx.stroke();
+                        ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.lineWidth=2; ctx.moveTo(wa.x,wa.y); ctx.lineTo(wb.x,wb.y); ctx.stroke();
+                        ctx.restore();
+                      }
+                    }
+                  } else if(__plan2d.tool==='door'){
+                    var halfT2 = ((__plan2d.doorWidthM||0.92)/2)/wLen0; var t0p2=tHover2-halfT2, t1p2=tHover2+halfT2;
+                    if(t1p2>t0p2){
+                      t0p2=Math.max(0,t0p2); t1p2=Math.min(1,t1p2);
+                      if(t1p2>t0p2+1e-6){
+                        var dx0 = origAx + dirx*(t0p2*wLen0), dy0 = origAy + diry*(t0p2*wLen0);
+                        var dx1 = origAx + dirx*(t1p2*wLen0), dy1 = origAy + diry*(t1p2*wLen0);
+                        var da = worldToScreen2D(dx0, dy0), db = worldToScreen2D(dx1, dy1);
+                        ctx.save(); ctx.strokeStyle='#22c55e'; ctx.lineWidth=2;
+                        // Jamb line keyline
+                        ctx.beginPath(); ctx.moveTo(da.x,da.y); ctx.lineTo(db.x,db.y); ctx.stroke();
+                        // Simple preview arc assuming left hinge & swing-in for immediate feedback
+                        var hP = da, oP = db; var angP = Math.atan2(oP.y-hP.y, oP.x-hP.x); var rP = Math.hypot(oP.x-hP.x, oP.y-hP.y);
+                        ctx.beginPath(); ctx.arc(hP.x, hP.y, rP, angP, angP + Math.PI/2, false); ctx.stroke();
+                        ctx.restore();
+                      }
+                    }
+                  }
+                }
+              }
+            } catch(_pv){}
           }
           // Skip default solid wall draw since we've drawn segments
           continue;

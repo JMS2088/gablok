@@ -68,8 +68,16 @@
           if(doorHinge) doorHinge.style.display='none';
         } else if(el && el.type==='door'){
           if(winType) winType.style.display='none';
-          if(doorSwing){ doorSwing.style.display='inline-block'; doorSwing.value = (el.meta && el.meta.swing) ? el.meta.swing : 'in'; }
-          if(doorHinge){ doorHinge.style.display='inline-block'; doorHinge.value = (el.meta && el.meta.hinge) ? el.meta.hinge : 't0'; }
+          if(doorSwing){
+            doorSwing.style.display='inline-block';
+            doorSwing.value = (el.meta && el.meta.swing) ? el.meta.swing : 'in';
+          }
+          if(doorHinge){
+            doorHinge.style.display='inline-block';
+            // Explicitly set default left hinge if missing to ensure UI shows immediately
+            var hingeVal = (el.meta && el.meta.hinge) ? el.meta.hinge : 't0';
+            doorHinge.value = hingeVal;
+          }
         } else {
           if(winType) winType.style.display='none';
           if(doorSwing) doorSwing.style.display='none';
