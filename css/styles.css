@@ -241,6 +241,14 @@
     background: transparent; border: 0; border-radius: 0; padding: 0;
     backdrop-filter: none;
   }
+  /* Make right-hand side overlay buttons the same height as main navigation */
+  #plan2d-side-overlay > button {
+    /* Match Floor Plan button height: rely on shared padding (10px vertical) */
+    min-height: unset; /* remove forced 44px */
+    display: inline-flex;
+    align-items: center;
+    padding: 10px 16px; /* mirror global button padding */
+  }
 
   /* Opening controls row (moved from inline styles) */
   #plan2d-opening-inline {
@@ -266,7 +274,15 @@
     grid-auto-flow: column;          /* lay out children in columns */
     grid-auto-columns: 1fr;          /* each child gets equal width */
     gap: 12px;                       /* uniform gaps between items */
-    align-items: stretch;            /* make all items equal height */
+    align-items: start;              /* align tops so Wall group does not push buttons down */
+  }
+  /* Make the 2D toolbar buttons match main navigation height (~44px) */
+  #plan2d-toolbar-right > button {
+    /* Match Floor Plan button height by removing fixed 44px and using shared padding */
+    min-height: unset;
+    display: inline-flex;
+    align-items: center;
+    padding: 10px 16px;
   }
   /* Ensure each toolbar child expands to fill its grid cell */
   #plan2d-toolbar-right > * { min-width: 0; }
@@ -278,6 +294,8 @@
     display: flex; flex-direction: column; align-items: center; gap: 4px;
   }
   #plan2d-wall-group #plan2d-scale { font-size: 11px; color: #ffffff; line-height: 1; }
+  /* Force scale label container text ("Scale:" and value) to white */
+  #plan2d-wall-group > div { color: #ffffff; }
 
   /* Hide the inline file input used by Import JSON trigger */
   #plan2d-import-file { display: none; }
