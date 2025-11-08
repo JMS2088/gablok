@@ -2,7 +2,7 @@
   html, body { height: 100%; overflow: hidden; font-family: system-ui, sans-serif; background:#ffffff; }
   
   #controls {
-    position: fixed; top: 10px; left: 10px; z-index: 100;
+    position: fixed; top: 35px; left: 35px; z-index: 100;
     /* Remove surrounding background panel */
     background: transparent; backdrop-filter: none;
     padding: 0; border-radius: 0; box-shadow: none;
@@ -227,11 +227,21 @@
   }
   
   #measurements {
-    position: fixed; top: 20px; right: 20px; z-index: 100;
+    position: fixed; top: 35px; right: 35px; z-index: 100;
     background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
     padding: 15px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);
     min-width: 200px; width: 340px; font-family: monospace; font-size: 12px;
     display: block;
+  }
+
+  /* 2D plan right-side overlay: move positioning from inline to stylesheet */
+  #plan2d-side-overlay {
+    position: absolute; right: 35px; top: 35px; z-index: 4;
+    display: flex; flex-direction: column; gap: 8px;
+    background: rgba(15,23,42,0.85);
+    border: 1px solid rgba(148,163,184,0.35);
+    border-radius: 10px; padding: 10px;
+    backdrop-filter: blur(2px);
   }
   
   #measurements.visible { display: block; }
