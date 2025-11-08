@@ -128,7 +128,10 @@
       var dpr=window.devicePixelRatio||1; var W=c.width,H=c.height; if(!W||!H) return false;
       var contentW=Math.max(0.01,b.maxX-b.minX); var contentH=Math.max(0.01,b.maxY-b.minY);
       var margin=Math.max(0,(marginPx||40)*dpr);
-      var sX=(W-2*margin)/contentW; var sY=(H-2*margin)/contentH; var targetScale=Math.max(10,Math.min(800,Math.min(sX,sY)));
+      var sX=(W-2*margin)/contentW; var sY=(H-2*margin)/contentH;
+      // Allow a fixed target scale via opts.targetScale; otherwise compute a fit-based target.
+      var requested = (opts && typeof opts.targetScale==='number') ? opts.targetScale : null;
+      var targetScale = (requested!=null) ? Math.max(10, Math.min(800, requested)) : Math.max(10,Math.min(800,Math.min(sX,sY)));
       var cx=(b.minX+b.maxX)*0.5; var cy=(b.minY+b.maxY)*0.5; var targetPanX=-cx; var targetPanY=-cy;
       var duration = (opts && opts.durationMs) ? opts.durationMs : 600; // ms
       var easeName = (opts && opts.easing) || 'easeOutCubic';
@@ -149,6 +152,7 @@
       __plan2d.__initialAnim = anim;
       var reveal = !!(opts && opts.revealCanvas);
       var revealed=false;
+      var lockPan = !!(opts && opts.lockPan);
       function step(){
         if(anim.canceled){ return; }
         // Abort if user starts drawing or panning mid-animation (respect user intent)
@@ -156,8 +160,10 @@
         var now = performance.now(); var t = (now - anim.start)/anim.duration; if(t >= 1){ t = 1; }
         var k = ease(t);
         __plan2d.scale = startScale + (targetScale - startScale) * k;
-        __plan2d.panX = startPanX + (targetPanX - startPanX) * k;
-        __plan2d.panY = startPanY + (targetPanY - startPanY) * k;
+        if(!lockPan){
+          __plan2d.panX = startPanX + (targetPanX - startPanX) * k;
+          __plan2d.panY = startPanY + (targetPanY - startPanY) * k;
+        }
         if(reveal && !revealed){
           try{
             var ov=document.getElementById('plan2d-overlay');
@@ -423,21 +429,42 @@
       if(ov){ ov.style.visibility='hidden'; }
       if(l2){ l2.style.visibility='hidden'; }
     }catch(_vh){}
-    // Defer initial animation until elements exist or fallback after timeout
+    // Simple one-shot initial fit: try immediately, then a single delayed retry once.
     try{
-      var attempts=0; var maxAttempts=8; // ~8 * 80ms = ~640ms grace
-      (function waitForContent(){
+      var didAnimate=false;
+      var tryInitialFit=function(){
         try{
-          var have = Array.isArray(__plan2d.elements) && __plan2d.elements.length>0;
-          if(have || attempts>=maxAttempts){
-            // Run animated fit (reveal canvases in first frame). If bounds still missing fallback to instant & reveal.
-            var ok = plan2dAnimateInitialFit(40,{revealCanvas:true});
-            if(!ok){ plan2dFitViewToContent(40); try{ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var l2=document.getElementById('labels-2d'); if(c) c.style.visibility='visible'; if(ov) ov.style.visibility='visible'; if(l2) l2.style.visibility='visible'; }catch(_rvI){} }
+          if(didAnimate || !__plan2d.active) return;
+          var b=plan2dComputeBounds();
+          if(b){
+            // Pre-center pan and animate scale-only once
+            var cx=(b.minX+b.maxX)*0.5; var cy=(b.minY+b.maxY)*0.5;
+            __plan2d.panX = -cx; __plan2d.panY = -cy;
+            // Desired initial scale: show label "1:0.69" => scale = 100/0.69 ≈ 144.93
+            var desiredScale = 100/0.69; // clamp happens inside animate
+            var ok = plan2dAnimateInitialFit(40,{revealCanvas:true, lockPan:true, targetScale: desiredScale});
+            if(!ok){
+              // Fallback: instant fit and reveal
+              // Use fixed scale fallback too for consistency
+              __plan2d.scale = Math.max(10, Math.min(800, desiredScale));
+              try{ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var l2=document.getElementById('labels-2d'); if(c) c.style.visibility='visible'; if(ov) ov.style.visibility='visible'; if(l2) l2.style.visibility='visible'; }catch(_rvI){}
+              try{ plan2dDraw && plan2dDraw(); }catch(_dd){}
+            }
+            didAnimate=true;
             return;
           }
-          attempts++; setTimeout(waitForContent, 80);
-        }catch(_wf){ attempts++; setTimeout(waitForContent, 80); }
-      })();
+          // No content yet: reveal empty stage and default to Wall tool for immediate use
+          try{
+            var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); var l2=document.getElementById('labels-2d');
+            if(c) c.style.visibility='visible'; if(ov) ov.style.visibility='visible'; if(l2) l2.style.visibility='visible';
+          }catch(_rvE){}
+          try{ __plan2d.tool='wall'; plan2dCursor && plan2dCursor(); }catch(_tw){}
+          try{ plan2dDraw && plan2dDraw(); }catch(_dw){}
+        }catch(_tif){}
+      };
+      // Attempt immediately after populate; if that didn't animate, try once more shortly after.
+      tryInitialFit();
+      if(!didAnimate){ setTimeout(tryInitialFit, 200); }
     }catch(_def){}
     // Refresh scale label
     try{ var scl=document.getElementById('plan2d-scale'); if(scl) scl.textContent='1:'+Math.round(100*(__plan2d.scale? (100/__plan2d.scale):1))/100; }catch(_s){}
@@ -449,44 +476,7 @@
   try{ if(typeof window.__plan2dResize==='function') window.__plan2dResize(); requestAnimationFrame(function(){ try{ window.__plan2dResize && window.__plan2dResize(); }catch(_r2){} }); }catch(_r){}
   // Force a sizing pass (draw will occur after animation reveal)
   // (No explicit plan2dDraw here to avoid empty flash)
-    // Populate retries after boot settles: if no elements yet, try again and fit (multi-pass)
-    try{
-      var retryDelays = [120, 320, 800];
-      retryDelays.forEach(function(delay){
-        setTimeout(function(){
-          try{
-            // Skip auto-populate/fit while user is actively drawing to avoid jumpy view resets
-            if(__plan2d.userDrawingActive){ return; }
-            var had = Array.isArray(__plan2d.elements) ? __plan2d.elements.length : 0;
-            if (typeof window.populatePlan2DFromDesign==='function') { window.populatePlan2DFromDesign(); }
-            var now = Array.isArray(__plan2d.elements) ? __plan2d.elements.length : 0;
-            if ((had===0 && now>0)) {
-              try{ if(!__plan2d.userDrawingActive){
-                // If initial zoom already done we use instant fit; else animate.
-                if(__plan2d.initialZoomDone){ plan2dFitViewToContent && plan2dFitViewToContent(40); } else { plan2dAnimateInitialFit && plan2dAnimateInitialFit(40); }
-              } }catch(_f){}
-              try{ plan2dDraw && plan2dDraw(); }catch(_d){}
-            } else if (now===0) {
-              // Ensure tools are usable even with empty plan: default to Wall tool for convenience
-              try{ __plan2d.tool = 'wall'; plan2dCursor && plan2dCursor(); plan2dDraw && plan2dDraw(); }catch(_t){}
-            }
-          }catch(_pr){}
-        }, delay);
-      });
-    }catch(_prS){}
-    // Also sync once after the first 3D frame if we opened too early
-    try{
-      var onFirstRender = function(){
-        try{
-          var had = Array.isArray(__plan2d.elements) ? __plan2d.elements.length : 0;
-          if (typeof window.populatePlan2DFromDesign==='function') window.populatePlan2DFromDesign();
-          var now = Array.isArray(__plan2d.elements) ? __plan2d.elements.length : 0;
-          if (now>0 && had===0){ try{ if(__plan2d.initialZoomDone){ plan2dFitViewToContent && plan2dFitViewToContent(40); } else { plan2dAnimateInitialFit && plan2dAnimateInitialFit(40); } }catch(_f){} }
-          try{ plan2dDraw && plan2dDraw(); }catch(_d){}
-        }catch(_eFr){}
-      };
-      window.addEventListener('gablok:first-render', onFirstRender, { once:true });
-    }catch(_eEv){}
+    // Simplified: no multi-pass populate retries, no extra fit/animate triggers
     // Live keep-in-sync whenever 3D changes apply: coalesce events within a frame
     try{
       if (!window.__plan2dSyncApplyHandler) {

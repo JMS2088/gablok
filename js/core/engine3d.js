@@ -1694,6 +1694,19 @@
   if (typeof window.selectObject === 'undefined') {
     window.selectObject = function selectObject(id, opts){
       try {
+        var prevId = window.selectedRoomId || null;
+        // If user is actively editing a measurements input and selection changes, blur the field.
+        try {
+          if (id !== prevId) {
+            var panel = document.getElementById('measurements');
+            var active = document.activeElement;
+            if (panel && active && panel.contains(active) && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) {
+              // Commit any pending value by triggering change before blur (native behavior may handle, but we ensure consistency)
+              try { active.dispatchEvent(new Event('change', { bubbles: true })); } catch(_chg) {}
+              active.blur();
+            }
+          }
+        } catch(_blur) { /* non-fatal */ }
         if (id == null) { window.selectedRoomId = null; }
         else { window.selectedRoomId = id; }
         // Keep measurements panel visible and update instantly
