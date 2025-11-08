@@ -372,8 +372,12 @@ function populatePlan2DFromDesign(){
     var scaleX = (c.width>0) ? (c.width/(fitWm||1)) : __plan2d.scale;
     var scaleY = (c.height>0) ? (c.height/(fitHm||1)) : __plan2d.scale;
     var newScale = Math.max(10, Math.min(140, Math.floor(Math.min(scaleX, scaleY)))); // clamp sensible range
-    // Suppress scale changes while user is in an active drawing chain to avoid view "jump" on second click
-    if (__freezeScale || (__plan2d && __plan2d.userDrawingActive)) { newScale = __plan2d.scale || newScale; }
+    // Suppress scale changes while user is in an active drawing chain OR immediately after adding an opening to avoid view "jump"
+    if (
+      __freezeScale ||
+      (__plan2d && __plan2d.userDrawingActive) ||
+      (__plan2d && __plan2d.freezeCenterScaleUntil && Date.now() < __plan2d.freezeCenterScaleUntil)
+    ) { newScale = __plan2d.scale || newScale; }
     if (isFinite(newScale) && newScale>0) {
       // Only update scale if not in userDrawingActive (double-guard) to prevent any subtle fractional recenter
       if(!(__plan2d && __plan2d.userDrawingActive)) {
