@@ -338,6 +338,34 @@
         plan2dDraw();
         return;
       }
+      if(__plan2d.tool==='window' || __plan2d.tool==='door'){
+        // Single-click anchored placement on nearest wall (fallback to drag-create if Shift held)
+        try {
+          if(ev.shiftKey){ /* allow legacy drag gesture */ }
+          else {
+            var near = (typeof plan2dFindNearestWall==='function') ? plan2dFindNearestWall(p, 0.35) : null;
+            if(near && typeof near.index==='number'){
+              var wall = __plan2d.elements[near.index];
+              if(wall && wall.type==='wall'){
+                var tCenter = (typeof plan2dProjectParamOnWall==='function') ? plan2dProjectParamOnWall(p, wall) : 0.5;
+                var wdx = wall.x1-wall.x0, wdy = wall.y1-wall.y0; var wLen = Math.hypot(wdx,wdy)||1;
+                var openingWidth = (__plan2d.tool==='door' ? (__plan2d.doorWidthM||0.92) : (__plan2d.windowDefaultWidthM||1.2));
+                var halfT = (openingWidth/2)/wLen;
+                var t0 = Math.max(0, Math.min(1, tCenter-halfT));
+                var t1 = Math.max(0, Math.min(1, tCenter+halfT));
+                if(t1 < t0){ var tmp=t0; t0=t1; t1=tmp; }
+                var el = { type: (__plan2d.tool==='door' ? 'door':'window'), host: near.index, t0: t0, t1: t1, thickness: (__plan2d.tool==='door'? (__plan2d.doorWidthM||0.92): (__plan2d.wallThicknessM||0.30)) };
+                if(__plan2d.tool==='door'){ el.meta={hinge:'left',swing:'in'}; }
+                __plan2d.elements.push(el);
+                plan2dEdited();
+                plan2dDraw();
+                return; // placed; stop
+              }
+            }
+          }
+        }catch(_place){ /* fallback to legacy drag below */ }
+        // Legacy drag-create path if not anchored; begin selection gesture for finalize() logic
+      }
       if(__plan2d.tool==='select'){
         // Hit-test any element near cursor; if none, start panning
         var best=-1, bestDist=0.18; for(var i=0;i<__plan2d.elements.length;i++){ var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; } }
