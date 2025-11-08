@@ -163,10 +163,81 @@
   window.plan2dFindPlacementWall = window.plan2dFindPlacementWall || plan2dFindPlacementWall;
 
   // Element creation -------------------------------------------------------
-  function plan2dFinalize(a,b){ if(!a||!b) return; var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='door'){ __plan2d.elements.push({type:'door',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:0.9,meta:{hinge:'left',swing:'in'}}); } plan2dEdited(); }
+  // Merge colinear overlapping/adjacent axis-aligned walls into a single expanded wall.
+  function plan2dMergeColinearWalls(){
+    try {
+      var els = __plan2d.elements || []; var changed = true; var EPS = 1e-6; var TOUCH = 0.001; // 1mm adjacency tolerance
+      function axisAligned(w){ return w && w.type==='wall' && (Math.abs(w.x0 - w.x1) < EPS || Math.abs(w.y0 - w.y1) < EPS); }
+      function horizontal(w){ return axisAligned(w) && Math.abs(w.y0 - w.y1) < EPS; }
+      function vertical(w){ return axisAligned(w) && Math.abs(w.x0 - w.x1) < EPS; }
+      function normSpan(a0,a1){ return a0<=a1? [a0,a1] : [a1,a0]; }
+      function collectWindowsDoorsForWall(idx){ var out=[]; for(var i=0;i<els.length;i++){ var e=els[i]; if(!e) continue; if((e.type==='window'||e.type==='door') && typeof e.host==='number' && e.host===idx){ out.push({el:e}); } } return out; }
+      function recomputeOpeningParams(opening, oldWall, newWall){
+        try {
+          if(!opening || !oldWall || !newWall) return;
+          var owx0 = oldWall.x0 + (oldWall.x1 - oldWall.x0) * (opening.t0||0);
+          var owy0 = oldWall.y0 + (oldWall.y1 - oldWall.y0) * (opening.t0||0);
+          var owx1 = oldWall.x0 + (oldWall.x1 - oldWall.x0) * (opening.t1||0);
+          var owy1 = oldWall.y0 + (oldWall.y1 - oldWall.y0) * (opening.t1||0);
+          var dx = newWall.x1 - newWall.x0, dy = newWall.y1 - newWall.y0; var len2 = dx*dx + dy*dy || 1;
+          function proj(px,py){ return Math.max(0, Math.min(1, ((px - newWall.x0)*dx + (py - newWall.y0)*dy)/len2)); }
+          var nt0 = proj(owx0, owy0), nt1 = proj(owx1, owy1);
+          opening.t0 = nt0; opening.t1 = nt1;
+        } catch(_rp){}
+      }
+      while(changed){
+        changed = false;
+        for(var i=0;i<els.length;i++){
+          var A = els[i]; if(!horizontal(A) && !vertical(A)) continue;
+          for(var j=i+1;j<els.length;j++){
+            var B = els[j]; if(!horizontal(B) && !vertical(B)) continue;
+            // Must be same orientation and aligned on constant axis
+            if(horizontal(A) && horizontal(B)){
+              if(Math.abs(A.y0 - B.y0) > TOUCH) continue;
+              var sA = normSpan(A.x0, A.x1), sB = normSpan(B.x0, B.x1);
+              // Check overlap or touch
+              if(sA[1] < sB[0] - TOUCH || sB[1] < sA[0] - TOUCH) continue;
+              // Union span
+              var n0 = Math.min(sA[0], sB[0]); var n1 = Math.max(sA[1], sB[1]);
+              var oldA = {x0:A.x0,y0:A.y0,x1:A.x1,y1:A.y1}; var oldB = {x0:B.x0,y0:B.y0,x1:B.x1,y1:B.y1};
+              A.x0 = n0; A.x1 = n1; A.y0 = A.y1 = window.plan2dSnap(A.y0);
+              // Re-home openings from B to A
+              var openingsB = collectWindowsDoorsForWall(j);
+              for(var ob=0; ob<openingsB.length; ob++){ var op = openingsB[ob].el; op.host = i; recomputeOpeningParams(op, oldB, A); }
+              // Adjust openings originally on A (due to A expansion) to maintain proportions
+              var openingsA = collectWindowsDoorsForWall(i);
+              for(var oa=0; oa<openingsA.length; oa++){ recomputeOpeningParams(openingsA[oa].el, oldA, A); }
+              // Remove B and fix host indices (>j)
+              els.splice(j,1);
+              for(var k=0;k<els.length;k++){ var e=els[k]; if(e && (e.type==='window'||e.type==='door') && typeof e.host==='number' && e.host>j){ e.host -= 1; } }
+              changed = true; break;
+            } else if(vertical(A) && vertical(B)) {
+              if(Math.abs(A.x0 - B.x0) > TOUCH) continue;
+              var vA = normSpan(A.y0, A.y1), vB = normSpan(B.y0, B.y1);
+              if(vA[1] < vB[0] - TOUCH || vB[1] < vA[0] - TOUCH) continue;
+              var m0 = Math.min(vA[0], vB[0]); var m1 = Math.max(vA[1], vB[1]);
+              var oldAv = {x0:A.x0,y0:A.y0,x1:A.x1,y1:A.y1}; var oldBv = {x0:B.x0,y0:B.y0,x1:B.x1,y1:B.y1};
+              A.y0 = m0; A.y1 = m1; A.x0 = A.x1 = window.plan2dSnap(A.x0);
+              var openingsBv = collectWindowsDoorsForWall(j);
+              for(var obv=0; obv<openingsBv.length; obv++){ var opv = openingsBv[obv].el; opv.host = i; recomputeOpeningParams(opv, oldBv, A); }
+              var openingsAv = collectWindowsDoorsForWall(i);
+              for(var oav=0; oav<openingsAv.length; oav++){ recomputeOpeningParams(openingsAv[oav].el, oldAv, A); }
+              els.splice(j,1);
+              for(var kk=0;kk<els.length;kk++){ var ee=els[kk]; if(ee && (ee.type==='window'||ee.type==='door') && typeof ee.host==='number' && ee.host>j){ ee.host -= 1; } }
+              changed = true; break;
+            }
+          }
+          if(changed) break;
+        }
+      }
+    } catch(e){ /* non-fatal */ }
+  }
+  window.plan2dMergeColinearWalls = window.plan2dMergeColinearWalls || plan2dMergeColinearWalls;
+
+  function plan2dFinalize(a,b){ if(!a||!b) return; var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM}); plan2dMergeColinearWalls(); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='door'){ __plan2d.elements.push({type:'door',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:0.9,meta:{hinge:'left',swing:'in'}}); } plan2dEdited(); }
   window.plan2dFinalize = window.plan2dFinalize || plan2dFinalize;
 
-  function plan2dFinalizeChain(){ try { var pts=Array.isArray(__plan2d.chainPoints)?__plan2d.chainPoints:[]; if(pts.length<2){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); return; } for(var i=0;i<pts.length-1;i++){ var a=pts[i], b=pts[i+1]; var segLen=Math.hypot(b.x-a.x,b.y-a.y); if(segLen<0.05) continue; var ax=a.x, ay=a.y, bx=b.x, by=b.y; if(Math.abs(bx-ax)>Math.abs(by-ay)) by=ay; else bx=ax; __plan2d.elements.push({type:'wall',x0:ax,y0:ay,x1:bx,y1:by,thickness:__plan2d.wallThicknessM}); } __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dAutoSnapAndJoin(); plan2dDraw(); plan2dEdited(); }catch(e){} }
+  function plan2dFinalizeChain(){ try { var pts=Array.isArray(__plan2d.chainPoints)?__plan2d.chainPoints:[]; if(pts.length<2){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); return; } for(var i=0;i<pts.length-1;i++){ var a=pts[i], b=pts[i+1]; var segLen=Math.hypot(b.x-a.x,b.y-a.y); if(segLen<0.05) continue; var ax=a.x, ay=a.y, bx=b.x, by=b.y; if(Math.abs(bx-ax)>Math.abs(by-ay)) by=ay; else bx=ax; __plan2d.elements.push({type:'wall',x0:ax,y0:ay,x1:bx,y1:by,thickness:__plan2d.wallThicknessM}); plan2dMergeColinearWalls(); } __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dAutoSnapAndJoin(); plan2dDraw(); plan2dEdited(); }catch(e){} }
   window.plan2dFinalizeChain = window.plan2dFinalizeChain || plan2dFinalizeChain;
 
   // Eraser & deletion ------------------------------------------------------
@@ -428,12 +499,36 @@
                 if(Math.abs(t1 - t0) < 0.01){ var mid=(t0+t1)/2; t0=Math.max(0, mid-0.005); t1=Math.min(1, mid+0.005); }
                 var el = { type: (__plan2d.tool==='door' ? 'door':'window'), host: near.index, t0: t0, t1: t1, thickness: (__plan2d.tool==='door'? (__plan2d.doorWidthM||0.92): (__plan2d.wallThicknessM||0.30)) };
                 if(__plan2d.tool==='door'){ el.meta={hinge:'left',swing:'in'}; }
-                __plan2d.elements.push(el);
+                // Merge logic for window expansion: if placing a window and an existing window on the same wall overlaps or touches
+                if(__plan2d.tool==='window'){
+                  try {
+                    var eps = 0.002; // ~2mm tolerance for adjacency
+                    var spanA0 = Math.min(el.t0, el.t1), spanA1 = Math.max(el.t0, el.t1);
+                    for(var mi=0; mi<__plan2d.elements.length; mi++){
+                      var other = __plan2d.elements[mi];
+                      if(!other || other.type!=='window' || typeof other.host!=='number' || other.host!==near.index) continue;
+                      var o0 = Math.min(other.t0||0, other.t1||0), o1 = Math.max(other.t0||0, other.t1||0);
+                      // Overlap or immediate touch check
+                      var overlap = !(spanA1 < o0 - eps || spanA0 > o1 + eps);
+                      if(overlap){
+                        // Expand existing window span to cover union; prefer keeping sill/height of existing
+                        var n0 = Math.min(spanA0, o0), n1 = Math.max(spanA1, o1);
+                        other.t0 = n0; other.t1 = n1;
+                        // Do not add new window; treat as resize
+                        el = null;
+                        // Select the merged window for immediate feedback
+                        try { plan2dSetSelection && plan2dSetSelection(mi); }catch(_selM){}
+                        break;
+                      }
+                    }
+                  } catch(_mergeWin) { /* non-fatal */ }
+                }
+                if(el){ __plan2d.elements.push(el); }
                 // Ensure full redraw so the new window appears immediately (avoid stale dirtyRect region)
                 try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clr){}
                 plan2dEdited();
                 // Optionally select the newly added element for instant handle visibility
-                try{ var newIdx=__plan2d.elements.length-1; plan2dSetSelection && plan2dSetSelection(newIdx); }catch(_selNew){}
+                try{ if(el){ var newIdx=__plan2d.elements.length-1; plan2dSetSelection && plan2dSetSelection(newIdx); } }catch(_selNew){}
                 plan2dDraw();
                 return; // placed; stop
               }
@@ -612,7 +707,36 @@
     }
     // Finish window endpoint drag
     if(__plan2d.dragWindow){
-      try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); __plan2d.freezeCenterScaleUntil = Date.now() + 600; plan2dEdited(); }catch(_endW){}
+      try {
+        // Merge overlapping/touching windows on the same host wall into the dragged window span
+        var dw = __plan2d.dragWindow;
+        var arr = __plan2d.elements || [];
+        var we = arr[dw.index];
+        if(we && we.type==='window' && typeof we.host==='number'){
+          var eps = 0.002; // ~2mm
+          var a0 = Math.min(we.t0||0, we.t1||0), a1 = Math.max(we.t0||0, we.t1||0);
+          for(var j=arr.length-1; j>=0; j--){
+            if(j===dw.index) continue;
+            var other = arr[j];
+            if(!other || other.type!=='window' || typeof other.host!=='number' || other.host!==we.host) continue;
+            var b0 = Math.min(other.t0||0, other.t1||0), b1 = Math.max(other.t0||0, other.t1||0);
+            var overlap = !(a1 < b0 - eps || a0 > b1 + eps);
+            if(overlap){
+              a0 = Math.min(a0, b0); a1 = Math.max(a1, b1);
+              // remove the other window; keep properties (sill/height) of dragged one
+              arr.splice(j, 1);
+              // Adjust drag index if splice removed an earlier element
+              if(j < dw.index) dw.index -= 1;
+            }
+          }
+          we.t0 = a0; we.t1 = a1;
+          // Reselect merged window (index may have shifted)
+          try { var ni = arr.indexOf(we); if(ni>=0) plan2dSetSelection && plan2dSetSelection(ni); }catch(_reSel){}
+        }
+        plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin();
+        __plan2d.freezeCenterScaleUntil = Date.now() + 600;
+        plan2dEdited();
+      }catch(_endW){}
       __plan2d.dragWindow=null; plan2dDraw(); return;
     }
     // Finish door endpoint drag

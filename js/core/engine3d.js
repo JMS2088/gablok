@@ -1534,19 +1534,22 @@
   // Cap Dt->At only if no neighbor at start
   if (!startHasNeighbor && pDt && pAt){ ctx.moveTo(pDt.x,pDt.y); ctx.lineTo(pAt.x,pAt.y); }
   ctx.stroke();
-      // Draw translucent blue glass for windows (centered plane)
-      if (glassRects.length){
-        for (var gi=0; gi<glassRects.length; gi++){
-          var G = glassRects[gi]; if(!G||G.length!==4) continue;
-          ctx.beginPath();
-          ctx.moveTo(G[0].x,G[0].y); ctx.lineTo(G[1].x,G[1].y); ctx.lineTo(G[2].x,G[2].y); ctx.lineTo(G[3].x,G[3].y); ctx.closePath();
-          ctx.fillStyle = 'rgba(56,189,248,0.25)'; // light blue glass
-          ctx.fill();
-          ctx.strokeStyle = onLevel ? 'rgba(56,189,248,0.55)' : 'rgba(148,163,184,0.7)';
-          ctx.lineWidth = onLevel ? 1.8 : 1.2;
-          ctx.stroke();
-        }
+      // Draw translucent blue glass for windows on all three planes: center, left face, right face
+      var glassFill = 'rgba(56,189,248,0.25)';
+      var glassStroke = onLevel ? 'rgba(56,189,248,0.55)' : 'rgba(148,163,184,0.7)';
+      function drawGlassQuad(Q){
+        ctx.beginPath();
+        ctx.moveTo(Q[0].x,Q[0].y); ctx.lineTo(Q[1].x,Q[1].y); ctx.lineTo(Q[2].x,Q[2].y); ctx.lineTo(Q[3].x,Q[3].y); ctx.closePath();
+        ctx.fillStyle = glassFill; ctx.fill();
+        ctx.strokeStyle = glassStroke; ctx.lineWidth = onLevel ? 1.8 : 1.2; ctx.stroke();
       }
+      // Center plane
+      if (glassRects.length){
+        for (var gi=0; gi<glassRects.length; gi++){ var G = glassRects[gi]; if(!G||G.length!==4) continue; drawGlassQuad(G); }
+      }
+      // Left and right wall faces
+      if (leftHoles.length){ for (var lh=0; lh<leftHoles.length; lh++){ var LQ = leftHoles[lh]; if(!LQ||LQ.length!==4) continue; drawGlassQuad(LQ); } }
+      if (rightHoles.length){ for (var rh=0; rh<rightHoles.length; rh++){ var RQ = rightHoles[rh]; if(!RQ||RQ.length!==4) continue; drawGlassQuad(RQ); } }
       // Draw any door/window overlays attached to this wall strip (centerline-based)
       // In solid mode, we already cut holes and drew glass; skip legacy opening outlines for clarity.
       try {
