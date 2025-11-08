@@ -234,15 +234,37 @@
     display: block;
   }
 
-  /* 2D plan right-side overlay: move positioning from inline to stylesheet */
+  /* 2D plan right-side overlay: match main controls container (transparent, no panel) */
   #plan2d-side-overlay {
-    position: absolute; right: 35px; top: 35px; z-index: 4;
-    display: flex; flex-direction: column; gap: 8px;
-    background: rgba(15,23,42,0.85);
-    border: 1px solid rgba(148,163,184,0.35);
-    border-radius: 10px; padding: 10px;
-    backdrop-filter: blur(2px);
+    position: absolute; right: 35px; top: 110px; z-index: 4; /* pushed down from standard 35px to 110px per user request */
+    display: flex; flex-direction: column; gap: 12px;
+    background: transparent; border: 0; border-radius: 0; padding: 0;
+    backdrop-filter: none;
   }
+
+  /* Opening controls row (moved from inline styles) */
+  #plan2d-opening-inline {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px;
+  }
+  #plan2d-opening-inline select {
+    padding: 4px 6px; font-size: 12px;
+  }
+  /* Default hidden, JS will toggle to show when relevant */
+  #plan2d-window-type,
+  #plan2d-door-swing,
+  #plan2d-door-hinge { display: none; }
+
+  /* 2D plan top-right toolbar: 35px from top/right, styles in CSS not inline */
+  #plan2d-toolbar-right {
+    position: absolute; top: 35px; right: 35px;
+    display: flex; gap: 12px; align-items: flex-start; /* top-align all buttons including taller Wall group */
+  }
+
+  /* Wall tool group (button + scale label) moved from inline */
+  #plan2d-wall-group {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  #plan2d-wall-group #plan2d-scale { font-size: 11px; color: #ffffff; line-height: 1; }
   
   #measurements.visible { display: block; }
   

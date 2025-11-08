@@ -510,14 +510,12 @@
 				</div>
 				<div id="plan2d-compass" style="display:none;"></div>
 			</div>
-			<div id="plan2d-toolbar-right" style="margin-left:auto; display:flex; gap:6px; align-items:flex-start; margin-top:12px;">
+			<div id="plan2d-toolbar-right">
 				<!-- Make Select the first tool left-to-right -->
 				<button id="plan2d-tool-select" class="secondary" title="Select elements to edit/delete">Select</button>
-				<div id="plan2d-wall-group" style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+				<div id="plan2d-wall-group">
 					<button id="plan2d-tool-wall" class="secondary" title="Draw Walls (300mm thick)">Wall</button>
-					<div style="font-size:11px; color:#ffffff; line-height:1;">
-						<span>Scale: </span><span id="plan2d-scale">1:100</span>
-					</div>
+					<div><span>Scale: </span><span id="plan2d-scale">1:100</span></div>
 				</div>
 				<button id="plan2d-tool-window" class="secondary" title="Draw Windows (thin line)">Window</button>
 				<button id="plan2d-tool-door" class="secondary" title="Draw Doors">Door</button>
@@ -543,16 +541,16 @@
 			<button id="plan2d-export" title="Export plan JSON">Export JSON</button>
 			<button id="plan2d-import" class="secondary" title="Import plan JSON">Import JSON</button>
 			<!-- Opening dropdowns relocated here: inline row just below Import JSON -->
-			<div id="plan2d-opening-inline" style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:4px;">
-				<select id="plan2d-window-type" class="secondary" title="Window Type" style="display:none; padding:4px 6px; font-size:12px;">
+			<div id="plan2d-opening-inline">
+				<select id="plan2d-window-type" class="secondary" title="Window Type">
 					<option value="standard">Window: Standard</option>
 					<option value="full">Window: Full Height</option>
 				</select>
-				<select id="plan2d-door-swing" class="secondary" title="Door Swing" style="display:none; padding:4px 6px; font-size:12px;">
+				<select id="plan2d-door-swing" class="secondary" title="Door Swing">
 					<option value="in">Door: Swing In</option>
 					<option value="out">Door: Swing Out</option>
 				</select>
-				<select id="plan2d-door-hinge" class="secondary" title="Door Hinge Side" style="display:none; padding:4px 6px; font-size:12px;">
+				<select id="plan2d-door-hinge" class="secondary" title="Door Hinge Side">
 					<option value="t0">Door: Hinge Left</option>
 					<option value="t1">Door: Hinge Right</option>
 				</select>
