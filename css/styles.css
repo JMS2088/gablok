@@ -305,6 +305,126 @@
     font-family: system-ui, sans-serif;
   }
   
+  /* =====================
+     Inline styles moved to CSS (batch 1)
+     ===================== */
+  #levelSelect { display: none; }
+  #nav-compass { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+  #nav-compass-canvas { width: 44px; height: 44px; pointer-events: none; }
+  #save-measurements { margin-top: 10px; padding: 6px 16px; }
+  
+  /* Info modal */
+  #info-modal { display: none; position: fixed; inset: 0; z-index: 11000; align-items: center; justify-content: center; }
+  #info-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+  #info-content { position: relative; width: min(980px, 96vw); max-height: calc(100vh - 40px); overflow: auto; background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
+  #info-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; position: sticky; top: 0; z-index: 1; }
+  #info-header strong { flex: 1; }
+  #info-body { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 18px; }
+
+  /* Share modal */
+  #share-modal { display: none; position: fixed; inset: 0; z-index: 11000; align-items: center; justify-content: center; }
+  #share-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+  #share-content { position: relative; width: min(720px, 95vw); background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); display: flex; flex-direction: column; overflow: hidden; }
+  #share-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; }
+  #share-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  #share-note { font-size: 13px; color: #334155; }
+  #share-row { display: flex; gap: 8px; align-items: center; }
+  #share-open { text-decoration: none; display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 8px; border: 1px solid #cbd5e1; }
+  #share-hint { font-size: 12px; color: #64748b; }
+
+  /* Hidden file inputs */
+  #upload-file, #upload-obj-file, #upload-pdf-floorplan, #upload-svg-floorplan, #upload-dxf-floorplan, #upload-dwg-floorplan { display: none; }
+
+  /* 2D Page shell */
+  #plan2d-page { display:none; position:fixed; inset:0; z-index:12000; }
+  #plan2d-content { position:absolute; inset:0; width:100%; height:100vh; background:repeating-linear-gradient(0deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px), repeating-linear-gradient(90deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px); display:flex; flex-direction:column; overflow:hidden; }
+  #plan2d-header { display:flex; align-items:center; gap:14px; padding:4px 8px; background:transparent; border-bottom:none; position:relative; z-index:2; }
+  #plan2d-floor-center { position:absolute; top:36px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; z-index:1; pointer-events:auto; }
+  .plan2d-floor-toggle { display:flex; gap:4px; background:rgba(15,23,42,0.85); padding:6px 10px; border:1px solid rgba(148,163,184,0.35); border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.4); }
+  #plan2d-compass { display:none; }
+  #plan2d-ruler-top { position:absolute; top:0; left:28px; right:0; height:28px; background:#0f172a; display:block; box-shadow:none; border:none; }
+  #plan2d-ruler-left { position:absolute; top:28px; left:0; bottom:0; width:28px; background:#0f172a; display:block; box-shadow:none; border:none; }
+  #plan2d-stage { position:absolute; top:28px; left:28px; right:0; bottom:0; }
+  #plan2d-canvas { position:absolute; inset:0; width:100%; height:100%; background:#0b1220; display:block; cursor:crosshair; }
+  #plan2d-overlay, #labels-2d { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; }
+
+  /* Floorplan import modal */
+  #floorplan-modal { display:none; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center; }
+  #floorplan-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
+  #floorplan-content { position:relative; width: min(1200px, 95vw); height: calc(100vh - 40px); max-height:100vh; background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden; }
+  #floorplan-stage { display:flex; min-height:0; height:100%; }
+  #floorplan-stage-main { flex:1; position:relative; background:#0b1020; display:flex; align-items:stretch; justify-content:stretch; }
+  #floorplan-canvas { width:100%; height:100%; background:#0b1020; display:block; }
+  #floorplan-overlay { position:absolute; inset:0; pointer-events:none; }
+  #floorplan-sidebar { width:280px; border-left:1px solid #e5e7eb; padding:10px; display:flex; flex-direction:column; gap:10px; background:#fff; overflow:auto; }
+  #fp-page-input { width:56px; }
+  #fp-commit { flex:1; }
+
+  /* Reset confirmation modal */
+  #reset-confirmation-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:20000; align-items:center; justify-content:center; }
+  #reset-dialog { background:#ffffff; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,0.4); max-width:440px; width:90%; padding:32px 28px; animation:slideUp 0.3s ease; }
+  #reset-titlebar { text-align:center; margin-bottom:24px; }
+  #reset-icon { width:64px; height:64px; margin:0 auto 16px; background:linear-gradient(135deg, #ef4444, #dc2626); border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 20px rgba(239,68,68,0.3); }
+  #reset-title { font-size:24px; font-weight:700; color:#111827; margin-bottom:8px; }
+  #reset-desc { font-size:15px; color:#6b7280; line-height:1.6; }
+  #reset-actions { display:flex; gap:12px; }
+  #reset-cancel-btn { flex:1; padding:12px; font-size:15px; font-weight:600; }
+  #reset-confirm-btn { flex:1; padding:12px; font-size:15px; font-weight:600; background:#ef4444; border:none; color:#ffffff; border-radius:8px; cursor:pointer; transition:all 0.2s; }
+
+  /* Floorplan modal remaining inline styles */
+  #floorplan-modal { display:none; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center; }
+  #floorplan-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
+  #floorplan-content { position:relative; width:min(1200px,95vw); height:calc(100vh - 40px); max-height:100vh; background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden; }
+  .floorplan-header { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid #e5e7eb; background:#f8fafc; }
+  .floorplan-header strong { flex:1; }
+  #floorplan-stage { display:flex; min-height:0; height:100%; }
+  #floorplan-stage-main { flex:1; position:relative; background:#0b1020; display:flex; align-items:stretch; justify-content:stretch; }
+  #floorplan-canvas { width:100%; height:100%; background:#0b1020; display:block; }
+  #floorplan-overlay { position:absolute; inset:0; pointer-events:none; }
+  #floorplan-sidebar { width:280px; border-left:1px solid #e5e7eb; padding:10px; display:flex; flex-direction:column; gap:10px; background:#fff; overflow:auto; }
+  .floorplan-page-row { display:flex; align-items:center; gap:6px; }
+  .floorplan-page-label { font-size:12px; color:#374151; }
+  #fp-page-input { width:56px; }
+  .floorplan-steps-title { font-weight:600; margin-bottom:6px; }
+  .floorplan-steps-list { margin:0 0 6px 18px; padding:0; }
+  .floorplan-tools-row { display:flex; gap:6px; flex-wrap:wrap; }
+  .floorplan-distances-column { display:flex; flex-direction:column; gap:6px; }
+  .floorplan-small-label { font-size:12px; color:#374151; }
+  .floorplan-auto-box { display:flex; flex-direction:column; gap:4px; background:#f8fafc; padding:8px; border:1px solid #e5e7eb; border-radius:8px; }
+  .floorplan-auto-title { font-size:12px; font-weight:600; color:#1e293b; display:flex; align-items:center; gap:4px; }
+  .floorplan-auto-label { font-size:11px; color:#475569; display:flex; flex-direction:column; gap:2px; }
+  /* Inputs inside auto box should be compact and full width */
+  .floorplan-auto-label input { width:100%; font-size:11px; }
+  .floorplan-small-text { font-size:12px; color:#374151; }
+  .floorplan-commit-row { margin-top:auto; display:flex; gap:8px; }
+  #fp-commit { flex:1; }
+
+  /* Pricing modal remaining inline styles */
+  #pricing-modal { display:none; position:fixed; inset:0; z-index:15000; align-items:center; justify-content:center; }
+  #pricing-content { position:relative; width:min(880px,95vw); max-height:calc(100vh - 40px); overflow:auto; background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); padding:24px; }
+  .pricing-settings-row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin:8px 0 12px; padding:10px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; }
+  .pricing-field-label { font-size:12px; color:#374151; display:flex; flex-direction:column; gap:4px; }
+  #pricing-slab-mm, #pricing-soil-per-m3 { width:120px; }
+
+  /* Room palette modal */
+  #room-palette-modal { display:none; position:fixed; inset:0; z-index:13000; align-items:center; justify-content:center; }
+  #room-palette-content { position:relative; width:min(960px,96vw); max-height:calc(100vh - 40px); background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); display:flex; padding:18px; gap:18px; }
+  #room-palette-left { display:flex; flex-direction:column; gap:10px; }
+  #room-palette-right { display:flex; flex-direction:column; gap:10px; flex:1; }
+  .room-palette-actions { display:flex; gap:8px; align-items:center; justify-content:center; margin-bottom:8px; }
+  #room-palette-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
+
+  /* Info modal section titles & lists */
+  .info-section-title { margin:0 0 8px; }
+  .info-list { margin:0 0 8px 18px; }
+  .info-sublist { margin:6px 0 0 18px; }
+
+  /* SVG icon shrink override */
+  .dropdown-item svg { flex-shrink:0; }
+
+  /* Hide test canvas border style inline moved */
+  #test-canvas { border:1px solid black; }
+  
   #status {
     position: fixed; bottom: 20px; right: 20px; z-index: 100;
     background: rgba(0,0,0,0.8); color: white; padding: 10px 15px;

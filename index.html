@@ -152,7 +152,7 @@
 		</div>
 	</div>
 	<!-- Hidden native select kept for fallback and API compatibility -->
-	<select id="levelSelect" onchange="switchLevel()" style="display:none">
+	<select id="levelSelect" onchange="switchLevel()">
 		<option value="0">Ground Floor</option>
 		<option value="1">First Floor</option>
 		<option value="stairs">+ Stairs</option>
@@ -173,7 +173,7 @@
 		</button>
 		<div id="actionsList" class="dropdown-list" role="menu">
 			<div class="dropdown-item" data-action="info">
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" style="flex-shrink:0;">
+				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
 					<circle cx="12" cy="12" r="10" stroke="#0f172a" stroke-width="2" fill="#ffffff"/>
 					<path d="M12 17v-6" stroke="#0f172a" stroke-width="2" stroke-linecap="round"/>
 					<circle cx="12" cy="7" r="1.5" fill="#0f172a"/>
@@ -203,8 +203,8 @@
 		</div>
 	</div>
 	<!-- Navigation Compass: sits next to Main Menu dropdown -->
-	<div id="nav-compass" aria-label="North" title="North" style="width:44px; height:44px; display:flex; align-items:center; justify-content:center;">
-		<canvas id="nav-compass-canvas" width="44" height="44" style="width:44px; height:44px; pointer-events:none;"></canvas>
+	<div id="nav-compass" aria-label="North" title="North">
+		<canvas id="nav-compass-canvas" width="44" height="44"></canvas>
 	</div>
 </div>
 
@@ -243,11 +243,11 @@
 		<span class="measurement-label">Floor:</span>
 		<span class="measurement-value" id="measure-floor">--</span>
 	</div>
-	<button id="save-measurements" style="margin-top:10px;padding:6px 16px;">Save</button>
+	<button id="save-measurements">Save</button>
 </div>
 
 <!-- Room palette modal for adding furniture -->
-<div id="room-palette-modal" style="display:none;">
+<div id="room-palette-modal">
 	<div id="room-palette-content">
 		<button class="close-button" onclick="hideRoomPalette()">&times;</button>
 		<div id="room-palette-left">
@@ -256,7 +256,7 @@
 		</div>
 		<div id="room-palette-right">
 			<h3>Furniture List</h3>
-			<div style="display:flex; gap:8px; align-items:center; justify-content:center; margin-bottom:8px;">
+			<div class="room-palette-actions">
 				<button class="secondary" id="palette-clear" title="Clear preview items">Clear</button>
 				<button id="palette-commit" title="Add preview items to room">Add to Room</button>
 			</div>
@@ -266,29 +266,30 @@
 	<div id="room-palette-backdrop" onclick="hideRoomPalette()"></div>
 	</div>
 
-<div id="info-modal" style="display:none; position:fixed; inset:0; z-index:11000; align-items:center; justify-content:center;">
-	<div id="info-backdrop" style="position:absolute; inset:0; background:rgba(0,0,0,0.45);" onclick="hideInfo()"></div>
-	<div id="info-content" style="position:relative; width:min(980px, 96vw); max-height:calc(100vh - 40px); overflow:auto; background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25);">
-		<div style="display:flex; align-items:center; gap:8px; padding:12px 14px; border-bottom:1px solid #e5e7eb; background:#f8fafc; position:sticky; top:0; z-index:1;">
-			<strong style="flex:1">Information & Help</strong>
+
+<div id="info-modal">
+	<div id="info-backdrop" onclick="hideInfo()"></div>
+	<div id="info-content">
+		<div id="info-header">
+			<strong>Information & Help</strong>
 			<button class="secondary" onclick="hideInfo()" title="Close">✕</button>
 		</div>
-		<div style="padding:16px; display:grid; grid-template-columns: 1fr; gap:18px;">
+		<div id="info-body">
 			<section>
-				<h3 style="margin:0 0 8px;">Camera</h3>
-				<ul style="margin:0 0 8px 18px;">
+				<h3 class="info-section-title">Camera</h3>
+				<ul class="info-list">
 					<li>Drag: rotate view</li>
 					<li>Shift + Drag: pan view</li>
 					<li>Mouse wheel: zoom in/out</li>
 				</ul>
 			</section>
 			<section>
-				<h3 style="margin:0 0 8px;">Main Toolbar (top)</h3>
-				<ul style="margin:0 0 8px 18px;">
+				<h3 class="info-section-title">Main Toolbar (top)</h3>
+				<ul class="info-list">
 					<li><strong>+ Add Room</strong>: Create a new rectangular room. Drag its edges or use handles to resize.</li>
 		                    <li><strong>Render</strong>: Toggle free-standing walls between simple lines (draft) and solid 300mm walls.</li>
 					<li><strong>Level Menu</strong>: Switch between Ground/First floors and add components:
-						<ul style="margin:6px 0 0 18px;">
+						<ul class="info-sublist">
 							<li><strong>+ Stairs</strong>: Add a staircase component.</li>
 							<li><strong>+ Pergola</strong>: Add an outdoor pergola structure.</li>
 							<li><strong>+ Garage</strong>: Add a garage volume.</li>
@@ -301,7 +302,7 @@
 					<li><strong>Main Menu 7 Price</strong>: Open pricing panel.</li>
 					<li><strong>Main Menu &rsaquo; Reset</strong>: Clear the project (confirmation required).</li>
 					<li><strong>Main Menu &rsaquo; Price</strong>: Open pricing panel.</li>
-						<ul style="margin:6px 0 0 18px;">
+						<ul class="info-sublist">
 							<li><strong>Information</strong>: Open this help.</li>
 							<li><strong>Project</strong>: Price.</li>
 							<li><strong>Share</strong>: Get a shareable URL.</li>
@@ -312,8 +313,8 @@
 				</ul>
 			</section>
 			<section>
-				<h3 style="margin:0 0 8px;">3D Editing</h3>
-				<ul style="margin:0 0 8px 18px;">
+				<h3 class="info-section-title">3D Editing</h3>
+				<ul class="info-list">
 					<li><strong>Labels</strong>: Name labels are always visible. Selected items reveal Edit and 360° buttons.</li>
 					<li><strong>Edit</strong>: Opens the Room Palette to add furniture to the selected room.</li>
 					<li><strong>360°</strong>: Rotates the selected item by 45° per click (roof, stairs, garage, furniture where applicable).</li>
@@ -322,8 +323,8 @@
 				</ul>
 			</section>
 			<section>
-				<h3 style="margin:0 0 8px;">2D Floor Plan Editor</h3>
-				<ul style="margin:0 0 8px 18px;">
+				<h3 class="info-section-title">2D Floor Plan Editor</h3>
+				<ul class="info-list">
 					<li><strong>Select</strong> (default): Click to select doors/windows/walls. Delete removes selection. Arrow keys nudge. Hold Space to pan.</li>
 					<li><strong>Wall</strong>: Draw axis-aligned walls. Shift-click to chain segments. Double-click or press Enter to finish. Close loops to form rooms.</li>
 					<li><strong>Window</strong>: Click a wall to place; drag endpoints to size. Use the Window Type dropdown for Standard/Full height.</li>
@@ -337,8 +338,8 @@
 				</ul>
 			</section>
 			<section>
-				<h3 style="margin:0 0 8px;">Room Palette (Furniture)</h3>
-				<ul style="margin:0 0 8px 18px;">
+				<h3 class="info-section-title">Room Palette (Furniture)</h3>
+				<ul class="info-list">
 					<li><strong>Preview</strong>: Drag to orbit the preview; drag items within room bounds.</li>
 					<li><strong>Add to Room</strong>: Commit preview items to the selected room.</li>
 					<li><strong>Clear</strong>: Remove all preview items (keeps existing room furniture).</li>
@@ -346,8 +347,8 @@
 				</ul>
 			</section>
 			<section>
-				<h3 style="margin:0 0 8px;">Keyboard</h3>
-				<ul style="margin:0 0 8px 18px;">
+				<h3 class="info-section-title">Keyboard</h3>
+				<ul class="info-list">
 					<li><strong>Escape</strong>: Clear selection.</li>
 					<li><strong>Delete</strong>: Delete selected object (3D) or element (2D).</li>
 					<li><strong>Arrow Keys</strong> (2D): Nudge selection. Hold Shift to move faster; Alt for finer steps.</li>
@@ -358,90 +359,92 @@
 </div>
 
 <!-- Share URL Modal -->
-<div id="share-modal" style="display:none; position:fixed; inset:0; z-index:11000; align-items:center; justify-content:center;">
-	<div id="share-backdrop" style="position:absolute; inset:0; background:rgba(0,0,0,0.45);" onclick="hideShare()"></div>
-	<div id="share-content" style="position:relative; width:min(720px, 95vw); background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden;">
-		<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid #e5e7eb; background:#f8fafc;">
-			<strong style="flex:1">Share Link</strong>
+
+<div id="share-modal">
+	<div id="share-backdrop" onclick="hideShare()"></div>
+	<div id="share-content">
+		<div id="share-header">
+			<strong>Share Link</strong>
 			<button class="secondary" onclick="hideShare()" title="Close">✕</button>
 		</div>
-		<div style="padding:12px; display:flex; flex-direction:column; gap:10px;">
-			<div style="font-size:13px; color:#334155;">Open your share link in a new tab. In Codespaces, this will be the forwarded URL.</div>
-			<div style="display:flex; gap:8px; align-items:center;">
-				<a id="share-open" class="secondary" style="text-decoration:none; display:inline-flex; align-items:center; padding:6px 10px; border-radius:8px; border:1px solid #cbd5e1;" target="_blank" rel="noopener">Open</a>
+		<div id="share-body">
+			<div id="share-note">Open your share link in a new tab. In Codespaces, this will be the forwarded URL.</div>
+			<div id="share-row">
+				<a id="share-open" class="secondary" target="_blank" rel="noopener">Open</a>
 			</div>
-			<div id="share-hint" style="font-size:12px; color:#64748b;"></div>
+			<div id="share-hint"></div>
 		</div>
 	</div>
   
 </div>
 
-<input type="file" id="upload-file" accept="application/json" style="display:none" />
-<input type="file" id="upload-obj-file" accept=".obj" style="display:none" />
-<input type="file" id="upload-pdf-floorplan" accept="application/pdf" style="display:none" />
-<input type="file" id="upload-svg-floorplan" accept="image/svg+xml,.svg" style="display:none" />
-<input type="file" id="upload-dxf-floorplan" accept=".dxf,application/dxf,application/x-dxf,text/plain" style="display:none" />
-<input type="file" id="upload-dwg-floorplan" accept=".dwg,application/acad,application/x-acad,application/autocad-dwg" style="display:none" />
+<input type="file" id="upload-file" accept="application/json" />
+<input type="file" id="upload-obj-file" accept=".obj" />
+<input type="file" id="upload-pdf-floorplan" accept="application/pdf" />
+<input type="file" id="upload-svg-floorplan" accept="image/svg+xml,.svg" />
+<input type="file" id="upload-dxf-floorplan" accept=".dxf,application/dxf,application/x-dxf,text/plain" />
+<input type="file" id="upload-dwg-floorplan" accept=".dwg,application/acad,application/x-acad,application/autocad-dwg" />
 
 <!-- Floorplan Import Modal -->
-<div id="floorplan-modal" style="display:none; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center;">
-	<div id="floorplan-backdrop" style="position:absolute; inset:0; background:rgba(0,0,0,0.45);"></div>
-	<div id="floorplan-content" style="position:relative; width: min(1200px, 95vw); height: calc(100vh - 40px); max-height:100vh; background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden;">
-		<div style="display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid #e5e7eb; background:#f8fafc;">
-			<strong style="flex:1">Import Floorplan (PDF)</strong>
+
+<div id="floorplan-modal">
+	<div id="floorplan-backdrop"></div>
+	<div id="floorplan-content">
+		<div class="floorplan-header">
+			<strong>Import Floorplan (PDF)</strong>
 			<button id="floorplan-close" class="secondary" title="Close">✕</button>
 		</div>
-		<div style="display:flex; min-height:0; height:100%;">
-			<div style="flex:1; position:relative; background:#0b1020; display:flex; align-items:stretch; justify-content:stretch;">
-				<canvas id="floorplan-canvas" style="width:100%; height:100%; background:#0b1020; display:block;"></canvas>
-				<canvas id="floorplan-overlay" style="position:absolute; inset:0; pointer-events:none;"></canvas>
+		<div id="floorplan-stage">
+			<div id="floorplan-stage-main">
+				<canvas id="floorplan-canvas"></canvas>
+				<canvas id="floorplan-overlay"></canvas>
 			</div>
-			<div style="width:280px; border-left:1px solid #e5e7eb; padding:10px; display:flex; flex-direction:column; gap:10px; background:#fff; overflow:auto;">
-				<div style="display:flex; align-items:center; gap:6px;">
-					<span style="font-size:12px; color:#374151;">Page</span>
+			<div id="floorplan-sidebar">
+				<div class="floorplan-page-row">
+					<span class="floorplan-page-label">Page</span>
 					<button id="fp-page-prev" class="secondary" title="Previous page">◀</button>
-					<input id="fp-page-input" type="number" min="1" value="1" style="width:56px;" />
-					<span style="font-size:12px; color:#374151;">/ <span id="fp-page-total">1</span></span>
+					<input id="fp-page-input" type="number" min="1" value="1" />
+					<span class="floorplan-page-label">/ <span id="fp-page-total">1</span></span>
 					<button id="fp-page-next" class="secondary" title="Next page">▶</button>
 				</div>
 				<div>
-					<div style="font-weight:600; margin-bottom:6px;">Steps</div>
+					<div class="floorplan-steps-title">Steps</div>
 
-					<ol style="margin:0 0 6px 18px; padding:0;">
+					<ol class="floorplan-steps-list">
 						<li>Calibrate scale: click two points, enter real distance</li>
 						<li>Draw rooms: drag to place rectangles</li>
 						<li>Commit rooms to scene</li>
 					</ol>
 				</div>
-				<div style="display:flex; gap:6px; flex-wrap:wrap;">
+				<div class="floorplan-tools-row">
 					<button id="fp-mode-calibrate">Calibrate</button>
 					<button id="fp-mode-place">Place Room</button>
 					<button id="fp-undo" class="secondary">Undo</button>
 					<button id="fp-refine-detect" class="secondary" title="Re-run automatic detection">Refine Detect</button>
 				</div>
-				<div style="display:flex; flex-direction:column; gap:6px;">
-					<label style="font-size:12px; color:#374151;">Real distance (m) for last two clicks</label>
+				<div class="floorplan-distances-column">
+					<label class="floorplan-small-label">Real distance (m) for last two clicks</label>
 					<input id="fp-real-distance" type="number" min="0.1" max="1000" step="0.1" value="1.0" />
 					<button id="fp-apply-scale" class="secondary">Apply Scale</button>
 				</div>
-				<div style="display:flex; flex-direction:column; gap:4px; background:#f8fafc; padding:8px; border:1px solid #e5e7eb; border-radius:8px;">
-					<div style="font-size:12px; font-weight:600; color:#1e293b; display:flex; align-items:center; gap:4px;">Auto Detection</div>
-					<label style="font-size:11px; color:#475569; display:flex; flex-direction:column; gap:2px;">Min Room (m)
-						<input id="fp-auto-min" type="number" step="0.5" min="1" value="2" style="width:100%; font-size:11px;" />
+				<div class="floorplan-auto-box">
+					<div class="floorplan-auto-title">Auto Detection</div>
+					<label class="floorplan-auto-label">Min Room (m)
+							<input id="fp-auto-min" type="number" step="0.5" min="1" value="2" />
 					</label>
-					<label style="font-size:11px; color:#475569; display:flex; flex-direction:column; gap:2px;">Max Aspect Ratio
-						<input id="fp-auto-ar" type="number" step="0.5" min="2" value="8" style="width:100%; font-size:11px;" />
+					<label class="floorplan-auto-label">Max Aspect Ratio
+							<input id="fp-auto-ar" type="number" step="0.5" min="2" value="8" />
 					</label>
-					<label style="font-size:11px; color:#475569; display:flex; flex-direction:column; gap:2px;">Border Ink ≥
-						<input id="fp-auto-border" type="number" step="0.05" min="0" max="1" value="0.15" style="width:100%; font-size:11px;" />
+					<label class="floorplan-auto-label">Border Ink ≥
+							<input id="fp-auto-border" type="number" step="0.05" min="0" max="1" value="0.15" />
 					</label>
 				</div>
-				<div style="font-size:12px; color:#374151;">
+				<div class="floorplan-small-text">
 					<div>Scale: <span id="fp-scale-display">—</span> px/m</div>
 					<div>Rooms queued: <span id="fp-rooms-count">0</span></div>
 				</div>
-				<div style="margin-top:auto; display:flex; gap:8px;">
-					<button id="fp-commit" style="flex:1;">Commit to Scene</button>
+				<div class="floorplan-commit-row">
+					<button id="fp-commit">Commit to Scene</button>
 					<button id="fp-cancel" class="secondary">Cancel</button>
 				</div>
 			</div>
@@ -451,17 +454,17 @@
 </div>
 
 <div id="pricing-modal">
-	<div id="pricing-content">
+    <div id="pricing-content">
 		<button class="close-button" onclick="hidePricing()">&times;</button>
 		<h2>Project Pricing</h2>
-			<div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin:8px 0 12px; padding:10px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px;">
-				<label style="font-size:12px; color:#374151; display:flex; flex-direction:column; gap:4px;">
+			<div class="pricing-settings-row">
+				<label class="pricing-field-label">
 					Concrete thickness (mm)
-					<input id="pricing-slab-mm" type="number" min="50" max="300" step="5" value="100" style="width:120px;" />
+					<input id="pricing-slab-mm" type="number" min="50" max="300" step="5" value="100" />
 				</label>
-				<label style="font-size:12px; color:#374151; display:flex; flex-direction:column; gap:4px;">
+				<label class="pricing-field-label">
 					Soil rate ($/m³)
-					<input id="pricing-soil-per-m3" type="number" min="0" step="10" value="600" style="width:120px;" />
+					<input id="pricing-soil-per-m3" type="number" min="0" step="10" value="600" />
 				</label>
 				<button id="pricing-apply" class="secondary" title="Apply pricing settings">Apply</button>
 			</div>
@@ -498,17 +501,18 @@
 
 <!-- 2D Floor Plan Editor Modal -->
 <!-- Elevate 2D plan modal above all other UI (previous duplicate used z-index 12000) -->
-<div id="plan2d-page" style="display:none; position:fixed; inset:0; z-index:12000;">
-	<div id="plan2d-content" style="position:absolute; inset:0; width: 100%; height: 100vh; background:repeating-linear-gradient(0deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px), repeating-linear-gradient(90deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px); display:flex; flex-direction:column; overflow:hidden;">
-		<div id="plan2d-header" style="display:flex; align-items:center; gap:14px; padding:4px 8px; background:transparent; border-bottom:none; position:relative; z-index:2;">
-				<!-- Removed duplicate subset nav: unified main #controls is dynamically relocated here -->
+
+<div id="plan2d-page">
+	<div id="plan2d-content">
+		<div id="plan2d-header">
+			<!-- Removed duplicate subset nav: unified main #controls is dynamically relocated here -->
 			<!-- Centered floor toggle absolutely relative to full header width -->
-			<div style="position:absolute; top:36px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; z-index:1; pointer-events:auto;">
-				<div class="plan2d-floor-toggle" role="group" aria-label="Switch Floor" style="display:flex; gap:4px; background:rgba(15,23,42,0.85); padding:6px 10px; border:1px solid rgba(148,163,184,0.35); border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.4);">
+			<div id="plan2d-floor-center">
+				<div class="plan2d-floor-toggle" role="group" aria-label="Switch Floor">
 					<button id="plan2d-floor-ground" type="button" title="Switch to Ground Floor">Ground</button>
 					<button id="plan2d-floor-first" type="button" title="Switch to First Floor">First</button>
 				</div>
-				<div id="plan2d-compass" style="display:none;"></div>
+				<div id="plan2d-compass"></div>
 			</div>
 			<div id="plan2d-toolbar-right">
 				<!-- Make Select the first tool left-to-right -->
@@ -529,12 +533,12 @@
 			</div>
 		</div>
 	<!-- Absolute-positioned rulers and stage to match resize logic and restore left-side overlay -->
-	<canvas id="plan2d-ruler-top" style="position:absolute; top:0; left:28px; right:0; height:28px; background:#0f172a; display:block; box-shadow:none; border:none;"></canvas>
-	<canvas id="plan2d-ruler-left" style="position:absolute; top:28px; left:0; bottom:0; width:28px; background:#0f172a; display:block; box-shadow:none; border:none;"></canvas>
-	<div id="plan2d-stage" style="position:absolute; top:28px; left:28px; right:0; bottom:0;">
-		<canvas id="plan2d-canvas" style="position:absolute; inset:0; width:100%; height:100%; background:#0b1220; display:block; cursor:crosshair;"></canvas>
-		<canvas id="plan2d-overlay" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block;"></canvas>
-		<canvas id="labels-2d" style="position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block;"></canvas>
+	<canvas id="plan2d-ruler-top"></canvas>
+	<canvas id="plan2d-ruler-left"></canvas>
+	<div id="plan2d-stage">
+		<canvas id="plan2d-canvas"></canvas>
+		<canvas id="plan2d-overlay"></canvas>
+		<canvas id="labels-2d"></canvas>
 		<!-- Floating side overlay (left-hand menu) restored -->
 		<div id="plan2d-side-overlay">
 			<button id="plan2d-apply-3d" title="Apply this floor plan to the 3D design">Apply to 3D</button>
@@ -555,28 +559,28 @@
 					<option value="t1">Door: Hinge Right</option>
 				</select>
 			</div>
-			<input type="file" id="plan2d-import-file" accept="application/json" style="display:none;">
+				<input type="file" id="plan2d-import-file" accept="application/json">
 		</div>
 	</div>
 	</div>
 </div>
-</div>
 
 <!-- Reset Confirmation Modal -->
-<div id="reset-confirmation-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:20000; align-items:center; justify-content:center;">
-	<div style="background:#ffffff; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,0.4); max-width:440px; width:90%; padding:32px 28px; animation:slideUp 0.3s ease;">
-		<div style="text-align:center; margin-bottom:24px;">
-			<div style="width:64px; height:64px; margin:0 auto 16px; background:linear-gradient(135deg, #ef4444, #dc2626); border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 20px rgba(239,68,68,0.3);">
+
+<div id="reset-confirmation-modal">
+	<div id="reset-dialog">
+		<div id="reset-titlebar">
+			<div id="reset-icon">
 				<svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 					<path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 				</svg>
 			</div>
-			<h2 style="font-size:24px; font-weight:700; color:#111827; margin-bottom:8px;">Reset Everything?</h2>
-			<p style="font-size:15px; color:#6b7280; line-height:1.6;">This will permanently delete all your work including rooms, furniture, and settings. This action cannot be undone.</p>
+			<h2 id="reset-title">Reset Everything?</h2>
+			<p id="reset-desc">This will permanently delete all your work including rooms, furniture, and settings. This action cannot be undone.</p>
 		</div>
-		<div style="display:flex; gap:12px;">
-			<button id="reset-cancel-btn" class="secondary" style="flex:1; padding:12px; font-size:15px; font-weight:600;">Cancel</button>
-			<button id="reset-confirm-btn" style="flex:1; padding:12px; font-size:15px; font-weight:600; background:#ef4444; border:none; color:#ffffff; border-radius:8px; cursor:pointer; transition:all 0.2s;">Yes, Reset Everything</button>
+		<div id="reset-actions">
+			<button id="reset-cancel-btn" class="secondary">Cancel</button>
+			<button id="reset-confirm-btn">Yes, Reset Everything</button>
 		</div>
 	</div>
 </div>
