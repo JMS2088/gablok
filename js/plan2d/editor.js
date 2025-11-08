@@ -20,7 +20,36 @@
     var imp=document.getElementById('plan2d-import'); var file=document.getElementById('plan2d-import-file');
     if(imp && !imp.__wired){ imp.__wired=true; imp.addEventListener('click', function(){ if(file) file.click(); }); }
     if(file && !file.__wired){ file.__wired=true; file.addEventListener('change', function(ev){ try{ var f=ev.target.files && ev.target.files[0]; if(!f) return; var r=new FileReader(); r.onload=function(){ try{ plan2dImport && plan2dImport(r.result); }catch(_){} }; r.readAsText(f); }catch(_){} finally { try{ ev.target.value=''; }catch(_){} } }); }
-    var apply=document.getElementById('plan2d-apply-3d'); if(apply && !apply.__wired){ apply.__wired=true; apply.addEventListener('click', function(){ try{ if(typeof window.applyPlan2DTo3D==='function'){ window.applyPlan2DTo3D(undefined,{allowRooms:true,quiet:false,level:(typeof window.currentFloor==='number'? window.currentFloor:0)}); } }catch(_){} }); }
+    // Apply to 3D button: preserve current zoom/pan so user view doesn't jump.
+    // Some downstream apply paths or status updates can trigger a fit (autoFitEnabled) indirectly; we suppress that.
+    var apply=document.getElementById('plan2d-apply-3d'); if(apply && !apply.__wired){ apply.__wired=true; apply.addEventListener('click', function(){
+      try {
+        if(typeof __plan2d==='object'){
+          // Capture current view state
+          var keepScale=__plan2d.scale, keepPanX=__plan2d.panX, keepPanY=__plan2d.panY;
+          // Temporarily block auto-fit logic during apply
+          try{ __plan2d.autoFitEnabled=false; __plan2d.freezeCenterScaleUntil=Date.now()+1000; }catch(_af){}
+          if(typeof window.applyPlan2DTo3D==='function'){
+            window.applyPlan2DTo3D(undefined, {
+              allowRooms:true,
+              quiet:false,
+              level:(typeof window.currentFloor==='number'? window.currentFloor:0),
+              // Hint for future: if applyPlan2DTo3D adds view-changing behavior later we can read this flag.
+              preserveView:true
+            });
+          }
+          // Restore view state (defensive: only if still defined and numeric)
+          try {
+            if(isFinite(keepScale)) __plan2d.scale=keepScale;
+            if(isFinite(keepPanX)) __plan2d.panX=keepPanX;
+            if(isFinite(keepPanY)) __plan2d.panY=keepPanY;
+          }catch(_rst){}
+          try{ if(typeof plan2dDraw==='function') plan2dDraw(); }catch(_drw){}
+        } else if(typeof window.applyPlan2DTo3D==='function') {
+          window.applyPlan2DTo3D(undefined,{allowRooms:true,quiet:false,level:(typeof window.currentFloor==='number'? window.currentFloor:0)});
+        }
+      } catch(_){}
+    }); }
 
     // Opening property dropdowns wiring (window type + door swing + door hinge)
     var winType=document.getElementById('plan2d-window-type');
