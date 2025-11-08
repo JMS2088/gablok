@@ -312,8 +312,11 @@ function populatePlan2DFromDesign(){
   } catch(_sg){}})();
   var gcx = (isFinite(gMinX)&&isFinite(gMaxX)) ? (gMinX+gMaxX)/2 : (minX+maxX)/2;
   var gcz = (isFinite(gMinZ)&&isFinite(gMaxZ)) ? (gMinZ+gMaxZ)/2 : (minZ+maxZ)/2;
-  // Use global center so both floors share the same origin
-  var cx = gcx; var cz = gcz;
+  // Center & scale should be floor-specific so switching floors shows only that floor's geometry perfectly.
+  // Previously we used global center (gcx,gcz) causing misalignment between 3D and 2D when changing floors.
+  // Now we derive center from current floor bounds (minX/maxX/minZ/maxZ) restricted to this level only.
+  var cx = (isFinite(minX) && isFinite(maxX)) ? (minX + maxX) / 2 : gcx;
+  var cz = (isFinite(minZ) && isFinite(maxZ)) ? (minZ + maxZ) / 2 : gcz;
   // Use rooms-only span to compute scale:
   // - If this floor has rooms, use them
   // - Else if any rooms exist globally, use global rooms (keep scale consistent across floors)
@@ -410,15 +413,15 @@ function populatePlan2DFromDesign(){
     }
   } catch(e) { /* preserve openings failed - non-critical */ }
 
-  // Build wall segments around each rectangle, shifted so center is at (0,0)
+  // Build wall segments around each rectangle (rooms + structures) for this floor only, shifted relative to per-floor center.
   __plan2d.elements = [];
   function addRectWalls(minX,maxX,minZ,maxZ, groupId){
     var s = (__plan2d.yFromWorldZSign||1);
     var x0=minX - cx, x1=maxX - cx, y0=s*(minZ - cz), y1=s*(maxZ - cz); // map z->y with sign
-    var idxTop = __plan2d.elements.length;     __plan2d.elements.push({type:'wall', x0:x0,y0:y0, x1:x1,y1:y0, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
-    var idxRight = __plan2d.elements.length;   __plan2d.elements.push({type:'wall', x0:x1,y0:y0, x1:x1,y1:y1, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
-    var idxBottom = __plan2d.elements.length;  __plan2d.elements.push({type:'wall', x0:x1,y0:y1, x1:x0,y1:y1, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
-    var idxLeft = __plan2d.elements.length;    __plan2d.elements.push({type:'wall', x0:x0,y0:y1, x1:x0,y1:y0, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
+  var idxTop = __plan2d.elements.length;     __plan2d.elements.push({type:'wall', x0:x0,y0:y0, x1:x1,y1:y0, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvl});
+  var idxRight = __plan2d.elements.length;   __plan2d.elements.push({type:'wall', x0:x1,y0:y0, x1:x1,y1:y1, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvl});
+  var idxBottom = __plan2d.elements.length;  __plan2d.elements.push({type:'wall', x0:x1,y0:y1, x1:x0,y1:y1, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvl});
+  var idxLeft = __plan2d.elements.length;    __plan2d.elements.push({type:'wall', x0:x0,y0:y1, x1:x0,y1:y0, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvl});
     return { top: idxTop, right: idxRight, bottom: idxBottom, left: idxLeft, coords: {x0:x0,x1:x1,y0:y0,y1:y1} };
   }
   function addRotatedRectWalls(cxW, czW, w, d, rotationDeg, groupId){
@@ -428,10 +431,10 @@ function populatePlan2DFromDesign(){
     var c1=rotW(cxW-hw, czW-hd), c2=rotW(cxW+hw, czW-hd), c3=rotW(cxW+hw, czW+hd), c4=rotW(cxW-hw, czW+hd);
     function toPlan(p){ return { x: (p.x - cx), y: s * (p.z - cz) }; }
     var p1=toPlan(c1), p2=toPlan(c2), p3=toPlan(c3), p4=toPlan(c4);
-    var i1 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p1.x,y0:p1.y, x1:p2.x,y1:p2.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
-    var i2 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p2.x,y0:p2.y, x1:p3.x,y1:p3.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
-    var i3 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p3.x,y0:p3.y, x1:p4.x,y1:p4.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
-    var i4 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p4.x,y0:p4.y, x1:p1.x,y1:p1.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null});
+  var i1 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p1.x,y0:p1.y, x1:p2.x,y1:p2.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvl});
+  var i2 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p2.x,y0:p2.y, x1:p3.x,y1:p3.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvl});
+  var i3 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p3.x,y0:p3.y, x1:p4.x,y1:p4.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvl});
+  var i4 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p4.x,y0:p4.y, x1:p1.x,y1:p1.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvl});
     return { top: i1, right: i2, bottom: i3, left: i4, coords: {p1:p1,p2:p2,p3:p3,p4:p4} };
   }
   function markWallRole(idxObj, role){
@@ -447,7 +450,7 @@ function populatePlan2DFromDesign(){
     var rb=rects[rci];
   // Build walls for rooms only; non-room outlines should not feedback into 3D room creation
   if(rb.type!=='room' && rb.type!=='garage' && rb.type!=='pergola' && rb.type!=='balcony') continue;
-    var wallIdx;
+  var wallIdx;
     var hasRotation = (typeof rb.rotation==='number' && Math.abs(rb.rotation)%360>1e-6);
     if (hasRotation) {
       wallIdx = addRotatedRectWalls(rb.cx, rb.cz, rb.w, rb.d, rb.rotation, (rb.type==='room' && rb.roomId && !rb.polyLike ? ('room:'+rb.roomId) : null));
@@ -457,7 +460,7 @@ function populatePlan2DFromDesign(){
     // Tag walls so applyPlan2DTo3D can ignore non-room walls
     markWallRole(wallIdx, (rb.type==='room' ? 'room' : 'nonroom'));
     // Re-create openings (windows/doors) anchored to walls for rooms
-    if(rb.type==='room' && Array.isArray(rb.openings) && rb.openings.length){
+  if(rb.type==='room' && Array.isArray(rb.openings) && rb.openings.length){
       var s = (__plan2d.yFromWorldZSign||1);
       var minX = rb.minX - cx, maxX = rb.maxX - cx, minY = s*(rb.minZ - cz), maxY = s*(rb.maxZ - cz); // shifted with sign
       for(var oi=0; oi<rb.openings.length; oi++){
@@ -536,7 +539,7 @@ function populatePlan2DFromDesign(){
           var t0 = plan2dProjectParamOnWall(p0, wallEl);
           var t1 = plan2dProjectParamOnWall(p1, wallEl);
           if(op.type==='window'){
-            var winEl = { type:'window', host:hostIdx, t0:t0, t1:t1, thickness: (wallEl.thickness||__plan2d.wallThicknessM) };
+            var winEl = { type:'window', host:hostIdx, t0:t0, t1:t1, thickness: (wallEl.thickness||__plan2d.wallThicknessM), level: lvl };
             // Preserve custom sillM and heightM from original opening
             if(typeof op.sillM === 'number') winEl.sillM = op.sillM;
             if(typeof op.heightM === 'number') winEl.heightM = op.heightM;
@@ -544,21 +547,21 @@ function populatePlan2DFromDesign(){
             __plan2d.elements.push(winEl);
           } else if(op.type==='door'){
             var widthM = Math.hypot(p1.x-p0.x, p1.y-p0.y);
-            __plan2d.elements.push({ type:'door', host:hostIdx, t0:t0, t1:t1, widthM: widthM, heightM: (typeof op.heightM==='number'? op.heightM : (__plan2d.doorHeightM||2.04)), thickness: (wallEl.thickness||__plan2d.wallThicknessM), meta: (op.meta||{ hinge:'t0', swing:'in' }) });
+            __plan2d.elements.push({ type:'door', host:hostIdx, t0:t0, t1:t1, widthM: widthM, heightM: (typeof op.heightM==='number'? op.heightM : (__plan2d.doorHeightM||2.04)), thickness: (wallEl.thickness||__plan2d.wallThicknessM), meta: (op.meta||{ hinge:'t0', swing:'in' }), level: lvl });
           }
         }
       }
     }
   }
 
-  // Also include existing interior wall strips from 3D for the current floor as free-standing walls.
+  // Also include existing interior user-created wall strips for ONLY this floor as free-standing walls.
   // This ensures previously applied walls are visible/editable in 2D when adding more later.
   try {
     var sgnWS = (__plan2d.yFromWorldZSign||1);
     for (var wsi=0; wsi<wallStrips.length; wsi++){
       var ws = wallStrips[wsi];
       if (!ws) continue;
-      if ((ws.level||0) !== lvl) continue;
+  if ((ws.level||0) !== lvl) continue; // enforce per-floor filtering
       // Skip perimeter strips that were generated from rooms when in solid render mode.
       // These are tagged in 3D with window.__roomStripTag (default '__fromRooms').
       try {
@@ -572,7 +575,8 @@ function populatePlan2DFromDesign(){
         y0: sgnWS * (ws.z0 - cz),
         x1: ws.x1 - cx,
         y1: sgnWS * (ws.z1 - cz),
-        thickness: (ws.thickness || __plan2d.wallThicknessM || 0.3)
+        thickness: (ws.thickness || __plan2d.wallThicknessM || 0.3),
+        level: lvl
       };
       __plan2d.elements.push(eWall);
     }
@@ -634,7 +638,7 @@ function populatePlan2DFromDesign(){
           var newT1 = plan2dProjectParamOnWall({x: po.wx1, y: po.wy1}, bestWall);
           // Create new opening element
           if (po.type === 'window') {
-            var winEl = { type: 'window', host: bestWallIdx, t0: newT0, t1: newT1, thickness: (po.thickness || bestWall.thickness || __plan2d.wallThicknessM) };
+            var winEl = { type: 'window', host: bestWallIdx, t0: newT0, t1: newT1, thickness: (po.thickness || bestWall.thickness || __plan2d.wallThicknessM), level: lvl };
             if (typeof po.sillM === 'number') winEl.sillM = po.sillM;
             if (typeof po.heightM === 'number') winEl.heightM = po.heightM;
             if (po.meta) winEl.meta = po.meta;
@@ -645,7 +649,8 @@ function populatePlan2DFromDesign(){
               widthM: (po.widthM || 0.9), 
               heightM: (typeof po.heightM === 'number' ? po.heightM : (__plan2d.doorHeightM || 2.04)), 
               thickness: (po.thickness || bestWall.thickness || __plan2d.wallThicknessM), 
-              meta: (po.meta || { hinge: 't0', swing: 'in' }) 
+              meta: (po.meta || { hinge: 't0', swing: 'in' }),
+              level: lvl
             });
           }
         }

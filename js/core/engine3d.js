@@ -837,7 +837,13 @@
 
   // ---- Scene creation helpers ----
   if (typeof window.createRoom === 'undefined') {
-    window.createRoom = function(x,z,level){ var id='room_'+Date.now()+'_'+Math.random().toString(36).slice(2); return { id:id, name:'Room', x:x||0, z:z||0, width:4, depth:3, height:3, level:(level||0), type:'room', rotation:0 }; };
+    window.createRoom = function(x,z,level){
+      var id='room_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+      var rm = { id:id, name:'Room', x:x||0, z:z||0, width:4, depth:3, height:3, level:(level||0), type:'room', rotation:0 };
+      // Immediately add grouped wall tags so populatePlan2DFromDesign can build walls without waiting for a full apply round-trip.
+      try { if (!Array.isArray(rm.openings)) rm.openings = []; } catch(_eO){}
+      return rm;
+    };
   }
   // Generic free-spot finder that considers all object footprints on a level and snaps to grid
   function __collectFootprints(level){
@@ -904,7 +910,12 @@
     };
   }
   if (typeof window.createInitialRoom === 'undefined') {
-    window.createInitialRoom = function(){ if(Array.isArray(allRooms)&&allRooms.length>0) return; var r=createRoom(0,0,0); allRooms.push(r); selectedRoomId=r.id; };
+    window.createInitialRoom = function(){
+      if(Array.isArray(allRooms)&&allRooms.length>0) return;
+      var r=createRoom(0,0,0); allRooms.push(r); selectedRoomId=r.id;
+      // Immediately reflect in 2D
+      try { if (typeof populatePlan2DFromDesign==='function') { populatePlan2DFromDesign(); if (window.__plan2d && __plan2d.active && typeof plan2dDraw==='function') plan2dDraw(); } } catch(_e2d) {}
+    };
   }
   if (typeof window.addNewRoom === 'undefined') {
     window.addNewRoom = function(){
@@ -912,6 +923,8 @@
       var spot=findFreeSpot(r); r.x=spot.x; r.z=spot.z;
       try { var s=applySnap({x:r.x,z:r.z,width:r.width,depth:r.depth,level:r.level,id:r.id,type:'room'}); r.x=s.x; r.z=s.z; } catch(_e) {}
       allRooms.push(r);
+      // Sync 2D immediately so walls appear without needing manual refresh
+      try { if (typeof populatePlan2DFromDesign==='function') { populatePlan2DFromDesign(); if (window.__plan2d && __plan2d.active && typeof plan2dDraw==='function') plan2dDraw(); } } catch(_e2d2) {}
       if (typeof window.selectObject==='function') { window.selectObject(r.id, { noRender: true }); }
       else { selectedRoomId=r.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU) {} }
       updateStatus('Added room'); _needsFullRender=true; startRender();

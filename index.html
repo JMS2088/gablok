@@ -33,8 +33,6 @@
     transform: translateY(30px);
   }
   to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 @keyframes pulse {
@@ -164,8 +162,7 @@
 		<option value="pool">+ Pool</option>
 		<option value="balcony">+ Balcony</option>
 	</select>
-	<button class="secondary" onclick="showResetConfirmation()">Reset</button>
-	<button class="secondary" onclick="showPricing()" title="Show pricing">💰 Price</button>
+	<!-- Reset and Price moved into Main Menu -->
 	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor">📐 Floor Plan</button>
 	<div id="actionsDropdown" class="dropdown" aria-label="Main Menu">
 		<button id="actionsButton" class="dropdown-button" type="button">
@@ -183,7 +180,11 @@
 				</svg>
 				<span>Information</span>
 			</div>
+			<div class="dropdown-item" data-action="reset">Reset</div>
 			<div class="dropdown-item" data-action="share">🔗 Share</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-title">Project</div>
+			<div class="dropdown-item" data-action="price">Price</div>
 			<div class="dropdown-item separator" aria-hidden="true"></div>
 			<div class="dropdown-title">Export</div>
 			<div class="dropdown-item" data-action="obj">⬇ 3D - OBJ</div>
@@ -296,12 +297,13 @@
 							<li><strong>+ Balcony</strong>: Add a balcony platform.</li>
 						</ul>
 					</li>
-					<li><strong>Reset</strong>: Clear the project (confirmation required).</li>
-					<li><strong>💰 Price</strong>: Open pricing panel.</li>
-					<li><strong>📐 Floor Plan</strong>: Open the 2D floor plan editor. Your 3D stays in sync.</li>
-					<li><strong>Main Menu</strong>:
+					<li><strong>Main Menu 7 Reset</strong>: Clear the project (confirmation required).</li>
+					<li><strong>Main Menu 7 Price</strong>: Open pricing panel.</li>
+					<li><strong>Main Menu &rsaquo; Reset</strong>: Clear the project (confirmation required).</li>
+					<li><strong>Main Menu &rsaquo; Price</strong>: Open pricing panel.</li>
 						<ul style="margin:6px 0 0 18px;">
 							<li><strong>Information</strong>: Open this help.</li>
+							<li><strong>Project</strong>: Price.</li>
 							<li><strong>Share</strong>: Get a shareable URL.</li>
 							<li><strong>Export</strong>: OBJ (3D), PDF (views), JSON (project), DXF/DWG (floorplan).</li>
 							<li><strong>Import</strong>: OBJ, PDF/SVG/DXF/DWG floorplans, JSON.</li>

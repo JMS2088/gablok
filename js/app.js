@@ -189,6 +189,8 @@ function __wireAppUi(){
         switch(action){
           case 'info': if (typeof showInfo==='function') showInfo(); break;
           case 'share': if (typeof showShare==='function') showShare(); break;
+          case 'price': if (typeof showPricing==='function') showPricing(); break;
+          case 'reset': if (typeof showResetConfirmation==='function') showResetConfirmation(); break;
           case 'obj': exportOBJ && exportOBJ(); break;
           case 'pdf': exportPdfFromCanvas(); break;
           case 'json-download': download('gablok-project.json', serializeProject && serializeProject() || '{}', 'application/json'); try{ updateStatus('Exported JSON'); }catch(_){} break;
@@ -595,6 +597,8 @@ function commitFloorplanRooms(){
     room.height = 3;
     room.name = 'Imported ' + (i+1);
     allRooms.push(room); created++;
+    // Reflect immediately in 2D so added rooms show walls without extra steps
+    try { if (typeof populatePlan2DFromDesign==='function') { populatePlan2DFromDesign(); if (window.__plan2d && __plan2d.active && typeof plan2dDraw==='function') plan2dDraw(); } } catch(_e2d) {}
   }
   saveProjectSilently();
   // Clear selection using unified helper for immediate measurement panel refresh
