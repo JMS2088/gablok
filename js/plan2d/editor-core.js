@@ -62,6 +62,11 @@
   // Edit lifecycle hook – save drafts + sync lightweight signals to 3D ------
   function plan2dEdited(){
     try { plan2dSaveDraft(typeof window.currentFloor==='number'? window.currentFloor:0); }catch(e){}
+    // Bump plan version and invalidate cached computations used by drawing
+    try {
+      __plan2d.__version = (typeof __plan2d.__version==='number' ? __plan2d.__version+1 : 1);
+      if(__plan2d.__cache){ __plan2d.__cache.intersections = null; __plan2d.__cache.version = -1; }
+    } catch(_v){}
     // optional non-destructive 3D sync, guarded to avoid spam during drags
     try {
       if(Date.now() < __plan2d.freezeSyncUntil) return;
@@ -136,10 +141,10 @@
         if(c.width!==W||c.height!==H){ c.width=W; c.height=H; }
         if(ov.width!==W||ov.height!==H){ ov.width=W; ov.height=H; }
         if(l2 && (l2.width!==W||l2.height!==H)){ l2.width=W; l2.height=H; }
-  // Top ruler width should match drawing width, height fixed 28
-  if(rt){ var drawAreaWidth = Math.floor(rect.width*dpr); var rh=Math.floor(28*dpr); if(rt.width!==drawAreaWidth||rt.height!==rh){ rt.width=drawAreaWidth; rt.height=rh; } }
-  // Left ruler spans full browser height now (fixed), width fixed 28
-  if(rl){ var rw2=Math.floor(28*dpr), rh2=Math.floor((window.innerHeight||rect.height)*dpr); if(rl.width!==rw2||rl.height!==rh2){ rl.width=rw2; rl.height=rh2; } }
+        // Top ruler width should match drawing width, height fixed 28 CSS px
+        if(rt){ var stage=document.getElementById('plan2d-stage'); var sr=stage?stage.getBoundingClientRect():rect; var rtw=Math.floor(sr.width*dpr); var rth=Math.floor(28*dpr); if(rt.width!==rtw||rt.height!==rth){ rt.width=rtw; rt.height=rth; } }
+        // Left ruler spans from below top ruler to bottom of viewport; width fixed 28 CSS px
+        if(rl){ var rlw=Math.floor(28*dpr); var vh=Math.floor((window.innerHeight||document.documentElement.clientHeight||rect.height)*dpr) - Math.floor(28*dpr); if(vh<0) vh=0; if(rl.width!==rlw||rl.height!==vh){ rl.width=rlw; rl.height=vh; } }
         plan2dDraw();
       } catch(e){}
     };
@@ -267,6 +272,8 @@
   if(!window.__plan2dKeydown){ window.__plan2dKeydown=function(ev){ if(!__plan2d.active) return; 
     // Spacebar hold => temporary pan mode (do not toggle repeatedly on auto-repeat)
     if(ev.code==='Space'){ if(!__plan2d.spacePanActive){ __plan2d.spacePanActive=true; try{ var cEl=document.getElementById('plan2d-canvas'); if(cEl) cEl.style.cursor='grab'; }catch(_){} } ev.preventDefault(); ev.stopPropagation(); }
+    // Toggle performance HUD with 'P'
+    if(ev.key==='p' || ev.key==='P'){ __plan2d.perfHUD = !__plan2d.perfHUD; try{ plan2dDraw(); }catch(_){} ev.preventDefault(); ev.stopPropagation(); return; }
     if(__plan2d.tool==='wall' && __plan2d.chainActive){ if(ev.key==='Enter'){ plan2dFinalizeChain(); ev.preventDefault(); ev.stopPropagation(); return; } if(ev.key==='Escape'){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return; } }
     if(ev.key==='Delete' || ev.key==='Backspace'){ if(__plan2d.selectedIndex>=0){ plan2dEraseElementAt(__plan2d.selectedIndex); plan2dSetSelection(-1); plan2dDraw(); plan2dEdited(); } ev.preventDefault(); ev.stopPropagation(); return; }
   }; document.addEventListener('keydown', window.__plan2dKeydown, true); }
@@ -299,9 +306,8 @@
     try{ var btnClose=document.getElementById('plan2d-close'); if(btnClose && !btnClose.__wired){ btnClose.__wired=true; btnClose.addEventListener('click', function(){ closePlan2DModal(); }); } }catch(_c){}
     // Status
     try{ if(window.updateStatus) updateStatus('2D editor opened'); }catch(e){}
-    // Trigger resize pass to size canvases correctly now that visible
-    // Ensure ruler canvases are sized to visible edges after display change
-    try{ if(typeof window.__plan2dResize==='function') window.__plan2dResize(); }catch(_r){}
+  // Trigger multiple resize passes: once now and once on next frame to guarantee correct CSS->canvas sizing
+  try{ if(typeof window.__plan2dResize==='function') window.__plan2dResize(); requestAnimationFrame(function(){ try{ window.__plan2dResize && window.__plan2dResize(); }catch(_r2){} }); }catch(_r){}
     // Force redraw one more time so rulers align after resize
     try{ plan2dDraw(); }catch(_rd){}
   }

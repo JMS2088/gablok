@@ -1,8 +1,11 @@
 // Plan2D draw routines (extracted from editor.js)
 // Defines: plan2dDraw, plan2dDrawRulers, plan2dHitGuideAtScreen
 (function(){
-  if (typeof window.plan2dDraw !== 'function') {
-    window.plan2dDraw = function plan2dDraw(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height);
+  // Coalesced draw scheduling: multiple calls collapse into one animation frame.
+  var __plan2dDrawPending = false;
+  function plan2dDrawImmediate(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); var ovCtx=ov.getContext('2d'); var ox=ovCtx; ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,c.width,c.height); ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height);
+    var perfSections = __plan2d.__perfSections = { grid:0, walls:0, openings:0, labels:0, overlay:0, total:0 };
+    var tStart = (performance&&performance.now)?performance.now():Date.now();
       // Rulers (drawn on separate canvases)
       try {
         var rt=document.getElementById('plan2d-ruler-top'); var rl=document.getElementById('plan2d-ruler-left');
@@ -11,29 +14,42 @@
       // CAD-style grid: major 1 m and minor 0.1 m lines aligned to device pixels; include pan offsets
       var step=__plan2d.scale, w=c.width, h=c.height; 
       var originX = w/2 + (__plan2d.panX * step), originY = h/2 - (__plan2d.panY * step);
-      ctx.save();
-      ctx.translate(0.5,0.5); // center 1px strokes
-      ctx.lineWidth=1;
-      // Minor grid (0.1 m)
-      var minorStep=step/10;
-      if(minorStep>=4){
-        ctx.strokeStyle='rgba(255,255,255,0.04)';
-        var startXm = originX % minorStep; if(startXm<0) startXm+=minorStep;
-        for(var xm=startXm; xm<w; xm+=minorStep){ var xx=Math.round(xm); ctx.beginPath(); ctx.moveTo(xx,0); ctx.lineTo(xx,h); ctx.stroke(); }
-        var startYm = originY % minorStep; if(startYm<0) startYm+=minorStep;
-        for(var ym=startYm; ym<h; ym+=minorStep){ var yy=Math.round(ym); ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(w,yy); ctx.stroke(); }
-      }
-      // Major grid (1 m)
-      ctx.strokeStyle='rgba(255,255,255,0.10)';
-      var startX = originX % step; if(startX<0) startX+=step;
-      for(var x=startX; x<w; x+=step){ var x0=Math.round(x); ctx.beginPath(); ctx.moveTo(x0,0); ctx.lineTo(x0,h); ctx.stroke(); }
-      var startY = originY % step; if(startY<0) startY+=step;
-      for(var y=startY; y<h; y+=step){ var y0=Math.round(y); ctx.beginPath(); ctx.moveTo(0,y0); ctx.lineTo(w,y0); ctx.stroke(); }
-      // Axes
-      ctx.strokeStyle='rgba(255,255,255,0.16)';
-      ctx.beginPath(); ctx.moveTo(Math.round(originX),0); ctx.lineTo(Math.round(originX),h); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0,Math.round(originY)); ctx.lineTo(w,Math.round(originY)); ctx.stroke();
-      ctx.restore();
+      // Offscreen cached grid layer -------------------------------------
+      (function(){
+        try {
+          var gridCache = __plan2d.__gridCache || (__plan2d.__gridCache = {});
+          var needs = false;
+          if(gridCache.scale !== step || gridCache.panX !== __plan2d.panX || gridCache.panY !== __plan2d.panY || gridCache.w !== w || gridCache.h !== h){ needs = true; }
+          if(!gridCache.canvas){ needs = true; gridCache.canvas = document.createElement('canvas'); }
+          if(needs){
+            gridCache.canvas.width = w; gridCache.canvas.height = h;
+            var gctx = gridCache.canvas.getContext('2d');
+            gctx.setTransform(1,0,0,1,0,0);
+            gctx.clearRect(0,0,w,h);
+            gctx.save(); gctx.translate(0.5,0.5); gctx.lineWidth=1;
+            var minorStep=step/10;
+            if(minorStep>=8){
+              gctx.strokeStyle='rgba(255,255,255,0.04)';
+              var startXm = originX % minorStep; if(startXm<0) startXm+=minorStep;
+              for(var xm=startXm; xm<w; xm+=minorStep){ var xx=Math.round(xm); gctx.beginPath(); gctx.moveTo(xx,0); gctx.lineTo(xx,h); gctx.stroke(); }
+              var startYm = originY % minorStep; if(startYm<0) startYm+=minorStep;
+              for(var ym=startYm; ym<h; ym+=minorStep){ var yy=Math.round(ym); gctx.beginPath(); gctx.moveTo(0,yy); gctx.lineTo(w,yy); gctx.stroke(); }
+            }
+            gctx.strokeStyle='rgba(255,255,255,0.10)';
+            var startX = originX % step; if(startX<0) startX+=step;
+            for(var x=startX; x<w; x+=step){ var x0=Math.round(x); gctx.beginPath(); gctx.moveTo(x0,0); gctx.lineTo(x0,h); gctx.stroke(); }
+            var startY = originY % step; if(startY<0) startY+=step;
+            for(var y=startY; y<h; y+=step){ var y0=Math.round(y); gctx.beginPath(); gctx.moveTo(0,y0); gctx.lineTo(w,y0); gctx.stroke(); }
+            gctx.strokeStyle='rgba(255,255,255,0.16)';
+            gctx.beginPath(); gctx.moveTo(Math.round(originX),0); gctx.lineTo(Math.round(originX),h); gctx.stroke();
+            gctx.beginPath(); gctx.moveTo(0,Math.round(originY)); gctx.lineTo(w,Math.round(originY)); gctx.stroke();
+            gctx.restore();
+            gridCache.scale=step; gridCache.panX=__plan2d.panX; gridCache.panY=__plan2d.panY; gridCache.w=w; gridCache.h=h;
+          }
+          ctx.drawImage(gridCache.canvas,0,0);
+        } catch(e){ /* grid fallback */ }
+      })();
+      perfSections.grid = ((performance&&performance.now)?performance.now():Date.now()) - tStart;
       // Preview: multi-point wall chain (polyline) when active
       try {
         if(__plan2d.tool==='wall' && __plan2d.chainActive && Array.isArray(__plan2d.chainPoints) && __plan2d.chainPoints.length){
@@ -65,11 +81,20 @@
           ctx.restore();
         }
       } catch(e) { /* non-fatal chain preview */ }
-      // Elements
+  // Elements
+  var tWallsStart = (performance&&performance.now)?performance.now():Date.now();
       // Precompute connections at endpoints to extend walls and make corners flush
       var elems=__plan2d.elements;
-      // Precompute wall intersections to enable sub-segment selection/deletion
-      var __wallIntersections = plan2dComputeWallIntersections(elems);
+      // Precompute wall intersections (cached per edit version) to enable sub-segment selection/deletion
+      var __wallIntersections;
+      try{
+        var cache = __plan2d.__cache || (__plan2d.__cache = {});
+        if(!cache.intersections || cache.version !== (__plan2d.__version||0)){
+          cache.intersections = plan2dComputeWallIntersections(elems);
+          cache.version = (__plan2d.__version||0);
+        }
+        __wallIntersections = cache.intersections;
+      }catch(_cInt){ __wallIntersections = plan2dComputeWallIntersections(elems); }
       var startConn=new Array(elems.length).fill(false), endConn=new Array(elems.length).fill(false);
       (function(){
         function key(x,y){ return (Math.round(x*1000))+','+(Math.round(y*1000)); }
@@ -180,8 +205,14 @@
             (function(){
               var minLabelPx = 30; // skip very tiny segments
               if(Ls < minLabelPx) return;
+              // Soft cap: avoid measuring if too many solids drawn this frame to reduce text layout cost
+              __plan2d.__measureCount = (__plan2d.__measureCount||0) + 1; if(__plan2d.__measureCount > 200) return;
               var segLenM = Math.hypot(sx1 - sx0, sy1 - sy0);
-              var txt = formatMeters(segLenM) + ' m';
+              var rounded = Math.round(segLenM*1000)/1000;
+              var cache = __plan2d.__textCache || (__plan2d.__textCache={});
+              var entry = cache[rounded];
+              if(!entry){ entry = { txt: formatMeters(rounded) + ' m', w: null }; cache[rounded]=entry; }
+              var txt = entry.txt;
               var midx = (aSeg.x + bSeg.x) * 0.5, midy = (aSeg.y + bSeg.y) * 0.5;
               var angle = Math.atan2(dys, dxs);
               if (angle > Math.PI/2 || angle < -Math.PI/2) angle += Math.PI; // keep upright
@@ -191,7 +222,7 @@
               ctx.translate(midx, midy);
               ctx.rotate(angle);
               var baseFontSize = 18; ctx.font = baseFontSize + 'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-              var textW = ctx.measureText(txt).width;
+              var textW = entry.w!=null? entry.w : (entry.w = ctx.measureText(txt).width);
               var scale = Math.min(1, maxW / Math.max(1, textW), maxH / baseFontSize);
               if (scale < 0.5) { ctx.restore(); return; }
               ctx.scale(scale, scale);
@@ -314,7 +345,8 @@
           ctx.restore();
         }
       }
-      // Stairs are rendered on the overlay canvas only. Removed base-canvas stairs to avoid duplicates.
+  perfSections.walls = ((performance&&performance.now)?performance.now():Date.now()) - tWallsStart;
+  // Stairs are rendered on the overlay canvas only. Removed base-canvas stairs to avoid duplicates.
 
       // Color-coded overlays for pergola, garage, and balcony using world coords -> plan mapping
       try {
@@ -799,7 +831,8 @@
   var lx = l2c ? l2c.getContext('2d') : ox; // fallback to overlay if missing
   if (l2c) { lx.setTransform(1,0,0,1,0,0); lx.clearRect(0,0,l2c.width,l2c.height); }
 
-      // Overlays: Stairs indicator (both floors) + small labels
+  // Overlays: Stairs indicator (both floors) + small labels
+  var tOverlayStart = (performance&&performance.now)?performance.now():Date.now();
       (function(){
         try{
           var lvl = (typeof currentFloor==='number' ? currentFloor : 0);
@@ -854,12 +887,55 @@
         try { console.warn('2D overlay draw error', e); } catch(_) {}
       }
     })();
+      // Record labels time as overlay minus earlier blocks (approx)
+      perfSections.labels = ((performance&&performance.now)?performance.now():Date.now()) - tOverlayStart;
 
       // (Removed) Overlay: Wall orientation hint during wall drawing
       // (Removed) Overlay: live window width dimension label during drag or when selected
 
       // (Removed) Overlay: live wall dimension during drag
       // (Removed) Overlay: dimension lines for every wall
+
+    perfSections.overlay = ((performance&&performance.now)?performance.now():Date.now()) - tStart - perfSections.grid - perfSections.walls - perfSections.openings - perfSections.labels;
+    perfSections.total = ((performance&&performance.now)?performance.now():Date.now()) - tStart;
+  }
+
+  // Public throttled draw entry
+  if(typeof window.plan2dDraw!=='function'){
+    window.plan2dDraw = function plan2dDraw(){
+      if(__plan2dDrawPending){ return; }
+      __plan2dDrawPending=true;
+      requestAnimationFrame(function(){
+        __plan2dDrawPending=false;
+        __plan2d.__measureCount=0;
+        var t0 = (window.performance? performance.now(): Date.now());
+        plan2dDrawImmediate();
+        var t1=(window.performance? performance.now(): Date.now());
+        __plan2d.__lastDrawMs = t1 - t0;
+        if(__plan2d.perfHUD){
+          try{
+            var ov=document.getElementById('plan2d-overlay');
+            if(ov){
+              var hud=ov.getContext('2d');
+              hud.save();
+              hud.font='11px monospace';
+              hud.fillStyle='rgba(0,0,0,0.65)';
+              hud.fillRect(6,6,230,90);
+              hud.fillStyle='#f8fafc';
+              hud.textBaseline='top';
+              hud.fillText('draw: '+(__plan2d.__lastDrawMs||0).toFixed(2)+' ms', 12,10);
+              hud.fillText('elements: '+(__plan2d.elements?__plan2d.elements.length:0),12,24);
+              hud.fillText('scale: '+__plan2d.scale,12,38);
+              if(__plan2d.__perfSections){
+                var ps=__plan2d.__perfSections;
+                hud.fillText('grid '+ps.grid.toFixed(1)+'  walls '+ps.walls.toFixed(1)+'  open '+ps.openings.toFixed(1),12,52);
+                hud.fillText('labels '+ps.labels.toFixed(1)+'  over '+ps.overlay.toFixed(1)+'  tot '+ps.total.toFixed(1),12,66);
+              }
+              hud.restore();
+            }
+          }catch(_hud){}
+        }
+      });
     };
   }
 
