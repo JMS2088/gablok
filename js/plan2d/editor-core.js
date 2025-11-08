@@ -557,6 +557,10 @@
         if(console && console.log) console.log('[PLAN2D OPEN] Auto-populate floor', floor, 'ok=', ok, 'elements=', (__plan2d.elements?__plan2d.elements.length:0));
         try { window.__plan2dDiag = window.__plan2dDiag||{}; window.__plan2dDiag.lastOpenSnapshot = { at:Date.now(), floor:floor, elements:(__plan2d.elements?__plan2d.elements.length:0) }; }catch(_snap){}
       }
+      // Always sync floor toggle button highlight after determining floor and population
+      try { if(typeof window.syncPlan2DFloorButtons==='function') window.syncPlan2DFloorButtons(); }catch(_flSync){}
+      // Sync main level dropdown label to reflect active floor
+      try { if(typeof window.updateLevelMenuStates==='function') window.updateLevelMenuStates(); }catch(_lvlSync){}
       // Fallback: if still empty but 3D source exists, populate now
       try {
         if((!Array.isArray(__plan2d.elements) || __plan2d.elements.length===0) && typeof populatePlan2DFromDesign==='function'){
@@ -583,7 +587,11 @@
       try{ var scl=document.getElementById('plan2d-scale'); if(scl) scl.textContent='1:'+Math.round(100*(100/(__plan2d.scale||100)))/100; }catch(_slbl){}
       // Close button wiring
       try{ var btnClose=document.getElementById('plan2d-close'); if(btnClose && !btnClose.__wired){ btnClose.__wired=true; btnClose.addEventListener('click', function(){ closePlan2DModal(); }); } }catch(_cbtn){}
-      try{ if(window.updateStatus) updateStatus('2D editor opened'); }catch(_sts){}
+  try{ if(window.updateStatus) updateStatus('2D editor opened'); }catch(_sts){}
+  // Final highlight sync (defensive second pass in case buttons created late)
+  try { if(typeof window.syncPlan2DFloorButtons==='function') window.syncPlan2DFloorButtons(); }catch(_flSync2){}
+  // Also refresh level menu label post-open
+  try { if(typeof window.updateLevelMenuStates==='function') window.updateLevelMenuStates(); }catch(_lvlSync2){}
   // Resize pass once to ensure correct canvas backing size
   try{ if(typeof window.__plan2dResize==='function') window.__plan2dResize(); }catch(_rpass){}
       // Live sync listener
@@ -602,6 +610,10 @@
       try{ var controls=document.getElementById('controls'); if(controls && controls.__movedInto2D){ var parent=controls.__origParent; var next=controls.__origNext; if(parent){ if(next) parent.insertBefore(controls,next); else parent.appendChild(controls);} controls.__movedInto2D=false; } }catch(_rest){}
       plan2dDraw();
       try{ if(window.updateStatus) updateStatus('2D editor closed'); }catch(_st){}
+      // Sync highlight so next open reflects the (possibly changed) floor retained in currentFloor
+      try { if(typeof window.syncPlan2DFloorButtons==='function') window.syncPlan2DFloorButtons(); }catch(_flSyncClose){}
+      // Also sync level dropdown / label to current floor when closing
+      try { if(typeof window.updateLevelMenuStates==='function') window.updateLevelMenuStates(); }catch(_lvlSyncClose){}
     } catch(e) { if(console && console.error) console.error('[PLAN2D CLOSE ERROR]', e); }
   }
   // Always assign real handlers (do NOT guard with existing value) so loader stub gets replaced

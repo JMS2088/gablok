@@ -87,6 +87,7 @@
       if(bG && !bG.__wired){ bG.__wired=true; bG.addEventListener('click', function(){ switchFloor(0); }); }
       if(bF && !bF.__wired){ bF.__wired=true; bF.addEventListener('click', function(){ switchFloor(1); }); }
       setActive();
+      try{ if(typeof window.syncPlan2DFloorButtons!=='function'){ window.syncPlan2DFloorButtons = function(){ try{ setActive(); }catch(e){} }; } }catch(_exp){}
     }catch(e){}
     try{ if(typeof plan2dBind==='function') plan2dBind(); }catch(e){}
     try{ if(typeof plan2dDraw==='function') plan2dDraw(); }catch(e){}

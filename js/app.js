@@ -80,6 +80,8 @@ function switchLevel(){
       } catch(_eRe){ /* non-fatal */ }
       // Ensure measurements panel remains visible after switching
       try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
+      // Sync 2D floor toggle highlight (even if 2D currently closed so next open is correct)
+      try { if(typeof window.syncPlan2DFloorButtons==='function') window.syncPlan2DFloorButtons(); }catch(_hl){}
     }
   } catch(e){ /* ignore */ }
 }
@@ -172,6 +174,25 @@ function __wireAppUi(){
     // Initialize dynamic states (disable stairs if already present)
     try { updateLevelMenuStates(); } catch(_i){}
   })();
+
+  // Global helper to keep Ground/First toggle buttons in sync with currentFloor
+  try {
+    if(typeof window.syncPlan2DFloorButtons!=='function'){
+      window.syncPlan2DFloorButtons = function(){
+        try {
+          var cur = (typeof window.currentFloor==='number'? window.currentFloor:0);
+          var g=document.getElementById('plan2d-floor-ground');
+          var f=document.getElementById('plan2d-floor-first');
+          if(g&&f){
+            if(cur===0){ g.classList.add('active'); f.classList.remove('active'); }
+            else { f.classList.add('active'); g.classList.remove('active'); }
+          }
+        } catch(e){}
+      };
+    }
+    // Initial sync on UI wiring
+    window.syncPlan2DFloorButtons();
+  }catch(_syncInit){}
 
   // Main Actions Dropdown (Info/Share/Export/Import) wiring
   (function(){
