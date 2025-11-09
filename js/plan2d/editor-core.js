@@ -333,7 +333,8 @@
   function plan2dFitViewToContent(marginPx, opts){
     try{
       // Respect auto-fit disable unless explicitly forced
-      if(__plan2d && __plan2d.autoFitEnabled===false && !(opts && opts.force)) return false;
+      // Global disable: never auto-fit due to object additions or syncs unless caller forces
+      if(__plan2d && (__plan2d.autoFitEnabled===false || window.__disableAutoFitOnAdd===true) && !(opts && opts.force)) return false;
       var c=document.getElementById('plan2d-canvas'); if(!c) return false; var b=plan2dComputeBounds(); if(!b) return false; var dpr=window.devicePixelRatio||1; var W=c.width,H=c.height; var contentW=Math.max(0.01,b.maxX-b.minX); var contentH=Math.max(0.01,b.maxY-b.minY); var margin=Math.max(0,(marginPx||40)*dpr); var sX=(W-2*margin)/contentW; var sY=(H-2*margin)/contentH; var sNew=Math.max(10,Math.min(800,Math.min(sX,sY))); __plan2d.scale=sNew; var cx=(b.minX+b.maxX)*0.5; var cy=(b.minY+b.maxY)*0.5; __plan2d.panX=-cx; __plan2d.panY=-cy; plan2dDraw(); return true;
     }catch(e){ return false; }
   }

@@ -28,7 +28,9 @@
     try { if (typeof window.updateMeasurements==='function') window.updateMeasurements(); } catch(_eMs){}
     try { if (typeof window.ensureMeasurementsVisible==='function') window.ensureMeasurementsVisible(); } catch(_eMv){}
     try { if (typeof window.updateStatus==='function' && addedMsg) window.updateStatus(addedMsg); } catch(_eSt){}
-    try { if (typeof window.focusCameraOnObject==='function') window.focusCameraOnObject(obj); } catch(_eFc){}
+    // Do not auto-move/zoom the camera when adding a new object
+    // Gate legacy behavior behind an explicit opt-in flag for debugging only
+    try { if (window.__autoFocusOnAdd === true && typeof window.focusCameraOnObject==='function') window.focusCameraOnObject(obj); } catch(_eFc){}
     try { if (typeof window.renderLoop==='function') window.renderLoop(); } catch(_eRl){}
   }
   // --- Generic non-overlap placement helper (macro components) ---
@@ -46,31 +48,16 @@
     return (ax0 <= bx1 && ax1 >= bx0 && az0 <= bz1 && az1 >= bz0);
   }
   function __findFreeNonOverlapping(x,z,w,d,level){
+    // Delegate to shared helper if available
     try {
-      w = Math.max(0.1,w||0); d=Math.max(0.1,d||0);
-      var halfW=w/2, halfD=d/2; var footprints=__collectMacroFootprints(level);
-      function collides(cx,cz){
-        var ax0=cx-halfW, ax1=cx+halfW, az0=cz-halfD, az1=cz+halfD; // inclusive edges considered touching
-        for (var i=0;i<footprints.length;i++){
-          var f=footprints[i]; var bx0=f.x-(f.w||0)/2, bx1=f.x+(f.w||0)/2, bz0=f.z-(f.d||0)/2, bz1=f.z+(f.d||0)/2;
-          if (__aabbOverlapInclusive(ax0,ax1,az0,az1,bx0,bx1,bz0,bz1)) return true;
-        }
-        return false;
-      }
-      if(!collides(x,z)) return {x:x,z:z};
+      var footprints=__collectMacroFootprints(level).map(function(f){ return { x:f.x, z:f.z, w:f.w, d:f.d }; });
       var grid = (typeof window.GRID_SPACING==='number' && window.GRID_SPACING>0) ? window.GRID_SPACING : 1;
-      var maxRing=40; // search radius
-      for (var ring=1; ring<=maxRing; ring++){
-        for (var dx=-ring; dx<=ring; dx++){
-          for (var dz=-ring; dz<=ring; dz++){
-            if (Math.max(Math.abs(dx),Math.abs(dz))!==ring) continue;
-            var cx = x + dx*grid, cz = z + dz*grid;
-            if(!collides(cx,cz)) return {x:cx,z:cz};
-          }
-        }
+      if (typeof window.findNonTouchingSpot === 'function') {
+        var spot = window.findNonTouchingSpot({ x:x, z:z, w:w, d:d }, footprints, grid);
+        return { x: spot.x, z: spot.z };
       }
-      return {x:x,z:z};
-    } catch(e){ return {x:x,z:z}; }
+    } catch(e){ /* fall back */ }
+    return { x:x, z:z };
   }
 
   // --- Default field sets (mirrors earlier engine3d implementations) ---

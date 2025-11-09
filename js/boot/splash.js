@@ -29,8 +29,43 @@
   // Small public API for external progress ticks (script onload hooks)
   (function(){
     var total=0, loaded=0, lastMsg='';
-    var items = Object.create(null); // label -> {row, bar, lab}
+    var items = Object.create(null); // per-label rows (legacy)
+    var groupMode = true; // enable grouped bars to keep only ~6-7 rows visible
+    var groupDefs = [
+      { name: 'Core', match: function(l){ return /(Camera core|Placement helper|Engine wall strips|Engine components|Core engine|App core|Loader)/i.test(l); } },
+      { name: 'Project & I/O', match: function(l){ return /(Project mgmt|Import\/Export|File I\/O)/i.test(l); } },
+      { name: 'Input', match: function(l){ return /(Keyboard router|input\/events\.js)/i.test(l); } },
+      { name: 'Renderers', match: function(l){ return /(Room renderer|Stairs renderer|Pergola renderer|Garage renderer|Roof renderer|Pool renderer|Balcony renderer|Furniture renderer)/i.test(l); } },
+      { name: 'UI', match: function(l){ return /(UI labels|Room palette|Roof dropdown|Info modal|Pricing modal|Trace panel)/i.test(l); } },
+      { name: 'Plan2D', match: function(l){ return /(Plan2D (geom|walls|snap|core|draw|editor wiring|WebGL))/i.test(l); } },
+      { name: 'Formats', match: function(l){ return /(DXF|DWG|pdf|vendor)/i.test(l); } }
+    ];
+    var labelToGroup = Object.create(null); // label -> groupName
+    var groupTotals = Object.create(null);  // groupName -> count of labels
+    var groupLoaded = Object.create(null);  // groupName -> count loaded
+    var groupItems = Object.create(null);   // groupName -> {row, bar, lab}
+
+    function classifyGroup(label){
+      for(var i=0;i<groupDefs.length;i++){ if(groupDefs[i].match(label)) return groupDefs[i].name; }
+      return 'Misc';
+    }
+    function ensureGroupItem(groupName){
+      try{
+        var list = document.getElementById('loading-list'); if(!list) return null;
+        if(groupItems[groupName]) return groupItems[groupName];
+        var outer = document.createElement('div'); outer.style.display='flex'; outer.style.flexDirection='column'; outer.style.gap='4px'; outer.setAttribute('data-group', groupName);
+        var lab = document.createElement('div'); lab.textContent = groupName; lab.style.fontSize='12px'; lab.style.color='#8b949e'; lab.id = 'loading-group-label-'+groupName.replace(/[^a-z0-9_-]+/ig,'_');
+        var barO = document.createElement('div'); barO.style.height='6px'; barO.style.border='1px solid #30363d'; barO.style.borderRadius='999px'; barO.style.overflow='hidden'; barO.style.background='#21262d';
+        var barI = document.createElement('div'); barI.style.height='100%'; barI.style.width='0%'; barI.style.background='linear-gradient(90deg, #238636, #2ea043)'; barI.style.transition='width .3s ease';
+        barO.appendChild(barI);
+        outer.appendChild(lab); outer.appendChild(barO);
+        list.appendChild(outer);
+        groupItems[groupName] = { row: outer, bar: barI, lab: lab };
+        return groupItems[groupName];
+      }catch(e){ return null; }
+    }
     function ensureItem(label){
+      if(groupMode){ return ensureGroupItem(classifyGroup(label)); }
       try{
         var list = document.getElementById('loading-list'); if(!list) return null;
         if(items[label]) return items[label];
@@ -47,9 +82,39 @@
     }
     function pct(){ return total>0 ? Math.round((loaded/total)*100) : (loaded%100); }
     window.__splashSetTotal = function(n){ try{ total = Math.max(total, parseInt(n)||0); setProgress(pct(), lastMsg||'Loading…'); }catch(e){} };
-    window.__splashExpect = function(labels){ try{ ensureOverlay(); if(Array.isArray(labels)){ labels.forEach(function(l){ ensureItem(String(l)); }); } }catch(e){} };
-    window.__splashTick = function(label){ try{ loaded++; lastMsg = label || lastMsg || 'Loading…'; setProgress(pct(), String(lastMsg)); if(label){ var it = ensureItem(String(label)); if(it && it.bar) it.bar.style.width = '100%'; } }catch(e){} };
-    window.__splashMark = function(label, text){ try{ var it = ensureItem(String(label)); if(it && it.lab){ it.lab.textContent = String(label) + (text ? ' — '+ String(text) : ''); } }catch(e){} };
+    window.__splashExpect = function(labels){ try{
+      ensureOverlay();
+      if(!Array.isArray(labels)) return;
+      // Build group maps
+      if(groupMode){
+        labelToGroup = Object.create(null); groupTotals = Object.create(null); groupLoaded = Object.create(null);
+        labels.forEach(function(lbl){ var l=String(lbl); var g = classifyGroup(l); labelToGroup[l]=g; groupTotals[g]=(groupTotals[g]||0)+1; });
+        Object.keys(groupTotals).forEach(function(g){ groupLoaded[g]=0; ensureGroupItem(g); });
+      } else {
+        labels.forEach(function(l){ ensureItem(String(l)); });
+      }
+    }catch(e){} };
+    window.__splashTick = function(label){ try{
+      loaded++; lastMsg = label || lastMsg || 'Loading…'; setProgress(pct(), String(lastMsg));
+      if(!label) return;
+      var l = String(label);
+      if(groupMode){
+        var g = labelToGroup[l] || classifyGroup(l);
+        groupLoaded[g] = Math.min((groupLoaded[g]||0)+1, groupTotals[g]||1);
+        var itG = ensureGroupItem(g);
+        var denom = Math.max(1, groupTotals[g]||1);
+        var gpct = Math.round((groupLoaded[g] / denom) * 100);
+        if(itG && itG.bar) itG.bar.style.width = gpct+'%';
+        if(itG && itG.lab) itG.lab.textContent = g + ' — ' + groupLoaded[g] + '/' + denom;
+      } else {
+        var it = ensureItem(l); if(it && it.bar) it.bar.style.width = '100%';
+      }
+    }catch(e){} };
+    window.__splashMark = function(label, text){ try{
+      var l=String(label);
+      if(groupMode){ var g = labelToGroup[l] || classifyGroup(l); var itG = ensureGroupItem(g); if(itG && itG.lab){ var denom=Math.max(1, groupTotals[g]||1); var cur=(groupLoaded[g]||0); itG.lab.textContent = g + ' — ' + cur + '/' + denom + (text? (' · '+text):''); } }
+      else { var it = ensureItem(l); if(it && it.lab){ it.lab.textContent = String(label) + (text ? ' — '+ String(text) : ''); } }
+    }catch(e){} };
     window.__splashWaitForContinue = function(){ try { ensureOverlay(); var b = document.getElementById('loading-continue'); if(!b) return Promise.resolve(true); b.style.display='inline-block'; return new Promise(function(res){ __splash.continueResolve = res; }); } catch(e){ return Promise.resolve(true); } };
     window.__splashSetMessage = function(msg){ lastMsg = msg || lastMsg; setProgress(pct(), lastMsg); };
     window.__splashHide = hideOverlay;

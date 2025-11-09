@@ -115,6 +115,24 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         # Normalize/redirect bad forwarded host pattern before handling
         if self._maybe_redirect_host():
             return
+        # Serve a tiny in-memory favicon to avoid 404 noise
+        if self.path == '/favicon.ico':
+            try:
+                # 16x16 transparent PNG (1x1 scaled) minimal bytes
+                import base64
+                png_b64 = (
+                    'iVBORw0KGgoAAAANSUhEUgAAAA4AAAAOCAYAAAAfSC3RAAAAHElEQVQ4T2NkwA38z0AGGJgYGEYgQwMDw1EwAQAAc78GgH5BEx8AAAAASUVORK5CYII='
+                )
+                data = base64.b64decode(png_b64)
+                self.send_response(200)
+                self.send_header('Content-Type', 'image/png')
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                self.wfile.write(data)
+            except Exception:
+                self.send_response(204)
+                self.end_headers()
+            return
         # Tiny test reporting endpoints used by in-browser harness
         if self.path.startswith('/__report'):
             try:

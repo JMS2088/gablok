@@ -1778,7 +1778,8 @@
   else { window.selectedRoomId = id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMs) {} }
   if(typeof updateStatus==='function') updateStatus('Added Stairs');
   try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
-    try { focusCameraOnObject(stair); } catch(_e) {}
+  // Do not auto-focus camera on add to avoid unexpected view jumps
+  try { if (window.__autoFocusOnAdd === true) focusCameraOnObject(stair); } catch(_e) {}
     // Refresh menus (now a no-op for stairs)
     try { if (typeof window.updateLevelMenuStates === 'function') window.updateLevelMenuStates(); } catch(_u2){}
     _needsFullRender=true; startRender();
@@ -1792,7 +1793,7 @@
   else { window.selectedRoomId=p.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMp) {} }
   updateStatus('Added Pergola');
   try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
-    try { focusCameraOnObject(p); } catch(_e) {}
+  try { if (window.__autoFocusOnAdd === true) focusCameraOnObject(p); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   if (typeof window.addGarage === 'undefined') window.addGarage = function(){
     var lvl=0, w=3.2, d=5.5; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'garage'});
@@ -1802,7 +1803,7 @@
   else { window.selectedRoomId=g.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMg) {} }
   updateStatus('Added Garage');
   try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
-    try { focusCameraOnObject(g); } catch(_e) {}
+  try { if (window.__autoFocusOnAdd === true) focusCameraOnObject(g); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   if (typeof window.addPool === 'undefined') window.addPool = function(){
     var lvl=0, w=4, d=2; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'pool'});
@@ -1812,7 +1813,7 @@
   else { window.selectedRoomId=p.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMpl) {} }
   updateStatus('Added Pool');
   try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
-    try { focusCameraOnObject(p); } catch(_e) {}
+  try { if (window.__autoFocusOnAdd === true) focusCameraOnObject(p); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   // Compute the Y base where roofs should sit: on top of first floor if any rooms exist there, otherwise on top of ground floor
   if (typeof window.computeRoofBaseHeight === 'undefined') window.computeRoofBaseHeight = function(){
@@ -1865,7 +1866,7 @@
   try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
     // Lazy-load the roof UI dropdown when a roof is first added
     try { if (typeof window.loadScript==='function') { window.loadScript('js/ui/roofDropdown.js?v=20251026-1'); } } catch(_e) {}
-    try { focusCameraOnObject(r); } catch(_e) {}
+  try { if (window.__autoFocusOnAdd === true) focusCameraOnObject(r); } catch(_e) {}
     _needsFullRender=true; startRender(); };
   if (typeof window.addBalcony === 'undefined') window.addBalcony = function(){
     var lvl=1, w=2.5, d=1.5; var spot=findFreeSpotForFootprint(w,d,lvl); var s=applySnap({x:spot.x,z:spot.z,width:w,depth:d,level:lvl,type:'balcony'});
@@ -1875,7 +1876,7 @@
   else { window.selectedRoomId=b.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMb) {} }
   updateStatus('Added Balcony');
   try { if (typeof ensureMeasurementsVisible==='function') ensureMeasurementsVisible(); } catch(_m){}
-    try { focusCameraOnObject(b); } catch(_e) {}
+  try { if (window.__autoFocusOnAdd === true) focusCameraOnObject(b); } catch(_e) {}
     _needsFullRender=true; startRender(); };
 
   // Failsafe: ensure app starts once DOM is ready, but allow a boot orchestrator to gate startup

@@ -427,6 +427,20 @@
       var elevation = (it.kind === 'tv') ? 0.8 : 0.0;
       var depth = it.kind === 'kitchen' ? 0.7 : it.depth;
       var furn = { id: 'furn_'+Date.now()+Math.random().toString(36).slice(2), x: room.x + it.x, z: room.z + it.z, width: it.width, depth: depth, height: it.height, level: room.level, elevation: elevation, name: it.name, type: 'furniture', rotation: 0, kind: it.kind };
+      // Prevent overlap/touching with existing furniture using shared helper findNonTouchingSpot
+      try {
+        var existing = furnitureItems.filter(function(f){ return f && f.level===room.level; }).map(function(f){ return { x:f.x, z:f.z, w:f.width, d:f.depth }; });
+        // Limit search within the room footprint by filtering out placements that fall outside after search
+        var gridSize = (typeof window.GRID_SPACING==='number' && window.GRID_SPACING>0)? window.GRID_SPACING : 0.5;
+        var spot = (typeof window.findNonTouchingSpot==='function') ? window.findNonTouchingSpot({ x:furn.x, z:furn.z, w:furn.width, d:furn.depth }, existing, gridSize) : { x:furn.x, z:furn.z };
+        // Constrain to room footprint bounds
+        var halfW = furn.width/2, halfD = furn.depth/2;
+        var minX = room.x - room.width/2 + halfW, maxX = room.x + room.width/2 - halfW;
+        var minZ = room.z - room.depth/2 + halfD, maxZ = room.z + room.depth/2 - halfD;
+        spot.x = Math.max(minX, Math.min(maxX, spot.x));
+        spot.z = Math.max(minZ, Math.min(maxZ, spot.z));
+        furn.x = spot.x; furn.z = spot.z;
+      } catch(_eFO){}
       furnitureItems.push(furn);
     }
     saveProjectSilently();
