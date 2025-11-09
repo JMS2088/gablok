@@ -2,7 +2,44 @@
 // Populate the 2D Floor Plan from the current 3D model for the currently selected floor
 // Extracted from app.js for modularity; loaded by bootstrap before app core.
 function populatePlan2DFromDesign(){
-  try { if (window.__plan2d) { __plan2d.__userEdited = false; } } catch(_ueInit){}
+  // Round-trip diagnostics ring buffer helper
+  function __rtPush(evt){ 
+    try { 
+      // Ensure persistence layer matches apply path
+      if (!window.__roundTripTraceLoaded) {
+        try {
+          var raw = localStorage.getItem('gablok_rtTrace_v1');
+          if (raw) { var arr = JSON.parse(raw); if (Array.isArray(arr)) window.__roundTripTrace = arr.slice(-300); }
+        } catch(_lp) {}
+        window.__roundTripTraceLoaded = true;
+      }
+      var buf = window.__roundTripTrace || (window.__roundTripTrace=[]);
+      var MAX=300; buf.push(Object.assign({ t: Date.now(), source: 'populate' }, evt||{})); if(buf.length>MAX) buf.splice(0, buf.length-MAX);
+      // Throttled save
+      var now = Date.now(); if(!window.__rtTraceLastSave || now - window.__rtTraceLastSave > 1500){ try { localStorage.setItem('gablok_rtTrace_v1', JSON.stringify(buf)); window.__rtTraceLastSave = now; } catch(_ps){} }
+    } catch(_e){}
+  }
+  // Preserve user-drawn manual walls: if any exist, skip destructive populate to prevent disappearance.
+  try {
+    if (window.__plan2d) {
+      var hasManual=false;
+      var manualCount=0;
+      if (Array.isArray(__plan2d.elements)) {
+        for (var mi=0; mi<__plan2d.elements.length; mi++){
+          var e=__plan2d.elements[mi];
+          if(e && e.type==='wall' && e.manual){ manualCount++; hasManual=true; }
+        }
+      }
+      __rtPush({ kind:'populate-start', floor: (typeof window.currentFloor==='number')?window.currentFloor:0, manualWalls: manualCount, willSkip: !!hasManual });
+      if(hasManual){
+        if(console && console.debug) console.debug('[PLAN2D POPULATE] Skipped (manual walls present)');
+        __rtPush({ kind:'populate-skip-manual', reason:'manual-walls-present' });
+        // Do NOT reset userEdited so openPlan2DModal continues to respect draft
+        return false; // signal no populate performed
+      }
+      __plan2d.__userEdited = false; // reset only when overwriting from 3D
+    }
+  } catch(_ueInit){}
   // Defensive guards: create local safe views of 3D globals so we don't crash if not yet initialised
   var lvlSafe = (typeof window.currentFloor === 'number') ? window.currentFloor : 0;
   var allRooms = Array.isArray(window.allRooms) ? window.allRooms : [];
@@ -389,6 +426,7 @@ function populatePlan2DFromDesign(){
 
   // Preserve existing windows/doors before clearing elements so they survive room resizing
   var preservedOpenings = [];
+  var preservedCounts = { windows:0, doors:0 };
   try {
     if (Array.isArray(__plan2d.elements)) {
       for (var i = 0; i < __plan2d.elements.length; i++) {
@@ -431,6 +469,7 @@ function populatePlan2DFromDesign(){
           groupId: hostWall.groupId, // Track which room this opening belonged to
           edge: wallEdge // Track which edge (top/bottom/left/right)
         });
+        if(el.type==='window') preservedCounts.windows++; else if(el.type==='door') preservedCounts.doors++;
       }
     }
   } catch(e) { /* preserve openings failed - non-critical */ }
@@ -611,6 +650,7 @@ function populatePlan2DFromDesign(){
   // Reattach preserved openings to nearest matching walls
   try {
     if (preservedOpenings.length > 0) {
+      var reusedAttach = { windows:0, doors:0 };
       for (var poi = 0; poi < preservedOpenings.length; poi++) {
         var po = preservedOpenings[poi];
         var bestWallIdx = -1, bestDist = Infinity;
@@ -669,6 +709,7 @@ function populatePlan2DFromDesign(){
             if (typeof po.heightM === 'number') winEl.heightM = po.heightM;
             if (po.meta) winEl.meta = po.meta;
             __plan2d.elements.push(winEl);
+            reusedAttach.windows++;
           } else if (po.type === 'door') {
             __plan2d.elements.push({ 
               type: 'door', host: bestWallIdx, t0: newT0, t1: newT1, 
@@ -678,9 +719,11 @@ function populatePlan2DFromDesign(){
               meta: (po.meta || { hinge: 't0', swing: 'in' }),
               level: lvl
             });
+            reusedAttach.doors++;
           }
         }
       }
+      try { __rtPush({ kind:'populate-preserve-summary', floor: currentFloor, preserved: preservedCounts, reattached: reusedAttach }); } catch(_prs){}
     }
   } catch(e) { /* reattach openings failed - non-critical */ }
 
@@ -730,6 +773,12 @@ function populatePlan2DFromDesign(){
       floor: currentFloor,
       produced: (Array.isArray(__plan2d.elements)? __plan2d.elements.length : 0)
     };
+    // Push compact round-trip trace summary
+    try {
+      var w=0, win=0, d=0, other=0; var elsArr = Array.isArray(__plan2d.elements)? __plan2d.elements:[];
+      for (var ci=0; ci<elsArr.length; ci++){ var el=elsArr[ci]; if(!el) continue; if(el.type==='wall') w++; else if(el.type==='window') win++; else if(el.type==='door') d++; else other++; }
+      __rtPush({ kind:'populate-end', floor: currentFloor, counts: { walls:w, windows:win, doors:d, other:other, total: (elsArr.length||0) }, preserved: preservedCounts });
+    } catch(_rt){ /* ignore */ }
     if (console && console.debug) console.debug('[PLAN2D POPULATE] end floor='+currentFloor+' elements=', window.__plan2dDiag.lastPopulateEnd.produced);
   } catch(_dbg1) {}
   return true;

@@ -2,6 +2,22 @@
 // Exposes window.setupEvents(), called by startApp() in engine3d.js
 (function(){
   if (typeof window.setupEvents === 'function') return;
+  // Round-trip action tracing helper (persisted like other traces)
+  function __rtActionPush(evt){
+    try {
+      // Lazy-load persisted buffer
+      if (!window.__roundTripTraceLoaded) {
+        try { var raw = localStorage.getItem('gablok_rtTrace_v1'); if (raw){ var arr = JSON.parse(raw); if (Array.isArray(arr)) window.__roundTripTrace = arr.slice(-300); } } catch(_lp){}
+        window.__roundTripTraceLoaded = true;
+      }
+      var buf = window.__roundTripTrace || (window.__roundTripTrace = []);
+      var MAX = 300; buf.push(Object.assign({ t: Date.now(), source: 'action' }, evt||{})); if (buf.length>MAX) buf.splice(0, buf.length-MAX);
+      // Throttled persist
+      var now = Date.now(); if (!window.__rtTraceLastSave || now - window.__rtTraceLastSave > 1500){ try { localStorage.setItem('gablok_rtTrace_v1', JSON.stringify(buf)); window.__rtTraceLastSave = now; } catch(_ps){} }
+    } catch(_e){}
+  }
+  // Expose globally so other modules (2D editor, core) can log actions
+  try { if (typeof window.__rtActionPush !== 'function') window.__rtActionPush = __rtActionPush; } catch(_exp){}
   // Optional tracing for 3D keys/selection: ?trace3d=1 (or reuse ?trace2d=1) or localStorage 'gablok_trace3d'=1
   (function(){
     function qs(name){ try { var m = String(location.search||'').match(new RegExp('[?&]'+name+'=([^&]+)')); return m ? decodeURIComponent(m[1]) : null; } catch(_) { return null; } }
@@ -180,6 +196,7 @@
           // Track which room is actively dragged for targeted purge in solid rebuilds
           try { window.__activelyDraggedRoomId = target.id; } catch(_ad) {}
           console.log('🟢 START 3D DRAG - Flag set:', window.__dragging3DRoom, 'Room:', target.name || target.id);
+          try { __rtActionPush({ kind:'3d-drag-start', id: target.id, type: target.type||'room', name: target.name||null, handle: handle.type }); } catch(_trS){}
           
           // Capture original opening positions for rectangular rooms (before poly check)
           var rectOpenSnap = [];
@@ -297,6 +314,7 @@
         try { if (!canvas.hasAttribute('tabindex')) canvas.setAttribute('tabindex','0'); canvas.focus({preventScroll:true}); } catch(_e) {}
         mouse.down = false; mouse.dragType = null; mouse.dragInfo = null;
         updateStatus('Wall selected');
+        try { var wSel = (window.wallStrips && window.wallStrips[hitIdx]) ? window.wallStrips[hitIdx] : null; __rtActionPush({ kind:'wall-strip-select', index: hitIdx, level: (wSel&&wSel.level)||0, from:'3d' }); } catch(_ts){}
         renderLoop();
         return;
       }
@@ -781,9 +799,11 @@
     document.addEventListener('mouseup', function() {
       // If we just finished resizing OR moving a room, sync to 2D and save
       if ((mouse.dragType === 'handle' || mouse.dragType === 'room' || mouse.dragType === 'balcony') && mouse.dragInfo && mouse.dragInfo.roomId) {
+        try { var obj = findObjectById(mouse.dragInfo.roomId); if (obj) __rtActionPush({ kind:'3d-drag-end', id: obj.id, type: obj.type||'room', name: obj.name||null, pose:{ x:obj.x, z:obj.z, w:obj.width, d:obj.depth, rot:obj.rotation||0 } }); } catch(_trE){}
       // Wall strip drag end
       if (mouse.dragType === 'wall-strip' && mouse.dragInfo && typeof mouse.dragInfo.wallIndex === 'number') {
         updateStatus('Wall moved');
+        try { var wE = (window.wallStrips && window.wallStrips[mouse.dragInfo.wallIndex]) ? window.wallStrips[mouse.dragInfo.wallIndex] : null; if (wE) __rtActionPush({ kind:'wall-strip-move-end', index: mouse.dragInfo.wallIndex, to:{ x0:wE.x0, z0:wE.z0, x1:wE.x1, z1:wE.z1 }, level:(wE.level||0) }); } catch(_te){}
         // Persist project after move
         try { if (typeof saveProjectSilently==='function') saveProjectSilently(); } catch(_spw) {}
         renderLoop();
@@ -912,6 +932,7 @@
         if (roomIndex > -1 && allRooms.length > 1) {
           var room = allRooms[roomIndex];
           allRooms.splice(roomIndex, 1);
+          try { __rtActionPush({ kind:'3d-delete', target:'room', id: room.id, name: room.name||null, level: (room.level||0) }); } catch(_td1){}
           if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
           else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMs) {} }
           updateStatus(room.name + ' deleted');
@@ -925,6 +946,7 @@
           if (Array.isArray(scArrD) && scArrD.length){ for (var sdi=0; sdi<scArrD.length; sdi++){ var sObj=scArrD[sdi]; if (sObj && sObj.id === selectedRoomId) { delIdx = sdi; break; } } }
           if (delIdx > -1) {
             var delS = scArrD[delIdx]; scArrD.splice(delIdx,1);
+            try { __rtActionPush({ kind:'3d-delete', target:'stairs', id: delS.id, level: (delS.level||0) }); } catch(_tds){}
             try { window.stairsComponents = scArrD; } catch(_keep){}
             if (window.stairsComponent && window.stairsComponent.id === selectedRoomId){ window.stairsComponent = scArrD.length ? scArrD[scArrD.length-1] : null; }
             if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
@@ -935,6 +957,7 @@
             return;
           } else if (stairsComponent && stairsComponent.id === selectedRoomId) {
             stairsComponent = null;
+            try { __rtActionPush({ kind:'3d-delete', target:'stairs', id: selectedRoomId }); } catch(_tds2){}
             if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
             else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMd2) {} }
             updateStatus('Stairs deleted');
@@ -955,6 +978,7 @@
         if (pergolaIndex > -1) {
           var pergola = pergolaComponents[pergolaIndex];
           pergolaComponents.splice(pergolaIndex, 1);
+          try { __rtActionPush({ kind:'3d-delete', target:'pergola', id: pergola.id, level:(pergola.level||0) }); } catch(_tdp){}
           if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
           else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMp) {} }
           updateStatus(pergola.name + ' deleted');
@@ -973,6 +997,7 @@
         if (balconyIndex > -1) {
           var balcony = balconyComponents[balconyIndex];
           balconyComponents.splice(balconyIndex, 1);
+          try { __rtActionPush({ kind:'3d-delete', target:'balcony', id: balcony.id, level:(balcony.level||0) }); } catch(_tdb){}
           if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
           else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMb) {} }
           updateStatus(balcony.name + ' deleted');
@@ -991,6 +1016,7 @@
         if (garageIndex > -1) {
           var garage = garageComponents[garageIndex];
           garageComponents.splice(garageIndex, 1);
+          try { __rtActionPush({ kind:'3d-delete', target:'garage', id: garage.id, level:(garage.level||0) }); } catch(_tdg){}
           if (typeof window.selectObject === 'function') { window.selectObject(null, { noRender: true }); }
           else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMg) {} }
           updateStatus(garage.name + ' deleted');
@@ -1011,6 +1037,7 @@
           selectedRoomId = null;
           updateStatus(pool.name + ' deleted');
           try { __log3d('Deleted pool'); } catch(_l8){}
+          try { __rtActionPush({ kind:'3d-delete', target:'pool', id: pool.id, level:(pool.level||0) }); } catch(_tdpl){}
           return;
         }
         
@@ -1028,6 +1055,7 @@
           selectedRoomId = null;
           updateStatus(roof.name + ' deleted');
           try { __log3d('Deleted roof'); } catch(_l9){}
+          try { __rtActionPush({ kind:'3d-delete', target:'roof', id: roof.id, level:(roof.level||0) }); } catch(_tdr){}
           return;
         }
         
@@ -1041,6 +1069,7 @@
           selectedRoomId = null;
           updateStatus((furn.name || 'Item') + ' deleted');
           try { __log3d('Deleted furniture'); } catch(_l10){}
+          try { __rtActionPush({ kind:'3d-delete', target:'furniture', id: furn.id, level:(furn.level||0) }); } catch(_tdf){}
           return;
         }
         // If a wall strip is selected (and no object matched), delete it
@@ -1054,6 +1083,7 @@
             renderLoop();
             updateStatus('Wall deleted');
             try { __log3d('Deleted wall strip'); } catch(_l11){}
+            try { __rtActionPush({ kind:'3d-delete', target:'wall-strip' }); } catch(_tdw){}
             return;
           }
         }

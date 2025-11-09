@@ -57,9 +57,26 @@ if (typeof window.plan2dComputeRoomPolygonsLite !== 'function') window.plan2dCom
   try {
     options = options || {};
     var strictClosedLoopsOnly = !!options.strictClosedLoopsOnly;
-    var TOL = 0.03; // 3 cm tolerance, matches main engine
+    var TOL = (function(){
+      try {
+        var base = 0.03;
+        var step = (__plan2d && typeof __plan2d.precisionStepM==='number' && __plan2d.precisionStepM>0) ? __plan2d.precisionStepM : base;
+        // Clamp for safety (1mm .. 5cm)
+        if(step < 0.001) step = 0.001;
+        if(step > 0.05) step = 0.05;
+        return step;
+      } catch(e){ return 0.03; }
+    })(); // dynamic tolerance from precisionStepM
     function approxEq(a,b,t){ return Math.abs(a-b) <= (typeof t==='number'? t : TOL); }
-    function keyCoord(v){ return +(+v).toFixed(2); }
+    function keyCoord(v){
+      try {
+        var step = (__plan2d && typeof __plan2d.precisionStepM==='number' && __plan2d.precisionStepM>0) ? __plan2d.precisionStepM : 0.03;
+        if(step < 0.001) step = 0.001;
+        // Quantize then round to 4 decimals for stable keys
+        var q = Math.round((+v)/step)*step;
+        return +(+q).toFixed(4);
+      } catch(e){ return +(+v).toFixed(2); }
+    }
     function sortNumeric(a,b){ return a-b; }
 
     // Build snapped nodes and split at T-junctions
@@ -129,13 +146,65 @@ if (typeof window.plan2dComputeRoomPolygonsLite !== 'function') window.plan2dCom
   } catch(e){ return []; }
 };
 
+// Global round-trip diagnostics ring buffer helper (shared with populate)
+if (typeof window.__rtTracePush !== 'function') {
+  window.__rtTracePush = function __rtTracePush(evt){
+    try {
+      // Lazy-load persisted trace once per session
+      if (!window.__roundTripTraceLoaded) {
+        try {
+          var raw = localStorage.getItem('gablok_rtTrace_v1');
+          if (raw) {
+            var arr = JSON.parse(raw);
+            if (Array.isArray(arr)) {
+              window.__roundTripTrace = arr.slice(-300); // cap
+            }
+          }
+        } catch(_lp) {}
+        window.__roundTripTraceLoaded = true;
+      }
+      var buf = window.__roundTripTrace || (window.__roundTripTrace = []);
+      var MAX = 300; // allow a larger persisted history
+      buf.push(Object.assign({ t: Date.now(), source: 'apply' }, evt||{}));
+      if (buf.length > MAX) buf.splice(0, buf.length - MAX);
+      // Persist updated buffer (best-effort, throttled by simple time gate)
+      try {
+        var now = Date.now();
+        if (!window.__rtTraceLastSave || now - window.__rtTraceLastSave > 1500) {
+          localStorage.setItem('gablok_rtTrace_v1', JSON.stringify(buf));
+          window.__rtTraceLastSave = now;
+        }
+      } catch(_ps) {}
+    } catch(_e) {}
+  };
+}
+if (typeof window.getLatestRoundTripTrace !== 'function') {
+  window.getLatestRoundTripTrace = function getLatestRoundTripTrace(n){
+    try { var buf = window.__roundTripTrace || []; if(!n||n<=0) n=buf.length; return buf.slice(Math.max(0, buf.length - n)); } catch(e){ return []; }
+  };
+}
+
 "use strict";
 // Apply 2D plan edits back to 3D: rebuild rooms/strips from 2D walls and openings
 // Extracted from app.js for modularity; loaded by bootstrap before app core.
 function applyPlan2DTo3D(elemsSnapshot, opts){
+  // Early snapshot of previous 3D state (level-specific) for vanish diagnostics
+  var prevRoomsLevelCount = 0, prevStripsLevelCount = 0, prevOpeningsLevelCount = 0;
+  // Reuse/new opening counters for this apply invocation
+  var __reuseStats = { reused:0, new:0, reusedWin:0, newWin:0, reusedDoor:0, newDoor:0 };
+  try {
+    var lvlPre = (opts && typeof opts.level==='number') ? opts.level : 0;
+    if (Array.isArray(window.allRooms)) {
+      for (var rpi=0; rpi<allRooms.length; rpi++){ var rrP = allRooms[rpi]; if(rrP && (rrP.level||0)===lvlPre){ prevRoomsLevelCount++; if(Array.isArray(rrP.openings)) prevOpeningsLevelCount += rrP.openings.length; } }
+    }
+    if (Array.isArray(window.wallStrips)) {
+      for (var spi=0; spi<wallStrips.length; spi++){ var wsP = wallStrips[spi]; if(wsP && (wsP.level||0)===lvlPre) prevStripsLevelCount++; }
+    }
+  } catch(_prevState) {}
   // Don't apply 2D to 3D if we're in the middle of a 3D drag
   if (window.__dragging3DRoom) {
     console.log('🚫 applyPlan2DTo3D BLOCKED during 3D drag (flag is true)');
+    window.__rtTracePush({ kind:'apply-blocked-drag', dragging:true });
     return;
   }
   console.log('🔄 applyPlan2DTo3D RUNNING (flag is false or undefined)');
@@ -152,6 +221,13 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   var strictClosedLoopsOnly = (typeof opts.strictClosedLoopsOnly === 'boolean') ? !!opts.strictClosedLoopsOnly : true;
     // Which floor to apply to (0=ground, 1=first). Default to ground for backward compatibility.
     var targetLevel = (typeof opts.level === 'number') ? opts.level : 0;
+    // Raw incoming 2D element type counts (before any filtering)
+    try {
+      var rawElems = (__hasSnapshotObj ? (elemsSnapshot.elements||[]) : (Array.isArray(elemsSnapshot)? elemsSnapshot : (__plan2d.elements||[]))) || [];
+      var rawCounts = { walls:0, windows:0, doors:0, other:0 };
+      for (var rc=0; rc<rawElems.length; rc++){ var re=rawElems[rc]; if(!re) continue; if(re.type==='wall') rawCounts.walls++; else if(re.type==='window') rawCounts.windows++; else if(re.type==='door') rawCounts.doors++; else rawCounts.other++; }
+      window.__rtTracePush({ kind:'apply-start', level: targetLevel, opts: { stripsOnly:stripsOnly, allowRooms:allowRooms, nonDestructive:nonDestructive }, prev: { rooms:prevRoomsLevelCount, strips:prevStripsLevelCount, openings:prevOpeningsLevelCount }, raw2D: rawCounts });
+    } catch(_rtStart) {}
     // Debug/telemetry helper: emit a summary event so UI or tests can observe what was applied
     function __emitApplySummary(summary){
       try {
@@ -181,18 +257,26 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     try { return JSON.parse(JSON.stringify(base)); }
     catch(_e){ var cloned=[]; for (var i=0;i<base.length;i++){ var el=base[i]; cloned.push(el? Object.assign({}, el): el); } return cloned; }
   })();
-  // Filter: ignore walls tagged from other floors to avoid cross-level leakage when 2D view shows both floors
+  // Filter: ignore elements tagged from other floors to avoid cross-level leakage when 2D view shows both floors
   try {
     var filtered=[]; var tLvl = targetLevel;
     for (var fi=0; fi<elemsSrc.length; fi++){
       var elF = elemsSrc[fi];
       if(!elF){ continue; }
-      if(elF.type==='wall' && typeof elF.roomLevel==='number'){
-        if(elF.roomLevel !== tLvl){ continue; }
-      }
+      // Prefer explicit .level field first; fall back to legacy .roomLevel for walls
+      if (typeof elF.level==='number' && elF.level !== tLvl) { continue; }
+      if (elF.type==='wall' && typeof elF.level!=='number' && typeof elF.roomLevel==='number' && elF.roomLevel !== tLvl) { continue; }
       filtered.push(elF);
     }
     elemsSrc = filtered;
+    // Diagnostics: capture initial element counts per type after floor filtering.
+    try {
+      var _diagCounts = { level: tLvl, walls:0, windows:0, doors:0, others:0 };
+      for (var _di=0; _di<elemsSrc.length; _di++){ var _e=elemsSrc[_di]; if(!_e) continue; if(_e.type==='wall') _diagCounts.walls++; else if(_e.type==='window') _diagCounts.windows++; else if(_e.type==='door') _diagCounts.doors++; else _diagCounts.others++; }
+      if (tLvl>0 && typeof console!=='undefined' && console.debug){ console.debug('[DIAG applyPlan2DTo3D] Post-filter element counts', _diagCounts); }
+      window.__lastApplyFilterDiag = _diagCounts;
+        window.__rtTracePush({ kind:'apply-post-filter', level:tLvl, counts:_diagCounts });
+    } catch(_diagFilter){}
   } catch(_filt){}
   var __groupedRooms = [];
     // Phase -1: Respect room groups to avoid splitting user-added rooms when walls touch.
@@ -340,6 +424,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
               }
               
               if (reusedNoWalls){
+                // Count reuse stats
+                __reuseStats.reused++; __reuseStats[reusedNoWalls.type==='window'?'reusedWin':'reusedDoor']++;
                 // DEBUG: Show flag state
                 if (typeof console !== 'undefined' && console.log) {
                   console.log('🔍 Reused opening flag check:', reusedNoWalls.type, '__manuallyPositioned:', reusedNoWalls.__manuallyPositioned);
@@ -357,6 +443,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
                 }
                 newOpeningsArrNoWalls.push(reusedNoWalls);
               } else {
+                __reuseStats.new++; __reuseStats[gwNoWalls.type==='window'?'newWin':'newDoor']++;
                 if (typeof console !== 'undefined' && console.log) {
                   console.log('🆕 NEW opening:', gwNoWalls.type, 'coords x0:', gwNoWalls.x0.toFixed(2), 'z0:', gwNoWalls.z0.toFixed(2), 'x1:', gwNoWalls.x1.toFixed(2), 'z1:', gwNoWalls.z1.toFixed(2));
                 }
@@ -370,6 +457,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         saveProjectSilently(); renderLoop();
         if(!quiet) updateStatus('Updated grouped rooms with openings');
         __emitApplySummary({ action: 'updated-grouped-rooms', roomsRect: 0, roomsPoly: 0, strips: 0 });
+        try { window.__rtTracePush({ kind:'apply-final-no-walls', level: targetLevel, reuse: __reuseStats }); } catch(_fnw){}
         return;
       }
       // No grouped rooms: handle as before
@@ -393,9 +481,16 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       }
     }
   function approxEq(a,b,eps){ return Math.abs(a-b) < (eps||TOL); }
-  var TOL=0.03; // 3 cm forgiving tolerance for detection (used across passes)
+  var TOL=0.03; // base tolerance (3 cm) before precision scaling
   var OPENING_TOL=0.05; // 5 cm tolerance for matching openings to room edges (slightly more forgiving)
-    function keyCoord(v){ return Math.round(v / TOL) * TOL; }
+    // Precision-aware coordinate quantization for graph building / span merging.
+    function keyCoord(v){
+      try {
+        var step = (__plan2d && typeof __plan2d.precisionStepM==='number' && __plan2d.precisionStepM>0)? __plan2d.precisionStepM : TOL;
+        if(step < 0.001) step = 0.001; // clamp to >=1mm
+        return Math.round((+v)/step)*step;
+      } catch(e){ return Math.round((+v)/TOL)*TOL; }
+    }
 
     // Deduplicate wall strips by geometry (order-insensitive) and merge openings arrays
     function _dedupeStripsByGeom(arr){
@@ -557,6 +652,12 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       dedup.push(R);
     });
     roomsFound=dedup;
+
+    // Mid-pass diagnostics for first-floor (or higher) applies: rectangle & polygon provisional counts
+    try {
+      if (targetLevel>0 && typeof console!=='undefined' && console.debug){ console.debug('[DIAG applyPlan2DTo3D] roomsFromLoops:', roomsFromLoops.length, 'rectRoomsFound:', roomsFound.length); }
+      window.__rtTracePush({ kind:'apply-detect-rect', level: targetLevel, loops: roomsFromLoops.length, rects: roomsFound.length });
+    } catch(_diagRect){}
 
     // Detect closed orthogonal loops into polygon rooms (L/U and shared-wall/T-junction shapes).
     // Runs regardless of rectangle detection so mixed floorplans are supported simultaneously.
@@ -797,6 +898,18 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       } catch(_polyAdvE) { /* best-effort; ignore on failure */ }
     }
 
+    // After polygon detection, emit combined counts; sample first 3 wall endpoints if zero rooms detected.
+    try {
+      if (targetLevel>0 && typeof console!=='undefined' && console.debug){ console.debug('[DIAG applyPlan2DTo3D] polyRooms:', polyRooms.length); }
+  window.__rtTracePush({ kind:'apply-detect-poly', level: targetLevel, poly: polyRooms.length });
+      if (targetLevel>0 && roomsFound.length===0 && polyRooms.length===0){
+        var sampleWalls=[]; var maxSample=3; for (var sw=0; sw<elemsSrc.length && sampleWalls.length<maxSample; sw++){ var wS=elemsSrc[sw]; if(wS && wS.type==='wall'){ sampleWalls.push({x0:+(wS.x0).toFixed(3),y0:+(wS.y0).toFixed(3),x1:+(wS.x1).toFixed(3),y1:+(wS.y1).toFixed(3)}); } }
+        if (typeof console!=='undefined' && console.warn){ console.warn('[DIAG applyPlan2DTo3D] No rooms detected on level', targetLevel, 'wallSample:', sampleWalls); }
+        window.__lastApplyNoRoomsSample = { level: targetLevel, sample: sampleWalls };
+        window.__rtTracePush({ kind:'apply-no-rooms-sample', level: targetLevel, sample: sampleWalls });
+      }
+    } catch(_diagPoly){}
+
   if((roomsFound.length===0 && polyRooms.length===0) || stripsOnly){
       // Walls present but no closed rectangles: extrude standalone wall strips from 2D
       // Respect nonDestructive: if true and we're not in explicit stripsOnly mode, do NOT clear existing rooms
@@ -964,6 +1077,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       }
       if(!quiet) updateStatus(nonDestructive && !stripsOnly ? 'Kept existing rooms; updated wall strips' : 'Applied 2D plan to 3D (standalone walls)');
       try { __emitApplySummary({ action: 'strips-only', roomsRect: 0, roomsPoly: 0, strips: (Array.isArray(merged)? merged.length : (Array.isArray(strips)? strips.length: 0)) }); } catch(_s) {}
+      window.__rtTracePush({ kind:'apply-action', action: (stripsOnly?'strips-only':'standalone-strips'), level: targetLevel, newRooms:0, newStrips:(Array.isArray(merged)? merged.length:0) });
+      try { window.__rtTracePush({ kind:'apply-final', level: targetLevel, prev:{ rooms:prevRoomsLevelCount, strips:prevStripsLevelCount }, new:{ rooms:0, strips:(Array.isArray(merged)? merged.length:0) }, reuse: __reuseStats, roomsFound:0, polyRooms:0, vanishRoom:(prevRoomsLevelCount>0 && 0===0), vanishReason:(prevRoomsLevelCount>0?'no-rooms-detected':null) }); } catch(_rtFinalStrips){}
       return;
     }
 
@@ -1014,6 +1129,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             }
           }
           if (reused){
+            __reuseStats.reused++; __reuseStats[reused.type==='window'?'reusedWin':'reusedDoor']++;
             // update coordinates on the reused object so renderer uses new position
             try { reused.x0 = gw.x0; reused.z0 = gw.z0; reused.x1 = gw.x1; reused.z1 = gw.z1; reused.edge = gw.edge || reused.edge; reused.sillM = ('sillM' in gw) ? gw.sillM : reused.sillM; reused.heightM = ('heightM' in gw) ? gw.heightM : reused.heightM; reused.meta = ('meta' in gw) ? gw.meta : reused.meta; } catch(_u){}
             if (typeof console !== 'undefined' && console.log) {
@@ -1021,6 +1137,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             }
             newOpeningsArr.push(reused);
           } else {
+            __reuseStats.new++; __reuseStats[gw.type==='window'?'newWin':'newDoor']++;
             // No reusable opening found - use the newly generated opening object
             if (typeof console !== 'undefined' && console.log) {
               console.log('🆕 NEW opening:', gw.type, 'coords x0:', gw.x0.toFixed(2), 'z0:', gw.z0.toFixed(2), 'x1:', gw.x1.toFixed(2), 'z1:', gw.z1.toFixed(2));
@@ -1032,6 +1149,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       grp.openings = newOpeningsArr;
       allRooms.push(grp);
     }
+    try { window.__rtTracePush({ kind:'apply-grouped-readd', level: targetLevel, grouped: __groupedRooms.length }); } catch(_rtGrp){}
+    try { if(__groupedRooms.length) window.__rtTracePush({ kind:'apply-grouped-reuse-stats', level: targetLevel, reuse: __reuseStats }); } catch(_rtGrpStats){}
   }
   // We'll build interior strips and merge with existing ones for this level below
     // 2D y corresponds to world z; 2D x corresponds to world x; plan is centered at (0,0)
@@ -1121,6 +1240,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
               var wx0 = (__ctx.centerX||0) + ax; var wz0 = (__ctx.centerZ||0) + sgnp*ay;
               var wx1 = (__ctx.centerX||0) + bx; var wz1 = (__ctx.centerZ||0) + sgnp*by;
               openingsW.push({ type:'window', x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: null });
+          __reuseStats.new++; __reuseStats.newWin++;
             }
           });
         });
@@ -1134,6 +1254,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           var dwx1 = (__plan2d.centerX||0) + bxd; var dwz1 = (__plan2d.centerZ||0) + sgnp*byd;
           var dhM = (typeof de.heightM==='number') ? de.heightM : ((__plan2d&&__plan2d.doorHeightM)||2.04);
           openingsW.push({ type:'door', x0: dwx0, z0: dwz0, x1: dwx1, z1: dwz1, sillM: 0, heightM: dhM, meta: (de.meta||null) });
+    __reuseStats.new++; __reuseStats.newDoor++;
         }
         // Emit merged free windows per polygon edge and any free doors
         if (Array.isArray(polyPts) && polyPts.length>=2){
@@ -1151,6 +1272,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
                 var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgnp*ay;
                 var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgnp*by;
                 openingsW.push({ type:'window', x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: null });
+                __reuseStats.new++; __reuseStats.newWin++;
               }
             });
           }
@@ -1161,6 +1283,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             var dwx0b = (__plan2d.centerX||0) + axd2; var dwz0b = (__plan2d.centerZ||0) + sgnp*ayd2;
             var dwx1b = (__plan2d.centerX||0) + bxd2; var dwz1b = (__plan2d.centerZ||0) + sgnp*byd2;
             openingsW.push({ type:'door', x0: dwx0b, z0: dwz0b, x1: dwx1b, z1: dwz1b, sillM: 0, heightM: fdRec.heightM, meta: fdRec.meta||null });
+            __reuseStats.new++; __reuseStats.newDoor++;
           }
         }
       } catch(_eOpen) {}
@@ -1173,6 +1296,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       
       allRooms.push(roomPoly);
     }
+    try { if(polyRooms.length) window.__rtTracePush({ kind:'apply-add-poly', level: targetLevel, polyRooms: polyRooms.length }); } catch(_rtPolyAdd){}
 
     // Then, create standard rectangular rooms
     // If a polygon room already represents an axis-aligned rectangle with the same bbox,
@@ -1254,11 +1378,13 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
               if (el.type==='door') {
                 var hM=(typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04));
                 openings.push({type:'door', edge:'minZ', startM:q0, endM:q1, widthM: span, heightM:hM, sillM:0, meta:(el.meta||null)});
+                __reuseStats.new++; __reuseStats.newDoor++;
               } else { // window
                 var sillW = (typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0);
                 var hW = (typeof el.heightM==='number') ? el.heightM : ((__plan2d&&__plan2d.windowHeightM)||1.5);
                 var pk = 's'+(+sillW.toFixed(3))+'_h'+(+hW.toFixed(3));
                 (winByEdge.minZ[pk]||(winByEdge.minZ[pk]=[])).push([q0,q1]);
+                __reuseStats.new++; __reuseStats.newWin++;
               }
               added=true;
             }
@@ -1274,11 +1400,13 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
               if (el.type==='door'){
                 var hM2=(typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04));
                 openings.push({type:'door', edge:'maxZ', startM:q02, endM:q12, widthM: span2, heightM:hM2, sillM:0, meta:(el.meta||null)});
+                __reuseStats.new++; __reuseStats.newDoor++;
               } else {
                 var sillW2 = (typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0);
                 var hW2 = (typeof el.heightM==='number') ? el.heightM : ((__plan2d&&__plan2d.windowHeightM)||1.5);
                 var pk2 = 's'+(+sillW2.toFixed(3))+'_h'+(+hW2.toFixed(3));
                 (winByEdge.maxZ[pk2]||(winByEdge.maxZ[pk2]=[])).push([q02,q12]);
+                __reuseStats.new++; __reuseStats.newWin++;
               }
               added=true;
             }
@@ -1294,11 +1422,13 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
               if (el.type==='door'){
                 var hM3=(typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04));
                 openings.push({type:'door', edge:'minX', startM:q03, endM:q13, widthM: span3, heightM:hM3, sillM:0, meta:(el.meta||null)});
+                __reuseStats.new++; __reuseStats.newDoor++;
               } else {
                 var sillW3 = (typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0);
                 var hW3 = (typeof el.heightM==='number') ? el.heightM : ((__plan2d&&__plan2d.windowHeightM)||1.5);
                 var pk3 = 's'+(+sillW3.toFixed(3))+'_h'+(+hW3.toFixed(3));
                 (winByEdge.minX[pk3]||(winByEdge.minX[pk3]=[])).push([q03,q13]);
+                __reuseStats.new++; __reuseStats.newWin++;
               }
               added=true;
             }
@@ -1314,11 +1444,13 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
               if (el.type==='door'){
                 var hM4=(typeof el.heightM==='number'?el.heightM: (__plan2d&&__plan2d.doorHeightM||2.04));
                 openings.push({type:'door', edge:'maxX', startM:q04, endM:q14, widthM: span4, heightM:hM4, sillM:0, meta:(el.meta||null)});
+                __reuseStats.new++; __reuseStats.newDoor++;
               } else {
                 var sillW4 = (typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0);
                 var hW4 = (typeof el.heightM==='number') ? el.heightM : ((__plan2d&&__plan2d.windowHeightM)||1.5);
                 var pk4 = 's'+(+sillW4.toFixed(3))+'_h'+(+hW4.toFixed(3));
                 (winByEdge.maxX[pk4]||(winByEdge.maxX[pk4]=[])).push([q04,q14]);
+                __reuseStats.new++; __reuseStats.newWin++;
               }
               added=true;
             }
@@ -1334,6 +1466,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             for (var iM=0; iM<merged.length; iM++){
               var sM=merged[iM][0], eM=merged[iM][1];
               openings.push({ type:'window', edge: edge, startM: sM, endM: eM, widthM: (eM-sM), heightM: wh, sillM: wsill, meta: null });
+              __reuseStats.new++; __reuseStats.newWin++;
             }
           });
         });
@@ -1344,6 +1477,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       }
       allRooms.push(room);
     }
+    try { if(roomsFound.length) window.__rtTracePush({ kind:'apply-add-rect', level: targetLevel, rectRooms: roomsFound.length }); } catch(_rtRectAdd){}
 
   // Deduplicate rooms by id (first), then by geometry on each level as safety
   try {
@@ -1367,6 +1501,10 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     // Also run global dedupe for components
     dedupeAllEntities();
   } catch(e) { /* non-fatal dedupe */ }
+  try {
+    var postRooms=0; for (var vr=0; vr<allRooms.length; vr++){ var rV=allRooms[vr]; if(rV && (rV.level||0)===targetLevel) postRooms++; }
+    window.__rtTracePush({ kind:'apply-post-dedupe', level: targetLevel, rooms: postRooms });
+  } catch(_rtDed){}
 
   // Additionally, extrude interior 2D walls (non-perimeter) into 3D wall strips for this level
   try {
@@ -1422,6 +1560,10 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   wallStrips = keepOther2.concat(merged2);
   selectedWallStripIndex = -1;
   } catch(e){ /* interior strips non-fatal */ }
+  try {
+    var postStrips=0; for (var vs=0; vs<wallStrips.length; vs++){ var sV=wallStrips[vs]; if(sV && (sV.level||0)===targetLevel) postStrips++; }
+    window.__rtTracePush({ kind:'apply-post-strips', level: targetLevel, strips: postStrips });
+  } catch(_rtStr){}
 
   // Compute a quick openings count for this level for diagnostics/UX
   var openingsCountLevel = 0;
@@ -1437,5 +1579,17 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   }
   renderLoop(); if(!quiet && !Array.isArray(elemsSnapshot)) updateStatus((roomsFound.length||polyRooms.length)? ('Applied 2D plan to 3D (rooms + openings: '+ openingsCountLevel +')') : 'No closed rooms found (auto-snap enabled)');
   try { __emitApplySummary({ action: 'rooms-applied', roomsRect: roomsFound.length||0, roomsPoly: polyRooms.length||0, strips: (Array.isArray(merged2)? merged2.length : 0), openings: openingsCountLevel }); } catch(_f) {}
+  try {
+    var finalRooms=0; for (var fr=0; fr<allRooms.length; fr++){ var rf=allRooms[fr]; if(rf && (rf.level||0)===targetLevel) finalRooms++; }
+    var finalStrips=0; for (var fs=0; fs<wallStrips.length; fs++){ var sf=wallStrips[fs]; if(sf && (sf.level||0)===targetLevel) finalStrips++; }
+    var vanishRoom = (prevRoomsLevelCount>0 && finalRooms===0);
+    var vanishReason = null;
+    if (vanishRoom) {
+      if (roomsFound.length===0 && polyRooms.length===0) vanishReason = 'no-rooms-detected';
+      else vanishReason = 'cleared-during-rebuild';
+    }
+    window.__rtTracePush({ kind:'apply-final', level: targetLevel, prev:{ rooms:prevRoomsLevelCount, strips:prevStripsLevelCount }, new:{ rooms:finalRooms, strips:finalStrips, openings:openingsCountLevel }, roomsFound:roomsFound.length, polyRooms:polyRooms.length, vanishRoom:vanishRoom, vanishReason:vanishReason });
+    try { window.__rtTracePush({ kind:'apply-reuse-stats', level: targetLevel, reuse: __reuseStats }); } catch(_rtRS){}
+  } catch(_rtFinal){}
   } catch(e){ console.error('applyPlan2DTo3D failed', e); updateStatus('Apply to 3D failed'); }
 }

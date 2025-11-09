@@ -13,6 +13,7 @@
           if(typeof plan2dCursor==='function') plan2dCursor();
           if(typeof plan2dDraw==='function') plan2dDraw();
         }
+        try { if (typeof window.__rtActionPush==='function') window.__rtActionPush({ kind:'2d-tool-select', tool: tool }); } catch(_ta){}
       });
     });
     // Fit, Flip, Clear, Export, Import, Apply buttons
@@ -32,6 +33,7 @@
           var keepScale=__plan2d.scale, keepPanX=__plan2d.panX, keepPanY=__plan2d.panY;
           // Temporarily block auto-fit logic during apply
           try{ __plan2d.autoFitEnabled=false; __plan2d.freezeCenterScaleUntil=Date.now()+1000; }catch(_af){}
+          try { if (typeof window.__rtActionPush==='function') window.__rtActionPush({ kind:'2d-apply-click', level:(typeof window.currentFloor==='number'? window.currentFloor:0), elements:(Array.isArray(__plan2d.elements)? __plan2d.elements.length:0) }); } catch(_tap){}
           if(typeof window.applyPlan2DTo3D==='function'){
             window.applyPlan2DTo3D(undefined, {
               allowRooms:true,

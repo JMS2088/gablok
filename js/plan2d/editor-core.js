@@ -276,11 +276,46 @@
   }
   window.plan2dMergeColinearWalls = window.plan2dMergeColinearWalls || plan2dMergeColinearWalls;
 
-  function plan2dFinalize(a,b){ if(!a||!b) return; var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM}); plan2dMergeColinearWalls(); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM}); } else if(__plan2d.tool==='door'){ __plan2d.elements.push({type:'door',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:0.9,meta:{hinge:'left',swing:'in'}}); } plan2dEdited(); }
+  function plan2dFinalize(a,b){ if(!a||!b) return; var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM, manual:true, level:(typeof window.currentFloor==='number'? window.currentFloor:0)}); plan2dMergeColinearWalls(); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM, level:(typeof window.currentFloor==='number'? window.currentFloor:0)}); } else if(__plan2d.tool==='door'){ __plan2d.elements.push({type:'door',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:0.9,meta:{hinge:'left',swing:'in'}, level:(typeof window.currentFloor==='number'? window.currentFloor:0)}); } plan2dEdited(); }
   window.plan2dFinalize = window.plan2dFinalize || plan2dFinalize;
 
   function plan2dFinalizeChain(){ try { var pts=Array.isArray(__plan2d.chainPoints)?__plan2d.chainPoints:[]; if(pts.length<2){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); return; } for(var i=0;i<pts.length-1;i++){ var a=pts[i], b=pts[i+1]; var segLen=Math.hypot(b.x-a.x,b.y-a.y); if(segLen<0.05) continue; var ax=a.x, ay=a.y, bx=b.x, by=b.y; if(Math.abs(bx-ax)>Math.abs(by-ay)) by=ay; else bx=ax; __plan2d.elements.push({type:'wall',x0:ax,y0:ay,x1:bx,y1:by,thickness:__plan2d.wallThicknessM}); plan2dMergeColinearWalls(); } __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dAutoSnapAndJoin(); plan2dDraw(); plan2dEdited(); }catch(e){} }
+  // Revised finalize: single snap/join pass at the end + forced full redraw to ensure room polygons appear and prevent mid-chain camera jumps.
+  function plan2dFinalizeChain(){
+    try {
+      var pts = Array.isArray(__plan2d.chainPoints)? __plan2d.chainPoints : [];
+      if(pts.length < 2){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); return; }
+      for(var i=0;i<pts.length-1;i++){
+        var a=pts[i], b=pts[i+1];
+        var segLen=Math.hypot(b.x-a.x,b.y-a.y); if(segLen<0.05) continue;
+        var ax=a.x, ay=a.y, bx=b.x, by=b.y;
+    if(Math.abs(bx-ax)>Math.abs(by-ay)) by=ay; else bx=ax; // axis align
+  __plan2d.elements.push({type:'wall',x0:ax,y0:ay,x1:bx,y1:by,thickness:__plan2d.wallThicknessM, manual:true, level:(typeof window.currentFloor==='number'? window.currentFloor:0)});
+        plan2dMergeColinearWalls();
+      }
+      __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false;
+      plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin();
+      try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_fr){}
+      try{ __plan2d.freezeCenterScaleUntil = Date.now() + 600; }catch(_fz){}
+      plan2dEdited();
+      plan2dDraw();
+    } catch(e) { /* non-fatal */ }
+  }
   window.plan2dFinalizeChain = window.plan2dFinalizeChain || plan2dFinalizeChain;
+
+  // End an active wall chain session without adding new segments. Runs snap/join once,
+  // forces a full redraw so rooms appear, and freezes view to prevent jump.
+  function endWallChainSession(){
+    try{
+      __plan2d.chainActive=false; __plan2d.userDrawingActive=false; __plan2d.chainPoints=[];
+      plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin();
+      try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_fr){}
+      try{ __plan2d.freezeCenterScaleUntil = Date.now() + 600; }catch(_fz){}
+      plan2dEdited();
+      plan2dDraw();
+    }catch(_ecs){}
+  }
+  window.endWallChainSession = window.endWallChainSession || endWallChainSession;
 
   // Eraser & deletion ------------------------------------------------------
   function plan2dEraseElementAt(idx){ var arr=__plan2d.elements; if(!arr||idx<0||idx>=arr.length) return false; var removed=arr[idx]; arr.splice(idx,1); if(removed && removed.type==='wall'){ for(var i=arr.length-1;i>=0;i--){ var el=arr[i]; if((el.type==='window'||el.type==='door') && typeof el.host==='number'){ if(el.host===idx){ arr.splice(i,1); continue; } if(el.host>idx){ el.host-=1; } } } } else { for(var j=0;j<arr.length;j++){ var e=arr[j]; if((e.type==='window'||e.type==='door') && typeof e.host==='number' && e.host>idx){ e.host-=1; } } } return true; }
@@ -530,13 +565,13 @@
             if(Math.abs(bx-ax) >= Math.abs(by-ay)) by = ay; else bx = ax;
             var segLen = Math.hypot(bx-ax, by-ay);
             if(segLen >= 0.05){
-              __plan2d.elements.push({type:'wall', x0:ax, y0:ay, x1:bx, y1:by, thickness:__plan2d.wallThicknessM});
+              __plan2d.elements.push({type:'wall', x0:ax, y0:ay, x1:bx, y1:by, thickness:__plan2d.wallThicknessM, manual:true, level:(typeof window.currentFloor==='number'? window.currentFloor:0)});
               plan2dEdited();
             }
             // Add the (potentially adjusted) endpoint for the continuing chain preview
             __plan2d.chainPoints.push({x:bx, y:by});
-            // Auto-snap & join after each new segment for immediate feedback
-            try{ plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); }catch(_sj){}
+            // Defer auto-snap/join until chain finalize to avoid mid-chain endpoint shifts & view jumps.
+            // (Final pass happens in plan2dFinalizeChain.)
           }
         }
         plan2dDraw();
@@ -565,7 +600,7 @@
                 if(t1 < t0){ var tmp=t0; t0=t1; t1=tmp; }
                 // Clamp opening to avoid full 0-length collapse on tiny walls
                 if(Math.abs(t1 - t0) < 0.01){ var mid=(t0+t1)/2; t0=Math.max(0, mid-0.005); t1=Math.min(1, mid+0.005); }
-                var el = { type: (__plan2d.tool==='door' ? 'door':'window'), host: near.index, t0: t0, t1: t1, thickness: (__plan2d.tool==='door'? (__plan2d.doorWidthM||0.92): (__plan2d.wallThicknessM||0.30)) };
+                var el = { type: (__plan2d.tool==='door' ? 'door':'window'), host: near.index, t0: t0, t1: t1, thickness: (__plan2d.tool==='door'? (__plan2d.doorWidthM||0.92): (__plan2d.wallThicknessM||0.30)), level:(typeof window.currentFloor==='number'? window.currentFloor:0) };
                 if(__plan2d.tool==='door'){ el.meta={hinge:'left',swing:'in'}; }
                 // Merge logic for window expansion: if placing a window and an existing window on the same wall overlaps or touches
                 if(__plan2d.tool==='window'){
@@ -799,9 +834,9 @@
     }
 
     // Finish current wall chain with double-click for a predictable UX
-    c.addEventListener('dblclick', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.zoomLocked) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; plan2dDraw(); } }catch(_e){} });
+    c.addEventListener('dblclick', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.zoomLocked) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ endWallChainSession(); } }catch(_e){} });
   // Also allow right-click to end the chain without adding a point
-  c.addEventListener('contextmenu', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.zoomLocked) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ ev.preventDefault(); __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; plan2dDraw(); } }catch(_e){} });
+  c.addEventListener('contextmenu', function(ev){ try{ if(!__plan2d.active) return; if(__plan2d.zoomLocked) return; if(__plan2d.tool==='wall' && __plan2d.chainActive){ ev.preventDefault(); endWallChainSession(); } }catch(_e){} });
 
   window.addEventListener('mouseup', function(){ if(!__plan2d.active) return; 
     if(__plan2d.dragGuide){
@@ -866,7 +901,7 @@
       if(ev.shiftKey){ __plan2d.perfHUDExt = !__plan2d.perfHUDExt; if(__plan2d.perfHUDExt){ __plan2d.perfHUD = true; } try{ plan2dDraw(); }catch(_){} ev.preventDefault(); ev.stopPropagation(); return; }
       __plan2d.perfHUD = !__plan2d.perfHUD; try{ plan2dDraw(); }catch(_){} ev.preventDefault(); ev.stopPropagation(); return;
     }
-    if(__plan2d.tool==='wall' && __plan2d.chainActive){ if(ev.key==='Enter'){ plan2dFinalizeChain(); ev.preventDefault(); ev.stopPropagation(); return; } if(ev.key==='Escape'){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return; } }
+  if(__plan2d.tool==='wall' && __plan2d.chainActive){ if(ev.key==='Enter'){ endWallChainSession(); ev.preventDefault(); ev.stopPropagation(); return; } if(ev.key==='Escape'){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return; } }
     if(ev.key==='Delete' || ev.key==='Backspace'){ 
       // Delete selected guide first if any
       if(__plan2d.selectedGuide){
