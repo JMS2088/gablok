@@ -190,12 +190,14 @@ if (typeof window.getLatestRoundTripTrace !== 'function') {
 function applyPlan2DTo3D(elemsSnapshot, opts){
   // Early snapshot of previous 3D state (level-specific) for vanish diagnostics
   var prevRoomsLevelCount = 0, prevStripsLevelCount = 0, prevOpeningsLevelCount = 0;
+  // Snapshot of previous rooms on target level for position preservation (width/depth match based)
+  var __prevRoomsSnapshot = [];
   // Reuse/new opening counters for this apply invocation
   var __reuseStats = { reused:0, new:0, reusedWin:0, newWin:0, reusedDoor:0, newDoor:0 };
   try {
     var lvlPre = (opts && typeof opts.level==='number') ? opts.level : 0;
     if (Array.isArray(window.allRooms)) {
-      for (var rpi=0; rpi<allRooms.length; rpi++){ var rrP = allRooms[rpi]; if(rrP && (rrP.level||0)===lvlPre){ prevRoomsLevelCount++; if(Array.isArray(rrP.openings)) prevOpeningsLevelCount += rrP.openings.length; } }
+      for (var rpi=0; rpi<allRooms.length; rpi++){ var rrP = allRooms[rpi]; if(rrP && (rrP.level||0)===lvlPre){ prevRoomsLevelCount++; if(Array.isArray(rrP.openings)) prevOpeningsLevelCount += rrP.openings.length; __prevRoomsSnapshot.push({ id: rrP.id, x: rrP.x, z: rrP.z, width: rrP.width, depth: rrP.depth }); } }
     }
     if (Array.isArray(window.wallStrips)) {
       for (var spi=0; spi<wallStrips.length; spi++){ var wsP = wallStrips[spi]; if(wsP && (wsP.level||0)===lvlPre) prevStripsLevelCount++; }
@@ -215,6 +217,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     var allowRooms = !!opts.allowRooms;
     var quiet = !!opts.quiet;
     var nonDestructive = !!opts.nonDestructive; // when true, don't clear 3D rooms if there are no room walls in 2D (e.g., during view toggles)
+  // If caller did not explicitly specify nonDestructive AND we already have rooms on this level, default to preserving them
+  if(!('nonDestructive' in opts) && prevRoomsLevelCount>0){ nonDestructive = true; }
   // When true (default), only create rooms from explicit closed loops (rectangles or single closed polygons).
   // This avoids inferring rooms from planar subdivision faces which can create unwanted triangular/duplicate rooms
   // when free-standing walls or T-junctions are present.
@@ -236,6 +240,28 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         try { window.dispatchEvent(new CustomEvent('gablok:apply-summary', { detail: det })); } catch(_d) {}
         try { if (console && console.debug) console.debug('[applyPlan2DTo3D]', det); } catch(_c) {}
       } catch(_e) {}
+    }
+    // Helper: attempt to preserve original room world position for matching geometry (prevents random shifts after late edits)
+    var __preserveUsed = Object.create(null);
+    function __preserveRoomPosition(roomObj){
+      try {
+        if(!roomObj) return;
+        var tolSize = 0.02; // 2cm size tolerance per dimension
+        for (var i=0; i<__prevRoomsSnapshot.length; i++){
+          var pr = __prevRoomsSnapshot[i]; if(!pr) continue;
+          if (__preserveUsed[pr.id]) continue;
+          if (Math.abs((pr.width||0) - (roomObj.width||0)) <= tolSize && Math.abs((pr.depth||0) - (roomObj.depth||0)) <= tolSize){
+            // Preserve previous world center
+            var oldX = roomObj.x, oldZ = roomObj.z;
+            roomObj.x = pr.x; roomObj.z = pr.z;
+            __preserveUsed[pr.id] = true;
+            try { window.__rtTracePush({ kind:'apply-room-preserved', level: (roomObj.level||0), id: roomObj.id, matchId: pr.id, width: roomObj.width, depth: roomObj.depth, from:{ x:oldX, z:oldZ }, to:{ x:roomObj.x, z:roomObj.z } }); } catch(_rtPR){}
+            return; // only one match
+          }
+        }
+        // If not preserved (new geometry), emit a trace for observability
+        try { window.__rtTracePush({ kind:'apply-room-new', level:(roomObj.level||0), id:roomObj.id, width:roomObj.width, depth:roomObj.depth }); } catch(_rtNew){}
+      } catch(_ePR) { /* non-fatal */ }
     }
   // Build a stable plan context; default to live __plan2d but allow a snapshot object
   var __ctx = {
@@ -311,6 +337,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           var roomG = createRoom(wx, wz, targetLevel);
           roomG.width = wW; roomG.depth = wD; roomG.height = 3; roomG.name = 'Room';
           roomG.groupId = gid;
+          __preserveRoomPosition(roomG);
           // Openings: any window/door hosted on grouped walls -> map to world endpoints
           var openingsGW = [];
           try {
@@ -1174,6 +1201,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       roomPoly.name = 'Room';
       roomPoly.groupId = PR.groupId;
       roomPoly.footprint = worldPts; // world-space polygon footprint
+  __preserveRoomPosition(roomPoly);
   // Map openings from host walls in this component to world endpoints
   var openingsW = [];
   // Merge overlapping windows per host wall AND per window profile (sill/height) to avoid mixing types
@@ -1332,6 +1360,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   room.depth=Math.max(0.5, quantizeMeters(d, 2));
       room.height=3;
       room.name='Room';
+      __preserveRoomPosition(room);
       // Preserve grouping metadata (logical footprint union) if available
       if (R.groupId) room.groupId = R.groupId;
       // Collect openings (windows/doors) along rectangle sides using geometry (no strict host mapping)

@@ -55,6 +55,10 @@
   // Single ordered list (simple, step-by-step). Keep renderers after core.
   // Keep boot minimal: only hard requirements to render grid + a room and accept input.
   var modules = [
+    { label: 'Camera core', url: 'js/core/engine/camera.js?v=20251109-1', critical: true },
+    // Split engine: load extracted helpers BEFORE main engine so engine can skip defining duplicates
+    { label: 'Engine wall strips', url: 'js/core/engine/wallStrips.js?v=20251109-1', critical: true },
+    { label: 'Engine components', url: 'js/core/engine/components.js?v=20251109-1', critical: true },
     { label: 'Core engine', url: 'js/core/engine3d.js?v=20251026-1', critical: true },
     { label: 'Project mgmt', url: 'js/core/project.js?v=20251128-1', critical: true },
     { label: 'Import/Export', url: 'js/io/importExport.js?v=20251128-1', critical: true },
