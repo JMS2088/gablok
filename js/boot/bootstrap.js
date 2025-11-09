@@ -67,11 +67,15 @@
     { label: 'DWG', url: 'js/io/formats/dwg.js?v=20251128-1', critical: false },
     { label: 'Loader', url: 'js/boot/loader.js?v=20251026-1', critical: true },
     { label: 'UI labels', url: 'js/ui/labels.js?v=20251026-1', critical: true },
+    // Room palette (needed for Edit buttons to function). Previously missing → Edit buttons appeared broken.
+    { label: 'Room palette', url: 'js/ui/roomPalette.js?v=20251128-1', critical: false },
     { label: 'Room renderer', url: 'js/render/drawRoom.js?v=20251026-2', critical: true },
     { label: 'Stairs renderer', url: 'js/render/drawStairs.js?v=20251026-1', critical: false },
     { label: 'Pergola renderer', url: 'js/render/drawPergola.js?v=20251026-1', critical: false },
     { label: 'Garage renderer', url: 'js/render/drawGarage.js?v=20251026-1', critical: false },
     { label: 'Roof renderer', url: 'js/render/drawRoof.js?v=20251026-1', critical: false },
+    // Roof type dropdown UI (missing earlier → user reported roof types "missing"). Load after roof renderer & components.
+    { label: 'Roof dropdown', url: 'js/ui/roofDropdown.js?v=20251128-1', critical: false },
     { label: 'Pool renderer', url: 'js/render/drawPool.js?v=20251026-1', critical: false },
     { label: 'Balcony renderer', url: 'js/render/drawBalcony.js?v=20251026-1', critical: false },
     { label: 'Furniture renderer', url: 'js/render/drawFurniture.js?v=20251026-1', critical: false },
