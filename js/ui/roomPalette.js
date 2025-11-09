@@ -579,4 +579,15 @@
   window.openRoomPalette = openRoomPalette;
   window.hideRoomPalette = hideRoomPalette;
   window.addPaletteItem = addPaletteItem;
+
+  // Ensure the Furniture List is populated on boot even when this module is loaded eagerly by bootstrap
+  // (loader.js calls setupPalette, but bootstrap.js directly loading this file didn't).
+  try {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function(){ try { setupPalette(); } catch(_eSP){} });
+    } else {
+      // DOM is ready; populate immediately
+      setupPalette();
+    }
+  } catch(_eInit) {}
 })();
