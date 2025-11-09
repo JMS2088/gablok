@@ -215,16 +215,21 @@
           }
         }
         if (!drewAny && Array.isArray(window.allRooms)){
+          // Map world (x,z) to plan (x,y) using the same per-floor center and Y sign used elsewhere
           var lvlNowFill = (typeof window.currentFloor==='number' ? window.currentFloor : 0);
+          var cxF = (typeof __plan2d.centerX==='number' && isFinite(__plan2d.centerX)) ? __plan2d.centerX : 0;
+          var czF = (typeof __plan2d.centerZ==='number' && isFinite(__plan2d.centerZ)) ? __plan2d.centerZ : 0;
+          var sgnF = (__plan2d.yFromWorldZSign || 1);
+          function mapPlanFill(wx, wz){ return worldToScreen2D((wx - cxF), sgnF * (wz - czF)); }
           for (var rf=0; rf<allRooms.length; rf++){
             var rFill = allRooms[rf]; if(!rFill) continue; var rLvlF = (typeof rFill.level==='number' ? rFill.level : 0); if (rLvlF !== lvlNowFill) continue;
             try {
               if (Array.isArray(rFill.footprint) && rFill.footprint.length>=3){
-                var fp = rFill.footprint; ctx.beginPath(); var p0 = worldToScreen2D(fp[0].x, fp[0].z); ctx.moveTo(p0.x, p0.y);
-                for (var vi=1; vi<fp.length; vi++){ var p = worldToScreen2D(fp[vi].x, fp[vi].z); ctx.lineTo(p.x,p.y); }
+                var fp = rFill.footprint; ctx.beginPath(); var p0 = mapPlanFill(fp[0].x, fp[0].z); ctx.moveTo(p0.x, p0.y);
+                for (var vi=1; vi<fp.length; vi++){ var p = mapPlanFill(fp[vi].x, fp[vi].z); ctx.lineTo(p.x,p.y); }
                 ctx.closePath(); ctx.fill();
               } else {
-                var hw = (rFill.width||0)/2, hd = (rFill.depth||0)/2; var c1 = worldToScreen2D(rFill.x-hw, rFill.z-hd); var c2 = worldToScreen2D(rFill.x+hw, rFill.z-hd); var c3 = worldToScreen2D(rFill.x+hw, rFill.z+hd); var c4 = worldToScreen2D(rFill.x-hw, rFill.z+hd);
+                var hw = (rFill.width||0)/2, hd = (rFill.depth||0)/2; var c1 = mapPlanFill(rFill.x-hw, rFill.z-hd); var c2 = mapPlanFill(rFill.x+hw, rFill.z-hd); var c3 = mapPlanFill(rFill.x+hw, rFill.z+hd); var c4 = mapPlanFill(rFill.x-hw, rFill.z+hd);
                 ctx.beginPath(); ctx.moveTo(c1.x,c1.y); ctx.lineTo(c2.x,c2.y); ctx.lineTo(c3.x,c3.y); ctx.lineTo(c4.x,c4.y); ctx.closePath(); ctx.fill();
               }
             } catch(_rf){ /* ignore */ }
@@ -625,34 +630,38 @@
         if (__plan2d && __plan2d.active) {
           // Collect label boxes (screen-space) to draw text later on the labels-2d canvas
           var labelBoxes = [];
-          // Draw stairs footprint on the base canvas (authoritative rendering)
+          // Draw stairs footprint(s) on the base canvas (authoritative rendering)
           try {
-            if (stairsComponent) {
+            var scArrDraw = (Array.isArray(window.stairsComponents) && window.stairsComponents.length) ? window.stairsComponents : (stairsComponent ? [stairsComponent] : []);
+            if (scArrDraw.length) {
               var lvlNow = (typeof currentFloor==='number' ? currentFloor : 0);
-              var stairsLvl = (typeof stairsComponent.level==='number' ? stairsComponent.level : 0);
               var sgnSt = (__plan2d.yFromWorldZSign || 1);
-              var rotSt = ((stairsComponent.rotation || 0) * Math.PI) / 180;
-              var hwSt = (stairsComponent.width || 0)/2;
-              var hdSt = (stairsComponent.depth || 0)/2;
-              function rotStW(px, pz){ var dx=px - stairsComponent.x, dz=pz - stairsComponent.z; return { x: stairsComponent.x + dx*Math.cos(rotSt) - dz*Math.sin(rotSt), z: stairsComponent.z + dx*Math.sin(rotSt) + dz*Math.cos(rotSt) }; }
-              var s1 = rotStW(stairsComponent.x - hwSt, stairsComponent.z - hdSt);
-              var s2 = rotStW(stairsComponent.x + hwSt, stairsComponent.z - hdSt);
-              var s3 = rotStW(stairsComponent.x + hwSt, stairsComponent.z + hdSt);
-              var s4 = rotStW(stairsComponent.x - hwSt, stairsComponent.z + hdSt);
-              function mapPlanSt(p){ return { x: (p.x - __plan2d.centerX), y: sgnSt * (p.z - __plan2d.centerZ) }; }
-              var sp1 = worldToScreen2D(mapPlanSt(s1).x, mapPlanSt(s1).y);
-              var sp2 = worldToScreen2D(mapPlanSt(s2).x, mapPlanSt(s2).y);
-              var sp3 = worldToScreen2D(mapPlanSt(s3).x, mapPlanSt(s3).y);
-              var sp4 = worldToScreen2D(mapPlanSt(s4).x, mapPlanSt(s4).y);
-              ctx.save();
-              ctx.globalAlpha = (stairsLvl === lvlNow) ? 0.95 : 0.35;
-              ctx.fillStyle = (stairsLvl === lvlNow) ? 'rgba(15,23,42,0.10)' : 'rgba(15,23,42,0.06)';
-              // Match wall stroke weight and use white keylines for consistency in 2D
-              ctx.strokeStyle = '#ffffff';
-              ctx.lineWidth = (__plan2d.wallStrokePx || 1.2);
-              ctx.beginPath(); ctx.moveTo(sp1.x, sp1.y); ctx.lineTo(sp2.x, sp2.y); ctx.lineTo(sp3.x, sp3.y); ctx.lineTo(sp4.x, sp4.y); ctx.closePath(); ctx.fill(); ctx.stroke();
-              // Label backgrounds disabled in 2D plan: skip drawing name pills/text
-              try { if(false){
+              var cxSt = (typeof __plan2d.centerX==='number' && isFinite(__plan2d.centerX)) ? __plan2d.centerX : 0;
+              var czSt = (typeof __plan2d.centerZ==='number' && isFinite(__plan2d.centerZ)) ? __plan2d.centerZ : 0;
+              function mapPlanSt(p){ return { x: (p.x - cxSt), y: sgnSt * (p.z - czSt) }; }
+              function drawOneStairs(sc){
+                var stairsLvl = (typeof sc.level==='number' ? sc.level : 0);
+                var rotSt = ((sc.rotation || 0) * Math.PI) / 180;
+                var hwSt = (sc.width || 0)/2;
+                var hdSt = (sc.depth || 0)/2;
+                function rotStW(px, pz){ var dx=px - sc.x, dz=pz - sc.z; return { x: sc.x + dx*Math.cos(rotSt) - dz*Math.sin(rotSt), z: sc.z + dx*Math.sin(rotSt) + dz*Math.cos(rotSt) }; }
+                var s1 = rotStW(sc.x - hwSt, sc.z - hdSt);
+                var s2 = rotStW(sc.x + hwSt, sc.z - hdSt);
+                var s3 = rotStW(sc.x + hwSt, sc.z + hdSt);
+                var s4 = rotStW(sc.x - hwSt, sc.z + hdSt);
+                var sp1 = worldToScreen2D(mapPlanSt(s1).x, mapPlanSt(s1).y);
+                var sp2 = worldToScreen2D(mapPlanSt(s2).x, mapPlanSt(s2).y);
+                var sp3 = worldToScreen2D(mapPlanSt(s3).x, mapPlanSt(s3).y);
+                var sp4 = worldToScreen2D(mapPlanSt(s4).x, mapPlanSt(s4).y);
+                ctx.save();
+                ctx.globalAlpha = (stairsLvl === lvlNow) ? 0.95 : 0.35;
+                ctx.fillStyle = (stairsLvl === lvlNow) ? 'rgba(15,23,42,0.10)' : 'rgba(15,23,42,0.06)';
+                // Match wall stroke weight and use white keylines for consistency in 2D
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = (__plan2d.wallStrokePx || 1.2);
+                ctx.beginPath(); ctx.moveTo(sp1.x, sp1.y); ctx.lineTo(sp2.x, sp2.y); ctx.lineTo(sp3.x, sp3.y); ctx.lineTo(sp4.x, sp4.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+                // Label backgrounds disabled in 2D plan: skip drawing name pills/text
+                try { if(false){
                 var minXS = Math.min(sp1.x, sp2.x, sp3.x, sp4.x);
                 var minYS = Math.min(sp1.y, sp2.y, sp3.y, sp4.y);
                 var __dpr = window.devicePixelRatio || 1;
@@ -660,7 +669,7 @@
                 var padXCss = 11, padYCss = 6, baseFontPxCss = 9, radiusCss = 19;
                 var padX = padXCss * __dpr, padY = padYCss * __dpr, fontSize = baseFontPxCss * __dpr, radius = radiusCss * __dpr;
                 ctx.save(); ctx.font = '600 ' + fontSize + 'px system-ui, sans-serif';
-                var sText = (stairsComponent.name || 'Stairs');
+                var sText = (sc.name || 'Stairs');
                 var tW = ctx.measureText(sText).width;
                 var bx = Math.round(minXS + 6 * __dpr), by = Math.round(minYS + 6 * __dpr), bw = Math.round(tW + padX*2), bh = Math.round(fontSize + padY*2);
                 radius = Math.min(radius, bh/2);
@@ -705,10 +714,10 @@
                 } catch(e){}
                 ctx.restore();
               }} catch(e) { /* ignore label bg */ }
-              // Draw treads with weighted spacing: 10th interval (landing) is 5x deeper
-              try {
-                var totalDepth = (stairsComponent.depth || 0);
-                var totalSteps = Math.max(1, Math.floor(stairsComponent.steps || 19));
+                // Draw treads with weighted spacing: 10th interval (landing) is 5x deeper
+                try {
+                  var totalDepth = (sc.depth || 0);
+                  var totalSteps = Math.max(1, Math.floor(sc.steps || 19));
                 var intervals = Math.max(1, totalSteps - 1);
                 var weights = new Array(intervals);
                 for (var wi=0; wi<intervals; wi++) {
@@ -721,14 +730,19 @@
                   // Position this tread line at the end of interval siSt-1
                   var prevW = 0; for (var pi=0; pi<siSt; pi++) prevW += weights[pi];
                   var tt = (sumW > 0) ? (prevW / sumW) : (siSt / (intervals+0));
-                  var zW = stairsComponent.z - hdSt + tt * totalDepth;
-                  var aW = rotStW(stairsComponent.x - hwSt, zW); var bW = rotStW(stairsComponent.x + hwSt, zW);
+                  var zW = sc.z - hdSt + tt * totalDepth;
+                  var aW = rotStW(sc.x - hwSt, zW); var bW = rotStW(sc.x + hwSt, zW);
                   var aS = worldToScreen2D(mapPlanSt(aW).x, mapPlanSt(aW).y);
                   var bS = worldToScreen2D(mapPlanSt(bW).x, mapPlanSt(bW).y);
                   ctx.beginPath(); ctx.strokeStyle = 'rgba(100,116,139,0.9)'; ctx.lineWidth = 1; ctx.moveTo(aS.x, aS.y); ctx.lineTo(bS.x, bS.y); ctx.stroke();
                 }
-              } catch(e) { /* ignore */ }
-              ctx.restore();
+                } catch(e) { /* ignore */ }
+                ctx.restore();
+              }
+              // Draw all stairs (both floors visible, current floor emphasized)
+              for (var si=0; si<scArrDraw.length; si++){
+                var sc = scArrDraw[si]; if(!sc) continue; drawOneStairs(sc);
+              }
             }
           } catch(e) { /* base stairs draw non-fatal */ }
 

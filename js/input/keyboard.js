@@ -52,3 +52,28 @@
 
   document.addEventListener('keydown', handleKeydown, true);
 })();
+
+// Global undo/redo keyboard shortcuts: Ctrl/Cmd+Z, Ctrl+Y or Ctrl+Shift+Z
+(function(){
+  function undoRedoHandler(ev){
+    try {
+      // Don't hijack while user is typing
+      if (isEditingElement(document.activeElement)) return;
+      var mod = (ev.ctrlKey || ev.metaKey);
+      if (!mod) return;
+      var key = (ev.key || '').toLowerCase();
+      if (key === 'z' && !ev.altKey) {
+        // Ctrl/Cmd+Z -> undo
+        ev.preventDefault(); ev.stopPropagation();
+        try { if (typeof window.historyUndo === 'function') window.historyUndo(); }
+        catch(_e){}
+      } else if (key === 'y' || (key === 'z' && ev.shiftKey)) {
+        // Ctrl+Y or Ctrl+Shift+Z -> redo
+        ev.preventDefault(); ev.stopPropagation();
+        try { if (typeof window.historyRedo === 'function') window.historyRedo(); }
+        catch(_e){}
+      }
+    } catch(_e){}
+  }
+  document.addEventListener('keydown', undoRedoHandler, true);
+})();

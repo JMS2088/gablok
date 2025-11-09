@@ -124,7 +124,9 @@
       // Disable future auto-fit after first user edit; require manual Fit button to re-enable
       if(typeof __plan2d.autoFitEnabled==='undefined' || __plan2d.autoFitEnabled===true){ __plan2d.autoFitEnabled=false; }
     } catch(_v){}
-    // optional non-destructive 3D sync, guarded to avoid spam during drags
+    // Record an undo checkpoint for 2D edits (coalesced per-floor)
+    try { if (typeof window.historyPushChange === 'function') window.historyPushChange('plan2d-edit', { coalesce: true, coalesceKey: (typeof window.currentFloor === 'number' ? window.currentFloor : 0) }); } catch(_hpcPlan){}
+  // optional non-destructive 3D sync, guarded to avoid spam during drags
     // Debounced lightweight 3D sync to prevent flooding during rapid edits
     try {
       if(Date.now() < __plan2d.freezeSyncUntil) return;
@@ -175,32 +177,33 @@
   // Preferable wall pick for placing openings near cursor, robust to overlaps.
   function plan2dFindPlacementWall(p, tolPx){
     try{
-      var els = __plan2d.elements||[]; var bestIdx=-1;
+      var els = __plan2d.elements || [];
+      var bestIdx = -1;
       var tolW = plan2dWorldTolForPixels(typeof tolPx==='number'? tolPx : 18);
-      var bestPenalty=Infinity, bestDist=Infinity, bestLen=0;
+      var bestPenalty = Infinity, bestDist = Infinity, bestLen = 0;
       for(var i=0;i<els.length;i++){
         var w = els[i]; if(!w || w.type!=='wall') continue;
-        var dx=w.x1-w.x0, dy=w.y1-w.y0; var len=Math.hypot(dx,dy)||1;
-        // distance point -> segment centerline
-        var denom=(dx*dx+dy*dy)||1; var t=((p.x-w.x0)*dx+(p.y-w.y0)*dy)/denom; t=Math.max(0,Math.min(1,t));
-        var cx=w.x0+t*dx, cy=w.y0+t*dy; var d=Math.hypot(p.x-cx, p.y-cy);
-        if(d > tolW) continue;
-        // Penalty if placing near an existing opening midpoint on this wall (avoid stacking on overlaps)
-        var penalty = 0; var openingsNear=0;
-        for(var j=0;j<els.length;j++){
-          var e=els[j]; if(!e) continue;
-          if((e.type==='window'||e.type==='door') && typeof e.host==='number' && e.host===i){
-            var a=Math.min(e.t0||0,e.t1||0), b=Math.max(e.t0||0,e.t1||0); var mid=(a+b)/2; if(Math.abs(mid - t) < 0.08) { openingsNear++; }
+        var dx = w.x1 - w.x0, dy = w.y1 - w.y0; var len = Math.hypot(dx,dy) || 1;
+        var denom = (dx*dx + dy*dy) || 1;
+        var t = ((p.x - w.x0)*dx + (p.y - w.y0)*dy) / denom; t = Math.max(0, Math.min(1, t));
+        var cx = w.x0 + t*dx, cy = w.y0 + t*dy;
+        var d = Math.hypot(p.x - cx, p.y - cy);
+        if (d > tolW) continue;
+        var openingsNear = 0;
+        for (var j=0;j<els.length;j++){
+          var e = els[j]; if(!e) continue;
+          if ((e.type==='window' || e.type==='door') && typeof e.host==='number' && e.host===i){
+            var a = Math.min(e.t0||0, e.t1||0), b = Math.max(e.t0||0, e.t1||0); var mid = (a+b)/2;
+            if (Math.abs(mid - t) < 0.08) openingsNear++;
           }
         }
-        penalty += openingsNear; // integer
-        // Tie-breakers: smaller distance, then longer wall for stability
-        if(penalty < bestPenalty || (penalty===bestPenalty && (d<bestDist || (Math.abs(d-bestDist)<1e-6 && len>bestLen)))){
-          bestPenalty=penalty; bestDist=d; bestIdx=i; bestLen=len;
+        var penalty = openingsNear;
+        if (penalty < bestPenalty || (penalty === bestPenalty && (d < bestDist || (Math.abs(d-bestDist) < 1e-6 && len > bestLen)))){
+          bestPenalty = penalty; bestDist = d; bestIdx = i; bestLen = len;
         }
       }
-      return (bestIdx>=0)? { index: bestIdx, dist: bestDist } : null;
-    }catch(_e){ return null; }
+      return (bestIdx >= 0) ? { index: bestIdx, dist: bestDist } : null;
+    } catch(_e){ return null; }
   }
   window.plan2dFindPlacementWall = window.plan2dFindPlacementWall || plan2dFindPlacementWall;
 

@@ -11,6 +11,7 @@
     // Hide roof dropdown/controls while modal is open
     var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.classList.add('is-hidden');
     var roofControls = document.getElementById('roof-controls'); if (roofControls) roofControls.classList.remove('visible');
+    try { populateInfoControls(); } catch(e) { console.warn('populateInfoControls failed', e); }
     modal.classList.add('visible');
   };
   window.hideInfo = function(){
@@ -118,4 +119,97 @@
     try { document.execCommand('copy'); setStatus('URL copied'); }
     catch(e){ if(navigator.clipboard){ navigator.clipboard.writeText(input.value).then(function(){ setStatus('URL copied'); }).catch(function(){ setStatus('Copy failed'); }); } }
   };
+
+  // Dynamically populate the Info modal with current control + shortcut documentation.
+  function populateInfoControls(){
+    var body = document.getElementById('info-body'); if(!body) return;
+    // Avoid rebuilding if already populated during this open cycle (optional)
+    if (body.__populatedOnce) return; // comment out this line to always rebuild
+    var isMac = /Mac|iPhone|iPad/.test(navigator.platform || '') || /Mac OS/.test(navigator.userAgent || '');
+    var MOD = isMac ? 'Cmd' : 'Ctrl';
+    var redoKeys = isMac ? 'Shift+'+MOD+'+Z' : MOD+'+Y / Shift+'+MOD+'+Z';
+    var html = '';
+    function section(title, listHtml){
+      html += '<section><h3 class="info-section-title">'+title+'</h3><ul class="info-list">'+listHtml+'</ul></section>';
+    }
+    function li(txt){ return '<li>'+txt+'</li>'; }
+    // Camera / Navigation
+    section('Camera & Navigation',
+      li('<strong>Drag (empty space)</strong>: Orbit camera')+
+      li('<strong>Shift + Drag</strong>: Pan camera')+
+      li('<strong>Mouse Wheel</strong>: Zoom in/out')+
+      li('<strong>Compass</strong>: Shows North; click & drag (if enabled) to re-orient')
+    );
+    // Main Toolbar & Menus
+    section('Toolbar & Menus',
+      li('<strong>+ Add Room</strong>: Insert new rectangular room (resize by dragging colored handles)')+
+      li('<strong>Render: Lines/Solid</strong>: Toggle free-standing walls between outline and 300mm thickness')+
+      li('<strong>Level Menu</strong>: Switch floors or add components (+ Stairs, + Pergola, + Garage, + Roof, + Pool, + Balcony)')+
+      li('<strong>Main Menu › Information</strong>: Open this help panel')+
+      li('<strong>Main Menu › Reset</strong>: Reset entire project (confirmation)')+
+      li('<strong>Main Menu › Price</strong>: Open pricing breakdown')+
+      li('<strong>Export</strong>: OBJ (3D), PDF (views), JSON (project), DXF/DWG (floorplan)')+
+      li('<strong>Import</strong>: OBJ, PDF/SVG/DXF/DWG floorplans, JSON (project)')
+    );
+    // 3D Editing
+    section('3D Object Editing',
+      li('<strong>Select</strong>: Click any room/component/furniture to select; label shows Edit / 360° buttons when applicable')+
+      li('<strong>Edit</strong>: Opens the Room Palette for furniture management (rooms only)')+
+      li('<strong>360° Button</strong>: Rotates selected roof, stairs, garage, balcony, pergola, furniture by 45° each click')+
+      li('<strong>Resize Handles</strong>: Drag X (width), Z (depth), Y (height where present)')+
+      li('<strong>Measurements Panel</strong>: Precise edits (name, size, position); click Save to apply')+
+      li('<strong>Arrow Keys (selected object)</strong>: Nudge by 0.1m; hold Shift for 1.0m steps; automatic history coalescing for rapid nudges')
+    );
+    // Components specifics
+    section('Components',
+      li('<strong>Stairs</strong>: Added once; rotate with 360°; positioned like other components')+
+      li('<strong>Roof</strong>: Add via Level Menu; rotate with 360°; style via Roof Type dropdown (if present)')+
+      li('<strong>Garage / Pergola / Pool / Balcony</strong>: Added from Level Menu; place & resize similar to rooms (subject to constraints)')
+    );
+    // Room Palette (Furniture)
+    section('Room Palette (Furniture)',
+      li('<strong>Preview Canvas</strong>: Orbit with drag; items show scaled representation')+
+      li('<strong>Add to Room</strong>: Commits preview items to selected room')+
+      li('<strong>Clear</strong>: Removes preview items only (keeps existing room furniture)')+
+      li('<strong>Rotation</strong>: Use 360° after placement for supported furniture types')
+    );
+    // 2D Floor Plan Editor
+    section('2D Floor Plan Editor',
+      li('<strong>Open</strong>: Floor Plan button in main toolbar')+
+      li('<strong>Select Tool</strong>: Click elements (walls / doors / windows); Delete removes; Arrow keys nudge (Shift faster, Alt finer)')+
+      li('<strong>Wall Tool</strong>: Click-drag to draw axis-aligned segments; Shift-click to chain; Enter / double-click to finish loop')+
+      li('<strong>Window / Door Tools</strong>: Click a wall to place; drag endpoints to size; dropdowns set type / swing / hinge')+
+      li('<strong>Erase Tool</strong>: Click to remove element under cursor')+
+      li('<strong>Fit</strong>: Auto-fit current drawing to viewport')+
+      li('<strong>Flip Y</strong>: Mirror vertical axis to match 3D orientation')+
+      li('<strong>Clear</strong>: Remove all elements (confirmation)')+
+      li('<strong>Apply to 3D</strong>: Commit plan, close editor, update 3D scene')+
+      li('<strong>Floor Toggle</strong>: Switch Ground/First while editing')+
+      li('<strong>Pan</strong>: Hold Space + Drag')
+    );
+    // Keyboard shortcuts
+    section('Keyboard Shortcuts',
+      li('<strong>'+MOD+'+Z</strong>: Undo (up to ~60 steps)')+
+      li('<strong>'+redoKeys+'</strong>: Redo')+
+      li('<strong>Delete</strong>: Delete selected (3D object or 2D element)')+
+      li('<strong>Escape</strong>: Clear current selection')+
+      li('<strong>Arrow Keys</strong>: Nudge selection (3D: 0.1m / Shift 1.0m; 2D: grid units; Alt = finer in 2D)')+
+      li('<strong>Space + Drag</strong>: Pan (2D editor)')+
+      li('<strong>Enter</strong>: Finish current wall chain (2D)')
+    );
+    // History system
+    section('Undo / Redo History',
+      li('Automatic snapshot on: 3D drag end, arrow-key movement (coalesced), deletions, 2D edits, wall-strip moves')+
+      li('Rapid micro-movements are merged to keep history concise')+
+      li('Maximum stored steps: about 60 (older steps drop off)')
+    );
+    // Tips
+    section('Tips',
+      li('Use Solid wall render only when needed; Lines mode is faster for large scenes')+
+      li('Rotate roof early to align orientation before adding other components')+
+      li('Apply 2D plan frequently to sync and unlock precise 3D measurement edits')
+    );
+    body.innerHTML = html;
+    body.__populatedOnce = true;
+  }
 })();
