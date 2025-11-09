@@ -496,6 +496,8 @@
 
   /* Pricing modal remaining inline styles */
   #pricing-modal { display:none; position:fixed; inset:0; z-index:15000; align-items:center; justify-content:center; }
+  /* Ensure Pricing modal shows when JS toggles 'visible' */
+  #pricing-modal.visible { display:flex; }
   #pricing-content { position:relative; width:min(880px,95vw); max-height:calc(100vh - 40px); overflow:auto; background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); padding:24px; }
   .pricing-settings-row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin:8px 0 12px; padding:10px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; }
   .pricing-field-label { font-size:12px; color:#374151; display:flex; flex-direction:column; gap:4px; }

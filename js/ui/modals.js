@@ -196,6 +196,8 @@
     body.innerHTML = html;
     body.__populatedOnce = true;
   }
+  // Expose for embedded account view usage
+  window.populateInfoControls = populateInfoControls;
 
   // Reusable forwarded URL logic for both modal and account view
   async function fetchShareUrl(opts){
