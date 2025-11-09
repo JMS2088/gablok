@@ -480,8 +480,48 @@
       var spot=findFreeSpot(r); r.x=spot.x; r.z=spot.z;
       try { var s=applySnap({x:r.x,z:r.z,width:r.width,depth:r.depth,level:r.level,id:r.id,type:'room'}); r.x=s.x; r.z=s.z; } catch(_e) {}
       allRooms.push(r);
+      // Preserve current 2D center/scale so existing walls/rooms do not visually shift when we sync.
+      try {
+        if (window.__plan2d) {
+          __plan2d.__preserveCenterScaleOnAdd = true;
+          if (typeof __plan2d.centerX === 'number') __plan2d.__savedCenterX = __plan2d.centerX;
+          if (typeof __plan2d.centerZ === 'number') __plan2d.__savedCenterZ = __plan2d.centerZ;
+          if (typeof __plan2d.scale === 'number') __plan2d.__savedScale = __plan2d.scale;
+          // Mark recent addition for 2D label highlight pulse
+          __plan2d.__recentAddedRoomId = r.id;
+          __plan2d.__recentAddedAt = Date.now();
+        }
+      } catch(_ePreserve) {}
       // Sync 2D immediately so walls appear without needing manual refresh
       try { if (typeof populatePlan2DFromDesign==='function') { populatePlan2DFromDesign(); if (window.__plan2d && __plan2d.active && typeof plan2dDraw==='function') plan2dDraw(); } } catch(_e2d2) {}
+      // Ensure new room is visible without re-centering: gently pan if offscreen.
+      try {
+        if (window.__plan2d && __plan2d.active) {
+          var cEl = document.getElementById('plan2d-canvas');
+          if (cEl) {
+            var scale = __plan2d.scale || 50;
+            var dpr = window.devicePixelRatio || 1;
+            var w = cEl.width; var h = cEl.height;
+            // Compute screen position using current center & pan (mirror logic of worldToScreen2D).
+            var sx = (w/2) + ((__plan2d.panX||0) * scale) + ((r.x - (__plan2d.centerX||0)) * scale);
+            var sy = (h/2) - ((__plan2d.panY||0) * scale) - ((r.z - (__plan2d.centerZ||0)) * scale * (__plan2d.yFromWorldZSign||1));
+            var margin = 60 * dpr; // keep inside padded viewport
+            var needPan = false;
+            var targetPanX = __plan2d.panX || 0;
+            var targetPanY = __plan2d.panY || 0;
+            if (sx < margin) { targetPanX += (margin - sx)/scale; needPan = true; }
+            if (sx > w - margin) { targetPanX -= (sx - (w - margin))/scale; needPan = true; }
+            if (sy < margin) { targetPanY -= (margin - sy)/scale; needPan = true; }
+            if (sy > h - margin) { targetPanY += (sy - (h - margin))/scale; needPan = true; }
+            if (needPan) {
+              __plan2d.panX = targetPanX;
+              __plan2d.panY = targetPanY;
+            }
+          }
+        }
+      } catch(_ePan) {}
+      // Clear preservation flag after first sync so later explicit fit operations can proceed normally.
+      try { if (window.__plan2d && __plan2d.__preserveCenterScaleOnAdd) delete __plan2d.__preserveCenterScaleOnAdd; } catch(_clrFlag) {}
       if (typeof window.selectObject==='function') { window.selectObject(r.id, { noRender: true }); }
       else { selectedRoomId=r.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU) {} }
       updateStatus('Added room'); _needsFullRender=true; startRender();

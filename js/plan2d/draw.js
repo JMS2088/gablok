@@ -867,7 +867,7 @@
                 var bwR = Math.round(tWR + padXR*2), bhR = Math.round((baseFontPxCssRoom * __dprR) + padYR*2);
                 try { var cElR=document.getElementById('plan2d-canvas'); if(cElR){ var cwR=cElR.width||0, chR=cElR.height||0; bxR = Math.max(6, Math.min(bxR, Math.max(6, cwR - bwR - 6))); byR = Math.max(6, Math.min(byR, Math.max(6, chR - bhR - 6))); } } catch(e){}
                 // Defer drawing of room labels to the labels-2d layer and only keep one visible later
-                try { labelBoxes.push({ x: bxR, y: byR, w: bwR, h: bhR, text: labelTextR, a: 0.95, kind:'room', roomIndex: ir, area: Math.max(0,(rm.width||0)) * Math.max(0,(rm.depth||0)) }); } catch(_elb){}
+                try { labelBoxes.push({ x: bxR, y: byR, w: bwR, h: bhR, text: labelTextR, a: 0.95, kind:'room', roomIndex: ir, area: Math.max(0,(rm.width||0)) * Math.max(0,(rm.depth||0)), id: rm.id }); } catch(_elb){}
                 ctx.restore();
               }
             }
@@ -1133,6 +1133,59 @@
   var l2c = document.getElementById('labels-2d');
   var lx = l2c ? l2c.getContext('2d') : ox; // fallback to overlay if missing
   if (l2c) { lx.setTransform(1,0,0,1,0,0); lx.clearRect(0,0,l2c.width,l2c.height); }
+
+  // Draw room name labels on the labels-2d canvas using the collected boxes, with simple overlap culling
+  try {
+    if (__plan2d && Array.isArray(__plan2d.__labelBoxes2D) && lx){
+      var boxes = __plan2d.__labelBoxes2D.filter(function(b){ return b && b.kind==='room' && b.text; });
+      // Sort by area (desc) so larger rooms have priority
+      boxes.sort(function(a,b){ return (b.area||0) - (a.area||0); });
+      var placed = [];
+      var maxLabels = 40;
+      function intersects(a,b){ return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y); }
+      function roundedRect(ctx,x,y,w,h,r){ var rr=Math.min(r, Math.min(w,h)/2); ctx.beginPath(); ctx.moveTo(x+rr,y); ctx.lineTo(x+w-rr,y); ctx.quadraticCurveTo(x+w,y,x+w,y+rr); ctx.lineTo(x+w,y+h-rr); ctx.quadraticCurveTo(x+w,y+h,x+w-rr,y+h); ctx.lineTo(x+rr,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-rr); ctx.lineTo(x,y+rr); ctx.quadraticCurveTo(x,y,x+rr,y); ctx.closePath(); }
+      var dprL = window.devicePixelRatio || 1;
+      var recentId = (__plan2d && __plan2d.__recentAddedRoomId) ? __plan2d.__recentAddedRoomId : null;
+      var recentAgeMs = (__plan2d && __plan2d.__recentAddedAt) ? (Date.now() - __plan2d.__recentAddedAt) : Infinity;
+      for (var bi=0; bi<boxes.length && placed.length<maxLabels; bi++){
+        var b = boxes[bi];
+        // Skip if overlaps any already placed
+        var overlaps = false;
+        for (var pj=0; pj<placed.length; pj++){ if (intersects(b, placed[pj])) { overlaps = true; break; } }
+        if (overlaps) continue;
+        // Draw pill background
+        var radius = 19 * (window.devicePixelRatio||1);
+        lx.save();
+        // Slight drop shadow for readability
+        lx.shadowColor = 'rgba(2,6,23,0.35)';
+        lx.shadowBlur = 6 * dprL;
+        lx.shadowOffsetX = 0; lx.shadowOffsetY = 0;
+        // Highlight recent added room for ~1.2s with a subtle pulse
+        var isRecent = (recentId && b.id && b.id === recentId && recentAgeMs < 1200);
+        var alpha = Math.max(0.75, Math.min(1.0, b.a||0.95));
+        if (isRecent) {
+          var t = recentAgeMs / 1200; var pulse = 0.15 * Math.cos(t*Math.PI*2) + 0.2; // small pulse
+          alpha = Math.min(1.0, alpha + pulse);
+        }
+        lx.globalAlpha = alpha;
+        lx.fillStyle = '#ffffff';
+        roundedRect(lx, b.x, b.y, b.w, b.h, radius);
+        lx.fill();
+        // Text
+        lx.globalAlpha = 1.0;
+        lx.textAlign = 'center'; lx.textBaseline = 'middle';
+        var fontPx = 9 * dprL; // base font
+        lx.font = '600 ' + fontPx + 'px system-ui, sans-serif';
+        var avail = Math.max(0, b.w - (11*dprL)*2);
+        var tw = lx.measureText(b.text).width;
+        if (tw > avail && avail > 0){ var scale = avail / Math.max(1, tw); fontPx = Math.max(8*dprL, Math.floor(fontPx * scale)); lx.font = '600 ' + fontPx + 'px system-ui, sans-serif'; }
+        lx.fillStyle = '#111827';
+        lx.fillText(b.text, b.x + b.w/2, b.y + b.h/2 + 0.5);
+        lx.restore();
+        placed.push(b);
+      }
+    }
+  } catch(_lbl2d) { /* non-fatal label draw */ }
 
   // Overlays: Stairs indicator (both floors) + small labels
   var tOverlayStart = (performance&&performance.now)?performance.now():Date.now();

@@ -373,6 +373,13 @@ function populatePlan2DFromDesign(){
   // Now we derive center from current floor bounds (minX/maxX/minZ/maxZ) restricted to this level only.
   var cx = (isFinite(minX) && isFinite(maxX)) ? (minX + maxX) / 2 : gcx;
   var cz = (isFinite(minZ) && isFinite(maxZ)) ? (minZ + maxZ) / 2 : gcz;
+  // If a room was just added and we want to preserve the previous visual framing, keep existing center.
+  try {
+    if (window.__plan2d && __plan2d.__preserveCenterScaleOnAdd) {
+      if (isFinite(__plan2d.centerX)) cx = __plan2d.centerX;
+      if (isFinite(__plan2d.centerZ)) cz = __plan2d.centerZ;
+    }
+  } catch(_keepC) {}
   // Use rooms-only span to compute scale:
   // - If this floor has rooms, use them
   // - Else if any rooms exist globally, use global rooms (keep scale consistent across floors)
@@ -418,6 +425,8 @@ function populatePlan2DFromDesign(){
     if (isFinite(newScale) && newScale>0) {
       // Only update scale if not in userDrawingActive and not within freeze window
       var allowScaleUpdate = !(__plan2d && __plan2d.userDrawingActive) && !(__plan2d && __plan2d.freezeCenterScaleUntil && Date.now() < __plan2d.freezeCenterScaleUntil);
+      // Preserve scale on add if flag active
+      try { if (__plan2d.__preserveCenterScaleOnAdd) { allowScaleUpdate = false; newScale = __plan2d.scale; } } catch(_keepS) {}
       if(allowScaleUpdate) { __plan2d.scale = newScale; }
     }
   }
@@ -781,6 +790,8 @@ function populatePlan2DFromDesign(){
     } catch(_rt){ /* ignore */ }
     if (console && console.debug) console.debug('[PLAN2D POPULATE] end floor='+currentFloor+' elements=', window.__plan2dDiag.lastPopulateEnd.produced);
   } catch(_dbg1) {}
+  // Clear preservation flag after this populate so future resizes can occur normally
+  try { if (__plan2d && __plan2d.__preserveCenterScaleOnAdd) delete __plan2d.__preserveCenterScaleOnAdd; } catch(_clr) {}
   return true;
 }
 
