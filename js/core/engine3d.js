@@ -1659,6 +1659,22 @@
       } catch(_e) { return 1.0; }
     };
   }
+  // Shared helper: center Y used for labels/handles/hit-tests across object types
+  if (typeof window.getObjectCenterY === 'undefined') {
+    window.getObjectCenterY = function getObjectCenterY(o){
+      try {
+        if (!o) return 1.5;
+        if (o.type==='roof') { var b=(typeof o.baseHeight==='number'?o.baseHeight:3.0), h=(typeof o.height==='number'?o.height:1.0); return b + h*0.5; }
+        if (o.type==='pergola') { var th=(o.totalHeight!=null? o.totalHeight : (o.height||2.2)); return th*0.5; }
+        if (o.type==='balcony') { var lv=(o.level||0)*3.5; return lv + (o.height||3.0)*0.5; }
+        if (o.type==='garage') { return (o.height||2.6)*0.5; }
+        if (o.type==='pool') { return 0.3; }
+        if (o.type==='stairs') { return (o.height||3.0)*0.5; }
+        if (o.type==='furniture') { var e=Math.max(0, o.elevation||0); var lv2=(o.level||0)*3.5; return lv2 + e + (o.height||0.7)*0.5; }
+        var lvlY=(o.level||0)*3.5; return lvlY + (o.height!=null? o.height*0.5 : 1.5);
+      } catch(_e) { return (o && (o.level||0)*3.5 + 1.5) || 1.5; }
+    };
+  }
 
   // ---- Entrypoints ----
   // Startup helper: if 2D floorplan drafts exist in localStorage, apply them to 3D

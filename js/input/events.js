@@ -319,6 +319,63 @@
         return;
       }
 
+      // If not on a handle or wall strip, attempt direct object hit test so components (pergola, garage, roof, pool, balcony, stairs, furniture)
+      // can be selected and dragged without relying on the DOM label. This restores expected interaction parity.
+      // Hit test strategy: project object center and four footprint corners, build a convex quad in screen space, then
+      // check if mouse point lies inside (fallback: circle distance to center). Prefer nearest object within threshold.
+      function hitTestObjects(mxCss, myCss){
+        try {
+          var dpr = window.devicePixelRatio || 1; var mx = mxCss * dpr, my = myCss * dpr;
+          var candidates = [];
+          function consider(o){ if(!o) return; if (o.width==null || o.depth==null) return; candidates.push(o); }
+          (allRooms||[]).forEach(consider);
+          try { var scA = window.stairsComponents||[]; if(Array.isArray(scA) && scA.length) scA.forEach(consider); else if (stairsComponent) consider(stairsComponent); } catch(_sht){}
+          ['pergolaComponents','garageComponents','poolComponents','roofComponents','balconyComponents','furnitureItems'].forEach(function(k){ var arr=window[k]||[]; if(Array.isArray(arr)) arr.forEach(consider); });
+          var best=null, bestScore=Infinity;
+          for (var i=0;i<candidates.length;i++){
+            var o=candidates[i];
+            // Center Y from shared helper
+            var yMid = (typeof window.getObjectCenterY==='function') ? window.getObjectCenterY(o) : ((o.level||0)*3.5 + (o.height||3)/2);
+            var rot=((o.rotation||0)*Math.PI)/180;
+            var hw=(o.width||0)/2, hd=(o.depth||0)/2;
+            function corner(lx,lz){ var dx=lx, dz=lz; return { x:(o.x||0)+dx*Math.cos(rot)-dz*Math.sin(rot), z:(o.z||0)+dx*Math.sin(rot)+dz*Math.cos(rot) }; }
+            var c = project3D(o.x||0, yMid, o.z||0); if(!c) continue;
+            var p1=project3D(corner(-hw,-hd).x, yMid, corner(-hw,-hd).z);
+            var p2=project3D(corner(hw,-hd).x, yMid, corner(hw,-hd).z);
+            var p3=project3D(corner(hw,hd).x, yMid, corner(hw,hd).z);
+            var p4=project3D(corner(-hw,hd).x, yMid, corner(-hw,hd).z);
+            if (!(p1&&p2&&p3&&p4)) continue;
+            // Point-in-quad via barycentric subdivision (two triangles)
+            function ptInTri(pt,a,b,c){ var v0x=c.x-a.x,v0y=c.y-a.y,v1x=b.x-a.x,v1y=b.y-a.y,v2x=pt.x-a.x,v2y=pt.y-a.y; var den=v0x*v1y - v1x*v0y; if(Math.abs(den)<1e-6) return false; var u=(v2x*v1y - v1x*v2y)/den; var v=(v0x*v2y - v2x*v0y)/den; return (u>=0&&v>=0&&(u+v)<=1); }
+            var inside = ptInTri({x:mx,y:my}, p1,p2,p3) || ptInTri({x:mx,y:my}, p1,p3,p4);
+            if (!inside){
+              var dx=c.x-mx, dy=c.y-my; var dist2=dx*dx+dy*dy; var rad=(Math.max(p1.x,p2.x,p3.x,p4.x)-Math.min(p1.x,p2.x,p3.x,p4.x))*0.5; // rough footprint size in screen px
+              if (dist2 > (rad*rad)) continue; // outside loose circle
+              // keep but apply penalty factor so true hits rank earlier
+            }
+            var areaApprox = Math.abs((p2.x-p1.x)*(p3.y-p1.y) - (p2.y-p1.y)*(p3.x-p1.x));
+            var dxC=c.x-mx, dyC=c.y-my; var score = dxC*dxC+dyC*dyC + areaApprox*0.0005; // favor nearer + smaller footprint
+            if (score < bestScore){ bestScore=score; best=o; }
+          }
+          return best;
+        } catch(_eHT){ return null; }
+      }
+
+      var hitObj = hitTestObjects(mouseX, mouseY);
+      if (hitObj){
+        // Select object
+        if (typeof window.selectObject==='function') window.selectObject(hitObj.id, { noRender: true }); else { selectedRoomId = hitObj.id; }
+        // Start drag immediately (center drag) for move
+        mouse.dragType = (hitObj.type==='roof'||hitObj.type==='garage'||hitObj.type==='pool'||hitObj.type==='balcony'||hitObj.type==='pergola'||hitObj.type==='stairs'||hitObj.type==='furniture') ? hitObj.type : 'room';
+        mouse.dragInfo = { roomId: hitObj.id, startX: e.clientX, startY: e.clientY, originalX: hitObj.x, originalZ: hitObj.z };
+        mouse.down = true;
+        window.__dragging3DRoom = true; try { window.__activelyDraggedRoomId = hitObj.id; } catch(_adH) {}
+        canvas.style.cursor = 'grabbing';
+        updateStatus((hitObj.name||hitObj.type||'Item') + ' selected');
+        renderLoop();
+        return;
+      }
+
       mouse.down = true;
       mouse.lastX = e.clientX;
       mouse.lastY = e.clientY;
