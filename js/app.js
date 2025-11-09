@@ -315,7 +315,7 @@ var __fp = {
 
 function openFloorplanModal(opts){
   var m = document.getElementById('floorplan-modal'); if (!m) return;
-  m.style.display = 'flex';
+  m.classList.add('visible');
   __fp.active = true;
   __fp.pdf = opts.pdf || null;
   __fp.page = opts.page || null;
@@ -346,7 +346,7 @@ function openFloorplanModal(opts){
 }
 
 function closeFloorplanModal(){
-  var m = document.getElementById('floorplan-modal'); if (m) m.style.display = 'none';
+  var m = document.getElementById('floorplan-modal'); if (m) m.classList.remove('visible');
   __fp.active = false;
   // remove listeners if any
   unbindFloorplanUI();

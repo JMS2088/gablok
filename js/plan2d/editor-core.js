@@ -33,6 +33,28 @@
     };
   }
 
+  // Incremental redraw dirty rectangle helpers ---------------------------------
+  // Merge a world-space bbox {minX,minY,maxX,maxY} into the current dirtyRect and flag incremental draw.
+  function plan2dMarkDirty(minX, minY, maxX, maxY){
+    try {
+      if(minX>maxX){ var t=minX; minX=maxX; maxX=t; }
+      if(minY>maxY){ var t2=minY; minY=maxY; maxY=t2; }
+      var dr = __plan2d.dirtyRect;
+      if(!dr){ __plan2d.dirtyRect = {minX:minX, minY:minY, maxX:maxX, maxY:maxY}; }
+      else {
+        dr.minX = Math.min(dr.minX, minX);
+        dr.maxX = Math.max(dr.maxX, maxX);
+        dr.minY = Math.min(dr.minY, minY);
+        dr.maxY = Math.max(dr.maxY, maxY);
+      }
+      __plan2d.__incremental = true;
+    }catch(_md){ /* non-fatal */ }
+  }
+  window.plan2dMarkDirty = window.plan2dMarkDirty || plan2dMarkDirty;
+
+  function plan2dResetDirty(){ try{ __plan2d.dirtyRect=null; __plan2d.__incremental=false; }catch(_rd){} }
+  window.plan2dResetDirty = window.plan2dResetDirty || plan2dResetDirty;
+
   // Draft persistence ------------------------------------------------------
   if(!window.__plan2dDrafts) window.__plan2dDrafts = {};
   function loadPlan2dDraftsFromStorage(){
@@ -103,10 +125,30 @@
       if(typeof __plan2d.autoFitEnabled==='undefined' || __plan2d.autoFitEnabled===true){ __plan2d.autoFitEnabled=false; }
     } catch(_v){}
     // optional non-destructive 3D sync, guarded to avoid spam during drags
+    // Debounced lightweight 3D sync to prevent flooding during rapid edits
     try {
       if(Date.now() < __plan2d.freezeSyncUntil) return;
-      if(typeof window.applyPlan2DTo3D === 'function'){
-        window.applyPlan2DTo3D(undefined,{allowRooms:true,quiet:true,level:(typeof window.currentFloor==='number'? window.currentFloor:0),nonDestructive:true});
+      var now = Date.now();
+      var nextAllowed = (__plan2d.__next3DSync||0);
+      var SYNC_INTERVAL = 250; // ms debounce window
+      if (now >= nextAllowed) {
+        __plan2d.__next3DSync = now + SYNC_INTERVAL;
+        if(typeof window.applyPlan2DTo3D === 'function'){
+          window.applyPlan2DTo3D(undefined,{allowRooms:true,quiet:true,level:(typeof window.currentFloor==='number'? window.currentFloor:0),nonDestructive:true});
+        }
+      } else {
+        // Schedule a trailing sync if one isn't already queued
+        if(!__plan2d.__syncPending){
+          __plan2d.__syncPending = true;
+          setTimeout(function(){
+            try {
+              __plan2d.__syncPending = false;
+              if(typeof window.applyPlan2DTo3D === 'function'){
+                window.applyPlan2DTo3D(undefined,{allowRooms:true,quiet:true,level:(typeof window.currentFloor==='number'? window.currentFloor:0),nonDestructive:true});
+              }
+            } catch(_ts){}
+          }, Math.max(40, nextAllowed - now));
+        }
       }
     } catch(e){}
   }
@@ -338,6 +380,28 @@
   function plan2dCursor(){ var c=document.getElementById('plan2d-canvas'); if(!c) return; c.style.cursor = (__plan2d.tool==='erase')? 'not-allowed' : (__plan2d.tool==='select' ? 'pointer' : 'crosshair'); plan2dUpdateActiveButtons(); }
   window.plan2dCursor = window.plan2dCursor || plan2dCursor;
 
+  // Centralized tool switching so all code paths (UI and programmatic) keep consistent state.
+  function plan2dSetTool(tool){
+    try{
+      if(!tool) return;
+      var prev = __plan2d.tool;
+      if(prev === tool){ plan2dCursor(); plan2dDraw && plan2dDraw(); return; }
+      __plan2d.tool = tool;
+      // Leaving Wall: clear any in-progress chain so guides don't linger
+      if(prev === 'wall' && tool !== 'wall'){
+        __plan2d.chainActive = false; __plan2d.chainPoints = []; __plan2d.userDrawingActive=false;
+      }
+      // Entering Wall fresh: ensure clean start and show hint on first point
+      if(tool === 'wall' && prev !== 'wall'){
+        __plan2d.chainActive = false; __plan2d.chainPoints = []; __plan2d.userDrawingActive=false;
+        __plan2d.__showWallHintNext = true; // display a small hint when the chain actually starts
+      }
+      plan2dCursor();
+      plan2dDraw && plan2dDraw();
+    }catch(_st){}
+  }
+  window.plan2dSetTool = window.plan2dSetTool || plan2dSetTool;
+
   // Event binding ----------------------------------------------------------
   function plan2dBind(){ var c=document.getElementById('plan2d-canvas'); if(!c) return; if(window.__plan2dResize) return; // already bound
     window.__plan2dResize = function(){
@@ -454,6 +518,10 @@
           __plan2d.chainActive=true; __plan2d.chainPoints=[pt];
           // Mark user drawing session start: suppress population recentering/auto-fit while actively placing walls
           __plan2d.userDrawingActive = true;
+          // UX hint: only on the first point after switching into Wall
+          try{
+            if(__plan2d.__showWallHintNext){ __plan2d.__showWallHintNext=false; if(typeof updateStatus==='function'){ updateStatus('New wall: click to add points (Enter, double-click, or right-click to finish)'); } }
+          }catch(_hint){}
         } else {
           var prev = __plan2d.chainPoints[__plan2d.chainPoints.length-1];
           if(prev){
@@ -559,13 +627,44 @@
       // Window/door endpoint dragging: update t0/t1 while dragging
       if(__plan2d.dragWindow){
         try{
-          var dw = __plan2d.dragWindow; var we = __plan2d.elements[dw.index]; if(we && we.type==='window' && typeof we.host==='number'){ var host = __plan2d.elements[we.host]; if(host && host.type==='wall'){ var t = (typeof plan2dProjectParamOnWall==='function') ? plan2dProjectParamOnWall(p, host) : 0.5; if(dw.end==='t0' || dw.end==='a' || dw.end==='t0'){ we.t0 = Math.max(0, Math.min(1, t)); } else { we.t1 = Math.max(0, Math.min(1, t)); } if(we.t1 < we.t0){ var tmp=we.t0; we.t0=we.t1; we.t1=tmp; dw.end = (dw.end==='t0'?'t1':'t0'); } plan2dDraw(); } }
+          var dw = __plan2d.dragWindow; var we = __plan2d.elements[dw.index]; if(we && we.type==='window' && typeof we.host==='number'){ var host = __plan2d.elements[we.host]; if(host && host.type==='wall'){ var t = (typeof plan2dProjectParamOnWall==='function') ? plan2dProjectParamOnWall(p, host) : 0.5; var prevT0 = we.t0, prevT1 = we.t1; if(dw.end==='t0' || dw.end==='a' || dw.end==='t0'){ we.t0 = Math.max(0, Math.min(1, t)); } else { we.t1 = Math.max(0, Math.min(1, t)); } if(we.t1 < we.t0){ var tmp=we.t0; we.t0=we.t1; we.t1=tmp; dw.end = (dw.end==='t0'?'t1':'t0'); }
+            // Dirty region: span endpoints (old + new) projected to world along host wall
+            try{
+              var wallLen = Math.hypot(host.x1-host.x0, host.y1-host.y0)||1;
+              function spanPoint(tVal){ return { x: host.x0 + (host.x1-host.x0)*tVal, y: host.y0 + (host.y1-host.y0)*tVal }; }
+              var aPrev = spanPoint(Math.max(0,Math.min(1,prevT0)));
+              var bPrev = spanPoint(Math.max(0,Math.min(1,prevT1)));
+              var aNow  = spanPoint(Math.max(0,Math.min(1,we.t0)));
+              var bNow  = spanPoint(Math.max(0,Math.min(1,we.t1)));
+              var pad = (__plan2d.wallThicknessM||0.3) * 1.2; // expand slightly beyond wall thickness
+              var minX = Math.min(aPrev.x,bPrev.x,aNow.x,bNow.x) - pad;
+              var maxX = Math.max(aPrev.x,bPrev.x,aNow.x,bNow.x) + pad;
+              var minY = Math.min(aPrev.y,bPrev.y,aNow.y,bNow.y) - pad;
+              var maxY = Math.max(aPrev.y,bPrev.y,aNow.y,bNow.y) + pad;
+              plan2dMarkDirty(minX,minY,maxX,maxY);
+            }catch(_dwin){}
+            plan2dDraw(); } }
         }catch(_dwMove){}
         return;
       }
       if(__plan2d.dragDoor){
         try{
-          var ddw = __plan2d.dragDoor; var de = __plan2d.elements[ddw.index]; if(de && de.type==='door' && typeof de.host==='number'){ var hostD = __plan2d.elements[de.host]; if(hostD && hostD.type==='wall'){ var t2 = (typeof plan2dProjectParamOnWall==='function') ? plan2dProjectParamOnWall(p, hostD) : 0.5; if(ddw.end==='t0' || ddw.end==='a' || ddw.end==='t0'){ de.t0 = Math.max(0, Math.min(1, t2)); } else { de.t1 = Math.max(0, Math.min(1, t2)); } if(de.t1 < de.t0){ var tmp2=de.t0; de.t0=de.t1; de.t1=tmp2; ddw.end = (ddw.end==='t0'?'t1':'t0'); } plan2dDraw(); } }
+          var ddw = __plan2d.dragDoor; var de = __plan2d.elements[ddw.index]; if(de && de.type==='door' && typeof de.host==='number'){ var hostD = __plan2d.elements[de.host]; if(hostD && hostD.type==='wall'){ var t2 = (typeof plan2dProjectParamOnWall==='function') ? plan2dProjectParamOnWall(p, hostD) : 0.5; var prevT0d = de.t0, prevT1d = de.t1; if(ddw.end==='t0' || ddw.end==='a' || ddw.end==='t0'){ de.t0 = Math.max(0, Math.min(1, t2)); } else { de.t1 = Math.max(0, Math.min(1, t2)); } if(de.t1 < de.t0){ var tmp2=de.t0; de.t0=de.t1; de.t1=tmp2; ddw.end = (ddw.end==='t0'?'t1':'t0'); }
+            // Dirty region for door span change
+            try{
+              function spanPointD(tVal){ return { x: hostD.x0 + (hostD.x1-hostD.x0)*tVal, y: hostD.y0 + (hostD.y1-hostD.y0)*tVal }; }
+              var aPrevD = spanPointD(Math.max(0,Math.min(1,prevT0d)));
+              var bPrevD = spanPointD(Math.max(0,Math.min(1,prevT1d)));
+              var aNowD  = spanPointD(Math.max(0,Math.min(1,de.t0)));
+              var bNowD  = spanPointD(Math.max(0,Math.min(1,de.t1)));
+              var padD = (__plan2d.wallThicknessM||0.3) * 1.4;
+              var minXD = Math.min(aPrevD.x,bPrevD.x,aNowD.x,bNowD.x) - padD;
+              var maxXD = Math.max(aPrevD.x,bPrevD.x,aNowD.x,bNowD.x) + padD;
+              var minYD = Math.min(aPrevD.y,bPrevD.y,aNowD.y,bNowD.y) - padD;
+              var maxYD = Math.max(aPrevD.y,bPrevD.y,aNowD.y,bNowD.y) + padD;
+              plan2dMarkDirty(minXD,minYD,maxXD,maxYD);
+            }catch(_ddirty){}
+            plan2dDraw(); } }
         }catch(_ddMove){}
         return;
       }
@@ -588,12 +687,21 @@
             __plan2d.dragGuide.value = plan2dSnap(wy);
             __plan2d.guidesH[__plan2d.dragGuide.index] = __plan2d.dragGuide.value;
           }
+          // Mark a thin dirty column/row around the moved guide for incremental redraw
+          try {
+            var padGuide = 0.25; // meters
+            if(__plan2d.dragGuide.dir==='v'){
+              var gx = __plan2d.dragGuide.value; plan2dMarkDirty(gx-padGuide, -1e6, gx+padGuide, 1e6);
+            } else {
+              var gy = __plan2d.dragGuide.value; plan2dMarkDirty(-1e6, gy-padGuide, 1e6, gy+padGuide);
+            }
+          }catch(_gdirty){}
           plan2dDraw();
         }catch(_gdrag){}
         return;
       }
       // Panning when dragging on empty space with Select tool
-      if(__plan2d.panning){ var s=__plan2d.panning.scale||(__plan2d.scale||50); var dx=cx-__plan2d.panning.mx; var dy=cy-__plan2d.panning.my; __plan2d.panX = (__plan2d.panning.panX0||0) + dx/Math.max(1e-6,s); __plan2d.panY = (__plan2d.panning.panY0||0) - dy/Math.max(1e-6,s); plan2dDraw(); return; }
+  if(__plan2d.panning){ var s=__plan2d.panning.scale||(__plan2d.scale||50); var dx=cx-__plan2d.panning.mx; var dy=cy-__plan2d.panning.my; __plan2d.panX = (__plan2d.panning.panX0||0) + dx/Math.max(1e-6,s); __plan2d.panY = (__plan2d.panning.panY0||0) - dy/Math.max(1e-6,s); plan2dResetDirty(); plan2dDraw(); return; }
       // Dragging a wall endpoint
       if(__plan2d.dragWall){
         try {
@@ -753,8 +861,11 @@
   if(!window.__plan2dKeydown){ window.__plan2dKeydown=function(ev){ if(!__plan2d.active) return; 
     // Spacebar hold => temporary pan mode (do not toggle repeatedly on auto-repeat)
     if(ev.code==='Space'){ if(!__plan2d.spacePanActive){ __plan2d.spacePanActive=true; try{ var cEl=document.getElementById('plan2d-canvas'); if(cEl) cEl.style.cursor='grab'; }catch(_){} } ev.preventDefault(); ev.stopPropagation(); }
-    // Toggle performance HUD with 'P'
-    if(ev.key==='p' || ev.key==='P'){ __plan2d.perfHUD = !__plan2d.perfHUD; try{ plan2dDraw(); }catch(_){} ev.preventDefault(); ev.stopPropagation(); return; }
+    // Toggle performance HUD with 'P' (Shift+P toggles extended HUD)
+    if(ev.key==='p' || ev.key==='P'){
+      if(ev.shiftKey){ __plan2d.perfHUDExt = !__plan2d.perfHUDExt; if(__plan2d.perfHUDExt){ __plan2d.perfHUD = true; } try{ plan2dDraw(); }catch(_){} ev.preventDefault(); ev.stopPropagation(); return; }
+      __plan2d.perfHUD = !__plan2d.perfHUD; try{ plan2dDraw(); }catch(_){} ev.preventDefault(); ev.stopPropagation(); return;
+    }
     if(__plan2d.tool==='wall' && __plan2d.chainActive){ if(ev.key==='Enter'){ plan2dFinalizeChain(); ev.preventDefault(); ev.stopPropagation(); return; } if(ev.key==='Escape'){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return; } }
     if(ev.key==='Delete' || ev.key==='Backspace'){ 
       // Delete selected guide first if any
@@ -855,7 +966,7 @@
         // If there's content, fit to content; otherwise just draw the empty grid and set tool to wall
         var hasContent = Array.isArray(__plan2d.elements) && __plan2d.elements.length>0;
         if(hasContent){ plan2dFitViewToContent(40); }
-        else { __plan2d.tool='wall'; }
+        else { if(typeof plan2dSetTool==='function') plan2dSetTool('wall'); else __plan2d.tool='wall'; }
         plan2dDraw && plan2dDraw();
       }catch(_fit){}
       // Scale label refresh

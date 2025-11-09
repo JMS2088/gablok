@@ -155,7 +155,7 @@
   }
   window.showPricing = function(){
     var modal = document.getElementById('pricing-modal'); if (!modal) return;
-    var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.style.display = 'none';
+  var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.classList.add('is-hidden');
     var slabMmEl = document.getElementById('pricing-slab-mm');
     var soilM3El = document.getElementById('pricing-soil-per-m3');
     if (slabMmEl) slabMmEl.value = Math.round(((window.PRICING && PRICING.slabThicknessM) || 0.1) * 1000);
@@ -172,10 +172,10 @@
       renderPricingBreakdown();
     };
     renderPricingBreakdown();
-    modal.style.display = 'block';
+  modal.classList.add('visible');
   };
   window.hidePricing = function(){
-    var modal = document.getElementById('pricing-modal'); if (modal) modal.style.display = 'none';
-    var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.style.display = 'block';
+  var modal = document.getElementById('pricing-modal'); if (modal) modal.classList.remove('visible');
+  var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.classList.remove('is-hidden');
   };
 })();

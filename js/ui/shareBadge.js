@@ -21,18 +21,6 @@
     if (!wrap){
       wrap = document.createElement('div');
       wrap.id = 'share-badge';
-      wrap.style.display = 'inline-flex';
-      wrap.style.alignItems = 'center';
-      wrap.style.gap = '6px';
-      wrap.style.marginLeft = '8px';
-      wrap.style.padding = '4px 8px';
-      wrap.style.border = '1px solid #e5e7eb';
-      wrap.style.borderRadius = '8px';
-      wrap.style.background = '#ffffff';
-      wrap.style.font = '12px system-ui, sans-serif';
-      wrap.style.whiteSpace = 'normal';
-      wrap.style.maxWidth = '70vw';
-      wrap.style.flexWrap = 'wrap';
       var icon = document.createElement('span');
       icon.textContent = '🔗';
       icon.setAttribute('aria-hidden','true');
@@ -40,11 +28,6 @@
       link.id = 'share-badge-link';
       link.href = '#';
       link.textContent = 'Share';
-      link.style.color = '#1f2937';
-      link.style.textDecoration = 'none';
-      link.style.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
-      link.style.fontSize = '12px';
-      link.style.overflowWrap = 'anywhere';
       link.target = '_blank'; link.rel = 'noopener';
       wrap.appendChild(icon);
       wrap.appendChild(link);

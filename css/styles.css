@@ -1,4 +1,14 @@
-  :root { --btn-gap: 12px; }
+  :root {
+    --btn-gap: 12px;
+    --transition-fast: 120ms;
+    --label-btn-font-size: 10px;
+    --label-btn-height: 24px;
+    --label-btn-radius: 12px;
+    --roof-rotate-size: 32px;
+  }
+  /* Utility visibility classes */
+  .is-hidden { display: none !important; }
+  .is-invisible { visibility: hidden !important; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; font-family: system-ui, sans-serif; background:#ffffff; }
   
@@ -213,7 +223,7 @@
     background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
     padding: 15px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);
     min-width: 200px; width: 340px; font-family: monospace; font-size: 12px;
-    display: block;
+    display: none;
   }
 
   /* 2D plan right-side overlay: match main controls container (transparent, no panel) */
@@ -257,6 +267,9 @@
   #plan2d-window-type,
   #plan2d-door-swing,
   #plan2d-door-hinge { display: none; }
+  #plan2d-window-type.visible,
+  #plan2d-door-swing.visible,
+  #plan2d-door-hinge.visible { display: inline-block; }
 
   /* 2D plan top-right toolbar: 35px from top/right, styles in CSS not inline */
   #plan2d-toolbar-right {
@@ -364,6 +377,18 @@
 
   /* Hidden file inputs */
   #upload-file, #upload-obj-file, #upload-pdf-floorplan, #upload-svg-floorplan, #upload-dxf-floorplan, #upload-dwg-floorplan { display: none; }
+  /* Share badge styles moved from JS */
+  #share-badge {
+    display:inline-flex; align-items:center; gap:6px; margin-left:8px;
+    padding:4px 8px; border:1px solid #e5e7eb; border-radius:8px;
+    background:#ffffff; font:12px system-ui, sans-serif; white-space: normal;
+    max-width:70vw; flex-wrap: wrap;
+  }
+  #share-badge-link {
+    color:#1f2937; text-decoration:none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size:12px; overflow-wrap:anywhere;
+  }
 
   /* 2D Page shell */
   #plan2d-page { display:none; position:fixed; inset:0; z-index:12000; }
@@ -399,6 +424,33 @@
   #reset-desc { font-size:15px; color:#6b7280; line-height:1.6; }
   #reset-actions { display:flex; gap:12px; }
   #reset-cancel-btn { flex:1; padding:12px; font-size:15px; font-weight:600; }
+  
+  /* Debug overlay (migrated from JS inline) */
+  .debug-overlay { position:fixed; top:8px; left:8px; z-index:99999; background:rgba(0,0,0,0.75); color:#fff; font:12px/1.35 monospace; padding:8px 10px; border-radius:8px; pointer-events:none; }
+
+  /* =====================
+    Loading overlay (migrated from inline <style> in index.html)
+    ===================== */
+  #loading-overlay { position:fixed; inset:0; background:linear-gradient(135deg,#0a0e1a 0%,#1a1f35 100%); color:#e2e8f0; display:flex; align-items:center; justify-content:center; z-index:10000; transition:opacity 0.8s ease; animation:fadeIn 0.6s ease; }
+  #loading-overlay.hide { opacity:0; pointer-events:none; }
+  @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
+  @keyframes slideUp { from{opacity:0; transform:translateY(30px);} to{opacity:1; transform:translateY(0);} }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.6;} }
+  @keyframes shimmer { 0%{background-position:-1000px 0;} 100%{background-position:1000px 0;} }
+  #loading-card { width:min(520px,90vw); padding:40px 32px; background:rgba(255,255,255,0.05); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 100px rgba(0,122,204,0.1); animation:slideUp 0.8s ease; }
+  #loading-title { font-size:32px; font-weight:700; margin-bottom:8px; letter-spacing:1px; text-align:center; background:linear-gradient(135deg,#60a5fa,#3b82f6,#2563eb); background-size:200% 200%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; animation:shimmer 3s ease infinite; }
+  #loading-subtitle { font-size:14px; color:#94a3b8; text-align:center; margin-bottom:32px; font-weight:400; }
+  #loading-bar { width:100%; height:8px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; border:1px solid rgba(255,255,255,0.1); position:relative; }
+  #loading-bar-inner { height:100%; width:0%; background:linear-gradient(90deg,#3b82f6,#60a5fa,#3b82f6); background-size:200% 100%; animation:shimmer 2s linear infinite; transition:width 0.4s cubic-bezier(0.4,0,0.2,1); border-radius:999px; box-shadow:0 0 20px rgba(59,130,246,0.5); }
+  #loading-text { margin-top:16px; font-size:13px; color:#cbd5e1; text-align:center; animation:pulse 2s ease infinite; }
+  #loading-list { margin-top:24px; display:flex; flex-direction:column; gap:12px; }
+  #loading-continue { display:none; margin-top:24px; align-self:center; padding:10px 24px; border:1px solid rgba(59,130,246,0.5); border-radius:8px; background:rgba(59,130,246,0.1); color:#60a5fa; cursor:pointer; font-weight:600; transition:all 0.3s ease; }
+  #loading-continue:hover { background:rgba(59,130,246,0.2); border-color:#60a5fa; box-shadow:0 0 20px rgba(59,130,246,0.3); transform:translateY(-2px); }
+
+  /* Roof controls (migrated from JS inline styling) */
+  #roof-controls { display:none; gap:8px; align-items:center; margin-left:8px; }
+  #roof-controls.visible { display:inline-flex; }
+  .roof-label { font-size:12px; color:#374151; }
   #reset-confirm-btn { flex:1; padding:12px; font-size:15px; font-weight:600; background:#ef4444; border:none; color:#ffffff; border-radius:8px; cursor:pointer; transition:all 0.2s; }
 
   /* Floorplan modal remaining inline styles */
@@ -477,7 +529,7 @@
     position: absolute; transform: translate(-50%, -50%);
     pointer-events: all; cursor: grab; user-select: none;
     background: white; color: #333;
-    padding: 6px 11px; border-radius: 19px; font-weight: 600; font-size: 10px;
+    padding: 6px 11px; border-radius: 19px; font-weight: 600; font-size: var(--label-btn-font-size);
     box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     /* Let JS-driven per-frame opacity control handle smoothness; avoid extra CSS lag */
     transition: opacity 0s linear;
@@ -495,13 +547,13 @@
     transform: translate(-50%, -50%);
     z-index: 60;
     pointer-events: auto;
-    min-width: 44px; height: 24px;
+    min-width: 44px; height: var(--label-btn-height);
     padding: 0 8px;
-    border-radius: 12px;
+    border-radius: var(--label-btn-radius);
     border: none; /* remove 1px keyline */
     background: #ffffff;
     color: #007acc;
-    font-size: 10px; font-weight: 600; line-height: 24px; text-align: center;
+    font-size: var(--label-btn-font-size); font-weight: 600; line-height: var(--label-btn-height); text-align: center;
     box-shadow: 0 4px 14px rgba(0,0,0,0.2);
     cursor: pointer;
     /* Keep in lockstep with JS-driven fade */
@@ -522,14 +574,14 @@
     position: absolute;
     z-index: 60;
     pointer-events: auto;
-    width: 32px; height: 32px; text-align: center;
+    width: var(--roof-rotate-size); height: var(--roof-rotate-size); text-align: center;
     display: flex; align-items: center; justify-content: center;
     transform: translate(-50%, -50%);
-    border-radius: 16px; border: 2px solid rgba(255,255,255,0.9);
+    border-radius: calc(var(--roof-rotate-size) / 2); border: 2px solid rgba(255,255,255,0.9);
     background: #8b5cf6; color: #ffffff; font-weight: 700; font-size: 12px;
     box-shadow: none;
     cursor: pointer;
-    transition: opacity 0s linear, transform 0.06s ease, background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    transition: opacity 0s linear, transform 0.06s ease, background-color var(--transition-fast) ease, color var(--transition-fast) ease, border-color var(--transition-fast) ease;
   }
   .roof-rotate-btn:hover {
     background: #7c3aed; /* slightly darker violet on hover */

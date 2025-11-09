@@ -49,6 +49,86 @@
  * @since 2024
  */
 
+// Lightweight, pure room polygon detector used by 2D drawing to render alpha fills
+// without mutating 3D state. Returns an array of polygons (each polygon is an array
+// of {x,y} in plan/world space). Orthogonal-only, reuses the same snapping and face
+// traversal principles as applyPlan2DTo3D but avoids changing wallRole or allRooms.
+if (typeof window.plan2dComputeRoomPolygonsLite !== 'function') window.plan2dComputeRoomPolygonsLite = function plan2dComputeRoomPolygonsLite(elems, options){
+  try {
+    options = options || {};
+    var strictClosedLoopsOnly = !!options.strictClosedLoopsOnly;
+    var TOL = 0.03; // 3 cm tolerance, matches main engine
+    function approxEq(a,b,t){ return Math.abs(a-b) <= (typeof t==='number'? t : TOL); }
+    function keyCoord(v){ return +(+v).toFixed(2); }
+    function sortNumeric(a,b){ return a-b; }
+
+    // Build snapped nodes and split at T-junctions
+    var nodes = Object.create(null); // key -> { x, y, out: [] }
+    var endpointWalls = [];
+    for (var i=0;i<elems.length;i++){
+      var w = elems[i]; if(!w || w.type!=='wall') continue;
+      // Only orthogonal walls are considered for closed rooms
+      if (!approxEq(w.y0, w.y1, 1e-2) && !approxEq(w.x0, w.x1, 1e-2)) continue;
+      var ax = keyCoord(w.x0), ay = keyCoord(w.y0);
+      var bx = keyCoord(w.x1), by = keyCoord(w.y1);
+      var kA = ax.toFixed(2)+","+ay.toFixed(2);
+      var kB = bx.toFixed(2)+","+by.toFixed(2);
+      if(!nodes[kA]) nodes[kA] = { x: ax, y: ay, out: [] };
+      if(!nodes[kB]) nodes[kB] = { x: bx, y: by, out: [] };
+      endpointWalls.push({ idx:i, aKey:kA, bKey:kB, x0:ax, y0:ay, x1:bx, y1:by });
+    }
+    var nodesByY = Object.create(null), nodesByX = Object.create(null);
+    Object.keys(nodes).forEach(function(k){ var n=nodes[k]; var yk=n.y.toFixed(2), xk=n.x.toFixed(2); (nodesByY[yk]||(nodesByY[yk]=[])).push(k); (nodesByX[xk]||(nodesByX[xk]=[])).push(k); });
+    function keyOf(x,y){ return (+x).toFixed(2)+","+(+y).toFixed(2); }
+
+    var halfEdges = []; // { aKey, bKey, angle }
+    function addHalfEdge(aKey,bKey){ var a=nodes[aKey], b=nodes[bKey]; if(!a||!b) return; var ang=Math.atan2(b.y-a.y,b.x-a.x); var idx=halfEdges.length; halfEdges.push({ aKey:aKey, bKey:bKey, angle:ang }); nodes[aKey].out.push(idx); }
+
+    for (var ewi=0; ewi<endpointWalls.length; ewi++){
+      var ew = endpointWalls[ewi]; var horizontal = approxEq(ew.y0, ew.y1, 1e-2);
+      if (horizontal){
+        var yKey = ew.y0.toFixed(2); var xs=[]; var listY = nodesByY[yKey]||[];
+        var xMin = Math.min(ew.x0, ew.x1) - Math.max(1e-6, TOL/2);
+        var xMax = Math.max(ew.x0, ew.x1) + Math.max(1e-6, TOL/2);
+        for (var li=0; li<listY.length; li++){ var k=listY[li]; var n=nodes[k]; if(!n) continue; if(n.x>=xMin && n.x<=xMax) xs.push(n.x); }
+        xs.push(ew.x0, ew.x1); xs = xs.map(function(v){ return +(+v).toFixed(2); }).sort(sortNumeric);
+        var uniq=[]; for (var xi=0; xi<xs.length; xi++){ if(!uniq.length || Math.abs(xs[xi]-uniq[uniq.length-1])>1e-6) uniq.push(xs[xi]); }
+        for (var xi2=0; xi2<uniq.length-1; xi2++){ var xa=uniq[xi2], xb=uniq[xi2+1]; if(xb-xa<1e-6) continue; var aK=keyOf(xa, ew.y0), bK=keyOf(xb, ew.y0); if(!nodes[aK]) nodes[aK]={x:xa,y:ew.y0,out:[]}; if(!nodes[bK]) nodes[bK]={x:xb,y:ew.y0,out:[]}; addHalfEdge(aK,bK); addHalfEdge(bK,aK); }
+      } else {
+        var xKey = ew.x0.toFixed(2); var ys=[]; var listX = nodesByX[xKey]||[];
+        var yMin = Math.min(ew.y0, ew.y1) - Math.max(1e-6, TOL/2);
+        var yMax = Math.max(ew.y0, ew.y1) + Math.max(1e-6, TOL/2);
+        for (var lj=0; lj<listX.length; lj++){ var k2=listX[lj]; var n2=nodes[k2]; if(!n2) continue; if(n2.y>=yMin && n2.y<=yMax) ys.push(n2.y); }
+        ys.push(ew.y0, ew.y1); ys = ys.map(function(v){ return +(+v).toFixed(2); }).sort(sortNumeric);
+        var uniqY=[]; for (var yi=0; yi<ys.length; yi++){ if(!uniqY.length || Math.abs(ys[yi]-uniqY[uniqY.length-1])>1e-6) uniqY.push(ys[yi]); }
+        for (var yi2=0; yi2<uniqY.length-1; yi2++){ var ya=uniqY[yi2], yb=uniqY[yi2+1]; if(yb-ya<1e-6) continue; var aK2=keyOf(ew.x0, ya), bK2=keyOf(ew.x0, yb); if(!nodes[aK2]) nodes[aK2]={x:ew.x0,y:ya,out:[]}; if(!nodes[bK2]) nodes[bK2]={x:ew.x0,y:yb,out:[]}; addHalfEdge(aK2,bK2); addHalfEdge(bK2,aK2); }
+      }
+    }
+    // Sort outgoing by angle at each node
+    Object.keys(nodes).forEach(function(k){ var out=nodes[k].out; out.sort(function(ia,ib){ return halfEdges[ia].angle - halfEdges[ib].angle; }); });
+    function nextCCW(curIdx){ var he=halfEdges[curIdx]; var node=nodes[he.bKey]; if(!node) return -1; var out=node.out; if(!out||!out.length) return -1; var ang=he.angle; var best=out[0]; for(var i=0;i<out.length;i++){ if(halfEdges[out[i]].angle - ang > 1e-9){ best=out[i]; break; } } return best; }
+    function polyArea(pts){ var a=0; for(var i=0,j=pts.length-1;i<pts.length;j=i++) a += (pts[j].x*pts[i].y - pts[i].x*pts[j].y); return a/2; }
+    function simplifyOrth(poly){ if(!poly||poly.length<4) return poly; var out=[]; for(var i=0;i<poly.length;i++){ var p0=poly[(i+poly.length-1)%poly.length], p1=poly[i], p2=poly[(i+1)%poly.length]; var v1x=p1.x-p0.x, v1y=p1.y-p0.y, v2x=p2.x-p1.x, v2y=p2.y-p1.y; var col=(Math.abs(v1x)<1e-6&&Math.abs(v2x)<1e-6)||(Math.abs(v1y)<1e-6&&Math.abs(v2y)<1e-6); if(!col) out.push(p1); } return out; }
+
+    var visitedLeft = new Array(halfEdges.length).fill(false), faces=[];
+    for (var heIdx=0; heIdx<halfEdges.length; heIdx++){
+      if(visitedLeft[heIdx]) continue; var start=heIdx, cur=start, guard=0, MAX=10000; var keys=[]; var used=[];
+      while(cur>=0 && guard++<MAX){ var he=halfEdges[cur]; if(keys.length===0) keys.push(he.aKey); keys.push(he.bKey); used.push(cur); var nxt=nextCCW(cur); if(nxt<0) break; if(nxt===start) break; cur=nxt; if(used.length>2 && halfEdges[cur].aKey===halfEdges[start].aKey && halfEdges[cur].bKey===halfEdges[start].bKey) break; }
+      if(used.length>=3 && keys.length>=4){ var pts=[]; for(var pk=0; pk<keys.length; pk++){ var nk=nodes[keys[pk]]; if(!nk) continue; pts.push({x:nk.x,y:nk.y}); }
+        if(pts.length>1 && Math.abs(pts[0].x-pts[pts.length-1].x)<1e-9 && Math.abs(pts[0].y-pts[pts.length-1].y)<1e-9) pts.pop(); pts=simplifyOrth(pts);
+        if(pts.length>=4){ var A=polyArea(pts), areaAbs=Math.abs(A); if(areaAbs>(TOL*TOL)){ faces.push({poly:pts, area:areaAbs}); for(var vh=0; vh<used.length; vh++) visitedLeft[used[vh]]=true; } }
+      }
+    }
+    // Optionally only keep strict closed loops (drop tiny slivers)
+    var polys = faces.map(function(f){ return f.poly; });
+    // Deduplicate identical polygons by bounding box + vertex count signature
+    var sigSeen = Object.create(null), uniq=[];
+    function bboxSig(poly){ var minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity; for(var i=0;i<poly.length;i++){ var p=poly[i]; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.y<minY)minY=p.y; if(p.y>maxY)maxY=p.y; } return [minX,maxX,minY,maxY,poly.length].map(function(v){return (+v).toFixed(2);}).join('|'); }
+    for (var pi=0; pi<polys.length; pi++){ var poly=polys[pi]; var sig=bboxSig(poly); if(!sigSeen[sig]){ sigSeen[sig]=true; uniq.push(poly); } }
+    return uniq;
+  } catch(e){ return []; }
+};
+
 "use strict";
 // Apply 2D plan edits back to 3D: rebuild rooms/strips from 2D walls and openings
 // Extracted from app.js for modularity; loaded by bootstrap before app core.

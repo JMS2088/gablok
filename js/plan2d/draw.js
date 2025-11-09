@@ -4,6 +4,34 @@
   // Coalesced draw scheduling: multiple calls collapse into one animation frame.
   var __plan2dDrawPending = false;
   function plan2dDrawImmediate(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); var ovCtx=ov.getContext('2d'); var ox=ovCtx; ctx.setTransform(1,0,0,1,0,0);
+    // ------------------------------------------------------------------
+    // Per-frame profiling counters (reset at frame start)
+    try {
+      __plan2d.__frameCounter = (__plan2d.__frameCounter||0)+1;
+      __plan2d.__frameProfile = {
+        wallsConsidered:0,
+        wallsSkipped:0,
+        wallSegments:0,
+        openingsConsidered:0,
+        openingsSkipped:0,
+        measureNew:0,
+        measureHit:0,
+        labelTexts:0,
+        dirtyPixelPct:0,
+        dirtyPixelArea:0,
+        dirtyWorldArea:0,
+        elementsTotal:(__plan2d.elements?__plan2d.elements.length:0)
+      };
+    }catch(_pfInit){}
+    // Decide dynamic label/measurement budget for this frame
+    try {
+      var elemCount = (__plan2d.elements? __plan2d.elements.length: 0);
+      var baseLimit = 200; // default budget
+      if(elemCount > 800) baseLimit = 100; else if(elemCount > 400) baseLimit = 140;
+      if(__plan2d.__lastDrawMs && __plan2d.__lastDrawMs > 18) baseLimit = Math.min(baseLimit, 120);
+      __plan2d.__measureLimit = baseLimit;
+      __plan2d.__measureCount = 0; // reset early in case external callers rely on it
+    }catch(_lim){}
     // Incremental redraw: if a dirtyRect is present and flagged incremental, only clear that region with padding
     var useDirty = !!(__plan2d.__incremental && __plan2d.dirtyRect);
     var clearPadPx = 40; // pad in pixels for stroke/joins
@@ -19,6 +47,15 @@
         ctx.clearRect(minSX, minSY, wSX, hSY);
         ovCtx.setTransform(1,0,0,1,0,0);
         ovCtx.clearRect(minSX, minSY, wSX, hSY);
+        try {
+          var pxArea = Math.max(0,wSX) * Math.max(0,hSY);
+          var totalPx = (c.width||1)*(c.height||1);
+            __plan2d.__frameProfile.dirtyPixelArea = pxArea;
+            __plan2d.__frameProfile.dirtyPixelPct = Math.min(100, (pxArea / Math.max(1,totalPx))*100);
+            var worldW = (c.width/(__plan2d.scale||50));
+            var worldH = (c.height/(__plan2d.scale||50));
+            __plan2d.__frameProfile.dirtyWorldArea = ( (__plan2d.dirtyRect.maxX-__plan2d.dirtyRect.minX) * (__plan2d.dirtyRect.maxY-__plan2d.dirtyRect.minY) );
+        }catch(_pfDirty){}
       }catch(_cdr){ ctx.clearRect(0,0,c.width,c.height); ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height); useDirty=false; }
     } else {
       ctx.clearRect(0,0,c.width,c.height); ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height);
@@ -115,7 +152,7 @@
         } catch(e){ /* grid fallback */ }
       })();
       perfSections.grid = ((performance&&performance.now)?performance.now():Date.now()) - tStart;
-      // Preview: multi-point wall chain (polyline) when active
+  // Preview: multi-point wall chain (polyline) when active
       try {
         if(__plan2d.tool==='wall' && __plan2d.chainActive && Array.isArray(__plan2d.chainPoints) && __plan2d.chainPoints.length){
           var pts = __plan2d.chainPoints;
@@ -146,6 +183,55 @@
           ctx.restore();
         }
       } catch(e) { /* non-fatal chain preview */ }
+      
+      // Room footprint fill (drawn UNDER walls)
+      // When 2D editor is active, compute polygons directly from current wall graph to follow live shape.
+      // Otherwise, fall back to 3D rooms (allRooms) if present.
+      try {
+        ctx.save();
+        ctx.fillStyle = 'rgba(148,163,184,0.18)'; // slate-400 at ~18%
+        var drewAny = false;
+        if (window.__plan2d && __plan2d.active && Array.isArray(__plan2d.elements) && typeof window.plan2dComputeRoomPolygonsLite==='function'){
+          // Cache polygon detection across frames; invalidated when __plan2d.__version changes
+          try { __plan2d.__cache = __plan2d.__cache || {}; } catch(_c){}
+          var polys = null;
+          try {
+            var vNow = (__plan2d.__version||0);
+            if (__plan2d.__cache.roomPolys && __plan2d.__cache.roomPolysVersion === vNow) {
+              polys = __plan2d.__cache.roomPolys;
+            } else {
+              polys = window.plan2dComputeRoomPolygonsLite(__plan2d.elements, { strictClosedLoopsOnly:false });
+              __plan2d.__cache.roomPolys = polys; __plan2d.__cache.roomPolysVersion = vNow;
+            }
+          } catch(_pc) { polys = window.plan2dComputeRoomPolygonsLite(__plan2d.elements, { strictClosedLoopsOnly:false }); }
+          for (var pi=0; pi<polys.length; pi++){
+            var poly = polys[pi]; if(!Array.isArray(poly) || poly.length<3) continue;
+            try {
+              ctx.beginPath();
+              var p0s = worldToScreen2D(poly[0].x, poly[0].y); ctx.moveTo(p0s.x, p0s.y);
+              for (var vi=1; vi<poly.length; vi++){ var ps = worldToScreen2D(poly[vi].x, poly[vi].y); ctx.lineTo(ps.x, ps.y); }
+              ctx.closePath(); ctx.fill(); drewAny = true;
+            } catch(_pf2){ /* ignore bad polygon */ }
+          }
+        }
+        if (!drewAny && Array.isArray(window.allRooms)){
+          var lvlNowFill = (typeof window.currentFloor==='number' ? window.currentFloor : 0);
+          for (var rf=0; rf<allRooms.length; rf++){
+            var rFill = allRooms[rf]; if(!rFill) continue; var rLvlF = (typeof rFill.level==='number' ? rFill.level : 0); if (rLvlF !== lvlNowFill) continue;
+            try {
+              if (Array.isArray(rFill.footprint) && rFill.footprint.length>=3){
+                var fp = rFill.footprint; ctx.beginPath(); var p0 = worldToScreen2D(fp[0].x, fp[0].z); ctx.moveTo(p0.x, p0.y);
+                for (var vi=1; vi<fp.length; vi++){ var p = worldToScreen2D(fp[vi].x, fp[vi].z); ctx.lineTo(p.x,p.y); }
+                ctx.closePath(); ctx.fill();
+              } else {
+                var hw = (rFill.width||0)/2, hd = (rFill.depth||0)/2; var c1 = worldToScreen2D(rFill.x-hw, rFill.z-hd); var c2 = worldToScreen2D(rFill.x+hw, rFill.z-hd); var c3 = worldToScreen2D(rFill.x+hw, rFill.z+hd); var c4 = worldToScreen2D(rFill.x-hw, rFill.z+hd);
+                ctx.beginPath(); ctx.moveTo(c1.x,c1.y); ctx.lineTo(c2.x,c2.y); ctx.lineTo(c3.x,c3.y); ctx.lineTo(c4.x,c4.y); ctx.closePath(); ctx.fill();
+              }
+            } catch(_rf){ /* ignore */ }
+          }
+        }
+        ctx.restore();
+      } catch(_roomFill){ /* non-fatal room fill */ }
   // Elements
   var tWallsStart = (performance&&performance.now)?performance.now():Date.now();
       // Precompute connections at endpoints to extend walls and make corners flush
@@ -188,15 +274,50 @@
         minX -= pad; maxX += pad; minY -= pad; maxY += pad;
         return !(maxX < dirtyW.minX || dirtyW.maxX < minX || maxY < dirtyW.minY || dirtyW.maxY < minY);
       }
+      // Precompute host-anchored opening spans per wall (cached by plan version)
+      var elemsVersion = (__plan2d.__version||0);
+      var hostSpansCache = __plan2d.__hostOpeningSpans;
+      if(!hostSpansCache || __plan2d.__hostOpeningSpansVersion !== elemsVersion){
+        hostSpansCache = new Array(elems.length);
+        // Initialize arrays only for walls; avoid sparse lookup cost later
+        for(var wiInit=0; wiInit<elems.length; wiInit++){ var wEl=elems[wiInit]; if(wEl && wEl.type==='wall') hostSpansCache[wiInit]=[]; }
+        // Collect host-anchored windows/doors into their wall lists
+        for(var oi=0; oi<elems.length; oi++){
+          var oEl = elems[oi]; if(!oEl) continue; if(oEl.type!=='window' && oEl.type!=='door') continue;
+          if(typeof oEl.host==='number' && elems[oEl.host] && elems[oEl.host].type==='wall'){
+            var hw = oEl.host;
+            var ot0 = Math.max(0, Math.min(1, oEl.t0||0));
+            var ot1 = Math.max(0, Math.min(1, oEl.t1||0));
+            if(ot1 < ot0){ var tmpSwap=ot0; ot0=ot1; ot1=tmpSwap; }
+            if(hostSpansCache[hw]) hostSpansCache[hw].push([ot0, ot1]);
+          }
+        }
+        // Sort and merge spans for each wall NOW to avoid per-wall recompute inside draw loop
+        for(var mw=0; mw<hostSpansCache.length; mw++){
+          var list = hostSpansCache[mw]; if(!list || list.length<2) continue;
+          list.sort(function(A,B){ return A[0]-B[0]; });
+          var mergedArr=[]; for(var li=0; li<list.length; li++){ var s=list[li]; if(mergedArr.length===0) mergedArr.push(s); else { var last=mergedArr[mergedArr.length-1]; if(s[0] <= last[1] + 1e-4){ last[1]=Math.max(last[1], s[1]); } else mergedArr.push([s[0], s[1]]); } }
+          hostSpansCache[mw]=mergedArr;
+        }
+        __plan2d.__hostOpeningSpans = hostSpansCache; __plan2d.__hostOpeningSpansVersion = elemsVersion;
+      }
+      // Build list of free openings (non-host) once; still requires per-wall projection but reduces scanning of host ones
+      var freeOpenings = [];
+      for(var foi=0; foi<elems.length; foi++){
+        var fEl = elems[foi]; if(!fEl) continue; if(fEl.type!=='window' && fEl.type!=='door') continue; if(typeof fEl.host==='number') continue; freeOpenings.push(fEl);
+      }
       for(var i=0;i<elems.length;i++){
         var el=elems[i];
         if(!el){ continue; } // Defensive: skip holes/undefined to avoid x0 access errors
-        if(!drawAll){ if(el.type==='wall'){ if(!wallIntersectsDirty(el)) continue; } else {
+        // Profiling counts
+        if(el.type==='wall') __plan2d.__frameProfile.wallsConsidered++;
+        else if(el.type==='window' || el.type==='door') __plan2d.__frameProfile.openingsConsidered++;
+        if(!drawAll){ if(el.type==='wall'){ if(!wallIntersectsDirty(el)){ try{ __plan2d.__frameProfile.wallsSkipped++; }catch(_skw){}; continue; } } else {
             // For doors/windows anchored to a wall, check host wall bbox; else check element endpoints
-            if(typeof el.host==='number' && elems[el.host] && elems[el.host].type==='wall'){ if(!wallIntersectsDirty(elems[el.host])) continue; }
+            if(typeof el.host==='number' && elems[el.host] && elems[el.host].type==='wall'){ if(!wallIntersectsDirty(elems[el.host])){ try{ __plan2d.__frameProfile.openingsSkipped++; }catch(_sko1){}; continue; } }
             else {
               var minXo=Math.min(el.x0,el.x1), maxXo=Math.max(el.x0,el.x1); var minYo=Math.min(el.y0,el.y1), maxYo=Math.max(el.y0,el.y1);
-              if(dirtyW && (maxXo < dirtyW.minX || dirtyW.maxX < minXo || maxYo < dirtyW.minY || dirtyW.maxY < minYo)) continue;
+              if(dirtyW && (maxXo < dirtyW.minX || dirtyW.maxX < minXo || maxYo < dirtyW.minY || dirtyW.maxY < minYo)){ try{ __plan2d.__frameProfile.openingsSkipped++; }catch(_sko2){}; continue; }
             }
         } }
         var ax=el.x0, ay=el.y0, bx=el.x1, by=el.y1;
@@ -222,27 +343,21 @@
           var lvlCur = (typeof window.currentFloor==='number'? window.currentFloor:0);
           var alphaFactor = 1.0;
           if(typeof el.roomLevel==='number' && el.roomLevel !== lvlCur){ alphaFactor = 0.25; }
-          // Build void spans (windows and doors) in t-space [0,1]
-          var spans = [];
-          for(var wi=0; wi<elems.length; wi++){
-            var oEl = elems[wi]; if(oEl.type!=='window' && oEl.type!=='door') continue;
-            if(typeof oEl.host==='number' && oEl.host===i){
-              var ot0 = Math.max(0, Math.min(1, oEl.t0||0));
-              var ot1 = Math.max(0, Math.min(1, oEl.t1||0));
-              if(ot1 < ot0){ var tmpo=ot0; ot0=ot1; ot1=tmpo; }
-              spans.push([ot0, ot1]);
-            } else {
-              // Free opening: if it lies along this wall, treat as void
-              var tA = plan2dProjectParamOnWall({x:oEl.x0, y:oEl.y0}, el);
-              var tB = plan2dProjectParamOnWall({x:oEl.x1, y:oEl.y1}, el);
-              // Check that both endpoints are near the wall centerline
-              var nearTol = halfW + 0.05; // meters
-              function pointWallDist(px,py){ var dx=origBx-origAx, dy=origBy-origAy; var denom=(dx*dx+dy*dy)||1; var t=((px-origAx)*dx+(py-origAy)*dy)/denom; t=Math.max(0,Math.min(1,t)); var cx=origAx+t*dx, cy=origAy+t*dy; return Math.hypot(px-cx, py-cy); }
-              var dA = pointWallDist(oEl.x0,oEl.y0), dB = pointWallDist(oEl.x1,oEl.y1);
-              if(dA <= nearTol && dB <= nearTol){
-                var s0 = Math.max(0, Math.min(1, Math.min(tA,tB)));
-                var s1 = Math.max(0, Math.min(1, Math.max(tA,tB)));
-                if(s1 > s0 + 1e-4) spans.push([s0,s1]);
+          // Start with pre-merged host spans for this wall
+          var spans = hostSpansCache && hostSpansCache[i] ? hostSpansCache[i].slice() : [];
+          // Append free openings that project onto this wall (still requires per-wall check)
+          if(freeOpenings.length){
+            for(var fo=0; fo<freeOpenings.length; fo++){
+              var oElF = freeOpenings[fo];
+              var tA = plan2dProjectParamOnWall({x:oElF.x0, y:oElF.y0}, el);
+              var tB = plan2dProjectParamOnWall({x:oElF.x1, y:oElF.y1}, el);
+              var nearTol = halfW + 0.05;
+              function pointWallDistF(px,py){ var dx=origBx-origAx, dy=origBy-origAy; var denom=(dx*dx+dy*dy)||1; var t=((px-origAx)*dx+(py-origAy)*dy)/denom; t=Math.max(0,Math.min(1,t)); var cx=origAx+t*dx, cy=origAy+t*dy; return Math.hypot(px-cx, py-cy); }
+              var dAF = pointWallDistF(oElF.x0,oElF.y0), dBF = pointWallDistF(oElF.x1,oElF.y1);
+              if(dAF <= nearTol && dBF <= nearTol){
+                var s0f = Math.max(0, Math.min(1, Math.min(tA,tB)));
+                var s1f = Math.max(0, Math.min(1, Math.max(tA,tB)));
+                if(s1f > s0f + 1e-4) spans.push([s0f,s1f]);
               }
             }
           }
@@ -292,20 +407,27 @@
             if(touchesEnd){   sx1 += dirx * halfW; sy1 += diry * halfW; }
             var aSeg = worldToScreen2D(sx0, sy0); var bSeg = worldToScreen2D(sx1, sy1);
             var dxs=bSeg.x-aSeg.x, dys=bSeg.y-aSeg.y; var Ls=Math.sqrt(dxs*dxs+dys*dys)||1; var nx=-dys/Ls, ny=dxs/Ls; var halfPx=(thick*__plan2d.scale)/2;
+            try { __plan2d.__frameProfile.wallSegments++; }catch(_pfws){}
             ctx.beginPath(); ctx.fillStyle='#e5e7eb'; ctx.strokeStyle='#334155'; ctx.lineWidth=__plan2d.wallStrokePx;
             ctx.moveTo(aSeg.x+nx*halfPx,aSeg.y+ny*halfPx); ctx.lineTo(bSeg.x+nx*halfPx,bSeg.y+ny*halfPx); ctx.lineTo(bSeg.x-nx*halfPx,bSeg.y-ny*halfPx); ctx.lineTo(aSeg.x-nx*halfPx,aSeg.y-ny*halfPx); ctx.closePath(); ctx.fill(); ctx.stroke();
 
             // Inline segment length measurement centered inside the wall polygon (no pill)
             (function(){
               var minLabelPx = 30; // skip very tiny segments
+              // Zoom-based culling: don't draw labels if zoomed out beyond threshold
+              var zoomMin = (__plan2d.labelZoomMin==null?0.12:__plan2d.labelZoomMin);
+              if(__plan2d.scale < zoomMin) return;
               if(Ls < minLabelPx) return;
               // Soft cap: avoid measuring if too many solids drawn this frame to reduce text layout cost
-              __plan2d.__measureCount = (__plan2d.__measureCount||0) + 1; if(__plan2d.__measureCount > 200) return;
+              __plan2d.__measureCount = (__plan2d.__measureCount||0) + 1; if(__plan2d.__measureCount > (__plan2d.__measureLimit||200)) return;
+              // High density culling: if wall segment count extremely high, raise minimum pixel length
+              if((__plan2d.__frameProfile.wallSegments||0) > 800 && Ls < 50) return;
               var segLenM = Math.hypot(sx1 - sx0, sy1 - sy0);
               var rounded = Math.round(segLenM*1000)/1000;
               var cache = __plan2d.__textCache || (__plan2d.__textCache={});
               var entry = cache[rounded];
-              if(!entry){ entry = { txt: formatMeters(rounded) + ' m', w: null }; cache[rounded]=entry; }
+              if(!entry){ entry = { txt: formatMeters(rounded) + ' m', w: null }; cache[rounded]=entry; try{ __plan2d.__frameProfile.measureNew++; }catch(_pfnm){} }
+              else { try{ __plan2d.__frameProfile.measureHit++; }catch(_pfmh){} }
               var txt = entry.txt;
               var midx = (aSeg.x + bSeg.x) * 0.5, midy = (aSeg.y + bSeg.y) * 0.5;
               var angle = Math.atan2(dys, dxs);
@@ -319,6 +441,7 @@
               var textW = entry.w!=null? entry.w : (entry.w = ctx.measureText(txt).width);
               var scale = Math.min(1, maxW / Math.max(1, textW), maxH / baseFontSize);
               if (scale < 0.5) { ctx.restore(); return; }
+              try{ __plan2d.__frameProfile.labelTexts++; }catch(_pflbl){}
               ctx.scale(scale, scale);
               // subtle outline for contrast on light wall fill
               ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(51,65,85,0.7)'; ctx.strokeText(txt, 0, 0.5);
@@ -412,6 +535,9 @@
             // Skip if this very window is being actively dragged; a dedicated live label is drawn later
             if (!(__plan2d.dragWindow && __plan2d.dragWindow.index === i)){
               var Lpx = Math.hypot(b.x - a.x, b.y - a.y);
+              // Zoom-based culling for window labels
+              var zoomMinW = (__plan2d.labelZoomMin==null?0.12:__plan2d.labelZoomMin);
+              if(__plan2d.scale < zoomMinW) { /* too far zoomed out */ } else {
               if (Lpx >= 20) {
                 // Compute span length in meters using host wall for anchored windows; else world distance
                 var lenM = 0;
@@ -442,8 +568,10 @@
                   ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(15,23,42,0.7)'; ctx.strokeText(txtM, 0, 0.5);
                   ctx.fillStyle = '#e5e7eb';
                   ctx.fillText(txtM, 0, 0.5);
+                  try{ __plan2d.__frameProfile.labelTexts++; }catch(_pflw){}
                 }
                 ctx.restore();
+              }
               }
             }
           } catch(e) { /* non-fatal measurement draw for windows */ }
@@ -695,7 +823,7 @@
             // Use a distinctive rose color
             drawBox(rf.x, rf.z, rf.width, rf.depth, rf.rotation||0, '#f43f5e', 'rgba(244,63,94,0.14)', 0.90, (rf.name||'Roof'));
           }
-          // 2D Room outlines and labels: draw subtle room footprint plus a small top-left label
+          // 2D Room labels (footprint fill is drawn earlier under walls)
           try {
             if (Array.isArray(allRooms)){
               var __dprR = window.devicePixelRatio || 1;
@@ -706,27 +834,29 @@
                 var rm = allRooms[ir]; if(!rm) continue;
                 var rLvl = (typeof rm.level==='number'? rm.level : 0);
                 if (rLvl !== lvlNowC) continue;
-                var hwR = (rm.width||0)/2, hdR = (rm.depth||0)/2;
-                var c1r = mapPlanXY(rm.x - hwR, rm.z - hdR);
-                var c2r = mapPlanXY(rm.x + hwR, rm.z - hdR);
-                var c3r = mapPlanXY(rm.x + hwR, rm.z + hdR);
-                var c4r = mapPlanXY(rm.x - hwR, rm.z + hdR);
-                // Subtle room footprint fill under walls
+                // Determine label anchor from polygon footprint if available; else use rect fallback
+                var minXr = Infinity, minYr = Infinity;
+                var usedPoly = false;
                 try {
-                  ctx.save();
-                  // Single alpha for clear but subtle footprint on dark background
-                  ctx.fillStyle = 'rgba(148,163,184,0.18)'; // slate-400 at ~18%
-                  ctx.beginPath();
-                  ctx.moveTo(c1r.x, c1r.y);
-                  ctx.lineTo(c2r.x, c2r.y);
-                  ctx.lineTo(c3r.x, c3r.y);
-                  ctx.lineTo(c4r.x, c4r.y);
-                  ctx.closePath();
-                  ctx.fill();
-                  ctx.restore();
-                } catch(e){}
-                var minXr = Math.min(c1r.x,c2r.x,c3r.x,c4r.x);
-                var minYr = Math.min(c1r.y,c2r.y,c3r.y,c4r.y);
+                  if (Array.isArray(rm.footprint) && rm.footprint.length>=3){
+                    usedPoly = true;
+                    for (var fi=0; fi<rm.footprint.length; fi++){
+                      var p = rm.footprint[fi]; if(!p) continue;
+                      var ps = mapPlanXY(p.x, p.z);
+                      if (ps.x < minXr) minXr = ps.x;
+                      if (ps.y < minYr) minYr = ps.y;
+                    }
+                  }
+                } catch(_lbfp){ usedPoly = false; }
+                if (!usedPoly){
+                  var hwR = (rm.width||0)/2, hdR = (rm.depth||0)/2;
+                  var c1r = mapPlanXY(rm.x - hwR, rm.z - hdR);
+                  var c2r = mapPlanXY(rm.x + hwR, rm.z - hdR);
+                  var c3r = mapPlanXY(rm.x + hwR, rm.z + hdR);
+                  var c4r = mapPlanXY(rm.x - hwR, rm.z + hdR);
+                  minXr = Math.min(c1r.x,c2r.x,c3r.x,c4r.x);
+                  minYr = Math.min(c1r.y,c2r.y,c3r.y,c4r.y);
+                }
                 var labelTextR = (rm.name || 'Room');
                 var padXR = padXCssR * __dprR, padYR = padYCssR * __dprR;
                 var fontPxR = baseFontPxCssRoom * __dprR;
@@ -1071,6 +1201,15 @@
 
     perfSections.overlay = ((performance&&performance.now)?performance.now():Date.now()) - tStart - perfSections.grid - perfSections.walls - perfSections.openings - perfSections.labels;
     perfSections.total = ((performance&&performance.now)?performance.now():Date.now()) - tStart;
+    // Rolling averages (EMA) for draw ms and dirty percent
+    try{
+      var ema = __plan2d.__ema || (__plan2d.__ema = {});
+      var a = 0.1; // smoothing
+      ema.ms = (ema.ms==null) ? perfSections.total : (1-a)*ema.ms + a*perfSections.total;
+      var dp = (__plan2d.__frameProfile && __plan2d.__frameProfile.dirtyPixelPct) || 0;
+      ema.dirty = (ema.dirty==null) ? dp : (1-a)*ema.dirty + a*dp;
+      __plan2d.__ema = ema;
+    }catch(_ema){}
   }
 
   // Public throttled draw entry
@@ -1094,8 +1233,9 @@
               var hud=ov.getContext('2d');
               hud.save();
               hud.font='11px monospace';
-              hud.fillStyle='rgba(0,0,0,0.65)';
-              hud.fillRect(6,6,230,90);
+                var ext = !!__plan2d.perfHUDExt;
+                hud.fillStyle='rgba(0,0,0,0.65)';
+                hud.fillRect(6,6, ext? 340:300, ext? 164:132);
               hud.fillStyle='#f8fafc';
               hud.textBaseline='top';
               hud.fillText('draw: '+(__plan2d.__lastDrawMs||0).toFixed(2)+' ms', 12,10);
@@ -1106,10 +1246,55 @@
                 hud.fillText('grid '+ps.grid.toFixed(1)+'  walls '+ps.walls.toFixed(1)+'  open '+ps.openings.toFixed(1),12,52);
                 hud.fillText('labels '+ps.labels.toFixed(1)+'  over '+ps.overlay.toFixed(1)+'  tot '+ps.total.toFixed(1),12,66);
               }
+                try {
+                  var fp = __plan2d.__frameProfile;
+                  if(fp){
+                    hud.fillText('dirty: '+fp.dirtyPixelPct.toFixed(1)+'%  segs '+fp.wallSegments,12,80);
+                    hud.fillText('meas new '+fp.measureNew+' hit '+fp.measureHit+' lbl '+fp.labelTexts,12,94);
+                    hud.fillText('walls '+fp.wallsConsidered+' open '+fp.openingsConsidered,12,108);
+                      if(ext){
+                        var ema = __plan2d.__ema||{};
+                        hud.fillText('avg ms '+(ema.ms?ema.ms.toFixed(2):'–')+'  avg dirty '+(ema.dirty?ema.dirty.toFixed(1):'–')+'%',12,122);
+                        hud.fillText('skipped w:'+fp.wallsSkipped+' o:'+fp.openingsSkipped+' limit:'+(__plan2d.__measureLimit||200),12,136);
+                      }
+                  }
+                }catch(_pfhud){}
               hud.restore();
             }
           }catch(_hud){}
         }
+          // Periodic console log (every 60 frames) for profiling timeline
+          try {
+            if((__plan2d.__frameCounter||0)%60===0){ var fpLog=__plan2d.__frameProfile||{}; var ps=__plan2d.__perfSections||{}; console.log('[2D PROF]', { frame:__plan2d.__frameCounter, ms:(__plan2d.__lastDrawMs||0).toFixed(2), dirtyPct:fpLog.dirtyPixelPct&&fpLog.dirtyPixelPct.toFixed?fpLog.dirtyPixelPct.toFixed(1):fpLog.dirtyPixelPct, wallSegs:fpLog.wallSegments, measNew:fpLog.measureNew, measHit:fpLog.measureHit, labels:fpLog.labelTexts, grid:ps.grid, walls:ps.walls, overlay:ps.overlay, total:ps.total }); }
+          }catch(_pflog){}
+          // Collect lightweight samples for metrics table (every 10 frames)
+          try{
+            var fc = (__plan2d.__frameCounter||0);
+            if(fc % 10 === 0){
+              var sArr = __plan2d.__perfSamples || (__plan2d.__perfSamples=[]);
+              var fpS = __plan2d.__frameProfile || {};
+              var psS = __plan2d.__perfSections || {};
+              sArr.push({
+                t: Date.now(),
+                ms: __plan2d.__lastDrawMs||0,
+                dirtyPct: fpS.dirtyPixelPct||0,
+                wallSegs: fpS.wallSegments||0,
+                measNew: fpS.measureNew||0,
+                measHit: fpS.measureHit||0,
+                labels: fpS.labelTexts||0,
+                wallsConsidered: fpS.wallsConsidered||0,
+                wallsSkipped: fpS.wallsSkipped||0,
+                opensConsidered: fpS.openingsConsidered||0,
+                opensSkipped: fpS.openingsSkipped||0,
+                grid: psS.grid||0,
+                walls: psS.walls||0,
+                overlay: psS.overlay||0,
+                total: psS.total||0
+              });
+              if(sArr.length>180) sArr.shift(); // keep ~180 samples (~30s at 6 samples/sec)
+              __plan2d.__perfSamples = sArr;
+            }
+          }catch(_smp){}
       });
     };
   }

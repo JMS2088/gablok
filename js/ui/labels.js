@@ -281,9 +281,9 @@
           var rect = { width: el.__w, height: el.__h };
           var sW = el.__scaleWorld || 1;
           // Buttons keep global style: do NOT scale size, only adjust position mildly.
-          var gap = 12; // constant gap
-          // Offset reduced by 8px per request (was 25)
-          var offsetRight = 17; // constant extra shift (adjusted)
+          // Use globally tunable spacing constants (defined on window for rapid UI iteration)
+          var gap = (typeof window.LABEL_GAP==='number'? window.LABEL_GAP : 12);
+          var offsetRight = (typeof window.LABEL_EDIT_OFFSET==='number'? window.LABEL_EDIT_OFFSET : 17); // reduced from original 25
           var editLeft = Math.round(left + (rect.width * sW / 2) + gap + offsetRight);
           var editTop = Math.round(top); // center aligned vertically
           eb.style.left = editLeft + 'px';
@@ -333,7 +333,8 @@
             rb.title = 'Rotate 45°';
             // Inline layout: [Label] [Rotate 360] [Edit]
             var rSize = 32, rRad = rSize/2; // rotate button is 32x32
-            var gapInline = 10, gapAfterRotate = 12; // base spacing between items
+            var gapInline = (typeof window.LABEL_ROTATE_GAP_INLINE==='number'? window.LABEL_ROTATE_GAP_INLINE : 10);
+            var gapAfterRotate = (typeof window.LABEL_ROTATE_TO_EDIT_GAP==='number'? window.LABEL_ROTATE_TO_EDIT_GAP : 12); // spacing between rotate and edit
             var rect2 = { width: (el.__w||60), height: (el.__h||22) };
             var sW = el.__scaleWorld || 1;
             // Position uses damped label scale horizontally but button itself keeps base size.
@@ -354,7 +355,8 @@
             // Move the Edit button to the right of the rotate button, aligned center
             var editHalf = 22;
             // Move the Edit button 8px closer to the label (leftwards) relative to rotate button
-            var ebCenterLeft = Math.round(rotCenterLeft + rRad + gapAfterRotate + editHalf - 8);
+            var reduce = (typeof window.LABEL_EDIT_REDUCE==='number'? window.LABEL_EDIT_REDUCE : 8); // shift closer to label
+            var ebCenterLeft = Math.round(rotCenterLeft + rRad + gapAfterRotate + editHalf - reduce);
             eb.style.left = ebCenterLeft + 'px';
             eb.style.top = Math.round(top) + 'px';
           } catch(_posRot){}

@@ -101,9 +101,9 @@
   if (typeof window.selectObject==='function') { window.selectObject(roomId, { noRender: true }); }
   else { window.selectedRoomId = roomId; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU) {} }
     title.textContent = room.name || 'Room';
-    // Hide roof dropdown while open
-    var dd = document.getElementById('roof-type-dropdown'); if (dd) dd.style.display = 'none';
-    modal.style.display = 'flex';
+  // Hide roof dropdown while open
+  var dd = document.getElementById('roof-type-dropdown'); if (dd) dd.classList.add('is-hidden');
+  modal.classList.add('visible');
     try { console.log('Room Palette opened for', roomId, '->', title.textContent); } catch(e){}
     // Reset preview state and preload existing furniture for this room
     var preload = loadExistingFurniturePreview(room);
@@ -191,9 +191,9 @@
 
   function hideRoomPalette() {
     var modal = document.getElementById('room-palette-modal');
-    if (modal) modal.style.display = 'none';
+  if (modal) modal.classList.remove('visible');
     paletteOpenForId = null;
-    var dd = document.getElementById('roof-type-dropdown'); if (dd) dd.style.display = 'block';
+  var dd = document.getElementById('roof-type-dropdown'); if (dd) dd.classList.remove('is-hidden');
     try { if (window.__paletteResizeHandler) { window.removeEventListener('resize', window.__paletteResizeHandler); window.__paletteResizeHandler = null; } } catch(e){}
     try {
       var cv = document.getElementById('room-preview-canvas');

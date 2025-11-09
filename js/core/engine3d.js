@@ -63,16 +63,8 @@
     if (!el) {
       el = document.createElement('div');
       el.id = 'debug-overlay';
-      el.style.position = 'fixed';
-      el.style.top = '8px';
-      el.style.left = '8px';
-      el.style.zIndex = '99999';
-      el.style.background = 'rgba(0,0,0,0.75)';
-      el.style.color = '#fff';
-      el.style.font = '12px/1.35 monospace';
-      el.style.padding = '8px 10px';
-      el.style.borderRadius = '8px';
-      el.style.pointerEvents = 'none';
+  // Apply debug overlay styling via CSS class instead of inline styles
+  el.className = (el.className ? el.className + ' ' : '') + 'debug-overlay';
       document.body.appendChild(el);
       window.__debugStickyStatus = true;
     }
@@ -1715,8 +1707,11 @@
       try {
         if (window.__plan2d && __plan2d.active) {
           panel.classList.remove('visible');
-          panel.style.display = 'none';
+          // Switch to class-based hide (avoid direct style.display churn)
+          panel.classList.add('is-hidden');
           return;
+        } else {
+          panel.classList.remove('is-hidden');
         }
       } catch(_p2d) {}
       var sel = window.selectedRoomId ? findObjectById(window.selectedRoomId) : null;
@@ -1862,8 +1857,12 @@
         var panel = document.getElementById('measurements');
         if (!panel) return;
         // Do not show the panel when 2D floor plan is active
-        if (window.__plan2d && __plan2d.active) { panel.classList.remove('visible'); panel.style.display = 'none'; return; }
-        panel.style.display = '';
+        if (window.__plan2d && __plan2d.active) { 
+          panel.classList.remove('visible'); 
+          panel.classList.add('is-hidden'); 
+          return; 
+        }
+        panel.classList.remove('is-hidden');
         panel.classList.add('visible');
       } catch(e) { /* non-fatal */ }
     };

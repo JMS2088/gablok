@@ -8,22 +8,26 @@
   // Info modal controls
   window.showInfo = function(){
     var modal = document.getElementById('info-modal'); if (!modal) return;
-    // Hide roof dropdown while modal is open
-  var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.style.display = 'none';
-  var roofControls = document.getElementById('roof-controls'); if (roofControls) roofControls.style.display = 'none';
-    modal.style.display = 'block';
+    // Hide roof dropdown/controls while modal is open
+    var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.classList.add('is-hidden');
+    var roofControls = document.getElementById('roof-controls'); if (roofControls) roofControls.classList.remove('visible');
+    modal.classList.add('visible');
   };
   window.hideInfo = function(){
-    var modal = document.getElementById('info-modal'); if (modal) modal.style.display = 'none';
-    // Restore roof dropdown visibility after closing
-  var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.style.display = 'block';
-  var roofControls = document.getElementById('roof-controls'); if (roofControls) { var hasRoof = Array.isArray(window.roofComponents) && roofComponents.length>0; roofControls.style.display = hasRoof ? 'inline-flex' : 'none'; }
+    var modal = document.getElementById('info-modal'); if (modal) modal.classList.remove('visible');
+    // Restore roof dropdown/controls visibility after closing
+    var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.classList.remove('is-hidden');
+    var roofControls = document.getElementById('roof-controls'); if (roofControls) {
+      var hasRoof = Array.isArray(window.roofComponents) && roofComponents.length>0;
+      if (hasRoof) roofControls.classList.add('visible'); else roofControls.classList.remove('visible');
+    }
   };
 
   // Share modal controls
   window.showShare = function(){
     try{
-      var modal = document.getElementById('share-modal'); if(!modal) return;
+  var modal = document.getElementById('share-modal'); if(!modal) return;
+  var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.classList.add('is-hidden');
       var input = document.getElementById('share-url');
       var openA = document.getElementById('share-open');
       var hint = document.getElementById('share-hint');
@@ -94,17 +98,20 @@
               hint.textContent = 'If using Codespaces/Gitpod, share the forwarded URL from your browser address bar.';
             }
           }
-          modal.style.display = 'flex';
+          modal.classList.add('visible');
         })
         .catch(function(){
           if(input) { input.value = fallUrl; input.focus(); input.select(); }
           if(openA) { openA.href = fallUrl; }
           if(hint) hint.textContent = 'If using Codespaces/Gitpod, share the forwarded URL from your browser address bar.';
-          modal.style.display = 'flex';
+          modal.classList.add('visible');
         });
     }catch(e){ console.warn('showShare failed', e); }
   };
-  window.hideShare = function(){ var modal = document.getElementById('share-modal'); if(modal) modal.style.display='none'; };
+  window.hideShare = function(){
+    var modal = document.getElementById('share-modal'); if(modal) modal.classList.remove('visible');
+    var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.classList.remove('is-hidden');
+  };
   window.copyShareUrl = function(){
     var input = document.getElementById('share-url'); if(!input) return;
     input.select(); input.setSelectionRange(0, 99999);

@@ -34,16 +34,12 @@
     if (!container){
       container = document.createElement('div');
       container.id = 'roof-controls';
-      container.style.display = 'none';
-      container.style.gap = '8px';
-      container.style.alignItems = 'center';
-      container.style.marginLeft = '8px';
+  // Styling now handled via CSS (#roof-controls)
 
       // Label (kept small for clarity; matches other control labels)
       var label = document.createElement('span');
       label.textContent = 'Roof:';
-      label.style.fontSize = '12px';
-      label.style.color = '#374151';
+  label.className = 'roof-label';
 
       // Styled dropdown matching other menus
       var ddWrap = document.createElement('div');
@@ -112,7 +108,7 @@
   function syncControls(){
     var ui = ensureControls();
     var hasRoof = Array.isArray(window.roofComponents) && roofComponents.length>0;
-    ui.style.display = hasRoof ? 'inline-flex' : 'none';
+  if (hasRoof) ui.classList.add('visible'); else ui.classList.remove('visible');
     if (!hasRoof) return;
     var target = getTargetRoof();
     var cur = (target && target.roofType) ? String(target.roofType) : 'flat';

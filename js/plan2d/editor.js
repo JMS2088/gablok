@@ -7,9 +7,12 @@
     Object.keys(map).forEach(function(tool){
       var el=document.getElementById(map[tool]); if(!el) return;
       el.addEventListener('click', function(){
-        __plan2d.tool = tool;
-        if(typeof plan2dCursor==='function') plan2dCursor();
-        if(typeof plan2dDraw==='function') plan2dDraw();
+        if(typeof plan2dSetTool==='function'){ plan2dSetTool(tool); }
+        else {
+          __plan2d.tool = tool;
+          if(typeof plan2dCursor==='function') plan2dCursor();
+          if(typeof plan2dDraw==='function') plan2dDraw();
+        }
       });
     });
     // Fit, Flip, Clear, Export, Import, Apply buttons
@@ -72,28 +75,28 @@
         var idx = __plan2d.selectedIndex;
         var el = (typeof idx==='number' && idx>=0)? __plan2d.elements[idx] : null;
         if(el && el.type==='window'){
-          if(winType){ winType.style.display='inline-block';
+          if(winType){ winType.classList.add('visible');
             var isFull = (el.sillM===0 && el.heightM === (__plan2d.wallHeightM||3.0));
             winType.value = isFull ? 'full' : 'standard';
           }
-          if(doorSwing) doorSwing.style.display='none';
-          if(doorHinge) doorHinge.style.display='none';
+          if(doorSwing) doorSwing.classList.remove('visible');
+          if(doorHinge) doorHinge.classList.remove('visible');
         } else if(el && el.type==='door'){
-          if(winType) winType.style.display='none';
+          if(winType) winType.classList.remove('visible');
           if(doorSwing){
-            doorSwing.style.display='inline-block';
+            doorSwing.classList.add('visible');
             doorSwing.value = (el.meta && el.meta.swing) ? el.meta.swing : 'in';
           }
           if(doorHinge){
-            doorHinge.style.display='inline-block';
+            doorHinge.classList.add('visible');
             // Explicitly set default left hinge if missing to ensure UI shows immediately
             var hingeVal = (el.meta && el.meta.hinge) ? el.meta.hinge : 't0';
             doorHinge.value = hingeVal;
           }
         } else {
-          if(winType) winType.style.display='none';
-          if(doorSwing) doorSwing.style.display='none';
-          if(doorHinge) doorHinge.style.display='none';
+          if(winType) winType.classList.remove('visible');
+          if(doorSwing) doorSwing.classList.remove('visible');
+          if(doorHinge) doorHinge.classList.remove('visible');
         }
       }catch(_rOC){}
     }

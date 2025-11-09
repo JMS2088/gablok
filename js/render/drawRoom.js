@@ -5,8 +5,9 @@
 function drawRoom(room) {
   try {
   var solidMode = (window.__wallRenderMode === 'solid');
-  // Only suppress room wireframe while an active 3D drag is in progress to avoid ghosting with solid walls
-  var suppressWire = !!(solidMode && window.__dragging3DRoom);
+  // Suppress room wireframe whenever walls are rendered as solids to avoid double outlines over wall faces.
+  // This prevents the appearance of "double rendering" (room edge stroke + wall strip edge) along perimeters.
+  var suppressWire = !!solidMode;
     // Helpers: near-plane clipping in camera space to keep floors/outlines visible without bending
     var kBlend = Math.max(0, Math.min(1, (typeof window.PERSPECTIVE_STRENGTH==='number'? window.PERSPECTIVE_STRENGTH:0.88)));
     var refZ = Math.max(0.5, (camera && camera.distance) || 12);
