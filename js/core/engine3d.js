@@ -525,6 +525,7 @@
       if (typeof window.selectObject==='function') { window.selectObject(r.id, { noRender: true }); }
       else { selectedRoomId=r.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU) {} }
       updateStatus('Added room'); _needsFullRender=true; startRender();
+      try { if (typeof window.historyPushChange==='function') window.historyPushChange('3d-add-room', { coalesce: false }); } catch(_hpa){}
     };
   }
 

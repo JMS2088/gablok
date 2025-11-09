@@ -211,6 +211,7 @@ function __wireAppUi(){
           case 'info': if (typeof showInfo==='function') showInfo(); break;
           case 'share': if (typeof showShare==='function') showShare(); break;
           case 'price': if (typeof showPricing==='function') showPricing(); break;
+          case 'admin': if (typeof showAdmin==='function') showAdmin(); break;
           case 'reset': if (typeof showResetConfirmation==='function') showResetConfirmation(); break;
           case 'obj': exportOBJ && exportOBJ(); break;
           case 'pdf': exportPdfFromCanvas(); break;

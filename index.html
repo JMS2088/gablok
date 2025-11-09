@@ -9,6 +9,13 @@
 </head>
 <body>
 
+<button id="account-button" title="Account" aria-label="Account">
+	<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+		<circle cx="12" cy="8" r="4" stroke="#0f172a" stroke-width="2" fill="#ffffff"/>
+		<path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="#0f172a" stroke-width="2" fill="none" stroke-linecap="round"/>
+	</svg>
+</button>
+
 <div id="controls">
 		<button onclick="addNewRoom()">+ Add Room</button>
 	<button id="btn-render-walls" class="secondary" title="Toggle wall render mode">Render: Lines</button>
@@ -53,16 +60,7 @@
 			</span>
 		</button>
 		<div id="actionsList" class="dropdown-list" role="menu">
-			<div class="dropdown-item" data-action="info">
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-					<circle cx="12" cy="12" r="10" stroke="#0f172a" stroke-width="2" fill="#ffffff"/>
-					<path d="M12 17v-6" stroke="#0f172a" stroke-width="2" stroke-linecap="round"/>
-					<circle cx="12" cy="7" r="1.5" fill="#0f172a"/>
-				</svg>
-				<span>Information</span>
-			</div>
 			<div class="dropdown-item" data-action="reset">Reset</div>
-			<div class="dropdown-item" data-action="share">🔗 Share</div>
 			<div class="dropdown-item separator" aria-hidden="true"></div>
 			<div class="dropdown-title">Project</div>
 			<div class="dropdown-item" data-action="price">Price</div>
@@ -257,6 +255,109 @@
 		</div>
 	</div>
   
+</div>
+
+<!-- Admin Modal -->
+<div id="admin-modal">
+	<div id="admin-backdrop" onclick="hideAdmin()"></div>
+	<div id="admin-content">
+		<div id="admin-header">
+			<strong>Admin: Users & Error Logs</strong>
+			<button class="secondary" onclick="hideAdmin()" title="Close">✕</button>
+		</div>
+		<div id="admin-body">
+			<section class="admin-section">
+				<h3>Users</h3>
+				<ul id="admin-users" class="admin-list"></ul>
+			</section>
+			<section class="admin-section">
+				<h3>Errors</h3>
+				<ul id="admin-errors" class="admin-list"></ul>
+			</section>
+		</div>
+	</div>
+  
+</div>
+
+<!-- Account Modal (full-screen splash with left nav) -->
+<div id="account-modal" aria-hidden="true">
+	<div id="account-splash"></div>
+	<div id="account-sheet">
+		<nav id="account-nav">
+			<h3>Account</h3>
+			<button class="account-nav-btn active" data-view="profile">Profile</button>
+			<button class="account-nav-btn" data-view="projects">Projects</button>
+			<button class="account-nav-btn" data-view="settings">Settings</button>
+			<button class="account-nav-btn" data-view="payments">Payments</button>
+			<div style="margin:14px 6px 6px; font-size:11px; font-weight:600; color:#64748b;">App</div>
+			<button class="account-nav-btn" data-view="info" data-action="info">Information</button>
+			<button class="account-nav-btn" data-view="share" data-action="share">Share</button>
+			<button class="account-nav-btn" data-view="admin" data-action="admin">Admin</button>
+		</nav>
+		<main id="account-main">
+			<button id="account-close" class="secondary" title="Close">✕</button>
+			<section id="account-view-profile">
+				<h2>Your Profile</h2>
+				<form id="account-form" class="account-form">
+					<div class="account-field"><label for="acc-first">First name</label><input id="acc-first" name="firstName" /></div>
+					<div class="account-field"><label for="acc-last">Last name</label><input id="acc-last" name="lastName" /></div>
+					<div class="account-field full"><label for="acc-email">Email</label><input id="acc-email" name="email" type="email" /></div>
+					<div class="account-field"><label for="acc-office">Office number</label><input id="acc-office" name="office" /></div>
+					<div class="account-field"><label for="acc-mobile">Mobile</label><input id="acc-mobile" name="mobile" /></div>
+					<div class="account-field full"><label for="acc-company">Company name</label><input id="acc-company" name="company" /></div>
+					<div class="account-actions full">
+						<button type="button" id="account-save">Save</button>
+						<button type="button" id="account-cancel" class="secondary">Cancel</button>
+					</div>
+				</form>
+			</section>
+			<section id="account-view-projects" style="display:none">
+				<h2>Projects</h2>
+				<p>Project management coming soon.</p>
+			</section>
+			<section id="account-view-settings" style="display:none">
+				<h2>Settings</h2>
+				<p>App settings will appear here.</p>
+			</section>
+			<section id="account-view-payments" style="display:none">
+				<h2>Payments</h2>
+				<p>Payment methods and billing will appear here.</p>
+			</section>
+					<section id="account-view-info" style="display:none">
+						<h2>Information & Help</h2>
+						<div id="account-info-body" class="account-scroll"></div>
+					</section>
+					<section id="account-view-share" style="display:none">
+						<h2>Share Project</h2>
+						<div class="share-inline">
+							<label class="share-label" for="account-share-url">Project URL</label>
+							<input id="account-share-url" type="text" readonly />
+							<div class="share-buttons">
+								<button id="account-share-open" class="secondary" type="button">Open</button>
+								<button id="account-share-copy" type="button">Copy</button>
+							</div>
+							<div id="account-share-hint" class="share-hint"></div>
+						</div>
+					</section>
+					<section id="account-view-admin" style="display:none">
+						<h2>Admin Logs</h2>
+						<div style="display:flex; align-items:center; gap:10px;">
+							<button id="account-admin-refresh" class="secondary" type="button">Refresh</button>
+							<div id="account-admin-spinner" class="spinner" aria-label="Loading"></div>
+						</div>
+						<div class="admin-inline">
+							<div class="admin-column">
+								<h3>Users</h3>
+								<ul id="account-admin-users" class="admin-list"></ul>
+							</div>
+							<div class="admin-column">
+								<h3>Errors</h3>
+								<ul id="account-admin-errors" class="admin-list"></ul>
+							</div>
+						</div>
+					</section>
+		</main>
+	</div>
 </div>
 
 <input type="file" id="upload-file" accept="application/json" />

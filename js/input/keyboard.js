@@ -58,6 +58,15 @@
   function undoRedoHandler(ev){
     try {
       // Don't hijack while user is typing
+      // Local helper (duplicated intentionally; previous definition was closure-scoped)
+      function isEditingElement(el){
+        try {
+          if (!el) return false;
+          var tag = (el.tagName||'').toLowerCase();
+          if (tag === 'input' || tag === 'textarea' || el.isContentEditable) return true;
+        } catch(_e){}
+        return false;
+      }
       if (isEditingElement(document.activeElement)) return;
       var mod = (ev.ctrlKey || ev.metaKey);
       if (!mod) return;

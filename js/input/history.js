@@ -5,13 +5,12 @@
 (function(){
   if (window.__historyInstalled) return; window.__historyInstalled = true;
   var MAX = 60;
-  var undoStack = []; // each entry: { stamp, kind, state }
-  var redoStack = [];
-  var suppress = 0; // increment while performing undo/redo to suppress new capture
-  var lastCoalesceKey = null; // key for coalescing drag / arrow move sequences
+  var undoStack = []; // entries: { stamp, kind, prevState, forwardState }
+  var redoStack = []; // same shape for redo operations
+  var suppress = 0;
+  var lastCoalesceKey = null;
   var lastCoalesceStamp = 0;
-  var COALESCE_MS = 350; // time window to merge sequential micro-moves
-
+  var COALESCE_MS = 350;
   function cloneArray(arr){ if(!Array.isArray(arr)) return []; return arr.map(function(o){ if(!o||typeof o!=='object') return o; var c={}; for(var k in o){ if(!Object.prototype.hasOwnProperty.call(o,k)) continue; var v=o[k]; if(v && typeof v==='object'){ if(Array.isArray(v)){ c[k]=v.slice(); } else { c[k]=JSON.parse(JSON.stringify(v)); } } else { c[k]=v; } } return c; }); }
   function shallowState(){
     return {
@@ -48,49 +47,50 @@
     try { window.selectedWallStripIndex = st.selectedWallStripIndex; } catch(_sw){}
     try { if(st.plan2d && window.__plan2d) { __plan2d.elements = cloneArray(st.plan2d); } } catch(_p){}
     try { if (typeof st.currentFloor==='number') window.currentFloor = st.currentFloor; } catch(_cf){}
-    // Trigger re-renders / UI updates
     try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_um){}
     try { if (typeof updateLabels==='function') updateLabels(); } catch(_ul){}
     try { if (typeof plan2dDraw==='function' && window.__plan2d && __plan2d.active) plan2dDraw(); } catch(_pd){}
     try { if (typeof renderLoop==='function') { window._needsFullRender = true; renderLoop(); } } catch(_rl){}
   }
+  var lastSnapshot = shallowState(); // state BEFORE next mutation
   function push(kind, opts){
-    if(suppress>0) return; // don't capture while restoring
+    if(suppress>0) return;
     var now = Date.now();
-    var coalesceKey = null;
-    if(opts && opts.coalesce){ coalesceKey = kind + ':' + (opts.coalesceKey||''); }
-    if(coalesceKey && lastCoalesceKey === coalesceKey && (now - lastCoalesceStamp) < COALESCE_MS && undoStack.length){
-      // Replace top entry with fresh snapshot (merge micro-changes)
-      undoStack[undoStack.length-1] = { stamp: now, kind: kind, state: shallowState() };
+    var currentState = shallowState(); // AFTER mutation (push called post-change)
+    var coalesceKey = (opts && opts.coalesce) ? (kind+':'+(opts.coalesceKey||'')) : null;
+    if (coalesceKey && lastCoalesceKey===coalesceKey && (now-lastCoalesceStamp)<COALESCE_MS && undoStack.length){
+      // Extend existing coalesced entry forwardState only
+      var top = undoStack[undoStack.length-1];
+      top.forwardState = currentState;
       lastCoalesceStamp = now;
-      redoStack.length = 0; // clear redo path on new mutation
+      redoStack.length = 0;
+      lastSnapshot = currentState; // update baseline for next non-coalesced push
       return;
     }
-    // Normal push
-    undoStack.push({ stamp: now, kind: kind, state: shallowState() });
-    if(undoStack.length>MAX) undoStack.splice(0, undoStack.length-MAX);
-    redoStack.length = 0; // invalidate forward history
+    undoStack.push({ stamp: now, kind: kind, prevState: lastSnapshot, forwardState: currentState });
+    if (undoStack.length>MAX) undoStack.splice(0, undoStack.length-MAX);
+    redoStack.length = 0;
     lastCoalesceKey = coalesceKey;
     lastCoalesceStamp = now;
+    lastSnapshot = currentState; // baseline shifts to newest state
     try { updateStatus && updateStatus('Saved step: '+kind); } catch(_s){}
   }
   function undo(){
-    if(!undoStack.length) { updateStatus && updateStatus('Nothing to undo'); return; }
-    var cur = shallowState();
+    if(!undoStack.length){ updateStatus && updateStatus('Nothing to undo'); return; }
     var entry = undoStack.pop();
-    redoStack.push({ stamp: Date.now(), kind: 'redo-base', state: cur });
-    suppress++; restoreState(entry.state); suppress--;
+    redoStack.push(entry);
+    suppress++; restoreState(entry.prevState); suppress--;
+    lastSnapshot = entry.prevState; // baseline now previous state
     updateStatus && updateStatus('Undo: '+entry.kind);
   }
   function redo(){
-    if(!redoStack.length) { updateStatus && updateStatus('Nothing to redo'); return; }
-    var cur = shallowState();
+    if(!redoStack.length){ updateStatus && updateStatus('Nothing to redo'); return; }
     var entry = redoStack.pop();
-    undoStack.push({ stamp: Date.now(), kind: 'undo-base', state: cur });
-    suppress++; restoreState(entry.state); suppress--;
-    updateStatus && updateStatus('Redo');
+    suppress++; restoreState(entry.forwardState); suppress--;
+    undoStack.push(entry); // reinsert so further undo works
+    lastSnapshot = entry.forwardState;
+    updateStatus && updateStatus('Redo: '+entry.kind);
   }
-  // Public API
   window.historyPushChange = push;
   window.historyUndo = undo;
   window.historyRedo = redo;

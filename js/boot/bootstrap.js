@@ -81,10 +81,12 @@
     { label: 'Balcony renderer', url: 'js/render/drawBalcony.js?v=20251026-1', critical: false },
     { label: 'Furniture renderer', url: 'js/render/drawFurniture.js?v=20251026-1', critical: false },
   'js/input/events.js?v=20251101-6',
-  { label: 'Keyboard router', url: 'js/input/keyboard.js?v=20251104-1', critical: true },
+  { label: 'History', url: 'js/input/history.js?v=20251109-1', critical: true },
+  { label: 'Keyboard router', url: 'js/input/keyboard.js?v=20251109-1', critical: true },
   { label: 'Plan apply', url: 'js/core/plan-apply.js?v=20251101-7', critical: true },
   { label: 'Plan populate', url: 'js/core/plan-populate.js?v=20251101-4', critical: true },
     { label: 'Trace panel', url: 'js/ui/trace-panel.js?v=20251109-1', critical: false },
+  { label: 'Admin client', url: 'js/ui/admin.js?v=20251109-1', critical: false },
   // Core UI modals
   { label: 'Info modal', url: 'js/ui/modals.js?v=20251128-1', critical: false },
   { label: 'Pricing modal', url: 'js/ui/pricing.js?v=20251128-1', critical: false },

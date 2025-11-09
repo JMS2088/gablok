@@ -32,6 +32,8 @@
     // Gate legacy behavior behind an explicit opt-in flag for debugging only
     try { if (window.__autoFocusOnAdd === true && typeof window.focusCameraOnObject==='function') window.focusCameraOnObject(obj); } catch(_eFc){}
     try { if (typeof window.renderLoop==='function') window.renderLoop(); } catch(_eRl){}
+    // Record history so Cmd/Ctrl+Z can undo the add immediately
+    try { if (typeof window.historyPushChange==='function') window.historyPushChange('3d-add-'+(obj && obj.type || 'object'), { coalesce:false }); } catch(_eHist){}
   }
   // --- Generic non-overlap placement helper (macro components) ---
   function __collectMacroFootprints(level){

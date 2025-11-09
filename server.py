@@ -8,6 +8,9 @@ import time
 
 # Lightweight in-memory store for test reports
 _last_test_report = { 'msg': '', 'ts': 0 }
+# In-memory admin data: basic user registry and error log
+_admin_users = {}
+_admin_errors = []
 
 
 class NoCacheHandler(SimpleHTTPRequestHandler):
@@ -231,6 +234,27 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(b'{"error":"failed"}')
             return
+        # Admin data fetch endpoint
+        if self.path == '/__admin-data':
+            try:
+                users_list = []
+                for uid, rec in _admin_users.items():
+                    users_list.append({
+                        'id': uid,
+                        'count': rec.get('count', 1),
+                        'lastSeen': rec.get('lastSeen', 0),
+                        'ua': rec.get('ua', '')
+                    })
+                body = json.dumps({ 'users': users_list, 'errors': _admin_errors[-500:] }).encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type','application/json; charset=utf-8')
+                self.send_header('Cache-Control','no-store')
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception:
+                self.send_response(500)
+                self.end_headers()
+            return
         # On first request, print the forwarded URL detected via Host header (if any)
         try:
             global _printed_forwarded_host
@@ -253,6 +277,79 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             # Client closed connection (e.g., gateway timed out and dropped it)
             return
+
+    def do_POST(self):
+        # Normalize/redirect bad forwarded host pattern before handling
+        if self._maybe_redirect_host():
+            return
+        path = self.path.split('?', 1)[0]
+        # Read JSON body safely
+        length = 0
+        try:
+            length = int(self.headers.get('Content-Length', '0'))
+        except Exception:
+            length = 0
+        raw = b''
+        if length > 0:
+            try:
+                raw = self.rfile.read(length)
+            except Exception:
+                raw = b''
+        try:
+            data = json.loads(raw.decode('utf-8') or '{}') if raw else {}
+        except Exception:
+            data = {}
+        # Handle admin logging endpoints
+        if path == '/__log-user':
+            try:
+                uid = str(data.get('id') or '').strip() or '-'
+                ua = str(data.get('ua') or '')
+                now = int(time.time() * 1000)
+                rec = _admin_users.get(uid) or { 'count': 0, 'lastSeen': 0, 'ua': ua }
+                rec['count'] = int(rec.get('count', 0)) + 1
+                rec['lastSeen'] = now
+                if ua:
+                    rec['ua'] = ua
+                _admin_users[uid] = rec
+                self.send_response(200)
+                self.send_header('Content-Type','application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(b'{"ok":true}')
+            except Exception:
+                self.send_response(500)
+                self.end_headers()
+            return
+        if path == '/__log-error':
+            try:
+                now = int(time.time() * 1000)
+                entry = {
+                    'ts': now,
+                    'userId': str(data.get('id') or ''),
+                    'message': str(data.get('message') or ''),
+                    'stack': str(data.get('stack') or ''),
+                    'meta': data.get('meta') if isinstance(data.get('meta'), dict) else None
+                }
+                _admin_errors.append(entry)
+                # Keep memory bounded
+                if len(_admin_errors) > 2000:
+                    del _admin_errors[:len(_admin_errors) - 2000]
+                self.send_response(200)
+                self.send_header('Content-Type','application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(b'{"ok":true}')
+            except Exception:
+                self.send_response(500)
+                self.end_headers()
+            return
+        # Fallback to default handler for other POSTs
+        # Unknown POST route
+        self.send_response(404)
+        self.send_header('Content-Type','text/plain; charset=utf-8')
+        self.end_headers()
+        try:
+            self.wfile.write(b'Not Found')
+        except Exception:
+            pass
 
 
 class ReusableHTTPServer(ThreadingHTTPServer):

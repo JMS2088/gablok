@@ -8,7 +8,6 @@
   // Info modal controls
   window.showInfo = function(){
     var modal = document.getElementById('info-modal'); if (!modal) return;
-    // Hide roof dropdown/controls while modal is open
     var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.classList.add('is-hidden');
     var roofControls = document.getElementById('roof-controls'); if (roofControls) roofControls.classList.remove('visible');
     try { populateInfoControls(); } catch(e) { console.warn('populateInfoControls failed', e); }
@@ -27,104 +26,68 @@
   // Share modal controls
   window.showShare = function(){
     try{
-  var modal = document.getElementById('share-modal'); if(!modal) return;
-  var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.classList.add('is-hidden');
-      var input = document.getElementById('share-url');
-      var openA = document.getElementById('share-open');
-      var hint = document.getElementById('share-hint');
-      var fallUrl = window.location.href;
-      function normalizeForwardedUrl(urlStr){
-        try{
-          var u = new URL(urlStr);
-          var host = u.hostname;
-          // Detect common forwarded domains
-          var isFwdHost = /app\.github\.dev$|githubpreview\.dev$|gitpod\.io$/.test(host);
-          if (!isFwdHost) return urlStr; // nothing to do
-          var parts = host.split('.');
-          if (parts.length === 0) return urlStr;
-          var sub = parts[0] || '';
-          var rest = parts.slice(1).join('.');
-          var portLabel = '8000';
-          var newSub = sub;
-          if (sub.startsWith(portLabel + '-')) {
-            // already canonical
-            newSub = sub;
-          } else if (sub.endsWith('-' + portLabel)) {
-            // reversed form: <codespace>-8000 -> 8000-<codespace>
-            newSub = portLabel + '-' + sub.slice(0, -(portLabel.length + 1));
-          } else if (/^\d+-.+/.test(sub)) {
-            // starts with some other port: <port>-<codespace> -> 8000-<codespace>
-            var subParts = sub.split('-'); subParts.shift();
-            newSub = portLabel + '-' + subParts.join('-');
-          } else {
-            // plain codespace name -> 8000-<codespace>
-            newSub = portLabel + '-' + sub;
-          }
-          u.hostname = newSub + (rest ? ('.' + rest) : '');
-          // Prefer https for forwarded hosts
-          u.protocol = 'https:';
-          return u.toString();
-        } catch(e){ return urlStr; }
-      }
-      // Try to fetch forwarded URL from server helper
-      fetch('/__forwarded', { cache: 'no-store' })
-        .then(function(r){ return r.ok ? r.json() : null; })
-        .then(function(info){
-          var best = fallUrl;
-          if (info && info.url) {
-            // Prefer server-reported URL unless it points to localhost and our current page is remote
-            var isLocal = /localhost|127\.0\.0\.1/.test(info.url);
-            var pageIsRemote = !/localhost|127\.0\.0\.1/.test(window.location.host);
-            if (!isLocal || !pageIsRemote) {
-              best = info.url;
-            }
-          }
-          // Normalize forwarded host to canonical 8000- form, keep https
-          best = normalizeForwardedUrl(best);
-          if (input) { input.value = best; input.focus(); input.select(); }
-          if (openA) { openA.href = best; }
-          var isForwarded = /app\.github\.dev|githubpreview\.dev|gitpod\.io|codespaces|gitpod/.test(best);
-          if (hint) {
-            if (isForwarded) {
-              var extra = '';
-              try {
-                var u = new URL(best);
-                var looksCodespaces = /app\.github\.dev$/.test(u.hostname);
-                if (looksCodespaces) {
-                  extra = ' If this link returns 404/403 for others, set port 8000 to Public in the Ports panel.';
-                }
-              } catch(e) {}
-              hint.textContent = 'Forwarded URL detected.' + extra;
-            } else {
-              hint.textContent = 'If using Codespaces/Gitpod, share the forwarded URL from your browser address bar.';
-            }
-          }
-          modal.classList.add('visible');
-        })
-        .catch(function(){
-          if(input) { input.value = fallUrl; input.focus(); input.select(); }
-          if(openA) { openA.href = fallUrl; }
-          if(hint) hint.textContent = 'If using Codespaces/Gitpod, share the forwarded URL from your browser address bar.';
-          modal.classList.add('visible');
-        });
+      var modal = document.getElementById('share-modal'); if(!modal) return;
+      var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.classList.add('is-hidden');
+      fetchShareUrl({ inputId: 'share-url', openId: 'share-open', hintId: 'share-hint', focus: true, select: true })
+        .then(function(){ modal.classList.add('visible'); })
+        .catch(function(){ modal.classList.add('visible'); });
     }catch(e){ console.warn('showShare failed', e); }
   };
   window.hideShare = function(){
     var modal = document.getElementById('share-modal'); if(modal) modal.classList.remove('visible');
     var existingDropdown = document.getElementById('roof-type-dropdown'); if (existingDropdown) existingDropdown.classList.remove('is-hidden');
   };
-  window.copyShareUrl = function(){
-    var input = document.getElementById('share-url'); if(!input) return;
+  window.copyShareUrl = function(id){
+    var input = document.getElementById(id || 'share-url'); if(!input) return;
     input.select(); input.setSelectionRange(0, 99999);
     try { document.execCommand('copy'); setStatus('URL copied'); }
     catch(e){ if(navigator.clipboard){ navigator.clipboard.writeText(input.value).then(function(){ setStatus('URL copied'); }).catch(function(){ setStatus('Copy failed'); }); } }
   };
 
+  // Admin modal controls
+  window.showAdmin = async function(){
+    try{
+      var modal = document.getElementById('admin-modal'); if(!modal) return;
+      // Fetch latest admin data
+      var resp = await fetch('/__admin-data', { cache: 'no-store' });
+      if(!resp.ok){ console.warn('admin data fetch failed', resp.status); }
+      var data = resp.ok ? (await resp.json()) : { users: [], errors: [] };
+      var usersUl = document.getElementById('admin-users');
+      var errsUl = document.getElementById('admin-errors');
+      if(usersUl){
+        var users = Array.isArray(data.users) ? data.users : [];
+        usersUl.innerHTML = users.length ? users.map(function(u){
+          var last = new Date(u.lastSeen || Date.now()).toLocaleString();
+          var ua = (u.ua || '').replace(/</g,'&lt;');
+          return '<li>'+
+            '<div class="admin-user-id">'+ (u.id||'(unknown)') +'</div>'+
+            '<div class="admin-meta">seen: '+ last + ' · count: '+ (u.count||1) +'</div>'+
+            (ua?('<div class="admin-meta">ua: '+ ua +'</div>'):'')+
+          '</li>';
+        }).join('') : '<li class="admin-meta">No users logged yet.</li>';
+      }
+      if(errsUl){
+        var errs = Array.isArray(data.errors) ? data.errors : [];
+        errsUl.innerHTML = errs.length ? errs.map(function(e){
+          var ts = new Date(e.ts || Date.now()).toLocaleString();
+          var msg = (e.message||'').replace(/</g,'&lt;');
+          var stack = (e.stack||'').replace(/</g,'&lt;');
+          var uid = (e.userId || '');
+          return '<li>'+
+            '<div class="admin-meta">'+ ts + (uid?(' · user: '+uid):'') +'</div>'+
+            '<div class="admin-error"><strong>'+ msg +'</strong>' + (stack?('<br>'+ stack):'') + '</div>'+
+          '</li>';
+        }).join('') : '<li class="admin-meta">No errors logged.</li>';
+      }
+      modal.classList.add('visible');
+    }catch(e){ console.warn('showAdmin failed', e); }
+  };
+  window.hideAdmin = function(){ var m=document.getElementById('admin-modal'); if(m) m.classList.remove('visible'); };
+
   // Dynamically populate the Info modal with current control + shortcut documentation.
-  function populateInfoControls(){
-    var body = document.getElementById('info-body'); if(!body) return;
-    // Avoid rebuilding if already populated during this open cycle (optional)
-    if (body.__populatedOnce) return; // comment out this line to always rebuild
+  function populateInfoControls(targetId){
+    var body = document.getElementById(targetId || 'info-body'); if(!body) return;
+    if (body.__populatedOnce) return;
     var isMac = /Mac|iPhone|iPad/.test(navigator.platform || '') || /Mac OS/.test(navigator.userAgent || '');
     var MOD = isMac ? 'Cmd' : 'Ctrl';
     var redoKeys = isMac ? 'Shift+'+MOD+'+Z' : MOD+'+Y / Shift+'+MOD+'+Z';
@@ -133,6 +96,27 @@
       html += '<section><h3 class="info-section-title">'+title+'</h3><ul class="info-list">'+listHtml+'</ul></section>';
     }
     function li(txt){ return '<li>'+txt+'</li>'; }
+    // High-level quickstart so users see it first when opening the Account > Information page
+    section('How the App Works',
+      li('<strong>Add Room</strong>: Click “+ Add Room”, then drag colored handles (X/Z/Y) to size and shape your space.')+
+      li('<strong>Add Components</strong>: Use the Level menu for + Stairs, + Pergola, + Garage, + Roof, + Pool, + Balcony.')+
+      li('<strong>Edit Furniture</strong>: Select a room and click <em>Edit</em> on its label to open the Room Palette.')+
+      li('<strong>Precision Panel</strong>: Use Object Measurements (right) to set name, width, depth, height, and position; click Save.')+
+      li('<strong>Floor Plan Editor</strong>: Click “Floor Plan” to calibrate a PDF or draw walls/doors/windows; Commit applies to 3D.')+
+      li('<strong>Reset / Price</strong>: Use Main Menu for Reset (with confirmation) and Price to see a breakdown.')+
+      li('<strong>Share / Export / Import</strong>: Share a link, export OBJ/PDF/JSON/DXF/DWG, or import JSON/plan files.')+
+      li('<strong>Undo/Redo</strong>: Extensive history with snapshot coalescing for smooth iteration.')
+    );
+    // Compact keyboard cheat sheet near top
+    section('Keyboard Quick Commands',
+      li('<strong>'+MOD+'+Z</strong>: Undo')+
+      li('<strong>'+redoKeys+'</strong>: Redo')+
+      li('<strong>Delete</strong>: Delete selection')+
+      li('<strong>Escape</strong>: Clear selection')+
+      li('<strong>Arrow Keys</strong>: Nudge selection (3D: 0.1m; <em>Shift</em> = 1.0m; 2D: grid; <em>Alt</em> = finer)')+
+      li('<strong>Space + Drag</strong>: Pan (2D editor)')+
+      li('<strong>Enter</strong>: Finish wall chain (2D)')
+    );
     // Camera / Navigation
     section('Camera & Navigation',
       li('<strong>Drag (empty space)</strong>: Orbit camera')+
@@ -212,4 +196,108 @@
     body.innerHTML = html;
     body.__populatedOnce = true;
   }
+
+  // Reusable forwarded URL logic for both modal and account view
+  async function fetchShareUrl(opts){
+    opts = opts || {};
+    var fallUrl = window.location.href;
+    function normalizeForwardedUrl(urlStr){
+      try{
+        var u = new URL(urlStr);
+        var host = u.hostname;
+        var isFwdHost = /app\.github\.dev$|githubpreview\.dev$|gitpod\.io$/.test(host);
+        if (!isFwdHost) return urlStr;
+        var parts = host.split('.');
+        if (!parts.length) return urlStr;
+        var sub = parts[0] || '';
+        var rest = parts.slice(1).join('.');
+        var portLabel = '8000';
+        var newSub = sub;
+        if (sub.startsWith(portLabel + '-')) {
+          newSub = sub;
+        } else if (sub.endsWith('-' + portLabel)) {
+          newSub = portLabel + '-' + sub.slice(0, -(portLabel.length + 1));
+        } else if (/^\d+-.+/.test(sub)) {
+          var subParts = sub.split('-'); subParts.shift();
+          newSub = portLabel + '-' + subParts.join('-');
+        } else {
+          newSub = portLabel + '-' + sub;
+        }
+        u.hostname = newSub + (rest ? ('.' + rest) : '');
+        u.protocol = 'https:';
+        return u.toString();
+      } catch(e){ return urlStr; }
+    }
+    var input = opts.inputId ? document.getElementById(opts.inputId) : null;
+    var openA = opts.openId ? document.getElementById(opts.openId) : null;
+    var hint = opts.hintId ? document.getElementById(opts.hintId) : null;
+    try {
+      var r = await fetch('/__forwarded', { cache: 'no-store' });
+      var info = r.ok ? await r.json() : null;
+      var best = fallUrl;
+      if (info && info.url) {
+        var isLocal = /localhost|127\.0\.0\.1/.test(info.url);
+        var pageIsRemote = !/localhost|127\.0\.0\.1/.test(window.location.host);
+        if (!isLocal || !pageIsRemote) best = info.url;
+      }
+      best = normalizeForwardedUrl(best);
+      if (input) { input.value = best; if(opts.focus) input.focus(); if(opts.select) { input.select(); } }
+      if (openA) { openA.href = best; }
+      var isForwarded = /app\.github\.dev|githubpreview\.dev|gitpod\.io|codespaces|gitpod/.test(best);
+      if (hint) {
+        if (isForwarded) {
+          var extra = '';
+          try { var u = new URL(best); if (/app\.github\.dev$/.test(u.hostname)) extra = ' If others see 404/403, make port 8000 Public.'; } catch(e) {}
+          hint.textContent = 'Forwarded URL detected.' + extra;
+        } else {
+          hint.textContent = 'If in Codespaces/Gitpod share the forwarded URL.';
+        }
+      }
+      return best;
+    } catch(e){
+      if(input){ input.value = fallUrl; if(opts.focus) input.focus(); if(opts.select) input.select(); }
+      if(openA) openA.href = fallUrl;
+      if(hint) hint.textContent = 'If in Codespaces/Gitpod share the forwarded URL.';
+      return fallUrl;
+    }
+  }
+  window.fetchShareUrl = fetchShareUrl;
+
+  // Admin data loader for account embedded view
+  async function loadAdminData(usersId, errorsId, spinnerId){
+    var spinner = spinnerId ? document.getElementById(spinnerId) : null;
+    try {
+      if (spinner) spinner.style.display = 'inline-block';
+      var resp = await fetch('/__admin-data', { cache: 'no-store' });
+      var data = resp.ok ? await resp.json() : { users: [], errors: [] };
+      var usersUl = document.getElementById(usersId); var errsUl = document.getElementById(errorsId);
+      if (usersUl) {
+        var users = Array.isArray(data.users) ? data.users : [];
+        usersUl.innerHTML = users.length ? users.map(function(u){
+          var last = new Date(u.lastSeen || Date.now()).toLocaleString();
+          var ua = (u.ua || '').replace(/</g,'&lt;');
+          return '<li>'+
+            '<div class="admin-user-id">'+ (u.id||'(unknown)') +'</div>'+
+            '<div class="admin-meta">seen: '+ last + ' · count: '+ (u.count||1) +'</div>'+
+            (ua?('<div class="admin-meta">ua: '+ ua +'</div>'):'')+
+          '</li>';
+        }).join('') : '<li class="admin-meta">No users logged yet.</li>';
+      }
+      if (errsUl) {
+        var errs = Array.isArray(data.errors) ? data.errors : [];
+        errsUl.innerHTML = errs.length ? errs.map(function(e){
+          var ts = new Date(e.ts || Date.now()).toLocaleString();
+          var msg = (e.message||'').replace(/</g,'&lt;');
+          var stack = (e.stack||'').replace(/</g,'&lt;');
+          var uid = (e.userId || '');
+          return '<li>'+
+            '<div class="admin-meta">'+ ts + (uid?(' · user: '+uid):'') +'</div>'+
+            '<div class="admin-error"><strong>'+ msg +'</strong>' + (stack?('<br>'+ stack):'') + '</div>'+
+          '</li>';
+        }).join('') : '<li class="admin-meta">No errors logged.</li>';
+      }
+    } catch(e){ console.warn('loadAdminData failed', e); }
+    finally { if (spinner) spinner.style.display = 'none'; }
+  }
+  window.loadAdminData = loadAdminData;
 })();
