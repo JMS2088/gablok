@@ -22,6 +22,8 @@
   function setRoofType(value){
     var target = getTargetRoof(); if (!target) return;
     target.roofType = value;
+    // Persist immediately and repaint
+    try { if (typeof saveProjectSilently==='function') saveProjectSilently(); } catch(_s){}
     if (typeof updateStatus==='function') updateStatus('Roof type: ' + (TYPES.find(function(t){return t.v===value;})||{label:value}).label);
     if (typeof renderLoop==='function') renderLoop();
   }
@@ -105,14 +107,23 @@
     }catch(e){}
   }
 
+  // Debounced/cached sync to reduce DOM churn
+  var __roofSync = { hasRoof: null, targetId: null, roofType: null };
   function syncControls(){
     var ui = ensureControls();
     var hasRoof = Array.isArray(window.roofComponents) && roofComponents.length>0;
-  if (hasRoof) ui.classList.add('visible'); else ui.classList.remove('visible');
+    if (__roofSync.hasRoof !== hasRoof) {
+      if (hasRoof) ui.classList.add('visible'); else ui.classList.remove('visible');
+      __roofSync.hasRoof = hasRoof;
+    }
     if (!hasRoof) return;
     var target = getTargetRoof();
-    var cur = (target && target.roofType) ? String(target.roofType) : 'flat';
-    setButtonLabel(cur);
+    var curId = target && target.id || null;
+    var curType = (target && target.roofType) ? String(target.roofType) : 'flat';
+    if (__roofSync.targetId !== curId || __roofSync.roofType !== curType) {
+      setButtonLabel(curType);
+      __roofSync.targetId = curId; __roofSync.roofType = curType;
+    }
   }
 
   // Removed spinRoofOnce animation; rotation is handled via per-roof overlay button in labels.js
@@ -121,5 +132,30 @@
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function(){ ensureControls(); syncControls(); });
   } else { ensureControls(); syncControls(); }
-  setInterval(syncControls, 350);
+  setInterval(syncControls, 500);
+
+  // Expose an explicit open helper so label Edit button can trigger roof type selection UI.
+  // Also selects the target roof if not already selected so measurements panel updates.
+  if (typeof window.openRoofTypeDropdown !== 'function') {
+    window.openRoofTypeDropdown = function(){
+      try {
+        ensureControls();
+        var rc = document.getElementById('roof-controls'); if (rc) rc.classList.add('visible');
+        var ddWrap = document.getElementById('roof-type-dropdown');
+        if (ddWrap) {
+          ddWrap.classList.remove('is-hidden');
+          // Focus the button for accessibility and keyboard use
+          var btn = document.getElementById('roof-type-button');
+          if (btn && typeof btn.focus==='function') { try { btn.focus(); } catch(_f){} }
+          // One-time pulse highlight to draw attention
+          ddWrap.classList.add('pulse');
+          setTimeout(function(){ try { ddWrap.classList.remove('pulse'); } catch(_r){} }, 650);
+          ddWrap.classList.add('open');
+        }
+        var target = getTargetRoof();
+        if (target && typeof window.selectObject === 'function') window.selectObject(target.id, { noRender: true });
+        if (typeof updateStatus === 'function') updateStatus('Roof type menu');
+      } catch(e){ /* non-fatal */ }
+    };
+  }
 })();

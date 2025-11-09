@@ -272,8 +272,22 @@
           eb.className = 'room-edit-btn';
           eb.setAttribute('data-id', box.id);
           eb.type = 'button';
-          eb.textContent = 'Edit';
-          eb.addEventListener('click', function(e){ e.stopPropagation(); try{ if (typeof openRoomPalette==='function') openRoomPalette(box.id); else if (typeof updateStatus==='function') updateStatus('Room palette unavailable'); } catch(_e){} });
+          // Dynamic label: Roof objects use 'Roof Type'; others use 'Edit'
+          eb.textContent = (box.type === 'roof') ? 'Roof Type' : 'Edit';
+          eb.addEventListener('click', function(e){
+            e.stopPropagation();
+            try {
+              if (box.type === 'roof') {
+                // Open roof type dropdown UI (ensure module loaded)
+                if (typeof window.openRoofTypeDropdown === 'function') {
+                  window.openRoofTypeDropdown();
+                } else if (typeof updateStatus === 'function') updateStatus('Roof controls not loaded');
+              } else {
+                if (typeof openRoomPalette === 'function') openRoomPalette(box.id);
+                else if (typeof updateStatus === 'function') updateStatus('Room palette unavailable');
+              }
+            } catch(_eEdit){}
+          });
           container.appendChild(eb);
         }
         try {
@@ -300,6 +314,9 @@
           if (selId2 && selId2 === box.id) {
             eb.style.opacity = '1';
             eb.style.pointerEvents = '';
+            // Keep button text accurate if type changed post-creation (rare)
+            var desired = (box.type === 'roof') ? 'Roof Type' : 'Edit';
+            if (eb.textContent !== desired) eb.textContent = desired;
           } else {
             eb.style.opacity = '0';
             eb.style.pointerEvents = 'none';

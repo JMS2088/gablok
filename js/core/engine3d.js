@@ -423,7 +423,8 @@
     } catch(e) {}
     return fps;
   }
-  function __aabbOverlap(ax0,ax1,az0,az1, bx0,bx1,bz0,bz1){ return (ax0 < bx1 && ax1 > bx0 && az0 < bz1 && az1 > bz0); }
+  // Treat touching edges as collision to enforce a visible gap between new placements
+  function __aabbOverlap(ax0,ax1,az0,az1, bx0,bx1,bz0,bz1){ return (ax0 <= bx1 && ax1 >= bx0 && az0 <= bz1 && az1 >= bz0); }
   function findFreeSpotForFootprint(width, depth, level){
     try {
       var grid = (typeof GRID_SPACING==='number' && GRID_SPACING>0)? GRID_SPACING : 1;

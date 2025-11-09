@@ -84,6 +84,9 @@
   { label: 'Plan apply', url: 'js/core/plan-apply.js?v=20251101-7', critical: true },
   { label: 'Plan populate', url: 'js/core/plan-populate.js?v=20251101-4', critical: true },
     { label: 'Trace panel', url: 'js/ui/trace-panel.js?v=20251109-1', critical: false },
+  // Core UI modals
+  { label: 'Info modal', url: 'js/ui/modals.js?v=20251128-1', critical: false },
+  { label: 'Pricing modal', url: 'js/ui/pricing.js?v=20251128-1', critical: false },
     // Plan2D foundational helpers must come BEFORE core/draw/editor wires
     { label: 'Plan2D geom', url: 'js/plan2d/geom2d.js?v=20251108-2', critical: false },
     { label: 'Plan2D walls', url: 'js/plan2d/walls.js?v=20251108-2', critical: false },

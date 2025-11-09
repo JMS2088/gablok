@@ -116,6 +116,15 @@
     color: #ffffff !important;
   }
 
+  /* Pulse highlight when opening the roof dropdown */
+  @keyframes dropdownPulse {
+    0% { box-shadow: 0 0 0 0 rgba(0,122,204,0.45); }
+    100% { box-shadow: 0 0 0 16px rgba(0,122,204,0); }
+  }
+  #roof-type-dropdown.pulse .dropdown-button {
+    animation: dropdownPulse 0.65s ease-out;
+  }
+
   /* Main menu: make all secondary buttons white with black text (except primary Add Room) */
   #controls button.secondary {
     background: #ffffff !important;

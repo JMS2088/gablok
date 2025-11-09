@@ -31,6 +31,47 @@
     try { if (typeof window.focusCameraOnObject==='function') window.focusCameraOnObject(obj); } catch(_eFc){}
     try { if (typeof window.renderLoop==='function') window.renderLoop(); } catch(_eRl){}
   }
+  // --- Generic non-overlap placement helper (macro components) ---
+  function __collectMacroFootprints(level){
+    var out=[];
+    try { (window.allRooms||[]).forEach(function(r){ if(r && (r.level||0)===level) out.push({x:r.x,z:r.z,w:r.width,d:r.depth}); }); } catch(_r){}
+    var names=['stairsComponents','pergolaComponents','garageComponents','poolComponents','roofComponents','balconyComponents'];
+    for (var ni=0; ni<names.length; ni++){
+      var arr = window[names[ni]] || [];
+      for (var i=0;i<arr.length;i++){ var o=arr[i]; if(o && (o.level||0)===level) out.push({x:o.x,z:o.z,w:o.width,d:o.depth}); }
+    }
+    return out;
+  }
+  function __aabbOverlapInclusive(ax0,ax1,az0,az1,bx0,bx1,bz0,bz1){
+    return (ax0 <= bx1 && ax1 >= bx0 && az0 <= bz1 && az1 >= bz0);
+  }
+  function __findFreeNonOverlapping(x,z,w,d,level){
+    try {
+      w = Math.max(0.1,w||0); d=Math.max(0.1,d||0);
+      var halfW=w/2, halfD=d/2; var footprints=__collectMacroFootprints(level);
+      function collides(cx,cz){
+        var ax0=cx-halfW, ax1=cx+halfW, az0=cz-halfD, az1=cz+halfD; // inclusive edges considered touching
+        for (var i=0;i<footprints.length;i++){
+          var f=footprints[i]; var bx0=f.x-(f.w||0)/2, bx1=f.x+(f.w||0)/2, bz0=f.z-(f.d||0)/2, bz1=f.z+(f.d||0)/2;
+          if (__aabbOverlapInclusive(ax0,ax1,az0,az1,bx0,bx1,bz0,bz1)) return true;
+        }
+        return false;
+      }
+      if(!collides(x,z)) return {x:x,z:z};
+      var grid = (typeof window.GRID_SPACING==='number' && window.GRID_SPACING>0) ? window.GRID_SPACING : 1;
+      var maxRing=40; // search radius
+      for (var ring=1; ring<=maxRing; ring++){
+        for (var dx=-ring; dx<=ring; dx++){
+          for (var dz=-ring; dz<=ring; dz++){
+            if (Math.max(Math.abs(dx),Math.abs(dz))!==ring) continue;
+            var cx = x + dx*grid, cz = z + dz*grid;
+            if(!collides(cx,cz)) return {x:cx,z:cz};
+          }
+        }
+      }
+      return {x:x,z:z};
+    } catch(e){ return {x:x,z:z}; }
+  }
 
   // --- Default field sets (mirrors earlier engine3d implementations) ---
   function hydrateStairs(s){
@@ -81,6 +122,8 @@
   if (typeof window.addPergola === 'undefined') window.addPergola = function(){
     var lvl=0,w=3.0,d=3.0,x=0,z=0; try{ if(typeof findFreeSpotForFootprint==='function'){ var spot=findFreeSpotForFootprint(w,d,lvl); x=spot.x; z=spot.z; } }catch(_e){}
     try{ if(typeof applySnap==='function'){ var s=applySnap({x:x,z:z,width:w,depth:d,level:lvl,type:'pergola'}); x=s.x; z=s.z; } }catch(_e2){}
+    // Enforce non-overlap (including edge contact) after snap
+    var adj=__findFreeNonOverlapping(x,z,w,d,lvl); x=adj.x; z=adj.z;
     var comp=createPergolaComponent({x:x,z:z,width:w,depth:d,level:lvl}); postAddSelectAndRender(comp,'Added Pergola'); return comp; };
 
   // Garage
@@ -91,6 +134,7 @@
   if (typeof window.addGarage === 'undefined') window.addGarage = function(){
     var lvl=0,w=3.2,d=5.5,x=0,z=0; try{ if(typeof findFreeSpotForFootprint==='function'){ var spot=findFreeSpotForFootprint(w,d,lvl); x=spot.x; z=spot.z; } }catch(_e){}
     try{ if(typeof applySnap==='function'){ var s=applySnap({x:x,z:z,width:w,depth:d,level:lvl,type:'garage'}); x=s.x; z=s.z; } }catch(_e2){}
+    var adj=__findFreeNonOverlapping(x,z,w,d,lvl); x=adj.x; z=adj.z;
     var comp=createGarageComponent({x:x,z:z,width:w,depth:d,level:lvl}); postAddSelectAndRender(comp,'Added Garage'); return comp; };
 
   // Pool
@@ -101,6 +145,7 @@
   if (typeof window.addPool === 'undefined') window.addPool = function(){
     var lvl=0,w=4.0,d=2.0,x=0,z=0; try{ if(typeof findFreeSpotForFootprint==='function'){ var spot=findFreeSpotForFootprint(w,d,lvl); x=spot.x; z=spot.z; } }catch(_e){}
     try{ if(typeof applySnap==='function'){ var s=applySnap({x:x,z:z,width:w,depth:d,level:lvl,type:'pool'}); x=s.x; z=s.z; } }catch(_e2){}
+    var adj=__findFreeNonOverlapping(x,z,w,d,lvl); x=adj.x; z=adj.z;
     var comp=createPoolComponent({x:x,z:z,width:w,depth:d,level:lvl}); postAddSelectAndRender(comp,'Added Pool'); return comp; };
 
   // Roof
@@ -112,6 +157,7 @@
   if (typeof window.addRoof === 'undefined') window.addRoof = function(){
     var lvl=0,w=6.0,d=6.0,x=0,z=0; try{ if(typeof computeRoofFootprint==='function'){ var fp=computeRoofFootprint(); if(fp){ x=fp.x; z=fp.z; w=Math.max(0.5,fp.width); d=Math.max(0.5,fp.depth); } } }catch(_e){}
     try{ if(typeof applySnap==='function'){ var s=applySnap({x:x,z:z,width:w,depth:d,level:lvl,type:'roof'}); x=s.x; z=s.z; } }catch(_e2){}
+    var adj=__findFreeNonOverlapping(x,z,w,d,lvl); x=adj.x; z=adj.z;
     var baseH=(typeof computeRoofBaseHeight==='function'? computeRoofBaseHeight():3.0);
     var comp=createRoofComponent({x:x,z:z,width:w,depth:d,level:lvl,baseHeight:baseH}); postAddSelectAndRender(comp,'Added Roof'); return comp; };
 
@@ -123,6 +169,7 @@
   if (typeof window.addBalcony === 'undefined') window.addBalcony = function(){
     var lvl=1,w=2.5,d=1.5,x=0,z=0; try{ if(typeof findFreeSpotForFootprint==='function'){ var spot=findFreeSpotForFootprint(w,d,lvl); x=spot.x; z=spot.z; } }catch(_e){}
     try{ if(typeof applySnap==='function'){ var s=applySnap({x:x,z:z,width:w,depth:d,level:lvl,type:'balcony'}); x=s.x; z=s.z; } }catch(_e2){}
+    var adj=__findFreeNonOverlapping(x,z,w,d,lvl); x=adj.x; z=adj.z;
     var comp=createBalconyComponent({x:x,z:z,width:w,depth:d,level:lvl}); postAddSelectAndRender(comp,'Added Balcony'); return comp; };
 
   // Hydrate any previously created components (from earlier stripped definitions) so they become visible again.
