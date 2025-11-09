@@ -8,112 +8,116 @@
 (function(){
   'use strict';
 
-  // Camera and pan defaults (idempotent)
-  if (typeof window.camera === 'undefined') {
-    window.camera = {
-      yaw: 0.0,
-      pitch: -0.5,
-      distance: 12,
+  (function(){
+    // Guard: avoid redefining if already extracted
+    if(window.updateProjectionCache && window.project3D && window.focusCameraOnObject && window.camera) return;
+
+    // Establish baseline globals to prevent early undefined access by other legacy modules.
+    // These were previously implicitly created in engine3d.js or other modules through first writes.
+    if(typeof window.allRooms === 'undefined') window.allRooms = [];
+    if(typeof window.wallStrips === 'undefined') window.wallStrips = [];
+    if(typeof window.allOpenings === 'undefined') window.allOpenings = [];
+    if(typeof window.allComponents === 'undefined') window.allComponents = [];
+    if(typeof window.mouse === 'undefined') window.mouse = { x:0, y:0, down:false };
+
+    // Perspective strength constant (was inline in original engine3d.js)
+    const PERSPECTIVE_STRENGTH = 0.88;
+    window.PERSPECTIVE_STRENGTH = PERSPECTIVE_STRENGTH;
+
+    // Initialize camera & pan objects if absent (replicates previous implicit globals)
+    window.camera = window.camera || {
+      yaw: 0.65,
+      pitch: -0.55,
+      distance: 32,
       targetX: 0,
-      targetY: 2.5,
       targetZ: 0,
-      // Constraints used by input handlers
-      minPitch: -1.2,
-      maxPitch: 0.3,
-      minDistance: 4,
-      maxDistance: 80,
-      // Prevent camera from dipping below a small height when looking down
-      minCamY: 0.3
+      cachedBasis: null,
+      cachedMatrix: null
     };
-  } else {
-    // Ensure constraint fields exist on preexisting camera objects
-    if (typeof camera.minPitch !== 'number') camera.minPitch = -1.2;
-    if (typeof camera.maxPitch !== 'number') camera.maxPitch = 0.3;
-    if (typeof camera.minDistance !== 'number') camera.minDistance = 4;
-    if (typeof camera.maxDistance !== 'number') camera.maxDistance = 80;
-    if (typeof camera.minCamY !== 'number') camera.minCamY = 0.3;
-    if (typeof camera.targetY !== 'number') camera.targetY = 2.5;
-  }
-  if (typeof window.pan === 'undefined') {
-    window.pan = { x: 0, y: 0 };
-  }
+  // Screen-space pan used across modules (x,y in pixels). Avoid 'z' here — some callers add to pan.y.
+  window.pan = window.pan || { x:0, y:0 };
 
-  // Shared projection cache object. IMPORTANT: never replace the object reference;
-  // always mutate window.__proj so other modules holding a reference stay in sync.
-  if (typeof window.__proj === 'undefined') {
-    window.__proj = { right:[1,0,0], up:[0,1,0], fwd:[0,0,1], cam:[0,0,10], scale: 600 };
-  }
+  // Constraints expected on the camera object by events.js and engine3d.js
+  if (typeof window.camera.minPitch !== 'number') window.camera.minPitch = -1.2;
+  if (typeof window.camera.maxPitch !== 'number') window.camera.maxPitch = 0.3;
+  if (typeof window.camera.minDistance !== 'number') window.camera.minDistance = 4;
+  if (typeof window.camera.maxDistance !== 'number') window.camera.maxDistance = 80;
+  if (typeof window.camera.minCamY !== 'number') window.camera.minCamY = 0.3;
 
-  // Perspective blend strength (1.0 = full perspective, 0.0 = orthographic-like)
-  if (typeof window.PERSPECTIVE_STRENGTH === 'undefined') window.PERSPECTIVE_STRENGTH = 0.88;
-
-  // Recompute camera basis and screen scale; mutate window.__proj in place
-  if (typeof window.updateProjectionCache === 'undefined') {
-    window.updateProjectionCache = function updateProjectionCache(){
-      var cy = Math.cos(camera.yaw), sy = Math.sin(camera.yaw);
-      var cp = Math.cos(camera.pitch), sp = Math.sin(camera.pitch);
-      var fwd = [ sy*cp, sp, cy*cp ];
-      var right = [ Math.max(-1, Math.min(1, cy)), 0, Math.max(-1, Math.min(1, -sy)) ];
-      // up = cross(fwd, right)
-      var up = [
+    // Cache update: use the original engine3d basis and camera placement to match rendering math
+    window.updateProjectionCache = function(){
+      // Precompute yaw/pitch sines/cosines
+      const cy = Math.cos(window.camera.yaw), sy = Math.sin(window.camera.yaw);
+      const cp = Math.cos(window.camera.pitch), sp = Math.sin(window.camera.pitch);
+      // Forward points from camera toward target
+      let fwd = [ sy*cp, sp, cy*cp ];
+      // Right vector around world Y axis (yaw-only)
+      let right = [ cy, 0, -sy ];
+      // Up = cross(fwd, right)
+      let up = [
         fwd[1]*right[2] - fwd[2]*right[1],
         fwd[2]*right[0] - fwd[0]*right[2],
         fwd[0]*right[1] - fwd[1]*right[0]
       ];
-      function norm(v){ var L=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/L,v[1]/L,v[2]/L]; }
+      function norm(v){ const L = Math.hypot(v[0],v[1],v[2]) || 1; return [ v[0]/L, v[1]/L, v[2]/L ]; }
       right = norm(right); up = norm(up); fwd = norm(fwd);
 
-      // Vertical bias keeps the camera a bit lower when pitching down
-      var verticalScale = (fwd[1] < 0 ? 0.6 : 1.0);
-      var camY = (camera.targetY||0) - fwd[1]*camera.distance*verticalScale;
-      if (typeof camera.minCamY === 'number') camY = Math.max(camera.minCamY, camY);
-      var cam = [ camera.targetX - fwd[0]*camera.distance, camY, camera.targetZ - fwd[2]*camera.distance ];
+      // Camera position: target minus forward*distance, with slight vertical bias when looking down
+      const verticalScale = (fwd[1] < 0 ? 0.6 : 1.0);
+      let camY = (window.camera.targetY || 0) - fwd[1] * window.camera.distance * verticalScale;
+      if (typeof window.camera.minCamY === 'number') camY = Math.max(window.camera.minCamY, camY);
+      const cam = [
+        window.camera.targetX - fwd[0]*window.camera.distance,
+        camY,
+        window.camera.targetZ - fwd[2]*window.camera.distance
+      ];
 
-      // Mutate the shared cache (do not reassign)
-      var proj = window.__proj || (window.__proj = { right:[1,0,0], up:[0,1,0], fwd:[0,0,1], cam:[0,0,10], scale:600 });
-      proj.right = right; proj.up = up; proj.fwd = fwd; proj.cam = cam;
-      var dpr = (typeof window.devicePixelRatio==='number' && isFinite(window.devicePixelRatio)) ? window.devicePixelRatio : 1;
-      var hPx = (window.canvas ? canvas.height : 800);
-      var wPx = (window.canvas ? canvas.width  : 1200);
-      proj.scale = Math.max(300, Math.min(hPx, wPx) * 0.6) / dpr;
-    };
-  }
-
-  // Focus camera on an object's center with distance scaled by its size
-  if (typeof window.focusCameraOnObject === 'undefined') {
-    window.focusCameraOnObject = function focusCameraOnObject(obj){
+      // Update global projection cache used by drawRoom/grid/inputs
       try {
-        if (!obj) return;
-        var w = Math.max(0.5, obj.width || 2);
-        var d = Math.max(0.5, obj.depth || 2);
-        camera.targetX = obj.x || 0;
-        camera.targetZ = obj.z || 0;
-        camera.distance = Math.max(8, Math.max(w, d) * 2 + 5);
-        pan.x = 0; pan.y = 0;
-        window._camLastMoveTime = (performance && performance.now) ? performance.now() : Date.now();
-      } catch(_e) {}
-    };
-  }
+        if (!window.__proj) window.__proj = { right:[1,0,0], up:[0,1,0], fwd:[0,0,1], cam:[0,0,10], scale:600 };
+        window.__proj.right = right;
+        window.__proj.up = up;
+        window.__proj.fwd = fwd;
+        window.__proj.cam = cam;
+        const dpr = window.devicePixelRatio || 1;
+        const W = window.canvas ? window.canvas.width : 1200;
+        const H = window.canvas ? window.canvas.height : 800;
+        window.__proj.scale = Math.max(300, Math.min(H, W) * 0.6) / dpr;
+      } catch(_eProj) {}
 
-  // Project world coordinates to screen pixel coordinates
-  if (typeof window.project3D === 'undefined') {
-    window.project3D = function project3D(x,y,z){
+      // Cache essentials for camera.js consumers
+      window.camera.cachedBasis = { camX: cam[0], camY: cam[1], camZ: cam[2], aspect: (window.canvas ? (window.canvas.width/Math.max(1, window.canvas.height)) : (16/9)) };
+      window.camera.cachedMatrix = { perspective: PERSPECTIVE_STRENGTH, invPerspective: 1 - PERSPECTIVE_STRENGTH };
+    };
+
+    // Project a 3D world point to screen space (returns null if canvas not ready yet)
+    window.project3D = function(x,y,z){
       if (!window.canvas) return null;
-      var proj = window.__proj || { right:[1,0,0], up:[0,1,0], fwd:[0,0,1], cam:[0,0,10], scale:600 };
-      var rx = x - proj.cam[0], ry = y - proj.cam[1], rz = z - proj.cam[2];
-      var cx = rx*proj.right[0] + ry*proj.right[1] + rz*proj.right[2];
-      var cy = rx*proj.up[0]    + ry*proj.up[1]    + rz*proj.up[2];
-      var cz = rx*proj.fwd[0]   + ry*proj.fwd[1]   + rz*proj.fwd[2];
-      // Clip/near handling (prevents mirrored scene and preserves near geometry)
+      if (!window.__proj) window.updateProjectionCache();
+      const rx = x - window.__proj.cam[0], ry = y - window.__proj.cam[1], rz = z - window.__proj.cam[2];
+      const cx = rx*window.__proj.right[0] + ry*window.__proj.right[1] + rz*window.__proj.right[2];
+      const cy = rx*window.__proj.up[0]    + ry*window.__proj.up[1]    + rz*window.__proj.up[2];
+      let   cz = rx*window.__proj.fwd[0]   + ry*window.__proj.fwd[1]   + rz*window.__proj.fwd[2];
       if (cz < -0.25) return null;
       if (cz < 0.02) cz = 0.02;
-      var k = Math.max(0, Math.min(1, window.PERSPECTIVE_STRENGTH));
-      var refZ = Math.max(0.5, camera.distance || 12);
-      var czEff = cz * k + refZ * (1 - k);
-      var s = proj.scale / czEff;
-      var sx = (canvas.width/2) + (cx * s) + (pan && pan.x || 0);
-      var sy = (canvas.height/2) - (cy * s) + (pan && pan.y || 0);
-      return { x:sx, y:sy, _cz:czEff };
+      const k = Math.max(0, Math.min(1, window.PERSPECTIVE_STRENGTH));
+      const refZ = Math.max(0.5, window.camera.distance || 12);
+      const czEff = cz * k + refZ * (1 - k);
+      const s = window.__proj.scale / czEff;
+      const px = (window.pan && typeof window.pan.x === 'number') ? window.pan.x : 0;
+      const py = (window.pan && typeof window.pan.y === 'number') ? window.pan.y : 0;
+      const sx = (window.canvas.width/2) + (cx * s) + px;
+      const sy = (window.canvas.height/2) - (cy * s) + py;
+      return { x: sx, y: sy, _cz: czEff };
     };
-  }
+
+    // Focus camera on an object with smoothish immediate retarget
+    window.focusCameraOnObject = function(obj){
+      if(!obj) return;
+      if(typeof obj.x === 'number') window.camera.targetX = obj.x;
+      if(typeof obj.z === 'number') window.camera.targetZ = obj.z;
+      window.updateProjectionCache();
+    };
+
+  })();
 })();

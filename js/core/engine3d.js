@@ -3,6 +3,17 @@
  * @description Core 3D rendering engine with orbit camera, projection, and scene management.
  */
 (function(){
+  // Ensure global canvas/ctx identifiers exist (some legacy modules reference bare `canvas` / `ctx`).
+  // Declare as globals if not already defined to avoid ReferenceError in other scripts.
+  if (typeof window.canvas === 'undefined') window.canvas = null;
+  if (typeof window.ctx === 'undefined') window.ctx = null;
+  // Bind local references (still point to globals) for internal convenience.
+  // IMPORTANT: DO NOT use `var canvas` / `var ctx` here or we shadow and prevent global var creation.
+  // Instead rely on the existing global bindings created above.
+  /* eslint-disable no-undef */
+  canvas = window.canvas;
+  ctx = window.ctx;
+  /* eslint-enable no-undef */
   // Component creation helpers moved to js/core/engine/components.js
   // addStairs, addPergola, addGarage, addPool, addRoof, addBalcony are defined there with guards
   if (typeof window.__showCornerCodes === 'undefined') window.__showCornerCodes = false;
@@ -120,6 +131,8 @@
       var w = Math.floor(cssW * dpr), h = Math.floor(cssH * dpr);
       if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
       if (!ctx) ctx = canvas.getContext('2d');
+      // Expose back to window for modules that reference window.canvas/window.ctx
+      try { window.canvas = canvas; window.ctx = ctx; } catch(_e) {}
     };
   }
 
