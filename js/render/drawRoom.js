@@ -4,12 +4,43 @@
 
 function drawRoom(room) {
   try {
+  // Preserve incoming canvas state so stroke styles/alphas don't leak or get clobbered
+  if (ctx && typeof ctx.save === 'function') ctx.save();
+  // Ensure a predictable baseline for stroke rendering regardless of prior modules
+  try {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineJoin = 'miter';
+    ctx.miterLimit = 4;
+    ctx.lineCap = 'butt';
+  } catch(_eState){}
+
+  /*
+   * ============================================================================
+   * 3D ROOM WIREFRAME — VERY IMPORTANT: DO NOT DELETE
+   * ----------------------------------------------------------------------------
+   * This renderer draws the full 3D wireframe for rooms (base, verticals, top)
+   * in BOTH render modes (Lines and Solid). Product requirement: the perimeter
+   * outline must ALWAYS be visible to anchor user interactions (drag/resize),
+   * prevent loss of spatial context, and avoid regressions where rooms appear
+   * to “vanish”.
+   *
+   * Key guarantees:
+   * - Base outline is always stroked (with near-plane fallbacks when needed).
+   * - Vertical edges and top outline are always drawn for a full wireframe.
+   * - Canvas state is saved/restored to prevent external style leakage.
+   *
+   * If you need to change visuals, adjust strokeStyle/lineWidth only. Do NOT
+   * remove these strokes or the fallback logic; smoke tests and UX depend on it.
+   * ============================================================================
+   */
   var solidMode = (window.__wallRenderMode === 'solid');
-  // In solid mode we draw extruded wall strips (faces + top) which already communicate footprint.
-  // Drawing the room floor fill again creates a perceived duplicate/"ghost" floor plan.
-  // So: suppress wireframe AND base floor fill when solidMode to eliminate duplicate plan rendering.
-  var suppressWire = !!solidMode;
-  var suppressFloorFill = !!solidMode; // new: skip base floor fill in solid mode to remove ghost duplicate
+  var lineMode = (window.__wallRenderMode !== 'solid');
+  // Updated policy (20251111): Always draw the perimeter outline for the room so users
+  // have stable visual feedback while dragging/resizing in BOTH render modes.
+  // We still suppress the filled floor in solid mode to avoid the duplicate "ghost" planar fill.
+  // (Previous logic suppressed wires entirely in solid mode which made outlines vanish.)
+  var suppressFloorFill = !!solidMode; // keep floor fill suppression in solid mode
+  var suppressWire = false; // NEVER suppress the base outline; vertical/top edges still gated below by mode
     // Helpers: near-plane clipping in camera space to keep floors/outlines visible without bending
     var kBlend = Math.max(0, Math.min(1, (typeof window.PERSPECTIVE_STRENGTH==='number'? window.PERSPECTIVE_STRENGTH:0.88)));
     var refZ = Math.max(0.5, (camera && camera.distance) || 12);
@@ -104,13 +135,15 @@ function drawRoom(room) {
     }
     
     if (currentLevel) {
-      ctx.strokeStyle = selected ? '#007acc' : '#4b5563';
-      ctx.lineWidth = selected ? 3 : 2.25;
+      // High-contrast strokes for current floor to ensure visibility
+      ctx.strokeStyle = selected ? '#0ea5e9' : '#111827';
+      ctx.lineWidth = selected ? 3 : 2.5;
       ctx.globalAlpha = 1.0;
     } else {
-      ctx.strokeStyle = selected ? '#005080' : '#9ca3af';
-      ctx.lineWidth = selected ? 2.25 : 1.25;
-      ctx.globalAlpha = 0.7;
+      // Off-floor: slightly lighter but still visible
+      ctx.strokeStyle = selected ? '#0ea5e9' : '#6b7280';
+      ctx.lineWidth = selected ? 2.25 : 1.5;
+      ctx.globalAlpha = 0.75;
     }
     
     if (!hasFootprint) {
@@ -141,9 +174,22 @@ function drawRoom(room) {
           ctx.beginPath(); var so = camToScreen(baseClip[0]); if(so){ ctx.moveTo(so.x, so.y); }
           for (var bo=1; bo<baseClip.length; bo++){ var sb2 = camToScreen(baseClip[bo]); if(sb2){ ctx.lineTo(sb2.x, sb2.y); } }
           ctx.closePath(); ctx.stroke();
+          try { window.__roomOutlineDrawCount = (window.__roomOutlineDrawCount||0) + 1; } catch(_eCnt0) {}
         }
       }
-      // Edges (12), clipped per segment — skip only while actively dragging in solid mode
+      // Fallback: if clipping removed the whole base (camera extremely close), still stroke raw projected rectangle
+      else if (!suppressWire) {
+        try {
+          var p0 = project3D(basePts[0].x, basePts[0].y, basePts[0].z);
+          var p1 = project3D(basePts[1].x, basePts[1].y, basePts[1].z);
+          var p2 = project3D(basePts[2].x, basePts[2].y, basePts[2].z);
+          var p3 = project3D(basePts[3].x, basePts[3].y, basePts[3].z);
+          if (p0 && p1 && p2 && p3) {
+            ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.closePath(); ctx.stroke();
+          }
+        } catch(_eRectFallback) {}
+      }
+      // Edges: FULL 3D WIREFRAME in all modes (draw base, verticals, and top)
       if (!suppressWire) {
         var edges = [ [0,1],[1,2],[2,3],[3,0], [4,5],[5,6],[6,7],[7,4], [0,4],[1,5],[2,6],[3,7] ];
         for (var eIdx=0; eIdx<edges.length; eIdx++){
@@ -184,16 +230,33 @@ function drawRoom(room) {
           for (var bo=1; bo<baseClip.length; bo++){ var sb2 = camToScreen(baseClip[bo]); if(sb2){ ctx.lineTo(sb2.x, sb2.y); } }
           ctx.closePath();
           ctx.stroke();
+          try { window.__roomOutlineDrawCount = (window.__roomOutlineDrawCount||0) + 1; } catch(_eCnt1) {}
         }
       }
-      // Top outline (clipped) — skip only while actively dragging in solid mode
+      // Polygon fallback (same reasoning as rectangle): ensure outline visible if near-plane clipping discards all points
+      else if (!suppressWire && Array.isArray(room.footprint) && room.footprint.length >= 3) {
+        try {
+          var firstProj = null;
+          ctx.beginPath();
+          for (var fpi=0; fpi<room.footprint.length; fpi++) {
+            var pRaw = room.footprint[fpi];
+            var pScr = project3D(pRaw.x, roomFloorY, pRaw.z);
+            if (!pScr) continue;
+            if (!firstProj) { ctx.moveTo(pScr.x, pScr.y); firstProj = pScr; }
+            else { ctx.lineTo(pScr.x, pScr.y); }
+          }
+          if (firstProj) { ctx.closePath(); ctx.stroke(); }
+          try { if (firstProj) window.__roomOutlineDrawCount = (window.__roomOutlineDrawCount||0) + 1; } catch(_eCnt2) {}
+        } catch(_ePolyFallback) {}
+      }
+      // Top outline (clipped) — ALWAYS draw for full 3D wireframe, regardless of mode
       var topClip = clipPolyNear(topCam);
       if (!suppressWire && topClip.length >= 2){
         ctx.beginPath(); var t0 = camToScreen(topClip[0]); if(t0){ ctx.moveTo(t0.x, t0.y); }
         for (var ti=1; ti<topClip.length; ti++){ var st = camToScreen(topClip[ti]); if(st){ ctx.lineTo(st.x, st.y); } }
         ctx.closePath(); ctx.stroke();
       }
-      // Side edges (vertical) — skip only while actively dragging in solid mode
+      // Side edges (vertical) — ALWAYS draw for full 3D wireframe
       if (!suppressWire) {
         for (var si=0; si<room.footprint.length; si++){
           var pt = room.footprint[si];
@@ -208,6 +271,8 @@ function drawRoom(room) {
     // Rectangle case floor fill moved above during clipping
 
   try { if (typeof drawHandlesForRoom === 'function') drawHandlesForRoom(room); } catch(e) {}
+  // Restore canvas state for subsequent draws
+  if (ctx && typeof ctx.restore === 'function') ctx.restore();
 
     // Draw openings (doors/windows) with full rectangular outline at correct sill/height
     // NOTE: Temporarily suppressed in solid wall render mode to diagnose persistent "ghost" outline layer.

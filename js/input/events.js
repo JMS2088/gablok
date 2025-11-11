@@ -991,17 +991,10 @@
               }
             }
             
-            // IMMEDIATELY rebuild 3D from the fresh 2D plan to apply the new center and coordinates
-            // This ensures openings get updated with the correct positions before any other code runs
-            if (typeof applyPlan2DTo3D === 'function') {
-              console.log('🔧 Rebuilding 3D from fresh 2D plan after drag');
-              var lvl = (typeof currentFloor==='number' ? currentFloor : 0);
-              // Use destructive apply here to replace rooms on this level and avoid duplicates
-              applyPlan2DTo3D(snap, { allowRooms:true, quiet:true, level: lvl, nonDestructive:false });
-            }
-
-            // If Render mode is active, immediately rebuild the solid room perimeter strips once more
-            __maybeRebuildRoomStripsThrottled();
+            // IMPORTANT: Do NOT rebuild 3D from 2D after a 3D drag.
+            // This used to cause clones/ghosts due to back-and-forth rebuilds.
+            // We keep 2D in sync from 3D (populatePlan2DFromDesign) and leave 3D as the source of truth.
+            // Solid perimeter strips are already rebuilt incrementally during the drag when in Render mode.
             
             // Only redraw if the 2D plan is actually visible
             if (__plan2d.active && typeof plan2dDraw === 'function') {

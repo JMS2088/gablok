@@ -221,6 +221,19 @@
   }
   if (typeof window.drawGrid === 'undefined') {
     window.drawGrid = function drawGrid(){
+      /*
+       * ========================================================================
+       * MAIN 3D GRID — VERY IMPORTANT: DO NOT DELETE
+       * ------------------------------------------------------------------------
+       * The ground grid provides essential spatial context for navigation,
+       * placement, and visual scale. It also serves as a sanity check that the
+       * 3D engine and projection are running (smoke tests sample non-white
+       * pixels in the frame and rely on the grid/geometry being drawn).
+       *
+       * If you need to adjust styling, tweak colors or line widths below, but do
+       * NOT remove this function or its invocation in the render loop.
+       * ========================================================================
+       */
       if (!ctx || !canvas) return;
       try { window.__dbgGfx.gridCalls++; } catch(_e) {}
       var range = 40;
@@ -586,7 +599,42 @@
   if (typeof window.drawWallStrip === 'undefined') window.drawWallStrip = function(ws){
     try {
       if (!ws) return;
-      // Do not draw strips for the room currently being dragged; prevents a ghost at the old pose while solids rebuild
+      // Build (or reuse) a perimeter edge hash for fast suppression checks in line mode.
+      try {
+        if (!window.__perimeterEdgeKeyHash) window.__perimeterEdgeKeyHash = null;
+        // Recompute once per frame when rendering first strip (detected by sentinel flag reset in render loop)
+        if (window.__rebuildPerimeterEdgeHashOnce) {
+          window.__rebuildPerimeterEdgeHashOnce = false;
+          var hash = Object.create(null);
+          function addEdge(lvl,a,b){ var k=lvl+'|'+a.x.toFixed(3)+','+a.z.toFixed(3)+'|'+b.x.toFixed(3)+','+b.z.toFixed(3); var k2=lvl+'|'+b.x.toFixed(3)+','+b.z.toFixed(3)+'|'+a.x.toFixed(3)+','+a.z.toFixed(3); hash[k]=true; hash[k2]=true; }
+          var roomsH = Array.isArray(window.allRooms)? window.allRooms : [];
+          for (var rhi=0;rhi<roomsH.length;rhi++){
+            var rr=roomsH[rhi]; if(!rr) continue; var lvl=(rr.level||0);
+            if (Array.isArray(rr.footprint) && rr.footprint.length>=2){
+              for (var fpI=0; fpI<rr.footprint.length; fpI++){ var A=rr.footprint[fpI], B=rr.footprint[(fpI+1)%rr.footprint.length]; if(!A||!B) continue; addEdge(lvl,A,B); }
+            } else {
+              var hw=(rr.width||0)/2, hd=(rr.depth||0)/2; if(hw>0&&hd>0){
+                var xL=(rr.x||0)-hw, xR=(rr.x||0)+hw, zT=(rr.z||0)-hd, zB=(rr.z||0)+hd;
+                var pts=[{x:xL,z:zT},{x:xR,z:zT},{x:xR,z:zB},{x:xL,z:zB}];
+                for (var ei=0; ei<pts.length; ei++){ var P=pts[ei], Q=pts[(ei+1)%pts.length]; addEdge(lvl,P,Q); }
+              }
+            }
+          }
+          var garagesH = Array.isArray(window.garageComponents)? window.garageComponents: [];
+          for (var ghi=0; ghi<garagesH.length; ghi++){
+            var gg=garagesH[ghi]; if(!gg) continue; var lvlG=(gg.level||0); var hwg=(gg.width||0)/2, hdg=(gg.depth||0)/2; if(hwg<=0||hdg<=0) continue;
+            var rot=((gg.rotation||0)*Math.PI)/180, c=Math.cos(rot), s=Math.sin(rot);
+            function Gp(lx,lz){ return { x:(gg.x||0)+lx*c - lz*s, z:(gg.z||0)+lx*s + lz*c }; }
+            var g1=Gp(-hwg,-hdg), g2=Gp(hwg,-hdg), g3=Gp(hwg,hdg), g4=Gp(-hwg,hdg);
+            var gEdges=[g1,g2,g3,g4];
+            for (var ge=0; ge<gEdges.length; ge++){ var GA=gEdges[ge], GB=gEdges[(ge+1)%gEdges.length]; addEdge(lvlG,GA,GB); }
+          }
+          window.__perimeterEdgeKeyHash = hash;
+        }
+      } catch(_eEdgeHash) {}
+      // While a room is actively dragged, skip drawing its pre-existing perimeter strips to avoid
+      // a detached ghost at the old pose. Outlines remain visible via drawRoom(), which now always
+      // renders the base perimeter even in solid mode.
       try {
         if (window.__activelyDraggedRoomId && ws.roomId && ws.roomId === window.__activelyDraggedRoomId) {
           return; // skip drawing this strip during active drag
@@ -648,30 +696,21 @@
         } catch(_eCC) { /* ignore */ }
       }
 
-      // Line mode: draw a single centerline at mid-height; skip thickness/face outlines
+      // Line mode: draw a single centerline ONLY for freestanding walls.
       if (renderMode === 'line'){
-        // Requirement: eliminate the persistent mid-height "keyline" ghost after 2D Apply.
-        // That keyline was the centerline rendering of perimeter wall strips generated from rooms.
-        // Rooms already have their footprint outlined via drawRoom at floor level; drawing an extra
-        // elevated centerline (~1.0–1.2m) duplicates visual information and is perceived as a ghost.
-        // Suppress drawing for room/garage-generated perimeter strips (tagged) in line mode.
-        try {
-          var roomTag = window.__roomStripTag || '__fromRooms';
-          if (ws && ws[roomTag]) {
-            return; // skip perimeter centerline for rooms/garages in line mode
-          }
-        } catch(_eSkipTag) {}
-        var yMid = baseY + Math.min(h*0.5, 1.2);
-        var p0 = project3D(x0, yMid, z0), p1 = project3D(x1, yMid, z1);
-        if (!p0 || !p1) return;
-        ctx.save();
-        ctx.strokeStyle = onLevel ? '#64748b' : 'rgba(148,163,184,0.6)';
-        ctx.lineWidth = onLevel ? 3 : 1.6;
-        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
-        ctx.restore();
-        // Corner codes in line mode too (using same mid-height for label position)
-        drawCornerCodeAt(x0, yMid, z0);
-        drawCornerCodeAt(x1, yMid, z1);
+        var isFromRoom = !!(ws && (ws.roomId || ws.garageId || ws[(window.__roomStripTag||'__fromRooms')]));
+        if (!isFromRoom) {
+          var yMid = baseY + Math.min(h*0.5, 1.2);
+          var p0 = project3D(x0, yMid, z0), p1 = project3D(x1, yMid, z1);
+          if (!p0 || !p1) return;
+          ctx.save();
+          ctx.strokeStyle = onLevel ? '#64748b' : 'rgba(148,163,184,0.6)';
+          ctx.lineWidth = onLevel ? 3 : 1.6;
+          ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+          ctx.restore();
+          drawCornerCodeAt(x0, yMid, z0);
+          drawCornerCodeAt(x1, yMid, z1);
+        }
         return;
       }
       // Base corners (counter-clockwise)
@@ -1649,6 +1688,8 @@
         }
         // Draw interior wall strips (extruded 2D walls)
         try {
+          // Mark that perimeter edge map should be rebuilt once before drawing strips in this frame
+          window.__rebuildPerimeterEdgeHashOnce = true;
           if (window.__showCornerCodes && typeof window.computeCornerCodes==='function') { window.computeCornerCodes(); }
           // Ensure exterior miter snaps are ready before the very first draw in this frame
           try { if (typeof window.computeExteriorCornerSnaps==='function') window.computeExteriorCornerSnaps(); } catch(_eSnapPre) {}

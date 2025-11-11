@@ -11,9 +11,13 @@ _last_test_report = { 'msg': '', 'ts': 0 }
 # In-memory admin data: basic user registry and error log
 _admin_users = {}
 _admin_errors = []
+_FORCE_CANONICAL_HOST = str(os.environ.get('FORCE_CANONICAL_HOST', '')).lower() in ('1','true','yes','on')
 
 
 class NoCacheHandler(SimpleHTTPRequestHandler):
+    # Use HTTP/1.1 for better compatibility with some forwarding proxies that
+    # may expect keep-alive semantics; we still explicitly send Connection: close.
+    protocol_version = 'HTTP/1.1'
     def setup(self):
         # Apply a per-connection timeout so stuck clients don’t hold server threads forever
         try:
@@ -66,7 +70,11 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             parts = host_no_port.split('.')
             sub = parts[0] if parts else ''
             rest = '.'.join(parts[1:]) if len(parts) > 1 else ''
-            fixed_port = 8000
+            # Prefer the bound port if known (set by run()), else PORT env, else 8000
+            try:
+                fixed_port = int(os.environ.get('GABLOK_BOUND_PORT') or os.environ.get('PORT') or 8000)
+            except Exception:
+                fixed_port = 8000
             port_suffix = f"-{fixed_port}"
             # Three forms we might see:
             #  1) canonical: 8000-<codespace>
@@ -88,6 +96,9 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         """If the current Host header is a remote forwarded host in a non-canonical form
         (like <codespace>-8000.app.github.dev), issue a 307 redirect to the canonical
         8000-<codespace>.app.github.dev preserving path and query. Returns True if redirected."""
+        # Allow opting out (default) to avoid redirect loops or interstitials in some environments
+        if not _FORCE_CANONICAL_HOST:
+            return False
         try:
             host = self.headers.get('Host', '')
             norm_host, looks_remote = self._normalize_remote_host(host)
@@ -181,8 +192,11 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         if self.path == '/__forwarded':
             try:
                 host = self.headers.get('Host', '')
-                # Team policy: advertise 8000 as the forwarded port regardless of bind port
-                fixed_port = 8000
+                # Advertise the actual bound port when known, else PORT env, else 8000
+                try:
+                    fixed_port = int(os.environ.get('GABLOK_BOUND_PORT') or os.environ.get('PORT') or 8000)
+                except Exception:
+                    fixed_port = 8000
                 local = f"http://localhost:{fixed_port}"
 
                 # Prefer the forwarded host from the Host header if it looks like a remote domain
@@ -190,7 +204,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 is_forwarded_host = bool(host_no_port) and not host_no_port.startswith(('0.0.0.0', '127.0.0.1')) and 'localhost' not in host_no_port
                 looks_remote = any(host_no_port.endswith(d) for d in ('app.github.dev', 'githubpreview.dev', 'gitpod.io')) if host_no_port else False
                 if is_forwarded_host:
-                    # Normalize Codespaces/Gitpod host to canonical 8000-<codespace>.<domain>
+                    # Normalize Codespaces/Gitpod host to canonical <port>-<codespace>.<domain>
                     try:
                         if looks_remote:
                             host, _ = self._normalize_remote_host(host)
@@ -207,7 +221,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                     url = ''
                     source = 'env'
                     if codespace:
-                        # https://8000-<codespace>.<domain>
+                        # https://<port>-<codespace>.<domain>
                         url = f"https://{fixed_port}-{codespace}.{fwd_domain}"
                     elif gitpod_base:
                         try:
@@ -367,6 +381,11 @@ def run(host='0.0.0.0', port=8000, directory=None):
     except OSError as e:
         print(f"Failed to bind to {host}:{port} -> {e}")
         raise
+    # Expose the bound port to handlers for URL generation
+    try:
+        os.environ['GABLOK_BOUND_PORT'] = str(port)
+    except Exception:
+        pass
     print(f"Serving {directory} on http://{host}:{port} (no-cache)", flush=True)
     # Helpful locals
     try:
@@ -417,8 +436,11 @@ if __name__ == '__main__':
     _printed_forwarded_host = False
     # Defaults from env vars with sensible fallbacks
     default_host = os.environ.get('HOST', '0.0.0.0')
-    # Team policy: default to 8000 regardless of PORT env to avoid broken forwarded ports
-    default_port = 8000
+    # Prefer PORT from environment if provided (Codespaces/Gitpod/CI), fallback to 8000
+    try:
+        default_port = int(os.environ.get('PORT') or 8000)
+    except Exception:
+        default_port = 8000
     default_dir = os.path.abspath(os.environ.get('SERVE_DIR', '.'))
 
     parser = argparse.ArgumentParser(description='Lightweight no-cache static server for development.')

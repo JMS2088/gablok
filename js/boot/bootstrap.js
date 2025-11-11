@@ -5,6 +5,33 @@
   window.__requireBoot = true;
   var bootResolve; window.__bootPromise = new Promise(function(res){ bootResolve = res; });
 
+  // Global error handler to surface early script failures in the status bar & admin log
+  if (!window.__bootErrorWired) {
+    window.__bootErrorWired = true;
+    window.addEventListener('error', function(evt){
+      try {
+        var msg = '[BootError] ' + (evt.message || evt.error && evt.error.message || 'unknown');
+        var s = document.getElementById('status'); if (s && !window.__debugStickyStatus) s.textContent = msg;
+        console.error(msg, evt.error || evt);
+        // Send to lightweight admin error collector (best-effort)
+        try {
+          fetch('/__log-error', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ message: msg, stack: (evt.error && evt.error.stack) || null }) }).catch(function(){});
+        } catch(_fe){}
+      } catch(_eTop){}
+    });
+    window.addEventListener('unhandledrejection', function(evt){
+      try {
+        var reason = (evt && (evt.reason && (evt.reason.message||evt.reason) || evt)) || 'unhandledrejection';
+        var msg = '[BootError] Promise rejection: ' + String(reason);
+        var s = document.getElementById('status'); if (s && !window.__debugStickyStatus) s.textContent = msg;
+        console.error(msg, evt);
+        try {
+          fetch('/__log-error', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ message: msg, stack: (reason && reason.stack) || null }) }).catch(function(){});
+        } catch(_fe2){}
+      } catch(_eTop2){}
+    });
+  }
+
   // Minimal loader if not present
   function loadScript(url){
     return new Promise(function(resolve, reject){
@@ -174,4 +201,29 @@
       });
     }catch(e){ console.warn('Floor plan button wiring failed', e); }
   })();
+
+  // Startup watchdogs: ensure the app never silently stalls on splash
+  // Force startApp if not begun shortly after boot, and attempt recovery render/reload if first frame never appears.
+  setTimeout(function(){
+    try {
+      if (!window.__appStarted && typeof window.startApp === 'function') {
+        console.warn('[Watchdog] startApp not started after 2500ms – forcing start.');
+        window.__appStarted = true; window.startApp();
+      }
+    } catch(e){ console.error('[Watchdog] Forced startApp failed', e); }
+  }, 2500);
+  setTimeout(function(){
+    try {
+      if (!window.__firstFrameEmitted) {
+        console.warn('[Watchdog] First frame not emitted after 6000ms – attempting recovery.');
+        var s = document.getElementById('status'); if (s && !window.__debugStickyStatus) s.textContent = 'Recovering…';
+        if (typeof window.renderLoop === 'function') window.renderLoop();
+        // If canvas/context still missing, attempt a one-time reload.
+        if ((!window.canvas || !window.ctx) && !window.__watchdogReloaded) {
+          window.__watchdogReloaded = true;
+          setTimeout(function(){ try { if (!window.__firstFrameEmitted) location.reload(); } catch(_r){} }, 800);
+        }
+      }
+    } catch(e){ /* non-fatal */ }
+  }, 6000);
 })();
