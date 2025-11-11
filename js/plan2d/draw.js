@@ -4,6 +4,8 @@
   // Coalesced draw scheduling: multiple calls collapse into one animation frame.
   var __plan2dDrawPending = false;
   function plan2dDrawImmediate(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); var ovCtx=ov.getContext('2d'); var ox=ovCtx; ctx.setTransform(1,0,0,1,0,0);
+    // CAD MODE BACKGROUND: if body has class 'cad-mode', enforce pure white canvas clear instead of dark theme.
+    var cadMode = false; try { cadMode = document.body && document.body.classList.contains('cad-mode'); } catch(_cad) {}
     // ------------------------------------------------------------------
     // Per-frame profiling counters (reset at frame start)
     try {
@@ -44,7 +46,8 @@
         var minSY = Math.min(aS.y, bS.y) - clearPadPx;
         var wSX = Math.abs(bS.x - aS.x) + clearPadPx*2;
         var hSY = Math.abs(bS.y - aS.y) + clearPadPx*2;
-        ctx.clearRect(minSX, minSY, wSX, hSY);
+        if(cadMode){ ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#ffffff'; ctx.fillRect(minSX, minSY, wSX, hSY); ctx.restore(); }
+        else { ctx.clearRect(minSX, minSY, wSX, hSY); }
         ovCtx.setTransform(1,0,0,1,0,0);
         ovCtx.clearRect(minSX, minSY, wSX, hSY);
         try {
@@ -58,7 +61,9 @@
         }catch(_pfDirty){}
       }catch(_cdr){ ctx.clearRect(0,0,c.width,c.height); ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height); useDirty=false; }
     } else {
-      ctx.clearRect(0,0,c.width,c.height); ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height);
+      if(cadMode){ ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,c.width,c.height); ctx.restore(); }
+      else { ctx.clearRect(0,0,c.width,c.height); }
+      ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height);
     }
     var perfSections = __plan2d.__perfSections = { grid:0, walls:0, openings:0, labels:0, overlay:0, total:0 };
     var tStart = (performance&&performance.now)?performance.now():Date.now();
@@ -77,7 +82,7 @@
           plan2dDrawRulers(rt.getContext('2d'), rl.getContext('2d'));
         }
       } catch(_eR) {}
-      // CAD-style grid: major 1 m and minor 0.1 m lines aligned to device pixels; include pan offsets
+  // Grid: adapt appearance in CAD mode (light gray lines on white) or dark mode (existing slate scheme)
       var step=__plan2d.scale, w=c.width, h=c.height; 
       var originX = w/2 + (__plan2d.panX * step), originY = h/2 - (__plan2d.panY * step);
       // Offscreen cached grid layer -------------------------------------
@@ -102,7 +107,7 @@
             var minorStepWorld = 0.1;
             var minorStepPx = step * minorStepWorld;
             if(minorStepPx >= 8){
-              gctx.strokeStyle='rgba(255,255,255,0.04)';
+              gctx.strokeStyle = cadMode ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)';
               var startMinorX = Math.ceil(worldLeft/minorStepWorld)*minorStepWorld;
               for(var wx=startMinorX; wx<=worldRight; wx+=minorStepWorld){
                 if(Math.abs(wx - Math.round(wx)) < 1e-6) continue;
@@ -117,7 +122,7 @@
               }
             }
             // Major (1m) lines
-            gctx.strokeStyle='rgba(255,255,255,0.10)';
+            gctx.strokeStyle = cadMode ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.10)';
             var startMajorX = Math.ceil(worldLeft);
             for(var mx=startMajorX; mx<=worldRight; mx+=1){
               var sxM = worldToScreen2D(mx,0).x + 0.5;
@@ -128,7 +133,7 @@
               var syM = worldToScreen2D(0,my).y + 0.5;
               gctx.beginPath(); gctx.moveTo(0,syM); gctx.lineTo(w,syM); gctx.stroke();
             }
-            gctx.strokeStyle='rgba(255,255,255,0.16)';
+            gctx.strokeStyle = cadMode ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.16)';
             // Central axes (world 0,0) pixel-perfect (use +0.5 since we avoided global 0.5 translate)
             gctx.beginPath(); gctx.moveTo(originX + 0.5,0); gctx.lineTo(originX + 0.5,h); gctx.stroke();
             gctx.beginPath(); gctx.moveTo(0,originY + 0.5); gctx.lineTo(w,originY + 0.5); gctx.stroke();

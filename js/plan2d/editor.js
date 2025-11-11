@@ -7,6 +7,11 @@
     Object.keys(map).forEach(function(tool){
       var el=document.getElementById(map[tool]); if(!el) return;
       el.addEventListener('click', function(){
+        // Clear previously selected tool button visual state
+        try {
+          Object.keys(map).forEach(function(t){ var b=document.getElementById(map[t]); if(b) b.classList.remove('selected'); });
+          el.classList.add('selected');
+        } catch(_cls) {}
         if(typeof plan2dSetTool==='function'){ plan2dSetTool(tool); }
         else {
           __plan2d.tool = tool;

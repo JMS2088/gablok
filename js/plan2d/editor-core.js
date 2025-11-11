@@ -426,6 +426,11 @@
       var prev = __plan2d.tool;
       if(prev === tool){ plan2dCursor(); plan2dDraw && plan2dDraw(); return; }
       __plan2d.tool = tool;
+      // Sync selected state on toolbar buttons if present
+      try {
+        var ids = { select: 'plan2d-tool-select', wall:'plan2d-tool-wall', window:'plan2d-tool-window', door:'plan2d-tool-door', erase:'plan2d-tool-erase' };
+        Object.keys(ids).forEach(function(k){ var b=document.getElementById(ids[k]); if(b) b.classList.toggle('selected', k===tool); });
+      } catch(_syncSel){}
       // Leaving Wall: clear any in-progress chain so guides don't linger
       if(prev === 'wall' && tool !== 'wall'){
         __plan2d.chainActive = false; __plan2d.chainPoints = []; __plan2d.userDrawingActive=false;
@@ -950,6 +955,8 @@
       if(__plan2d.active) return false;
       __plan2d.active=true;
       var floor = (typeof window.currentFloor==='number'? window.currentFloor:0);
+      // Auto-enable CAD mode: professional white drafting background
+      try { if(document && document.body) document.body.classList.add('cad-mode'); } catch(_cadAdd){}
       // Show modal container
       try{ var page=document.getElementById('plan2d-page'); if(page) page.style.display='block'; }catch(_d){}
       // Move controls into header
@@ -1033,6 +1040,8 @@
       __plan2d.chainActive=false; __plan2d.chainPoints=[];
       try{ var page=document.getElementById('plan2d-page'); if(page) page.style.display='none'; }catch(_d){}
       try{ var controls=document.getElementById('controls'); if(controls && controls.__movedInto2D){ var parent=controls.__origParent; var next=controls.__origNext; if(parent){ if(next) parent.insertBefore(controls,next); else parent.appendChild(controls);} controls.__movedInto2D=false; } }catch(_rest){}
+      // Remove CAD mode when leaving 2D editor to restore original theme for 3D view
+      try { if(document && document.body) document.body.classList.remove('cad-mode'); } catch(_cadRem){}
       plan2dDraw();
       try{ if(window.updateStatus) updateStatus('2D editor closed'); }catch(_st){}
       // Sync highlight so next open reflects the (possibly changed) floor retained in currentFloor

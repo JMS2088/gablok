@@ -169,6 +169,51 @@
     background: #005999;
     box-shadow: 0 3px 12px rgba(0,122,204,0.35);
   }
+  /* =====================================================================
+     GLOBAL BUTTON SYSTEM — DO NOT FRAGMENT OR REMOVE
+     ---------------------------------------------------------------------
+     All interactive buttons share a unified base style (above). 2D editor
+     tool buttons and side overlay buttons receive enhanced hover and a
+     persistent selected state for clarity against the dark grid.
+     Adjust colors with care; maintain sufficient contrast (WCAG AA).
+     ===================================================================== */
+  /* 2D Tool / Overlay buttons: ensure strong hover contrast on dark bg */
+  #plan2d-toolbar-right button,
+  #plan2d-side-overlay > button,
+  .plan2d-floor-toggle button,
+  #plan2d-opening-inline select { position: relative; }
+  #plan2d-toolbar-right button:hover,
+  #plan2d-side-overlay > button:hover,
+  .plan2d-floor-toggle button:hover {
+    background: #0093ff !important; /* brighter brand blue */
+    color: #ffffff !important;
+    box-shadow: 0 0 0 2px rgba(0,147,255,0.45), 0 4px 18px rgba(0,0,0,0.55) !important;
+  }
+  /* Selected (active tool) state */
+  #plan2d-toolbar-right button.selected {
+    background: #0ea5e9 !important; /* cyan accent */
+    color: #ffffff !important;
+    box-shadow: 0 0 0 2px rgba(14,165,233,0.55), 0 3px 14px rgba(0,0,0,0.5) !important;
+  }
+  #plan2d-toolbar-right button.selected:hover {
+    background: #0284c7 !important; /* slightly deeper on hover */
+    box-shadow: 0 0 0 2px rgba(2,132,199,0.55), 0 4px 16px rgba(0,0,0,0.55) !important;
+  }
+  /* Focus visible ring for keyboard accessibility */
+  #plan2d-toolbar-right button:focus-visible,
+  #plan2d-side-overlay > button:focus-visible,
+  .plan2d-floor-toggle button:focus-visible,
+  #plan2d-opening-inline select:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(14,165,233,0.65), 0 0 0 6px rgba(14,165,233,0.18);
+  }
+  /* Secondary buttons inside 2D dark context: lighten base for contrast */
+  #plan2d-page button.secondary { background:#f8fafc !important; color:#0f172a !important; border:1px solid #cbd5e1 !important; }
+  #plan2d-page button.secondary:hover { background:#0093ff !important; color:#ffffff !important; border-color:#0093ff !important; }
+  /* Clear button destructive hint */
+  #plan2d-clear:hover { background:#dc2626 !important; color:#ffffff !important; border-color:#dc2626 !important; box-shadow:0 0 0 2px rgba(220,38,38,0.4), 0 3px 14px rgba(0,0,0,0.55) !important; }
+  /* Close button distinct neutral hover (avoid accidental destructive feel) */
+  #plan2d-close:hover { background:#374151 !important; color:#ffffff !important; border-color:#374151 !important; }
   button.secondary { background: #f0f0f0; color: #333; border: 1px solid #ccc; }
   button.secondary:hover {
     background-color: #007acc !important;
@@ -406,6 +451,25 @@
   /* 2D Page shell */
   #plan2d-page { display:none; position:fixed; inset:0; z-index:12000; }
   #plan2d-content { position:absolute; inset:0; width:100%; height:100vh; background:repeating-linear-gradient(0deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px), repeating-linear-gradient(90deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px); display:flex; flex-direction:column; overflow:hidden; }
+  /* CAD MODE: Replace dark stylized background with professional white drafting paper when enabled */
+  body.cad-mode #plan2d-content { background:#ffffff !important; }
+  body.cad-mode #plan2d-canvas { background:#ffffff !important; }
+  body.cad-mode #plan2d-overlay { background:transparent !important; }
+  /* Rulers switch to light theme in CAD mode */
+  body.cad-mode #plan2d-ruler-top, body.cad-mode #plan2d-ruler-left { background:#ffffff !important; }
+  /* Tool / floor toggle contrast adjustments on white */
+  body.cad-mode .plan2d-floor-toggle { background:#ffffff !important; border:1px solid #cbd5e1 !important; box-shadow:none !important; }
+  body.cad-mode .plan2d-floor-toggle button { background:#f8fafc !important; color:#0f172a !important; box-shadow:none !important; border:1px solid #cbd5e1 !important; }
+  body.cad-mode .plan2d-floor-toggle button.active { background:#0ea5e9 !important; color:#ffffff !important; border-color:#0ea5e9 !important; }
+  /* Toolbar buttons: neutral outline with vivid selected state */
+  body.cad-mode #plan2d-toolbar-right button { background:#f8fafc !important; color:#0f172a !important; border:1px solid #cbd5e1 !important; }
+  body.cad-mode #plan2d-toolbar-right button:hover { background:#0ea5e9 !important; color:#ffffff !important; border-color:#0ea5e9 !important; }
+  body.cad-mode #plan2d-toolbar-right button.selected { background:#0284c7 !important; color:#ffffff !important; border-color:#0284c7 !important; }
+  /* Side overlay buttons alignment */
+  body.cad-mode #plan2d-side-overlay > button { background:#f8fafc !important; color:#0f172a !important; border:1px solid #cbd5e1 !important; }
+  body.cad-mode #plan2d-side-overlay > button:hover { background:#0ea5e9 !important; color:#ffffff !important; border-color:#0ea5e9 !important; }
+  /* Measurement text color adaptation */
+  body.cad-mode .plan2d-measure-label { color:#0f172a !important; }
   #plan2d-header { display:flex; align-items:center; gap:14px; padding:4px 8px; background:transparent; border-bottom:none; position:relative; z-index:2; }
   #plan2d-floor-center { position:absolute; top:36px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; z-index:1; pointer-events:auto; }
   .plan2d-floor-toggle { display:flex; gap:4px; background:rgba(15,23,42,0.85); padding:6px 10px; border:1px solid rgba(148,163,184,0.35); border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.4); }
