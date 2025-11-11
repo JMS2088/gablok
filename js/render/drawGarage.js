@@ -185,8 +185,10 @@ function drawHandlesForGarage(garage) {
     var hd = garage.depth/2;
     
     // Create handles (rotation drawn underneath)
-    var garageHandles = [];
-    garageHandles.push({ x: garage.x, y: ROTATION_HANDLE_Y, z: garage.z, type: 'rotate', label: '360', radius: ROTATION_HANDLE_RADIUS });
+  var garageHandles = [];
+  // Center move handle first (restrict movement to explicit handle usage)
+  garageHandles.push({ x: garage.x, y: BASE_HANDLE_Y, z: garage.z, type: 'move', label: '⟳', radius: REGULAR_HANDLE_RADIUS });
+  garageHandles.push({ x: garage.x, y: ROTATION_HANDLE_Y, z: garage.z, type: 'rotate', label: '360', radius: ROTATION_HANDLE_RADIUS });
     [
       {dx: hw, dz: 0, type: 'width+', label: 'X+'},
       {dx: -hw, dz: 0, type: 'width-', label: 'X-'},
@@ -200,7 +202,7 @@ function drawHandlesForGarage(garage) {
     garageHandles.forEach(function(handle) {
       var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) return;
-      if (handle.type !== 'rotate' && cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
+  if (handle.type !== 'rotate' && handle.type !== 'move' && cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
 
       var base = (typeof handle.radius==='number'? handle.radius : HANDLE_RADIUS);
       var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, base) : base;

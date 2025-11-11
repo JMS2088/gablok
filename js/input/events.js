@@ -113,6 +113,8 @@
     window.addEventListener('resize', setupCanvas);
     // Track UI interactions so we can fade affordances when idle
     try {
+      // Prevent default context menu so right-drag can orbit the camera
+      canvas.addEventListener('contextmenu', function(e){ e.preventDefault(); });
       canvas.addEventListener('mousemove', function(e){
         _uiLastInteractionTime = (performance && performance.now) ? performance.now() : Date.now();
         // Track hovered object for focus mode
@@ -161,6 +163,16 @@
       var rect = canvas.getBoundingClientRect();
       var mouseX = e.clientX - rect.left;
       var mouseY = e.clientY - rect.top;
+      // Right mouse button: always orbit camera (do not start selection/drag)
+      if (e.button === 2) {
+        mouse.down = true;
+        mouse.lastX = e.clientX;
+        mouse.lastY = e.clientY;
+        mouse.dragType = 'camera';
+        canvas.style.cursor = 'grabbing';
+        updateStatus('Orbit');
+        return;
+      }
       
       var handle = findHandle(mouseX, mouseY);
       if (handle) {
@@ -190,6 +202,35 @@
             sideAxis: (handle.type.indexOf('width') === 0 ? 'x' : (handle.type.indexOf('depth') === 0 ? 'z' : null)),
             sideSign: (handle.type.endsWith('+') ? 1 : (handle.type.endsWith('-') ? -1 : 0))
           };
+          // Capture old perimeter edges and bounding box before move/resize for stale-strip purge on mouseup
+          try {
+            function collectEdgesFor(room){
+              var out = [];
+              function normKey(x0,z0,x1,z1){ var a = x0.toFixed(3)+','+z0.toFixed(3); var b = x1.toFixed(3)+','+z1.toFixed(3); return (a<b? a+'|'+b : b+'|'+a); }
+              if (Array.isArray(room.footprint) && room.footprint.length >= 2){
+                for (var i=0;i<room.footprint.length;i++){
+                  var A=room.footprint[i], B=room.footprint[(i+1)%room.footprint.length]; if(!A||!B) continue;
+                  out.push(normKey(A.x||0,A.z||0,B.x||0,B.z||0));
+                }
+              } else {
+                var hw=(room.width||0)/2, hd=(room.depth||0)/2;
+                var xL=(room.x||0)-hw, xR=(room.x||0)+hw, zT=(room.z||0)-hd, zB=(room.z||0)+hd;
+                var edges=[[xL,zT,xR,zT],[xR,zT,xR,zB],[xR,zB,xL,zB],[xL,zB,xL,zT]];
+                for (var eIdx=0;eIdx<edges.length;eIdx++){ var E=edges[eIdx]; out.push(normKey(E[0],E[1],E[2],E[3])); }
+              }
+              return out;
+            }
+            mouse.dragInfo.oldPerimeterKeys = collectEdgesFor(target);
+            mouse.dragInfo.level = target.level||0;
+            // Bounding box for coarse purge
+            var minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+            if (Array.isArray(target.footprint) && target.footprint.length){
+              for (var fpI=0; fpI<target.footprint.length; fpI++){ var p=target.footprint[fpI]; if(!p) continue; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z; }
+            } else {
+              var hwB=(target.width||0)/2, hdB=(target.depth||0)/2; minX=(target.x||0)-hwB; maxX=(target.x||0)+hwB; minZ=(target.z||0)-hdB; maxZ=(target.z||0)+hdB;
+            }
+            mouse.dragInfo.oldBox = { minX:minX, maxX:maxX, minZ:minZ, maxZ:maxZ, centerX:(target.x||0), centerZ:(target.z||0) };
+          } catch(_capOldHandle) {}
           
           // Set global flag to prevent 2D->3D auto-apply during 3D drag
           window.__dragging3DRoom = true;
@@ -363,48 +404,8 @@
 
       var hitObj = hitTestObjects(mouseX, mouseY);
       if (hitObj){
-        // Select object
+        // Select object; require handle drag for ALL object types (standardized)
         if (typeof window.selectObject==='function') window.selectObject(hitObj.id, { noRender: true }); else { selectedRoomId = hitObj.id; }
-        // Start drag immediately (center drag) for move
-        mouse.dragType = (hitObj.type==='roof'||hitObj.type==='garage'||hitObj.type==='pool'||hitObj.type==='balcony'||hitObj.type==='pergola'||hitObj.type==='stairs'||hitObj.type==='furniture') ? hitObj.type : 'room';
-        mouse.dragInfo = { roomId: hitObj.id, startX: e.clientX, startY: e.clientY, originalX: hitObj.x, originalZ: hitObj.z };
-            // Capture old perimeter edges (normalized) before movement for later stale perimeter purge
-            try {
-              var rOld = hitObj;
-              function collectEdgesFor(room){
-                var out = [];
-                function normKey(x0,z0,x1,z1){
-                  var a = x0.toFixed(3)+','+z0.toFixed(3);
-                  var b = x1.toFixed(3)+','+z1.toFixed(3);
-                  return (a<b? a+'|'+b : b+'|'+a);
-                }
-                if (Array.isArray(room.footprint) && room.footprint.length >= 2){
-                  for (var i=0;i<room.footprint.length;i++){
-                    var A=room.footprint[i], B=room.footprint[(i+1)%room.footprint.length]; if(!A||!B) continue;
-                    out.push(normKey(A.x||0,A.z||0,B.x||0,B.z||0));
-                  }
-                } else {
-                  var hw=(room.width||0)/2, hd=(room.depth||0)/2;
-                  var xL=(room.x||0)-hw, xR=(room.x||0)+hw, zT=(room.z||0)-hd, zB=(room.z||0)+hd;
-                  var edges=[[xL,zT,xR,zT],[xR,zT,xR,zB],[xR,zB,xL,zB],[xL,zB,xL,zT]];
-                  for (var eIdx=0;eIdx<edges.length;eIdx++){ var E=edges[eIdx]; out.push(normKey(E[0],E[1],E[2],E[3])); }
-                }
-                return out;
-              }
-              mouse.dragInfo.oldPerimeterKeys = collectEdgesFor(rOld);
-              mouse.dragInfo.level = rOld.level||0;
-              // Bounding box for coarse purge
-              var minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
-              if (Array.isArray(rOld.footprint) && rOld.footprint.length){
-                for (var fpI=0; fpI<rOld.footprint.length; fpI++){ var p=rOld.footprint[fpI]; if(!p) continue; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z; }
-              } else {
-                var hwB=(rOld.width||0)/2, hdB=(rOld.depth||0)/2; minX=(rOld.x||0)-hwB; maxX=(rOld.x||0)+hwB; minZ=(rOld.z||0)-hdB; maxZ=(rOld.z||0)+hdB;
-              }
-              mouse.dragInfo.oldBox = { minX:minX, maxX:maxX, minZ:minZ, maxZ:maxZ };
-            } catch(_capOld) {}
-        mouse.down = true;
-        window.__dragging3DRoom = true; try { window.__activelyDraggedRoomId = hitObj.id; } catch(_adH) {}
-        canvas.style.cursor = 'grabbing';
         updateStatus((hitObj.name||hitObj.type||'Item') + ' selected');
         renderLoop();
         return;
@@ -565,8 +566,40 @@
           updateStatus('Moving ' + (furn.name || 'Item') + '...');
         }
       } else if (mouse.dragType === 'handle' && mouse.dragInfo && mouse.dragInfo.handle) {
-        var target = findObjectById(selectedRoomId);
+        var target = findObjectById(mouse.dragInfo.roomId);
         if (target) {
+          // Move handle: translate the room's center (restrict dragging to handles only)
+          if (mouse.dragInfo.handle.type === 'move') {
+            var dxM = e.clientX - mouse.dragInfo.startX;
+            var dyM = e.clientY - mouse.dragInfo.startY;
+            var mvM = worldMovement(dxM, dyM);
+            var newXM = mouse.dragInfo.originalRoomX + mvM.x;
+            var newZM = mouse.dragInfo.originalRoomZ + mvM.z;
+            var snapM = applySnap({ x: newXM, z: newZM, width: target.width, depth: target.depth, level: target.level, id: target.id, type: target.type });
+            var deltaXM = snapM.x - target.x;
+            var deltaZM = snapM.z - target.z;
+            // Translate polygon footprint if present
+            try {
+              if (Array.isArray(target.footprint) && target.footprint.length > 0 && (deltaXM !== 0 || deltaZM !== 0)) {
+                for (var ti=0; ti<target.footprint.length; ti++){
+                  var ptM = target.footprint[ti]; if(!ptM) continue; ptM.x = (ptM.x||0) + deltaXM; ptM.z = (ptM.z||0) + deltaZM;
+                }
+              }
+            } catch(_mvFp) {}
+            // Move openings
+            if (Array.isArray(target.openings) && target.openings.length > 0 && (deltaXM !== 0 || deltaZM !== 0)) {
+              for (var oiM=0; oiM<target.openings.length; oiM++){
+                var opM = target.openings[oiM]; if(!opM || typeof opM.x0 !== 'number') continue;
+                opM.x0 += deltaXM; opM.z0 += deltaZM; opM.x1 += deltaXM; opM.z1 += deltaZM; opM.__manuallyPositioned = true;
+              }
+            }
+            target.x = snapM.x; target.z = snapM.z; currentSnapGuides = snapM.guides;
+            updateStatus('Moving ' + (target.name||'Room') + '...');
+            try { updatePlan2DWallsForRoom(target); } catch(_upd2dM) {}
+            __maybeRebuildRoomStripsThrottled();
+            renderLoop();
+            return;
+          }
           // Rotation handle
           if (mouse.dragInfo.handle.type === 'rotate') {
             if (typeof target.rotation !== 'number') target.rotation = 0;
@@ -875,12 +908,13 @@
         var dx = e.clientX - mouse.lastX;
         var dy = e.clientY - mouse.lastY;
         if (e.shiftKey) {
+          // Screen-space pan retained for familiarity
           pan.x += dx * 1.5;
           pan.y += dy * 1.5;
         } else {
-          camera.yaw += dx * 0.008;
-          camera.pitch -= dy * 0.008;
-          camera.pitch = Math.max(camera.minPitch, Math.min(camera.maxPitch, camera.pitch));
+          // Use orbit helper with clamping and distance-aware speed
+          if (typeof orbitCamera === 'function') orbitCamera(dx, dy);
+          else { camera.yaw += dx * 0.008; camera.pitch -= dy * 0.008; camera.pitch = Math.max(camera.minPitch, Math.min(camera.maxPitch, camera.pitch)); }
         }
         mouse.lastX = e.clientX;
         mouse.lastY = e.clientY;
@@ -1030,7 +1064,9 @@
     canvas.addEventListener('wheel', function(e) {
       e.preventDefault();
       camera.distance *= e.deltaY > 0 ? 1.08 : 0.92;
-      camera.distance = Math.max(camera.minDistance, Math.min(camera.maxDistance, camera.distance));
+      // Clamp using camera bounds (engine ensures defaults exist)
+      if (typeof clampCamera === 'function') clampCamera();
+      else { camera.distance = Math.max(camera.minDistance||6, Math.min(camera.maxDistance||140, camera.distance)); }
     });
     
     document.addEventListener('keydown', function(e) {

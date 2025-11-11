@@ -239,6 +239,7 @@ function drawHandlesForBalcony(balcony) {
     var handleY = balcony.level * 3.5 + (balcony.height||3.0) * 0.5;
     
     var balconyHandles = [
+      {x: balcony.x, y: handleY, z: balcony.z, type: 'move', label: '⟳'},
       {x: balcony.x + balcony.width/2, y: handleY, z: balcony.z, type: 'width+', label: 'X+'},
       {x: balcony.x - balcony.width/2, y: handleY, z: balcony.z, type: 'width-', label: 'X-'},
       {x: balcony.x, y: handleY, z: balcony.z + balcony.depth/2, type: 'depth+', label: 'Z+'},
@@ -249,8 +250,8 @@ function drawHandlesForBalcony(balcony) {
     for (var i = 0; i < balconyHandles.length; i++) {
       var handle = balconyHandles[i];
       var screen = project3D(handle.x, handle.y, handle.z);
-      if (!screen) continue;
-      if (cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
+  if (!screen) continue;
+  if (handle.type !== 'move' && cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
 
   var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, HANDLE_RADIUS) : HANDLE_RADIUS;
   ctx.save(); var prevGA = ctx.globalAlpha; ctx.globalAlpha = prevGA * Math.max(0, Math.min(1, objA * (typeof window.__uiFadeAlpha==='number'? window.__uiFadeAlpha:1)));

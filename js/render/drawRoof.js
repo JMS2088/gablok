@@ -214,6 +214,7 @@ function drawHandlesForRoof(roof, apexY){
     function r(dx,dz){ return { x: roof.x + dx*Math.cos(rotRad) - dz*Math.sin(rotRad), z: roof.z + dx*Math.sin(rotRad) + dz*Math.cos(rotRad) }; }
     var hw = Math.max(0.25, (roof.width||4)/2), hd=Math.max(0.25, (roof.depth||4)/2);
     var handles = [
+      (function(){ return {x:roof.x, y:yMid, z:roof.z, type:'move', label:'⟳'}; })(),
       (function(){ var q=r(hw,0); return {x:q.x,y:yMid,z:q.z,type:'width+',label:'X+'}; })(),
       (function(){ var q=r(-hw,0); return {x:q.x,y:yMid,z:q.z,type:'width-',label:'X-'}; })(),
       (function(){ var q=r(0,hd); return {x:q.x,y:yMid,z:q.z,type:'depth+',label:'Z+'}; })(),
@@ -221,7 +222,7 @@ function drawHandlesForRoof(roof, apexY){
     ];
     var cScreen = project3D(roof.x, yMid, roof.z);
     for (var i=0;i<handles.length;i++){
-      var h=handles[i]; var s=project3D(h.x,h.y,h.z); if(!s) continue; if(cScreen){ var dx=cScreen.x-s.x, dy=cScreen.y-s.y; var L=Math.hypot(dx,dy)||1; s.x+=(dx/L)*20; s.y+=(dy/L)*20; }
+  var h=handles[i]; var s=project3D(h.x,h.y,h.z); if(!s) continue; if(h.type!=='move' && cScreen){ var dx=cScreen.x-s.x, dy=cScreen.y-s.y; var L=Math.hypot(dx,dy)||1; s.x+=(dx/L)*20; s.y+=(dy/L)*20; }
       var rr = (typeof computeHandleRadius==='function')? computeHandleRadius(s,HANDLE_RADIUS): HANDLE_RADIUS;
       ctx.save(); var prevGA = ctx.globalAlpha; ctx.globalAlpha = prevGA * Math.max(0, Math.min(1, objA * (typeof window.__uiFadeAlpha==='number'? window.__uiFadeAlpha:1)));
       drawHandle(s, h.type, h.label, isActive, rr);

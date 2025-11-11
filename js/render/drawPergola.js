@@ -11,6 +11,8 @@ function drawHandlesForPergola(pergola) {
     var isActive = selectedRoomId === pergola.id;
     var handleY = (pergola.totalHeight!=null ? pergola.totalHeight : (pergola.height||2.2)) * 0.5;
     var handleData = [
+      // Center move handle first
+      {x: pergola.x, y: handleY, z: pergola.z, type: 'move', label: '⟳'},
       {x: pergola.x + pergola.width/2, y: handleY, z: pergola.z, type: 'width+', label: 'X+'},
       {x: pergola.x - pergola.width/2, y: handleY, z: pergola.z, type: 'width-', label: 'X-'},
       {x: pergola.x, y: handleY, z: pergola.z + pergola.depth/2, type: 'depth+', label: 'Z+'},
@@ -21,8 +23,8 @@ function drawHandlesForPergola(pergola) {
     for (var i = 0; i < handleData.length; i++) {
       var handle = handleData[i];
   var screen = project3D(handle.x, handle.y, handle.z);
-      if (!screen) continue;
-  if (cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
+    if (!screen) continue;
+  if (handle.type !== 'move' && cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
 
   var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, HANDLE_RADIUS) : HANDLE_RADIUS;
   // Apply per-object and global UI fade alpha to handle drawing

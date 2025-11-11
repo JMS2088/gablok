@@ -3,6 +3,92 @@
  * @description Core 3D rendering engine with orbit camera, projection, and scene management.
  */
 (function(){
+  // ---------------------------------------------------------------------------
+  // Camera defaults & orbit helpers (FIX: stabilize 3D orbit interaction)
+  // ---------------------------------------------------------------------------
+  // Some interaction code (events.js) expects minPitch/maxPitch/minDistance/maxDistance
+  // on the camera object for clamping & wheel zoom. In certain boot sequences these
+  // were never defined, causing pitch to drift or zoom to ignore limits.
+  // We establish a single authoritative camera object here with sane defaults.
+  if (typeof window.camera === 'undefined' || !window.camera) {
+    window.camera = {
+      yaw: 0.65,              // radians around Y (0 faces +Z)
+      pitch: -0.45,           // negative looks downward slightly
+      distance: 26,           // radial distance from target
+      targetX: 0,
+      targetZ: 0,
+      targetY: 0,            // vertical anchor (keep 0 for ground reference)
+      minPitch: -1.15,       // avoid flipping under the ground
+      maxPitch: 0.35,        // slight upward tilt allowed
+      minDistance: 6,        // prevent extreme zoom-in clipping
+      maxDistance: 140       // cap far zoom for precision & perf
+    };
+  } else {
+    // Patch missing properties without overwriting user-changed values
+    var c = window.camera;
+    if (typeof c.minPitch !== 'number') c.minPitch = -1.15;
+    if (typeof c.maxPitch !== 'number') c.maxPitch = 0.35;
+    if (typeof c.minDistance !== 'number') c.minDistance = 6;
+    if (typeof c.maxDistance !== 'number') c.maxDistance = 140;
+    if (typeof c.targetX !== 'number') c.targetX = 0;
+    if (typeof c.targetZ !== 'number') c.targetZ = 0;
+    if (typeof c.targetY !== 'number') c.targetY = 0;
+  }
+  // Normalize yaw to [-PI, PI] so large drags never accumulate floating error.
+  function __normalizeYaw(y) {
+    var TWO_PI = Math.PI * 2;
+    if (!isFinite(y)) return 0;
+    // Bring into [0, 2PI)
+    y = y % TWO_PI; if (y < 0) y += TWO_PI;
+    // Shift to [-PI, PI]
+    if (y > Math.PI) y -= TWO_PI;
+    return y;
+  }
+  // Clamp and normalize camera orientation & distance.
+  if (typeof window.clampCamera === 'undefined') {
+    window.clampCamera = function clampCamera(){
+      try {
+        if (!window.camera) return;
+        camera.yaw = __normalizeYaw(camera.yaw);
+        // Smooth pitch clamp: hard clamp but preserve tiny epsilon to avoid getting stuck
+        var minP = camera.minPitch, maxP = camera.maxPitch;
+        if (camera.pitch < minP) camera.pitch = minP;
+        if (camera.pitch > maxP) camera.pitch = maxP;
+        // Distance clamp
+        if (camera.distance < camera.minDistance) camera.distance = camera.minDistance;
+        if (camera.distance > camera.maxDistance) camera.distance = camera.maxDistance;
+      } catch(_e) { /* non-fatal */ }
+    };
+  }
+  // Simple orbit apply used by events.js (right mouse or left empty-drag)
+  if (typeof window.orbitCamera === 'undefined') {
+    window.orbitCamera = function orbitCamera(dx, dy){
+      try {
+        // Scale rotation speed by current distance (farther = slower for stability)
+        var base = 0.008;
+        var distFactor = Math.max(0.35, Math.min(1.0, 18 / Math.max(1, camera.distance)));
+        camera.yaw += dx * base * distFactor;
+        camera.pitch -= dy * base * distFactor;
+        clampCamera();
+        // Touch camera activity timestamp so UI does not fade during orbit
+        window._camLastMoveTime = (performance && performance.now) ? performance.now() : Date.now();
+      } catch(_e) {}
+    };
+  }
+  // Public helper to pan using world axes (shift-drag path in events.js)
+  if (typeof window.panCameraWorld === 'undefined') {
+    window.panCameraWorld = function panCameraWorld(dx, dy){
+      try {
+        // Convert screen delta to world movement scaled by distance => intuitive near & far
+        var factor = Math.max(0.002, camera.distance / 400);
+        var right = (window.__proj && __proj.right) ? __proj.right : [1,0,0];
+        var fwd = (window.__proj && __proj.fwd) ? __proj.fwd : [0,0,1];
+        camera.targetX += factor * (dx * right[0] - dy * fwd[0]);
+        camera.targetZ += factor * (dx * right[2] - dy * fwd[2]);
+        window._camLastMoveTime = (performance && performance.now) ? performance.now() : Date.now();
+      } catch(_e) {}
+    };
+  }
   // Ensure global canvas/ctx identifiers exist (some legacy modules reference bare `canvas` / `ctx`).
   // Declare as globals if not already defined to avoid ReferenceError in other scripts.
   if (typeof window.canvas === 'undefined') window.canvas = null;
@@ -143,6 +229,8 @@
   if (typeof window.PERSPECTIVE_STRENGTH === 'undefined') window.PERSPECTIVE_STRENGTH = 0.88;
   if (typeof window.updateProjectionCache === 'undefined') {
     window.updateProjectionCache = function updateProjectionCache(){
+      // Ensure camera constraints before computing projection basis
+      try { clampCamera(); } catch(_eClamp) {}
       var cy = Math.cos(camera.yaw), sy = Math.sin(camera.yaw);
       var cp = Math.cos(camera.pitch), sp = Math.sin(camera.pitch);
       // Forward points from camera toward target

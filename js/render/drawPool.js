@@ -100,9 +100,10 @@ function drawHandlesForPool(pool) {
       };
     }
     var hw = pool.width/2, hd = pool.depth/2;
-    var handles = [];
-    // rotation first
-    handles.push({ x: pool.x, y: ROTATION_HANDLE_Y, z: pool.z, type: 'rotate', label: '360', radius: ROTATION_HANDLE_RADIUS });
+  var handles = [];
+  // Move + rotation
+  handles.push({ x: pool.x, y: BASE_HANDLE_Y, z: pool.z, type: 'move', label: '⟳', radius: REGULAR_HANDLE_RADIUS });
+  handles.push({ x: pool.x, y: ROTATION_HANDLE_Y, z: pool.z, type: 'rotate', label: '360', radius: ROTATION_HANDLE_RADIUS });
     [
       {dx: hw, dz: 0, type: 'width+', label: 'X+'},
       {dx: -hw, dz: 0, type: 'width-', label: 'X-'},
@@ -112,12 +113,12 @@ function drawHandlesForPool(pool) {
 
     handles.forEach(function(h){
       var s=project3D(h.x,h.y,h.z); if(!s) return;
-      var base = (typeof h.radius==='number'? h.radius : HANDLE_RADIUS);
+  var base = (typeof h.radius==='number'? h.radius : HANDLE_RADIUS);
       var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(s, base) : base;
       ctx.save(); var prevGA = ctx.globalAlpha; ctx.globalAlpha = prevGA * Math.max(0, Math.min(1, objA * (typeof window.__uiFadeAlpha==='number'? window.__uiFadeAlpha:1)));
       drawHandle(s, h.type, h.label, isActive, r);
       ctx.restore();
-      resizeHandles.push({ screenX:s.x - r, screenY:s.y - r, width:r*2, height:r*2, type:h.type, roomId:pool.id });
+  resizeHandles.push({ screenX:s.x - r, screenY:s.y - r, width:r*2, height:r*2, type:h.type, roomId:pool.id });
     });
   } catch (e) { console.error('Pool handle error:', e); }
 }

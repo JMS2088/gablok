@@ -127,6 +127,8 @@ function drawHandlesForStairs(stairs) {
       };
     }
     var stairHandles = [
+      // Center move handle
+      {x: stairs.x, y: handleY, z: stairs.z, type: 'move', label: '⟳'},
       // X+ (width+)
   (function() { var p = rotateHandle(stairs.width/2, 0); return {x: p.x, y: handleY, z: p.z, type: 'width+', label: 'X+'}; })(),
       // X- (width-)
@@ -142,9 +144,9 @@ function drawHandlesForStairs(stairs) {
     
     for (var i = 0; i < stairHandles.length; i++) {
       var handle = stairHandles[i];
-      var screen = project3D(handle.x, handle.y, handle.z);
+  var screen = project3D(handle.x, handle.y, handle.z);
       if (!screen) continue;
-      if (handle.type !== 'rotate' && cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
+  if (handle.type !== 'rotate' && handle.type !== 'move' && cScreen) { var dx=cScreen.x-screen.x, dy=cScreen.y-screen.y; var L=Math.hypot(dx,dy)||1; screen.x += (dx/L)*20; screen.y += (dy/L)*20; }
 
       var r = (typeof computeHandleRadius==='function') ? computeHandleRadius(screen, HANDLE_RADIUS) : HANDLE_RADIUS;
       ctx.save(); var prevGA = ctx.globalAlpha; ctx.globalAlpha = prevGA * Math.max(0, Math.min(1, objA * (typeof window.__uiFadeAlpha==='number'? window.__uiFadeAlpha:1)));

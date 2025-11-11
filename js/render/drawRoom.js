@@ -13,6 +13,69 @@ function drawRoom(room) {
     ctx.miterLimit = 4;
     ctx.lineCap = 'butt';
   } catch(_eState){}
+  // FOOTPRINT NORMALIZATION GUARD — VERY IMPORTANT: DO NOT DELETE
+  // Multi‑wall (polygon) rooms produced by applying a complex 2D plan can sometimes
+  // carry a footprint array with: (a) duplicate consecutive vertices, (b) collinear
+  // midpoints inserted redundantly, or (c) reversed winding (CW vs CCW) depending on
+  // authoring order. These issues can manifest visually as a perimeter outline that
+  // appears "broken" or partially detached during a 3D drag because zero‑length or
+  // overlapping edges collapse when projected and near‑plane clipping prunes them.
+  // To guarantee the perimeter outline ALWAYS renders as a single closed, connected
+  // loop while dragging or resizing, we sanitize the footprint once per frame when
+  // a polygon room is drawn. This is intentionally lightweight and idempotent.
+  // Safe operations performed:
+  // 1. Remove consecutive duplicates (distance < EPS).
+  // 2. Remove strictly collinear intermediate points (A,B,C aligned, B inside AC).
+  // 3. Ensure minimum vertex count (>=3) before drawing.
+  // 4. Normalize winding to counter‑clockwise (positive signed area) so other
+  //    algorithms relying on orientation (openings mapping, extrusion) remain stable.
+  // 5. Write back only if a change occurred (avoid churn for unchanged frames).
+  // This guard is critical for maintaining the product requirement: perimeter line
+  // is 100% connected and "locked" to the room during any interaction. DO NOT REMOVE.
+  (function normalizeFootprintIfNeeded(){
+    try {
+      if (!room || !Array.isArray(room.footprint) || room.footprint.length < 3) return;
+      var fp = room.footprint;
+      var EPS = 1e-5;
+      // Step 1: remove consecutive duplicates
+      var dedup = [];
+      for (var i=0;i<fp.length;i++){
+        var p=fp[i]; if(!p) continue;
+        if (dedup.length){ var prev=dedup[dedup.length-1]; var dx=p.x-prev.x, dz=p.z-prev.z; if(Math.abs(dx)<EPS && Math.abs(dz)<EPS) continue; }
+        dedup.push({ x:p.x, z:p.z });
+      }
+      // If last equals first after dedup, remove last (we draw closed loop implicitly)
+      if (dedup.length>1){ var f=dedup[0], l=dedup[dedup.length-1]; if (Math.abs(f.x-l.x)<EPS && Math.abs(f.z-l.z)<EPS) dedup.pop(); }
+      // Step 2: remove collinear interior points (A-B-C aligned)
+      function collinear(a,b,c){ var abx=b.x-a.x, abz=b.z-a.z, acx=c.x-a.x, acz=c.z-a.z; var cross=abx*acz - abz*acx; if (Math.abs(cross) > EPS) return false; // not collinear
+        // check if b lies within bounding box of a & c
+        var minX=Math.min(a.x,c.x)-EPS, maxX=Math.max(a.x,c.x)+EPS, minZ=Math.min(a.z,c.z)-EPS, maxZ=Math.max(a.z,c.z)+EPS; return (b.x>=minX && b.x<=maxX && b.z>=minZ && b.z<=maxZ);
+      }
+      var simplified=[]; for(var j=0;j<dedup.length;j++){ simplified.push(dedup[j]); }
+      var changed=true; // iterate until no removal occurs (bounded by vertex count)
+      var iter=0; while(changed && simplified.length>=3 && iter<8){
+        changed=false; iter++; var out=[]; var N=simplified.length;
+        for(var k=0;k<N;k++){
+          var a=simplified[(k-1+N)%N], b=simplified[k], c=simplified[(k+1)%N];
+          if (collinear(a,b,c)) { changed=true; continue; }
+          out.push(b);
+        }
+        simplified=out;
+      }
+      // Step 3: ensure >=3
+      if (simplified.length < 3) return; // fallback: let original render attempt handle (will skip gracefully)
+      // Step 4: normalize winding CCW using signed area
+      function signedArea(poly){ var A=0; for(var q=0;q<poly.length;q++){ var p1=poly[q], p2=poly[(q+1)%poly.length]; A += (p1.x*p2.z - p2.x*p1.z); } return A/2; }
+      var area = signedArea(simplified);
+      if (area < 0) simplified.reverse(); // make CCW
+      // Decide if we should write back (compare counts & coordinate deltas)
+      var write=false;
+      if (simplified.length !== fp.length) write=true; else {
+        for (var w=0; w<simplified.length; w++){ var o=fp[w], n=simplified[w]; if (!o || Math.abs(o.x-n.x)>EPS || Math.abs(o.z-n.z)>EPS){ write=true; break; } }
+      }
+      if (write){ room.footprint = simplified; }
+    } catch(_normErr) { /* non-fatal */ }
+  })();
 
   /*
    * ============================================================================
@@ -382,7 +445,9 @@ function drawHandlesForRoom(room) {
       (function(){ var p=rotPoint(hw, 0); return {x:p.x, y:handleY, z:p.z, type:'width+', label:'X+'}; })(),
       (function(){ var p=rotPoint(-hw, 0); return {x:p.x, y:handleY, z:p.z, type:'width-', label:'X-'}; })(),
       (function(){ var p=rotPoint(0, hd); return {x:p.x, y:handleY, z:p.z, type:'depth+', label:'Z+'}; })(),
-      (function(){ var p=rotPoint(0, -hd); return {x:p.x, y:handleY, z:p.z, type:'depth-', label:'Z-'}; })()
+      (function(){ var p=rotPoint(0, -hd); return {x:p.x, y:handleY, z:p.z, type:'depth-', label:'Z-'}; })(),
+      // Center MOVE handle (new) — restricts room translation to explicit handle usage
+      (function(){ return {x:room.x, y:handleY, z:room.z, type:'move', label:'⟳'}; })()
     ];
 
     // Project center for 20px inset calculation
