@@ -586,6 +586,12 @@
   if (typeof window.drawWallStrip === 'undefined') window.drawWallStrip = function(ws){
     try {
       if (!ws) return;
+      // Do not draw strips for the room currently being dragged; prevents a ghost at the old pose while solids rebuild
+      try {
+        if (window.__activelyDraggedRoomId && ws.roomId && ws.roomId === window.__activelyDraggedRoomId) {
+          return; // skip drawing this strip during active drag
+        }
+      } catch(_eDragSkip) {}
       var x0=ws.x0, z0=ws.z0, x1=ws.x1, z1=ws.z1;
       var renderMode = window.__wallRenderMode || 'line';
       var thinThick = Math.max(0.02, ws.thickness||0.3);

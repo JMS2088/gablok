@@ -368,6 +368,40 @@
         // Start drag immediately (center drag) for move
         mouse.dragType = (hitObj.type==='roof'||hitObj.type==='garage'||hitObj.type==='pool'||hitObj.type==='balcony'||hitObj.type==='pergola'||hitObj.type==='stairs'||hitObj.type==='furniture') ? hitObj.type : 'room';
         mouse.dragInfo = { roomId: hitObj.id, startX: e.clientX, startY: e.clientY, originalX: hitObj.x, originalZ: hitObj.z };
+            // Capture old perimeter edges (normalized) before movement for later stale perimeter purge
+            try {
+              var rOld = hitObj;
+              function collectEdgesFor(room){
+                var out = [];
+                function normKey(x0,z0,x1,z1){
+                  var a = x0.toFixed(3)+','+z0.toFixed(3);
+                  var b = x1.toFixed(3)+','+z1.toFixed(3);
+                  return (a<b? a+'|'+b : b+'|'+a);
+                }
+                if (Array.isArray(room.footprint) && room.footprint.length >= 2){
+                  for (var i=0;i<room.footprint.length;i++){
+                    var A=room.footprint[i], B=room.footprint[(i+1)%room.footprint.length]; if(!A||!B) continue;
+                    out.push(normKey(A.x||0,A.z||0,B.x||0,B.z||0));
+                  }
+                } else {
+                  var hw=(room.width||0)/2, hd=(room.depth||0)/2;
+                  var xL=(room.x||0)-hw, xR=(room.x||0)+hw, zT=(room.z||0)-hd, zB=(room.z||0)+hd;
+                  var edges=[[xL,zT,xR,zT],[xR,zT,xR,zB],[xR,zB,xL,zB],[xL,zB,xL,zT]];
+                  for (var eIdx=0;eIdx<edges.length;eIdx++){ var E=edges[eIdx]; out.push(normKey(E[0],E[1],E[2],E[3])); }
+                }
+                return out;
+              }
+              mouse.dragInfo.oldPerimeterKeys = collectEdgesFor(rOld);
+              mouse.dragInfo.level = rOld.level||0;
+              // Bounding box for coarse purge
+              var minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+              if (Array.isArray(rOld.footprint) && rOld.footprint.length){
+                for (var fpI=0; fpI<rOld.footprint.length; fpI++){ var p=rOld.footprint[fpI]; if(!p) continue; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z; }
+              } else {
+                var hwB=(rOld.width||0)/2, hdB=(rOld.depth||0)/2; minX=(rOld.x||0)-hwB; maxX=(rOld.x||0)+hwB; minZ=(rOld.z||0)-hdB; maxZ=(rOld.z||0)+hdB;
+              }
+              mouse.dragInfo.oldBox = { minX:minX, maxX:maxX, minZ:minZ, maxZ:maxZ };
+            } catch(_capOld) {}
         mouse.down = true;
         window.__dragging3DRoom = true; try { window.__activelyDraggedRoomId = hitObj.id; } catch(_adH) {}
         canvas.style.cursor = 'grabbing';
@@ -870,6 +904,58 @@
         try {
           // Ensure final 2D grouped walls match the final 3D room pose
           try { var rmFinal = findObjectById(mouse.dragInfo.roomId); if (rmFinal) updatePlan2DWallsForRoom(rmFinal); } catch(_cf) {}
+          // Purge stale perimeter wall strips that correspond to the room's previous footprint (ghost keylines)
+          try {
+            var info = mouse.dragInfo;
+            var roomNow = findObjectById(info.roomId);
+            if (roomNow && Array.isArray(window.wallStrips)) {
+              function collectEdges(room){
+                var out=[]; function normKey(x0,z0,x1,z1){ var a=x0.toFixed(3)+','+z0.toFixed(3); var b=x1.toFixed(3)+','+z1.toFixed(3); return (a<b? a+'|'+b : b+'|'+a); }
+                if (Array.isArray(room.footprint) && room.footprint.length>=2){
+                  for (var i=0;i<room.footprint.length;i++){ var A=room.footprint[i], B=room.footprint[(i+1)%room.footprint.length]; if(!A||!B) continue; out.push(normKey(A.x||0,A.z||0,B.x||0,B.z||0)); }
+                } else {
+                  var hw=(room.width||0)/2, hd=(room.depth||0)/2; var xL=(room.x||0)-hw, xR=(room.x||0)+hw, zT=(room.z||0)-hd, zB=(room.z||0)+hd; var edges=[[xL,zT,xR,zT],[xR,zT,xR,zB],[xR,zB,xL,zB],[xL,zB,xL,zT]]; for (var e=0;e<edges.length;e++){ var E=edges[e]; out.push(normKey(E[0],E[1],E[2],E[3])); }
+                }
+                return out;
+              }
+              var newEdges = collectEdges(roomNow);
+              var oldEdges = Array.isArray(info.oldPerimeterKeys) ? info.oldPerimeterKeys : [];
+              var newSet = Object.create(null); for (var ni=0; ni<newEdges.length; ni++) newSet[newEdges[ni]] = true;
+              var oldSet = Object.create(null); for (var oi=0; oi<oldEdges.length; oi++) oldSet[oldEdges[oi]] = true;
+              // Remove wall strips whose segment key is in oldSet but not in newSet (stale) on same level
+              function keyForStrip(ws){ var a=ws.x0.toFixed(3)+','+ws.z0.toFixed(3); var b=ws.x1.toFixed(3)+','+ws.z1.toFixed(3); return (a<b? a+'|'+b : b+'|'+a); }
+              var before = wallStrips.length;
+              wallStrips = wallStrips.filter(function(ws){
+                try {
+                  if (!ws) return false;
+                  if ((ws.level||0) !== (roomNow.level||0)) return true;
+                  var k = keyForStrip(ws);
+                  if (oldSet[k] && !newSet[k]) return false; // stale perimeter
+                  // Additionally, if this was generated as a room perimeter strip (tagged) and belongs to roomId but endpoints moved, purge
+                  if (ws.roomId === roomNow.id) {
+                    if (!newSet[k]) return false;
+                  }
+                  return true;
+                } catch(_e){ return true; }
+              });
+              var removed = before - wallStrips.length;
+              // Fallback coarse purge if nothing matched but box shifted notably (user dragged in line mode)
+              if (removed === 0 && info.oldBox) {
+                var shiftDist = Math.hypot((roomNow.x||0) - (info.originalX||info.oldBox.centerX||roomNow.x), (roomNow.z||0) - (info.originalZ||info.oldBox.centerZ||roomNow.z));
+                if (shiftDist > 0.05) {
+                  var pad = 0.05; // slight pad around old box
+                  var purged = (typeof window.purgeWallStripsInBox==='function') ? window.purgeWallStripsInBox(roomNow.level||0, info.oldBox.minX-pad, info.oldBox.minZ-pad, info.oldBox.maxX+pad, info.oldBox.maxZ+pad) : 0;
+                  removed += purged;
+                }
+              }
+              if (removed > 0) {
+                try { if (typeof window.dedupeWallStrips==='function') window.dedupeWallStrips(); } catch(_d) {}
+                try { if (typeof saveProjectSilently==='function') saveProjectSilently(); } catch(_sps) {}
+                try { if (typeof renderLoop==='function') renderLoop(); } catch(_rl) {}
+                console.log('🧹 Purged', removed, 'stale perimeter wall strips');
+              }
+            }
+          } catch(_purgeStale) { console.warn('Stale perimeter purge failed', _purgeStale); }
           console.log('🔄 SYNCING 3D -> 2D (flag still true to block feedback)');
           // Sync 3D changes to 2D plan (ALWAYS sync, even if 2D plan is not visible,
           // to ensure openings stay in correct positions when applyPlan2DTo3D is called later)

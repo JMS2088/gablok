@@ -1530,6 +1530,19 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     // Also run global dedupe for components
     dedupeAllEntities();
   } catch(e) { /* non-fatal dedupe */ }
+  // NEW: Immediately purge any stale perimeter strips from previous apply to prevent "ghost" outlines
+  // that only disappear after a subsequent drag. If we're in solid mode, rebuild fresh perimeter strips.
+  try {
+    var isSolidMode = (window.__wallRenderMode === 'solid');
+    if (typeof window.removeRoomPerimeterStrips === 'function') {
+      window.removeRoomPerimeterStrips();
+      try { if (typeof window.__rtTracePush === 'function') window.__rtTracePush({ kind:'apply-perimeter-purge', level: targetLevel, solid:isSolidMode }); } catch(_rtPP){}
+    }
+    if (isSolidMode && typeof window.rebuildRoomPerimeterStrips === 'function') {
+      window.rebuildRoomPerimeterStrips(window.__roomWallThickness || 0.3);
+      try { if (typeof window.__rtTracePush === 'function') window.__rtTracePush({ kind:'apply-perimeter-rebuild', level: targetLevel, thickness:(window.__roomWallThickness||0.3) }); } catch(_rtPRB){}
+    }
+  } catch(_ePerimRefresh) { /* perimeter refresh non-fatal */ }
   try {
     var postRooms=0; for (var vr=0; vr<allRooms.length; vr++){ var rV=allRooms[vr]; if(rV && (rV.level||0)===targetLevel) postRooms++; }
     window.__rtTracePush({ kind:'apply-post-dedupe', level: targetLevel, rooms: postRooms });

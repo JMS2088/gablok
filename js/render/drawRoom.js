@@ -5,9 +5,11 @@
 function drawRoom(room) {
   try {
   var solidMode = (window.__wallRenderMode === 'solid');
-  // Suppress room wireframe whenever walls are rendered as solids to avoid double outlines over wall faces.
-  // This prevents the appearance of "double rendering" (room edge stroke + wall strip edge) along perimeters.
+  // In solid mode we draw extruded wall strips (faces + top) which already communicate footprint.
+  // Drawing the room floor fill again creates a perceived duplicate/"ghost" floor plan.
+  // So: suppress wireframe AND base floor fill when solidMode to eliminate duplicate plan rendering.
   var suppressWire = !!solidMode;
+  var suppressFloorFill = !!solidMode; // new: skip base floor fill in solid mode to remove ghost duplicate
     // Helpers: near-plane clipping in camera space to keep floors/outlines visible without bending
     var kBlend = Math.max(0, Math.min(1, (typeof window.PERSPECTIVE_STRENGTH==='number'? window.PERSPECTIVE_STRENGTH:0.88)));
     var refZ = Math.max(0.5, (camera && camera.distance) || 12);
@@ -119,19 +121,21 @@ function drawRoom(room) {
       var baseCam = basePts.map(function(p){ return toCam(p); }).filter(Boolean);
       var baseClip = clipPolyNear(baseCam);
       if (baseClip.length >= 3){
-        // fill
-        ctx.beginPath(); var s0 = camToScreen(baseClip[0]); if(s0){ ctx.moveTo(s0.x, s0.y); }
-        for (var bi=1; bi<baseClip.length; bi++){ var sb = camToScreen(baseClip[bi]); if(sb){ ctx.lineTo(sb.x, sb.y); } }
-        ctx.closePath();
-        // choose fill like below (currentLevel/selected already set)
-        if (currentLevel) {
-          ctx.fillStyle = selected ? 'rgba(0,122,204,0.18)' : 'rgba(120,120,120,0.10)';
-        } else if (selected && room.level !== currentFloor) {
-          ctx.fillStyle = 'rgba(0,122,204,0.18)';
-        } else {
-          ctx.fillStyle = 'rgba(180,180,180,0.10)';
+        if (!suppressFloorFill) {
+          // fill
+          ctx.beginPath(); var s0 = camToScreen(baseClip[0]); if(s0){ ctx.moveTo(s0.x, s0.y); }
+          for (var bi=1; bi<baseClip.length; bi++){ var sb = camToScreen(baseClip[bi]); if(sb){ ctx.lineTo(sb.x, sb.y); } }
+          ctx.closePath();
+          // choose fill like below (currentLevel/selected already set)
+          if (currentLevel) {
+            ctx.fillStyle = selected ? 'rgba(0,122,204,0.18)' : 'rgba(120,120,120,0.10)';
+          } else if (selected && room.level !== currentFloor) {
+            ctx.fillStyle = 'rgba(0,122,204,0.18)';
+          } else {
+            ctx.fillStyle = 'rgba(180,180,180,0.10)';
+          }
+          ctx.fill();
         }
-        ctx.fill();
         // outline (skip only while actively dragging in solid mode)
         if (!suppressWire) {
           ctx.beginPath(); var so = camToScreen(baseClip[0]); if(so){ ctx.moveTo(so.x, so.y); }
@@ -161,17 +165,19 @@ function drawRoom(room) {
       // Fill base (floor) polygon with near-plane clipping
       var baseClip = clipPolyNear(baseCam);
       if (baseClip.length >= 3){
-        if (currentLevel) {
-          ctx.fillStyle = selected ? 'rgba(0,122,204,0.18)' : 'rgba(120,120,120,0.10)';
-        } else if (selected && room.level !== currentFloor) {
-          ctx.fillStyle = 'rgba(0,122,204,0.18)';
-        } else {
-          ctx.fillStyle = 'rgba(180,180,180,0.10)';
+        if (!suppressFloorFill) {
+          if (currentLevel) {
+            ctx.fillStyle = selected ? 'rgba(0,122,204,0.18)' : 'rgba(120,120,120,0.10)';
+          } else if (selected && room.level !== currentFloor) {
+            ctx.fillStyle = 'rgba(0,122,204,0.18)';
+          } else {
+            ctx.fillStyle = 'rgba(180,180,180,0.10)';
+          }
+          ctx.beginPath(); var b0 = camToScreen(baseClip[0]); if(b0){ ctx.moveTo(b0.x, b0.y); }
+          for (var bi=1; bi<baseClip.length; bi++){ var sb = camToScreen(baseClip[bi]); if(sb){ ctx.lineTo(sb.x, sb.y); } }
+          ctx.closePath();
+          ctx.fill();
         }
-        ctx.beginPath(); var b0 = camToScreen(baseClip[0]); if(b0){ ctx.moveTo(b0.x, b0.y); }
-        for (var bi=1; bi<baseClip.length; bi++){ var sb = camToScreen(baseClip[bi]); if(sb){ ctx.lineTo(sb.x, sb.y); } }
-        ctx.closePath();
-        ctx.fill();
         // Base outline — skip only while actively dragging in solid mode
         if (!suppressWire) {
           ctx.beginPath(); var b1 = camToScreen(baseClip[0]); if(b1){ ctx.moveTo(b1.x, b1.y); }
@@ -204,8 +210,10 @@ function drawRoom(room) {
   try { if (typeof drawHandlesForRoom === 'function') drawHandlesForRoom(room); } catch(e) {}
 
     // Draw openings (doors/windows) with full rectangular outline at correct sill/height
+    // NOTE: Temporarily suppressed in solid wall render mode to diagnose persistent "ghost" outline layer.
+    // If the phantom perimeter disappears with this suppression, the openings overlay was the duplicate source.
     try {
-      if (Array.isArray(room.openings) && room.openings.length) {
+      if (!solidMode && Array.isArray(room.openings) && room.openings.length) {
         var hw2 = room.width / 2; var hd2 = room.depth / 2;
         var yBase = roomFloorY; // floor level
         // Precompute the room's top Y to clamp full-height openings safely
