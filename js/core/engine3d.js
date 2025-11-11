@@ -650,6 +650,17 @@
 
       // Line mode: draw a single centerline at mid-height; skip thickness/face outlines
       if (renderMode === 'line'){
+        // Requirement: eliminate the persistent mid-height "keyline" ghost after 2D Apply.
+        // That keyline was the centerline rendering of perimeter wall strips generated from rooms.
+        // Rooms already have their footprint outlined via drawRoom at floor level; drawing an extra
+        // elevated centerline (~1.0–1.2m) duplicates visual information and is perceived as a ghost.
+        // Suppress drawing for room/garage-generated perimeter strips (tagged) in line mode.
+        try {
+          var roomTag = window.__roomStripTag || '__fromRooms';
+          if (ws && ws[roomTag]) {
+            return; // skip perimeter centerline for rooms/garages in line mode
+          }
+        } catch(_eSkipTag) {}
         var yMid = baseY + Math.min(h*0.5, 1.2);
         var p0 = project3D(x0, yMid, z0), p1 = project3D(x1, yMid, z1);
         if (!p0 || !p1) return;
