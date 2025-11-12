@@ -1040,7 +1040,19 @@
           }catch(e){}
         }
       }
-      // Selection highlight
+      // Multi-selection highlight (draw all selected walls except primary)
+      try{
+        if(Array.isArray(__plan2d.selectedIndices) && __plan2d.selectedIndices.length>1){
+          for(var mi=0; mi<__plan2d.selectedIndices.length; mi++){
+            var idxM = __plan2d.selectedIndices[mi];
+            if(idxM === __plan2d.selectedIndex) continue; // primary handled below
+            var wM = __plan2d.elements[idxM]; if(!wM || wM.type!=='wall') continue;
+            var aM=worldToScreen2D(wM.x0,wM.y0), bM=worldToScreen2D(wM.x1,wM.y1);
+            ctx.beginPath(); ctx.strokeStyle='#0ea5e9'; ctx.lineWidth=2.5; ctx.setLineDash([4,3]); ctx.moveTo(aM.x,aM.y); ctx.lineTo(bM.x,bM.y); ctx.stroke(); ctx.setLineDash([]);
+          }
+        }
+      }catch(_msDraw){}
+      // Primary selection highlight
       if(__plan2d.selectedIndex>=0){
         var se=__plan2d.elements[__plan2d.selectedIndex];
         var sx0=se.x0, sy0=se.y0, sx1=se.x1, sy1=se.y1;
@@ -1301,6 +1313,33 @@
 
     perfSections.overlay = ((performance&&performance.now)?performance.now():Date.now()) - tStart - perfSections.grid - perfSections.walls - perfSections.openings - perfSections.labels;
     perfSections.total = ((performance&&performance.now)?performance.now():Date.now()) - tStart;
+    // Safety: if there is content but it's likely off-screen (after deletes/pans), occasionally auto-fit once
+    try{
+      var nowChk = Date.now();
+      if(!__plan2d.panning && !__plan2d.dragWall && !__plan2d.dragWindow && !__plan2d.dragDoor && !__plan2d.dragGroup && !__plan2d.userDrawingActive){
+        if((__plan2d.__lastFitCheck||0) + 900 < nowChk){
+          __plan2d.__lastFitCheck = nowChk;
+          var hasEls = Array.isArray(__plan2d.elements) && __plan2d.elements.length>0;
+          if(hasEls && typeof plan2dComputeBounds==='function'){
+            var b = plan2dComputeBounds();
+            if(b){
+              // compute screen bbox of bounds
+              var aS = worldToScreen2D(b.minX, b.minY), bS = worldToScreen2D(b.maxX, b.maxY);
+              var minSX = Math.min(aS.x, bS.x), maxSX = Math.max(aS.x, bS.x);
+              var minSY = Math.min(aS.y, bS.y), maxSY = Math.max(aS.y, bS.y);
+              var w = c.width||1, h = c.height||1;
+              // if bbox is fully outside by a margin on all sides, fit view (force)
+              var margin = Math.max(40, Math.min(w,h)*0.15);
+              var outside = (maxSX < -margin) || (minSX > w+margin) || (maxSY < -margin) || (minSY > h+margin);
+              if(outside && typeof plan2dFitViewToContent==='function'){
+                try{ plan2dResetDirty && plan2dResetDirty(); }catch(_rd){}
+                plan2dFitViewToContent(40, {force:true});
+              }
+            }
+          }
+        }
+      }
+    }catch(_sfit){}
     // Rolling averages (EMA) for draw ms and dirty percent
     try{
       var ema = __plan2d.__ema || (__plan2d.__ema = {});

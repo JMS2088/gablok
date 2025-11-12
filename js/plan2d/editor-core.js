@@ -9,6 +9,7 @@
       elements:[],          // {type:'wall'|'window'|'door', ...}
       tool:'select',         // 'wall','window','door','select','erase'
       selectedIndex:-1,
+  selectedIndices:[],    // multi-select support (indices of walls); selectedIndex remains primary for backward compat
       selectedSubsegment:null,
       hoverIndex:-1,
       hoverDoorIndex:-1,
@@ -103,10 +104,38 @@
   // Selection ---------------------------------------------------------------
   function plan2dSetSelection(idx){
     __plan2d.selectedIndex = (typeof idx==='number'? idx : -1);
+    // Single-select sets multi-select accordingly (walls only; others clear multi)
+    try{
+      if(Array.isArray(__plan2d.selectedIndices)){
+        if(__plan2d.selectedIndex>=0){
+          var el = (__plan2d.elements||[])[__plan2d.selectedIndex];
+          if(el && el.type==='wall'){ __plan2d.selectedIndices = [__plan2d.selectedIndex]; }
+          else { __plan2d.selectedIndices = []; }
+        } else { __plan2d.selectedIndices = []; }
+      }
+    }catch(_ms){}
     __plan2d.selectedSubsegment = null;
     try{ if(typeof window.onPlan2DSelectionChange==='function'){ window.onPlan2DSelectionChange(__plan2d.selectedIndex); } }catch(_selHook){}
   }
   window.plan2dSetSelection = window.plan2dSetSelection || plan2dSetSelection;
+
+  function plan2dToggleSelection(idx){
+    try{
+      if(typeof idx!=='number' || idx<0) return;
+      var el = (__plan2d.elements||[])[idx]; if(!el || el.type!=='wall') { plan2dSetSelection(idx); return; }
+      var set = Array.isArray(__plan2d.selectedIndices) ? __plan2d.selectedIndices.slice() : [];
+      var pos = set.indexOf(idx);
+      if(pos>=0){ set.splice(pos,1); }
+      else { set.push(idx); }
+      __plan2d.selectedIndices = set;
+      // Keep primary selectedIndex on last toggled item if added; otherwise set to last remaining or -1
+      if(pos>=0){ __plan2d.selectedIndex = (set.length>0 ? set[set.length-1] : -1); }
+      else { __plan2d.selectedIndex = idx; }
+      __plan2d.selectedSubsegment = null;
+      try{ if(typeof window.onPlan2DSelectionChange==='function'){ window.onPlan2DSelectionChange(__plan2d.selectedIndex); } }catch(_selHook){}
+    }catch(_tgl){}
+  }
+  window.plan2dToggleSelection = window.plan2dToggleSelection || plan2dToggleSelection;
 
   // Dynamic tolerance helper (convert a pixel radius into world meters based on current scale)
   // This makes hit-tests/selection consistent regardless of zoom level.
@@ -351,17 +380,20 @@
   function plan2dNudgeSelection(dx, dy){
     try{
       if(!__plan2d || !__plan2d.active) return false;
-      var idx = (typeof __plan2d.selectedIndex==='number') ? __plan2d.selectedIndex : -1;
-      if(idx < 0) return false;
-      var e = (__plan2d.elements||[])[idx]; if(!e) return false;
-      if(e.type === 'wall'){
-        e.x0 += dx; e.x1 += dx; e.y0 += dy; e.y1 += dy;
-        // Keep view stable and mark as user edit
+      var movedAny = false;
+      var set = Array.isArray(__plan2d.selectedIndices) ? __plan2d.selectedIndices.slice() : [];
+      if(set.length===0 && typeof __plan2d.selectedIndex==='number' && __plan2d.selectedIndex>=0){ set=[__plan2d.selectedIndex]; }
+      var els = __plan2d.elements||[];
+      for(var si=0; si<set.length; si++){
+        var idx = set[si]; var e = els[idx]; if(!e) continue;
+        if(e.type==='wall'){
+          e.x0 += dx; e.x1 += dx; e.y0 += dy; e.y1 += dy; movedAny = true;
+        }
+      }
+      if(movedAny){
         try { __plan2d.freezeCenterScaleUntil = Date.now() + 400; __plan2d.autoFitEnabled = false; __plan2d.__userEdited = true; __plan2d.freezeSyncUntil = Date.now() + 200; } catch(_fzN){}
-        // Force full redraw for simplicity; movement area is small but computing bbox requires prev state
         try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrN){}
-        plan2dDraw();
-        plan2dEdited();
+        plan2dDraw(); plan2dEdited();
         return true;
       }
     }catch(_n){ /* non-fatal */ }
@@ -402,12 +434,20 @@
           return true;
         }
       }
-      // Direct element deletion (wall/window/door)
-      if(__plan2d.selectedIndex>=0){
-        if(typeof plan2dEraseElementAtSafe==='function' && plan2dEraseElementAtSafe(__plan2d.selectedIndex)){
+      // Direct element deletion (wall/window/door) – supports multi-select
+      var set = Array.isArray(__plan2d.selectedIndices) ? __plan2d.selectedIndices.slice() : [];
+      if(set.length <= 1 && __plan2d.selectedIndex>=0){ set = [__plan2d.selectedIndex]; }
+      if(set.length>0){
+        // delete in descending order to keep indices stable
+        set.sort(function(a,b){ return b-a; });
+        var any=false;
+        for(var di=0; di<set.length; di++){
+          var idx = set[di];
+          if(typeof plan2dEraseElementAtSafe==='function' && plan2dEraseElementAtSafe(idx)) { any=true; }
+        }
+        if(any){
           plan2dSetSelection(-1);
           try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrEl){}
-          // Prevent population or auto-fit from removing remaining walls; mark as user edited
           try { __plan2d.__userEdited = true; __plan2d.freezeSyncUntil = Date.now() + 800; } catch(_mkUE){}
           plan2dDraw(); plan2dEdited();
           return true;
@@ -638,6 +678,7 @@
                 orig: (hitEnd.end==='a'? {x: w.x0, y: w.y0} : {x: w.x1, y: w.y1})
               };
               plan2dSetSelection(hitEnd.index);
+              __plan2d.__didSelectOnMouseDown = true;
               plan2dDraw();
               return; // do not start selection gesture
             }
@@ -758,15 +799,30 @@
         try{
           var tolSeg = plan2dWorldTolForPixels(10);
           var winHit = (typeof plan2dHitWindowSegment==='function') ? plan2dHitWindowSegment(p, tolSeg) : null;
-          if(winHit && typeof winHit.index==='number'){ plan2dSetSelection(winHit.index); plan2dDraw(); return; }
+          if(winHit && typeof winHit.index==='number'){ plan2dSetSelection(winHit.index); __plan2d.__didSelectOnMouseDown = true; plan2dDraw(); return; }
           var doorHit = (typeof plan2dHitDoorSegment==='function') ? plan2dHitDoorSegment(p, tolSeg*0.9) : null;
-          if(doorHit && typeof doorHit.index==='number'){ plan2dSetSelection(doorHit.index); plan2dDraw(); return; }
+          if(doorHit && typeof doorHit.index==='number'){ plan2dSetSelection(doorHit.index); __plan2d.__didSelectOnMouseDown = true; plan2dDraw(); return; }
         }catch(_prefSel){}
         // Fallback: nearest element within tolerance; else start panning
         var best=-1, bestDist=plan2dWorldTolForPixels(12);
         for(var i=0;i<__plan2d.elements.length;i++){ var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; } }
         if(best<0){ __plan2d.panning={ mx:cx, my:cy, panX0:__plan2d.panX||0, panY0:__plan2d.panY||0, scale: __plan2d.scale||50 }; plan2dDraw(); return; }
-        plan2dSetSelection(best);
+        // Shift-click toggles wall in multi-select; plain click selects single
+        if(ev.shiftKey){ plan2dToggleSelection(best); }
+        else { plan2dSetSelection(best); }
+        __plan2d.__didSelectOnMouseDown = true;
+        // If multiple walls are selected and we clicked on a selected wall body, begin group drag
+        try{
+          var set = Array.isArray(__plan2d.selectedIndices) ? __plan2d.selectedIndices : [];
+          if(!ev.shiftKey && set && set.indexOf(best)>=0 && set.length>1){
+            // Start group translation (avoid if we were on an endpoint above)
+            var indices = set.slice(); var orig=[]; var els=__plan2d.elements||[];
+            for(var gi=0; gi<indices.length; gi++){ var idx=indices[gi]; var w=els[idx]; if(w && w.type==='wall'){ orig.push({index:idx, x0:w.x0, y0:w.y0, x1:w.x1, y1:w.y1}); } }
+            __plan2d.dragGroup = { indices: indices, start:{x:p.x,y:p.y}, orig: orig };
+            // Prevent panning; draw will update on mousemove
+            plan2dDraw(); return;
+          }
+        }catch(_grp){}
       }
       // selection gesture (fallback)
       __plan2d.start=p; __plan2d.last=p; plan2dDraw(); });
@@ -816,7 +872,7 @@
         }catch(_ddMove){}
         return;
       }
-      // Dragging a guide
+  // Dragging a guide
       if(__plan2d.dragGuide){
         try {
           if(__plan2d.dragGuide.dir==='v'){
@@ -850,6 +906,26 @@
       }
       // Panning when dragging on empty space with Select tool
   if(__plan2d.panning){ var s=__plan2d.panning.scale||(__plan2d.scale||50); var dx=cx-__plan2d.panning.mx; var dy=cy-__plan2d.panning.my; __plan2d.panX = (__plan2d.panning.panX0||0) + dx/Math.max(1e-6,s); __plan2d.panY = (__plan2d.panning.panY0||0) - dy/Math.max(1e-6,s); plan2dResetDirty(); plan2dDraw(); return; }
+      // Dragging a group of selected walls
+      if(__plan2d.dragGroup){
+        try{
+          var dg=__plan2d.dragGroup; var dxW = p.x - dg.start.x, dyW = p.y - dg.start.y;
+          // Axis constrain with Shift while dragging group
+          if(ev.shiftKey){ if(Math.abs(dxW)>=Math.abs(dyW)){ dyW=0; } else { dxW=0; } }
+          // Snap displacement to grid by snapping endpoints around the start reference
+          var dxS = plan2dSnap(dg.start.x + dxW) - plan2dSnap(dg.start.x);
+          var dyS = plan2dSnap(dg.start.y + dyW) - plan2dSnap(dg.start.y);
+          var els = __plan2d.elements||[];
+          // For simplicity, full redraw (group bbox dirty calc omitted)
+          try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrG){}
+          for(var gi=0; gi<dg.orig.length; gi++){
+            var o=dg.orig[gi]; var w=els[o.index]; if(!w || w.type!=='wall') continue;
+            w.x0 = o.x0 + dxS; w.y0 = o.y0 + dyS; w.x1 = o.x1 + dxS; w.y1 = o.y1 + dyS;
+          }
+          plan2dDraw();
+        }catch(_gd){}
+        return;
+      }
       // Dragging a wall endpoint
       if(__plan2d.dragWall){
         try {
@@ -956,6 +1032,7 @@
       try{ plan2dEdited(); }catch(_gdone){}
       __plan2d.dragGuide=null; plan2dDraw(); return; }
     if(__plan2d.panning){ __plan2d.panning=null; plan2dDraw(); return; }
+    if(__plan2d.dragGroup){ try{ __plan2d.freezeCenterScaleUntil = Date.now() + 600; plan2dEdited(); }catch(_ge){} __plan2d.dragGroup=null; plan2dDraw(); return; }
     // Finish wall endpoint drag
     if(__plan2d.dragWall){
       try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); __plan2d.freezeCenterScaleUntil = Date.now() + 600; plan2dEdited(); }catch(_endDrag){}
@@ -1000,9 +1077,9 @@
       try { plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); __plan2d.freezeCenterScaleUntil = Date.now() + 600; plan2dEdited(); }catch(_endD){}
       __plan2d.dragDoor=null; plan2dDraw(); return;
     }
-    if(__plan2d.start && __plan2d.last){ var moved=Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y); if(moved<0.02){ plan2dSelectAt(__plan2d.last); } else { var a=__plan2d.start,b=__plan2d.last; if(__plan2d.tool!=='wall'){ // drag-create still applies for window/door
+    if(__plan2d.start && __plan2d.last){ var moved=Math.hypot(__plan2d.last.x-__plan2d.start.x, __plan2d.last.y-__plan2d.start.y); if(moved<0.02){ if(!__plan2d.__didSelectOnMouseDown){ plan2dSelectAt(__plan2d.last); } } else { var a=__plan2d.start,b=__plan2d.last; if(__plan2d.tool!=='wall'){ // drag-create still applies for window/door
           plan2dFinalize(a,b); plan2dAutoSnapAndJoin(); plan2dDraw(); } } }
-    __plan2d.start=null; __plan2d.last=null; __plan2d.mouse=null; plan2dDraw(); });
+    __plan2d.start=null; __plan2d.last=null; __plan2d.mouse=null; __plan2d.__didSelectOnMouseDown=false; plan2dDraw(); });
   // Remove room drag mouseup listener (simplified)
 
     // Keyboard (selection delete + chain finalize) ------------------------

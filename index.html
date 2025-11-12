@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>3D Home Configurator with Pricing</title>
 <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-<link rel="stylesheet" href="css/styles.css?v=20251016-1">
+<link rel="stylesheet" href="css/styles.css?v=20251112-4">
 </head>
 <body>
 
@@ -206,7 +206,7 @@
 			<section>
 				<h3 class="info-section-title">2D Floor Plan Editor</h3>
 				<ul class="info-list">
-					<li><strong>Select</strong> (default): Click to select doors/windows/walls. Delete removes selection. Arrow keys nudge. Hold Space to pan.</li>
+					<li><strong>Select</strong> (default): Click to select doors/windows/walls. <strong>Shift+Click</strong> adds/removes walls to a multi-selection. Delete removes selection. Arrow keys nudge. Hold Space to pan.</li>
 					<li><strong>Wall</strong>: Draw axis-aligned walls. Shift-click to chain segments. Double-click or press Enter to finish. Close loops to form rooms.</li>
 					<li><strong>Window</strong>: Click a wall to place; drag endpoints to size. Use the Window Type dropdown for Standard/Full height.</li>
 					<li><strong>Door</strong>: Click a wall to place; drag endpoints to size. Use the Door Swing dropdown to set In/Out.</li>
@@ -233,7 +233,7 @@
 					<div class="left"><span class="kbd">Esc</span></div><div class="right">Clear selection</div>
 					<div class="left"><span class="kbd">Del</span>/<span class="kbd">⌫</span></div><div class="right">Delete selected (3D room / 2D element)</div>
 					<div class="left"><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span></div><div class="right">Nudge 3D object (when selected)</div>
-					<div class="left"><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span> (2D)</div><div class="right">Nudge selected wall (grid step). <span class="kbd">Shift</span>=×10</div>
+					<div class="left"><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span> (2D)</div><div class="right">Nudge selected wall(s) (grid step). <span class="kbd">Shift</span>=×10</div>
 					<div class="left"><span class="kbd">R</span></div><div class="right">Toggle wall render mode (Lines⇄Solid)</div>
 					<div class="left"><span class="kbd">L</span></div><div class="right">Hide / show labels & corner numbers</div>
 					<div class="left"><span class="kbd">V</span></div><div class="right">Toggle clean view (UI-free preview)</div>
@@ -241,7 +241,8 @@
 					<div class="left"><span class="kbd">Ctrl</span> + <span class="kbd">Y</span> / <span class="kbd">Ctrl</span> + <span class="kbd">Shift</span> + <span class="kbd">Z</span></div><div class="right">Redo</div>
 					<div class="left"><span class="kbd">Space</span> (2D)</div><div class="right">Hold to temporarily pan canvas</div>
 					<div class="left"><span class="kbd">Enter</span> (2D)</div><div class="right">Finish wall chain</div>
-					<div class="left"><span class="kbd">Shift</span> + Click (2D)</div><div class="right">Add wall segment to chain</div>
+					<div class="left"><span class="kbd">Shift</span> + Click (2D)</div><div class="right">Add/remove wall to multi-selection (Select tool) / Add wall segment to chain (Wall tool)</div>
+					<div class="left">Drag on selected wall (2D)</div><div class="right">Move all selected walls together (group move)</div>
 				</div>
 			</section>
 		</div>

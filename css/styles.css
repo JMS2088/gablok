@@ -610,9 +610,9 @@
   #info-content p, #info-content ul, #info-content li { font-size: inherit; line-height: inherit; }
   .info-section-title { font-size: 14px; line-height: 3.8; }
   #info-content h2 { font-size: 17px !important; line-height: 4.4; }
-  /* Force list item line-height expansion (list view) */
-  #info-content li { line-height: 8.6 !important; }
-  #info-content ul { line-height: 8.6 !important; }
+  /* Force list item line-height expansion (list view) – doubled from ~1.6 to ~3.2 */
+  #info-content li { line-height: 2.4 !important; }
+  #info-content ul { line-height: 2.4 !important; }
   /* Apply same to pricing panel for consistency */
   #pricing-content li, #pricing-content ul { line-height: 2.4 !important; }
 
@@ -735,13 +735,17 @@
     margin: 0 0 20px 0; color: #333; font-size: 24px;
   }
   
-  #info-content p, #pricing-content p {
-    margin: 0 0 15px 0; line-height: 1.6; color: #555;
-  }
+  /* Separate paragraph line-height: keep Pricing tighter, expand Info panel */
+  #pricing-content p { margin: 0 0 15px 0; line-height: 1.6; color: #555; }
+  #info-content p { margin: 0 0 15px 0; line-height: 2.4 !important; color: #555; }
   
-  #info-content ul, #pricing-content ul {
-    margin: 0 0 15px 20px; color: #555;
-  }
+  #pricing-content ul { margin: 0 0 15px 20px; color: #555; }
+  #info-content ul { margin: 0 0 15px 20px; color: #555; line-height: 2.4 !important; }
+  /* Account > Information & Help view: match Info modal spacing */
+  #account-info-body { font-size: 14px; }
+  #account-info-body p { margin: 0 0 15px 0; line-height: 2.4 !important; color: #555; }
+  #account-info-body ul { margin: 0 0 15px 20px; color: #555; line-height: 2.4 !important; }
+  #account-info-body li { margin-bottom: 14px; line-height: 2.4 !important; }
   
   #info-content li, #pricing-content li { margin-bottom: 8px; }
 
