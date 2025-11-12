@@ -25,17 +25,33 @@
         elementsTotal:(__plan2d.elements?__plan2d.elements.length:0)
       };
     }catch(_pfInit){}
-    // Decide dynamic label/measurement budget for this frame
+    // Dynamic performance budget tuning (adaptive to previous frame cost & element count)
     try {
       var elemCount = (__plan2d.elements? __plan2d.elements.length: 0);
-      var baseLimit = 200; // default budget
-      if(elemCount > 800) baseLimit = 100; else if(elemCount > 400) baseLimit = 140;
-      if(__plan2d.__lastDrawMs && __plan2d.__lastDrawMs > 18) baseLimit = Math.min(baseLimit, 120);
+      // Base budget scales down as count grows to avoid O(n) label floods
+      var baseLimit = 220; // slightly higher initial budget
+      if (elemCount > 1200) baseLimit = 80; else if (elemCount > 800) baseLimit = 110; else if (elemCount > 500) baseLimit = 150; else if (elemCount > 300) baseLimit = 190;
+      // If last draw was expensive, throttle further
+      if (__plan2d.__lastDrawMs && __plan2d.__lastDrawMs > 20) baseLimit = Math.min(baseLimit, 120);
+      if (__plan2d.__lastDrawMs && __plan2d.__lastDrawMs > 32) baseLimit = Math.min(baseLimit, 90);
+      // Allow external override (for perf experiments) via __measureLimitOverride
+      if (typeof __plan2d.__measureLimitOverride === 'number' && __plan2d.__measureLimitOverride >= 0) baseLimit = __plan2d.__measureLimitOverride;
       __plan2d.__measureLimit = baseLimit;
-      __plan2d.__measureCount = 0; // reset early in case external callers rely on it
-    }catch(_lim){}
+      __plan2d.__measureCount = 0;
+    } catch(_lim) {}
     // Incremental redraw: if a dirtyRect is present and flagged incremental, only clear that region with padding
-    var useDirty = !!(__plan2d.__incremental && __plan2d.dirtyRect);
+    // Incremental region draw activation heuristics: enable incremental if dirty rect covers <40% pixels
+    var useDirty = false;
+    try {
+      if (__plan2d.__incremental && __plan2d.dirtyRect) {
+        var dr = __plan2d.dirtyRect; var cArea = (c.width||1)*(c.height||1);
+        var aS = worldToScreen2D(dr.minX, dr.minY); var bS = worldToScreen2D(dr.maxX, dr.maxY);
+        var wSX = Math.abs(bS.x - aS.x); var hSY = Math.abs(bS.y - aS.y);
+        var pxArea = wSX * hSY;
+        var pct = pxArea / Math.max(1, cArea);
+        if (pct < 0.40) useDirty = true; else __plan2d.__incremental = false; // too big; fall back to full clear
+      }
+    } catch(_heur) {}
     var clearPadPx = 40; // pad in pixels for stroke/joins
     if(useDirty){
       try{
@@ -61,8 +77,9 @@
         }catch(_pfDirty){}
       }catch(_cdr){ ctx.clearRect(0,0,c.width,c.height); ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height); useDirty=false; }
     } else {
+      // Full clear path (optimize by using fill instead of clearRect which can trigger full layer invalidation)
       if(cadMode){ ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,c.width,c.height); ctx.restore(); }
-      else { ctx.clearRect(0,0,c.width,c.height); }
+      else { ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,c.width,c.height); ctx.restore(); }
       ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height);
     }
     var perfSections = __plan2d.__perfSections = { grid:0, walls:0, openings:0, labels:0, overlay:0, total:0 };
@@ -88,11 +105,16 @@
       // Offscreen cached grid layer -------------------------------------
       (function(){
         try {
-          var gridCache = __plan2d.__gridCache || (__plan2d.__gridCache = {});
-          var needs = false;
-          if(gridCache.scale !== step || gridCache.panX !== __plan2d.panX || gridCache.panY !== __plan2d.panY || gridCache.w !== w || gridCache.h !== h){ needs = true; }
-          if(!gridCache.canvas){ needs = true; gridCache.canvas = document.createElement('canvas'); }
-          if(needs){
+              var gridCache = __plan2d.__gridCache || (__plan2d.__gridCache = {});
+              var needs = false;
+              // Only rebuild grid when scale or viewport size changes enough (>1px pan shift at world origin or scale delta)
+              var panShiftX = Math.abs((gridCache.panX||0) - __plan2d.panX) * step;
+              var panShiftY = Math.abs((gridCache.panY||0) - __plan2d.panY) * step;
+              var scaleChanged = (gridCache.scale !== step);
+              var sizeChanged = (gridCache.w !== w || gridCache.h !== h);
+              if (scaleChanged || sizeChanged || panShiftX > 1 || panShiftY > 1) needs = true;
+              if(!gridCache.canvas){ needs = true; gridCache.canvas = document.createElement('canvas'); }
+              if(needs){
             gridCache.canvas.width = w; gridCache.canvas.height = h;
             var gctx = gridCache.canvas.getContext('2d');
             gctx.setTransform(1,0,0,1,0,0);
@@ -138,7 +160,7 @@
             gctx.beginPath(); gctx.moveTo(originX + 0.5,0); gctx.lineTo(originX + 0.5,h); gctx.stroke();
             gctx.beginPath(); gctx.moveTo(0,originY + 0.5); gctx.lineTo(w,originY + 0.5); gctx.stroke();
             gctx.restore();
-            gridCache.scale=step; gridCache.panX=__plan2d.panX; gridCache.panY=__plan2d.panY; gridCache.w=w; gridCache.h=h;
+            gridCache.scale=step; gridCache.panX=__plan2d.panX; gridCache.panY=__plan2d.panY; gridCache.w=w; gridCache.h=h; gridCache.lastBuildAt=(performance&&performance.now)?performance.now():Date.now();
           }
           // For incremental frames, only draw the slice that intersects the dirty rect
           if(useDirty){
@@ -149,7 +171,13 @@
               var minSY = Math.min(aS.y, bS.y) - clearPadPx;
               var wSX = Math.abs(bS.x - aS.x) + clearPadPx*2;
               var hSY = Math.abs(bS.y - aS.y) + clearPadPx*2;
-              ctx.drawImage(gridCache.canvas, Math.max(0,minSX), Math.max(0,minSY), Math.max(0,Math.min(wSX, c.width - minSX)), Math.max(0,Math.min(hSY, c.height - minSY)), Math.max(0,minSX), Math.max(0,minSY), Math.max(0,Math.min(wSX, c.width - minSX)), Math.max(0,Math.min(hSY, c.height - minSY)));
+              ctx.drawImage(
+                gridCache.canvas,
+                Math.max(0,minSX), Math.max(0,minSY),
+                Math.max(0,Math.min(wSX, c.width - minSX)), Math.max(0,Math.min(hSY, c.height - minSY)),
+                Math.max(0,minSX), Math.max(0,minSY),
+                Math.max(0,Math.min(wSX, c.width - minSX)), Math.max(0,Math.min(hSY, c.height - minSY))
+              );
             }catch(_dg){ ctx.drawImage(gridCache.canvas,0,0); }
           } else {
             ctx.drawImage(gridCache.canvas,0,0);

@@ -163,6 +163,8 @@
       var rect = canvas.getBoundingClientRect();
       var mouseX = e.clientX - rect.left;
       var mouseY = e.clientY - rect.top;
+        // Ensure canvas can receive keyboard events for 3D shortcuts after any interaction
+        try { if (!canvas.hasAttribute('tabindex')) canvas.setAttribute('tabindex','0'); canvas.focus({preventScroll:true}); } catch(_cfocus){}
       // Right mouse button: always orbit camera (do not start selection/drag)
       if (e.button === 2) {
         mouse.down = true;
@@ -406,6 +408,8 @@
       if (hitObj){
         // Select object; require handle drag for ALL object types (standardized)
         if (typeof window.selectObject==='function') window.selectObject(hitObj.id, { noRender: true }); else { selectedRoomId = hitObj.id; }
+        // Focus canvas so Delete / arrows work immediately after selection
+        try { if (!canvas.hasAttribute('tabindex')) canvas.setAttribute('tabindex','0'); canvas.focus({preventScroll:true}); } catch(_cfocus2){}
         updateStatus((hitObj.name||hitObj.type||'Item') + ' selected');
         renderLoop();
         return;
@@ -1068,6 +1072,105 @@
       if (typeof clampCamera === 'function') clampCamera();
       else { camera.distance = Math.max(camera.minDistance||6, Math.min(camera.maxDistance||140, camera.distance)); }
     });
+    
+    // ------------------------------------------------------------------
+    // TOUCH / MOBILE GESTURES (single‑finger orbit or handle drag, pinch zoom, two‑finger pan)
+    // Product requirement: add mobile gestures so user can test on touch devices.
+    // Design:
+    //  - 1 finger tap / drag on a handle: behaves exactly like mouse drag (reuse existing logic by dispatching synthetic mouse events)
+    //  - 1 finger drag NOT on a handle: orbit camera (same as right‑drag desktop)
+    //  - 2 finger pinch: zoom (adjust camera.distance, clamped)
+    //  - 2 finger drag (midpoint move while pinching): pan world (panCameraWorld)
+    //  - Touch end synthesizes mouseup to finalize drags (resize / move) ensuring existing cleanup logic runs.
+    // Guarded by window.__enableTouchGestures (default true) so we can disable quickly if needed.
+    if (typeof window.__enableTouchGestures === 'undefined') window.__enableTouchGestures = true;
+    (function initTouchGestures(){
+      try {
+        if (!canvas) return;
+        // Internal state
+        var activeMode = null; // 'single' | 'pinch'
+        var lastX = 0, lastY = 0;
+        var pinchLastDist = 0;
+        var pinchLastMid = null;
+        function synthMouse(type, x, y){
+          try { var evt = new MouseEvent(type, { clientX: x, clientY: y, bubbles: true, cancelable: true }); document.dispatchEvent(evt); } catch(_e){}
+        }
+        canvas.addEventListener('touchstart', function(e){
+          if(!window.__enableTouchGestures) return; if(!e.touches || !e.touches.length) return; _uiLastInteractionTime = (performance && performance.now)? performance.now(): Date.now();
+          if (e.touches.length === 1){
+            var t = e.touches[0];
+            // Hit-test handles first (CSS pixels). We mimic mousedown so existing code sets up dragInfo.
+            try {
+              var rect = canvas.getBoundingClientRect();
+              var mx = t.clientX - rect.left; var my = t.clientY - rect.top;
+              var handle = findHandle(mx, my);
+              if (handle){
+                // Dispatch synthetic mouse events to reuse the robust mousedown logic (selection, dragInfo capture, footprints/openings, etc.)
+                synthMouse('mousedown', t.clientX, t.clientY);
+              } else {
+                // Prepare for orbit mode
+                mouse.down = true; mouse.dragType = 'camera'; lastX = t.clientX; lastY = t.clientY; canvas.style.cursor='grabbing';
+              }
+            } catch(_ht) {
+              // Fallback to orbit
+              mouse.down = true; mouse.dragType = 'camera'; lastX = t.clientX; lastY = t.clientY; canvas.style.cursor='grabbing';
+            }
+            // Focus canvas on first touch so external keyboards (tablet) work for shortcuts
+            try { if (!canvas.hasAttribute('tabindex')) canvas.setAttribute('tabindex','0'); canvas.focus({preventScroll:true}); } catch(_tfocus){}
+            activeMode = 'single';
+          } else if (e.touches.length === 2){
+            var t0 = e.touches[0], t1 = e.touches[1];
+            pinchLastDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY) || 1;
+            pinchLastMid = { x: (t0.clientX + t1.clientX)/2, y: (t0.clientY + t1.clientY)/2 };
+            activeMode = 'pinch';
+          }
+          // Prevent browser scrolling / pinch-zoom of page
+          e.preventDefault();
+        }, { passive: false });
+        canvas.addEventListener('touchmove', function(e){
+          if(!window.__enableTouchGestures) return; if(!activeMode) return; if(!e.touches || !e.touches.length) return; _uiLastInteractionTime = (performance && performance.now)? performance.now(): Date.now();
+          if (activeMode === 'single' && e.touches.length === 1){
+            var t = e.touches[0];
+            // If a handle drag was initiated we forward as mousemove so existing resize logic applies.
+            if (mouse.dragType === 'handle'){ synthMouse('mousemove', t.clientX, t.clientY); }
+            else if (mouse.dragType === 'camera') {
+              var dx = t.clientX - lastX; var dy = t.clientY - lastY; lastX = t.clientX; lastY = t.clientY;
+              if (typeof orbitCamera === 'function') orbitCamera(dx, dy); else { camera.yaw += dx*0.008; camera.pitch -= dy*0.008; if (typeof clampCamera==='function') clampCamera(); }
+              if (typeof renderLoop==='function') renderLoop();
+            } else {
+              // No current dragType (e.g., simple tap-move off handle) -> orbit
+              var dx2 = t.clientX - lastX; var dy2 = t.clientY - lastY; lastX = t.clientX; lastY = t.clientY;
+              if (typeof orbitCamera === 'function') orbitCamera(dx2, dy2); else { camera.yaw += dx2*0.008; camera.pitch -= dy2*0.008; if (typeof clampCamera==='function') clampCamera(); }
+              if (typeof renderLoop==='function') renderLoop();
+            }
+          } else if (activeMode === 'pinch' && e.touches.length === 2){
+            var t0 = e.touches[0], t1 = e.touches[1];
+            var dist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY) || pinchLastDist;
+            // Zoom (pinch) -> adjust distance inversely to scale change
+            var scale = dist / pinchLastDist; if (scale !== 0){ camera.distance /= scale; }
+            if (typeof clampCamera === 'function') clampCamera();
+            // Midpoint pan (two-finger drag): translate camera target in world space
+            var mid = { x:(t0.clientX + t1.clientX)/2, y:(t0.clientY + t1.clientY)/2 };
+            if (pinchLastMid){ var dxm = mid.x - pinchLastMid.x; var dym = mid.y - pinchLastMid.y; if (typeof panCameraWorld === 'function') panCameraWorld(-dxm, dym); }
+            pinchLastDist = dist; pinchLastMid = mid;
+            if (typeof renderLoop==='function') renderLoop();
+          }
+          e.preventDefault();
+        }, { passive: false });
+        canvas.addEventListener('touchend', function(e){
+          if(!window.__enableTouchGestures) return;
+            if (activeMode === 'single') {
+              // Synthesize mouseup so existing cleanup (sync, save, purge) runs
+              synthMouse('mouseup', lastX, lastY);
+            }
+            if (e.touches.length === 0){ activeMode = null; mouse.down = false; if (canvas) canvas.style.cursor='grab'; }
+          e.preventDefault();
+        }, { passive: false });
+        canvas.addEventListener('touchcancel', function(e){
+          if(!window.__enableTouchGestures) return; activeMode = null; mouse.down = false; synthMouse('mouseup', lastX, lastY); if (canvas) canvas.style.cursor='grab'; e.preventDefault();
+        }, { passive: false });
+      } catch(_tg){ /* non-fatal touch init */ }
+    })();
     
     document.addEventListener('keydown', function(e) {
       try { __log3d('keydown', { key:e.key, code:e.code, keyCode:e.keyCode, which:e.which, target:(e.target&&e.target.tagName), active2D:(window.__plan2d && __plan2d.active) }); } catch(_l){}

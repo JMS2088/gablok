@@ -160,7 +160,28 @@
   if (typeof window.currentSnapGuides === 'undefined') window.currentSnapGuides = [];
   if (typeof window.GRID_SPACING === 'undefined') window.GRID_SPACING = 1;
   if (typeof window.HANDLE_RADIUS === 'undefined') window.HANDLE_RADIUS = 14;
-  if (typeof window.HANDLE_SNAP_TOLERANCE === 'undefined') window.HANDLE_SNAP_TOLERANCE = 0.15;
+  // Snap tolerance (meters): distance from a snapped size at which we "magnet" to grid.
+  // Previous fixed value (0.15) felt too forgiving / imprecise for fine work. We now allow
+  // dynamic override via window.__snapToleranceOverride and scale a sane default from grid size.
+  // If GRID_SPACING is large (>=1m) we keep a small fraction (≈0.12m). For finer grids we shrink.
+  if (typeof window.HANDLE_SNAP_TOLERANCE === 'undefined') {
+    try {
+      var g = (typeof window.GRID_SPACING==='number' && window.GRID_SPACING>0)? window.GRID_SPACING : 1;
+      // Base tolerance proportional to grid but clamped to a practical range.
+      var baseTol = Math.max(0.03, Math.min(0.18, g * 0.12)); // 12% of grid size
+      window.HANDLE_SNAP_TOLERANCE = baseTol;
+    } catch(_eTol){ window.HANDLE_SNAP_TOLERANCE = 0.12; }
+  }
+  // Runtime override hook (set window.__snapToleranceOverride before interactions)
+  if (typeof window.__applySnapToleranceOverride === 'undefined') {
+    window.__applySnapToleranceOverride = function(){
+      try {
+        if (typeof window.__snapToleranceOverride === 'number' && window.__snapToleranceOverride >= 0) {
+          window.HANDLE_SNAP_TOLERANCE = window.__snapToleranceOverride;
+        }
+      } catch(_e){/* non-fatal */}
+    };
+  }
   // Frame pacing defaults used by renderLoop
   if (typeof window.MIN_DYNAMIC_FPS === 'undefined') window.MIN_DYNAMIC_FPS = 12; // fps when idle
   if (typeof window._minFrameInterval === 'undefined') window._minFrameInterval = 16; // ms when active (≈60fps)

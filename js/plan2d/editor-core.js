@@ -330,6 +330,51 @@
   function plan2dEraseAt(p){ var win=plan2dFindNearestOfTypes(p,['window'],0.2); if(win.index>=0){ if(plan2dEraseElementAt(win.index)){ __plan2d.hoverIndex=-1; plan2dDraw(); plan2dEdited(); } return; } var dor=plan2dFindNearestOfTypes(p,['door'],0.2); if(dor.index>=0){ if(plan2dEraseElementAt(dor.index)){ __plan2d.hoverIndex=-1; plan2dDraw(); plan2dEdited(); } return; } var segHit=plan2dHitWallSubsegment && plan2dHitWallSubsegment(p,0.15); if(segHit){ __plan2d.selectedSubsegment=segHit; if(plan2dDeleteSelectedSubsegment && plan2dDeleteSelectedSubsegment()){ __plan2d.selectedSubsegment=null; __plan2d.hoverIndex=-1; plan2dAutoSnapAndJoin(); plan2dDraw(); plan2dEdited(); return; } } plan2dHoverErase(p); if(__plan2d.hoverIndex>=0){ var delIdx=__plan2d.hoverIndex; plan2dEraseElementAt(delIdx); __plan2d.hoverIndex=-1; plan2dDraw(); plan2dEdited(); } }
   window.plan2dEraseAt = window.plan2dEraseAt || plan2dEraseAt;
 
+  // Unified selection deletion entry point (used by global keyboard router)
+  // Deletes, in priority order: selected guide, selected wall subsegment, selected element.
+  // Returns true if something was removed.
+  function plan2dDeleteSelection(){
+    try {
+      if(!window.__plan2d || !__plan2d.active) return false;
+      // Guides (vertical or horizontal)
+      if(__plan2d.selectedGuide){
+        try {
+          if(__plan2d.selectedGuide.dir==='v'){
+            if(Array.isArray(__plan2d.guidesV) && __plan2d.selectedGuide.index>=0 && __plan2d.selectedGuide.index<__plan2d.guidesV.length){ __plan2d.guidesV.splice(__plan2d.selectedGuide.index,1); }
+          } else if(__plan2d.selectedGuide.dir==='h') {
+            if(Array.isArray(__plan2d.guidesH) && __plan2d.selectedGuide.index>=0 && __plan2d.selectedGuide.index<__plan2d.guidesH.length){ __plan2d.guidesH.splice(__plan2d.selectedGuide.index,1); }
+          }
+        } catch(_gdel){}
+        __plan2d.selectedGuide=null; __plan2d.dragGuide=null;
+        // Force full redraw (guide removal impacts overlay + potentially dirtyRect logic)
+        try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrG){}
+        plan2dDraw(); plan2dEdited();
+        return true;
+      }
+      // Wall subsegment (splits wall into remaining pieces and removes hosted openings)
+      if(__plan2d.selectedSubsegment){
+        if(typeof plan2dDeleteSelectedSubsegment==='function' && plan2dDeleteSelectedSubsegment()){
+          __plan2d.selectedSubsegment=null; __plan2d.hoverIndex=-1;
+          try{ plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); }catch(_sj){}
+          try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrS){}
+          plan2dDraw(); plan2dEdited();
+          return true;
+        }
+      }
+      // Direct element deletion (wall/window/door)
+      if(__plan2d.selectedIndex>=0){
+        if(typeof plan2dEraseElementAt==='function' && plan2dEraseElementAt(__plan2d.selectedIndex)){
+          plan2dSetSelection(-1);
+          try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrEl){}
+          plan2dDraw(); plan2dEdited();
+          return true;
+        }
+      }
+    } catch(_delSel){ /* non-fatal */ }
+    return false;
+  }
+  if(typeof window.plan2dDeleteSelection!=='function') window.plan2dDeleteSelection = plan2dDeleteSelection;
+
   // Bounds & view ----------------------------------------------------------
   function plan2dComputeBounds(){ var els=__plan2d.elements||[]; var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; for(var i=0;i<els.length;i++){ var e=els[i]; if(!e) continue; var include=function(x,y){ minX=Math.min(minX,x); maxX=Math.max(maxX,x); minY=Math.min(minY,y); maxY=Math.max(maxY,y); }; if(e.type==='wall'){ include(e.x0,e.y0); include(e.x1,e.y1); } else if(e.type==='door' || e.type==='window'){ if(typeof e.host==='number'){ var host=els[e.host]; if(host && host.type==='wall'){ var ax=host.x0+(host.x1-host.x0)*(e.t0||0), ay=host.y0+(host.y1-host.y0)*(e.t0||0); var bx=host.x0+(host.x1-host.x0)*(e.t1||0), by=host.y0+(host.y1-host.y0)*(e.t1||0); include(ax,ay); include(bx,by); } } else { include(e.x0,e.y0); include(e.x1,e.y1); } } } if(!isFinite(minX)||!isFinite(maxX)||!isFinite(minY)||!isFinite(maxY)) return null; return {minX,minY,maxX,maxY}; }
   window.plan2dComputeBounds = window.plan2dComputeBounds || plan2dComputeBounds;
