@@ -180,7 +180,11 @@
       var els = __plan2d.elements || [];
       var bestIdx = -1;
       var tolW = plan2dWorldTolForPixels(typeof tolPx==='number'? tolPx : 18);
-      var bestPenalty = Infinity, bestDist = Infinity, bestLen = 0;
+      // Previous implementation biased toward walls with fewer nearby openings (penalty). This caused
+      // unintuitive selection: clicking near a wall that already has windows/doors could select the opposite
+      // parallel wall because it had a lower penalty. We now prioritize pure perpendicular distance; tie-break
+      // by longer wall length for stability.
+      var bestDist = Infinity, bestLen = 0;
       for(var i=0;i<els.length;i++){
         var w = els[i]; if(!w || w.type!=='wall') continue;
         var dx = w.x1 - w.x0, dy = w.y1 - w.y0; var len = Math.hypot(dx,dy) || 1;
@@ -189,17 +193,8 @@
         var cx = w.x0 + t*dx, cy = w.y0 + t*dy;
         var d = Math.hypot(p.x - cx, p.y - cy);
         if (d > tolW) continue;
-        var openingsNear = 0;
-        for (var j=0;j<els.length;j++){
-          var e = els[j]; if(!e) continue;
-          if ((e.type==='window' || e.type==='door') && typeof e.host==='number' && e.host===i){
-            var a = Math.min(e.t0||0, e.t1||0), b = Math.max(e.t0||0, e.t1||0); var mid = (a+b)/2;
-            if (Math.abs(mid - t) < 0.08) openingsNear++;
-          }
-        }
-        var penalty = openingsNear;
-        if (penalty < bestPenalty || (penalty === bestPenalty && (d < bestDist || (Math.abs(d-bestDist) < 1e-6 && len > bestLen)))){
-          bestPenalty = penalty; bestDist = d; bestIdx = i; bestLen = len;
+        if (d < bestDist || (Math.abs(d - bestDist) < 1e-6 && len > bestLen)){
+          bestDist = d; bestIdx = i; bestLen = len;
         }
       }
       return (bestIdx >= 0) ? { index: bestIdx, dist: bestDist } : null;
@@ -323,11 +318,32 @@
   // Eraser & deletion ------------------------------------------------------
   function plan2dEraseElementAt(idx){ var arr=__plan2d.elements; if(!arr||idx<0||idx>=arr.length) return false; var removed=arr[idx]; arr.splice(idx,1); if(removed && removed.type==='wall'){ for(var i=arr.length-1;i>=0;i--){ var el=arr[i]; if((el.type==='window'||el.type==='door') && typeof el.host==='number'){ if(el.host===idx){ arr.splice(i,1); continue; } if(el.host>idx){ el.host-=1; } } } } else { for(var j=0;j<arr.length;j++){ var e=arr[j]; if((e.type==='window'||e.type==='door') && typeof e.host==='number' && e.host>idx){ e.host-=1; } } } return true; }
   window.plan2dEraseElementAt = window.plan2dEraseElementAt || plan2dEraseElementAt;
+  // Safe erase wrapper used by deletion paths to normalize state & prevent view jump
+  function plan2dEraseElementAtSafe(idx){
+    var ok = plan2dEraseElementAt(idx);
+    if(ok){
+      try {
+        // Prevent auto-fit or accidental repopulation after deletion
+        __plan2d.autoFitEnabled = false; __plan2d.freezeCenterScaleUntil = Date.now() + 1000; __plan2d.freezeSyncUntil = Date.now() + 800; __plan2d.__userEdited = true;
+        // Force polygon + measurement caches invalidation
+        if(__plan2d.__cache){ __plan2d.__cache.roomPolysVersion = -1; __plan2d.__cache.roomPolys = null; }
+      } catch(_safeDel){}
+    }
+    return ok;
+  }
+  if(typeof window.plan2dEraseElementAtSafe!=='function') window.plan2dEraseElementAtSafe = plan2dEraseElementAtSafe;
   function plan2dFindNearestOfTypes(p, types, maxDist){ var elems=__plan2d.elements||[]; var bestIdx=-1; var bestDist=(typeof maxDist==='number'? maxDist:0.2); for(var i=0;i<elems.length;i++){ var e=elems[i]; if(!e||types.indexOf(e.type)===-1) continue; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; bestIdx=i; } } return {index:bestIdx,dist:bestDist}; }
   window.plan2dFindNearestOfTypes = window.plan2dFindNearestOfTypes || plan2dFindNearestOfTypes;
   function plan2dHoverErase(p){ var best=-1, bestDist=0.25; for(var i=0;i<__plan2d.elements.length;i++){ var e=__plan2d.elements[i]; var d=plan2dPointSegDist(p.x,p.y,e); if(d<bestDist){ bestDist=d; best=i; } } __plan2d.hoverIndex=best; plan2dDraw(); }
   window.plan2dHoverErase = window.plan2dHoverErase || plan2dHoverErase;
-  function plan2dEraseAt(p){ var win=plan2dFindNearestOfTypes(p,['window'],0.2); if(win.index>=0){ if(plan2dEraseElementAt(win.index)){ __plan2d.hoverIndex=-1; plan2dDraw(); plan2dEdited(); } return; } var dor=plan2dFindNearestOfTypes(p,['door'],0.2); if(dor.index>=0){ if(plan2dEraseElementAt(dor.index)){ __plan2d.hoverIndex=-1; plan2dDraw(); plan2dEdited(); } return; } var segHit=plan2dHitWallSubsegment && plan2dHitWallSubsegment(p,0.15); if(segHit){ __plan2d.selectedSubsegment=segHit; if(plan2dDeleteSelectedSubsegment && plan2dDeleteSelectedSubsegment()){ __plan2d.selectedSubsegment=null; __plan2d.hoverIndex=-1; plan2dAutoSnapAndJoin(); plan2dDraw(); plan2dEdited(); return; } } plan2dHoverErase(p); if(__plan2d.hoverIndex>=0){ var delIdx=__plan2d.hoverIndex; plan2dEraseElementAt(delIdx); __plan2d.hoverIndex=-1; plan2dDraw(); plan2dEdited(); } }
+  function plan2dEraseAt(p){ 
+  var win=plan2dFindNearestOfTypes(p,['window'],0.2); if(win.index>=0){ if(plan2dEraseElementAtSafe(win.index)){ __plan2d.hoverIndex=-1; try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrW){} plan2dDraw(); plan2dEdited(); } return; }
+  var dor=plan2dFindNearestOfTypes(p,['door'],0.2); if(dor.index>=0){ if(plan2dEraseElementAtSafe(dor.index)){ __plan2d.hoverIndex=-1; try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrD){} plan2dDraw(); plan2dEdited(); } return; }
+    var segHit=plan2dHitWallSubsegment && plan2dHitWallSubsegment(p,0.15); if(segHit){ __plan2d.selectedSubsegment=segHit; if(plan2dDeleteSelectedSubsegment && plan2dDeleteSelectedSubsegment()){ __plan2d.selectedSubsegment=null; __plan2d.hoverIndex=-1; plan2dAutoSnapAndJoin(); try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrS){} plan2dDraw(); plan2dEdited(); return; } }
+    plan2dHoverErase(p); if(__plan2d.hoverIndex>=0){ var delIdx=__plan2d.hoverIndex; plan2dEraseElementAtSafe(delIdx); __plan2d.hoverIndex=-1; try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrE){} plan2dDraw(); plan2dEdited(); }
+    // Always freeze view and suppress auto-fit after any erase tool deletion to prevent recenter flashes
+    try { __plan2d.freezeCenterScaleUntil = Date.now() + 600; __plan2d.autoFitEnabled = false; __plan2d.__userEdited = true; __plan2d.preventAutoFitUntil = Date.now() + 1000; } catch(_fzErase){}
+  }
   window.plan2dEraseAt = window.plan2dEraseAt || plan2dEraseAt;
 
   // Unified selection deletion entry point (used by global keyboard router)
@@ -336,6 +352,8 @@
   function plan2dDeleteSelection(){
     try {
       if(!window.__plan2d || !__plan2d.active) return false;
+      // Freeze view so deletion never triggers auto-fit or recenter side-effects
+      try { __plan2d.freezeCenterScaleUntil = Date.now() + 800; __plan2d.autoFitEnabled = false; } catch(_fzDel){}
       // Guides (vertical or horizontal)
       if(__plan2d.selectedGuide){
         try {
@@ -363,9 +381,11 @@
       }
       // Direct element deletion (wall/window/door)
       if(__plan2d.selectedIndex>=0){
-        if(typeof plan2dEraseElementAt==='function' && plan2dEraseElementAt(__plan2d.selectedIndex)){
+        if(typeof plan2dEraseElementAtSafe==='function' && plan2dEraseElementAtSafe(__plan2d.selectedIndex)){
           plan2dSetSelection(-1);
           try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrEl){}
+          // Prevent population or auto-fit from removing remaining walls; mark as user edited
+          try { __plan2d.__userEdited = true; __plan2d.freezeSyncUntil = Date.now() + 800; } catch(_mkUE){}
           plan2dDraw(); plan2dEdited();
           return true;
         }
@@ -383,6 +403,8 @@
       // Respect auto-fit disable unless explicitly forced
       // Global disable: never auto-fit due to object additions or syncs unless caller forces
       if(__plan2d && (__plan2d.autoFitEnabled===false || window.__disableAutoFitOnAdd===true) && !(opts && opts.force)) return false;
+      // NEW: protective window after deletions/snap operations to prevent unintended recenter flashes
+      try { if(__plan2d && typeof __plan2d.preventAutoFitUntil==='number' && Date.now() < __plan2d.preventAutoFitUntil && !(opts && opts.force)) return false; } catch(_paf){}
       var c=document.getElementById('plan2d-canvas'); if(!c) return false; var b=plan2dComputeBounds(); if(!b) return false; var dpr=window.devicePixelRatio||1; var W=c.width,H=c.height; var contentW=Math.max(0.01,b.maxX-b.minX); var contentH=Math.max(0.01,b.maxY-b.minY); var margin=Math.max(0,(marginPx||40)*dpr); var sX=(W-2*margin)/contentW; var sY=(H-2*margin)/contentH; var sNew=Math.max(10,Math.min(800,Math.min(sX,sY))); __plan2d.scale=sNew; var cx=(b.minX+b.maxX)*0.5; var cy=(b.minY+b.maxY)*0.5; __plan2d.panX=-cx; __plan2d.panY=-cy; plan2dDraw(); return true;
     }catch(e){ return false; }
   }
@@ -637,7 +659,21 @@
           if(ev.shiftKey){ /* allow legacy drag gesture */ }
           else {
             // Use improved placement wall finder (robust to overlapping walls)
-            var near = (typeof plan2dFindPlacementWall==='function') ? plan2dFindPlacementWall(p, 22) : ((typeof plan2dFindNearestWall==='function') ? plan2dFindNearestWall(p, 0.35) : null);
+            var near = null;
+            // If a wall is explicitly selected, prefer that wall when cursor is within tolerance to avoid surprise.
+            try {
+              if(__plan2d.selectedIndex>=0){
+                var sel = __plan2d.elements[__plan2d.selectedIndex];
+                if(sel && sel.type==='wall'){
+                  var dxSel = sel.x1 - sel.x0, dySel = sel.y1 - sel.y0; var denomSel = dxSel*dxSel + dySel*dySel || 1;
+                  var tSel = ((p.x - sel.x0)*dxSel + (p.y - sel.y0)*dySel)/denomSel; tSel=Math.max(0,Math.min(1,tSel));
+                  var cxSel = sel.x0 + dxSel*tSel; var cySel = sel.y0 + dySel*tSel; var dSel = Math.hypot(p.x-cxSel,p.y-cySel);
+                  var tolSel = plan2dWorldTolForPixels(24); // generous tolerance while wall selected
+                  if(dSel <= tolSel){ near = { index: __plan2d.selectedIndex, dist: dSel }; }
+                }
+              }
+            }catch(_preferSel){}
+            if(!near){ near = (typeof plan2dFindPlacementWall==='function') ? plan2dFindPlacementWall(p, 22) : ((typeof plan2dFindNearestWall==='function') ? plan2dFindNearestWall(p, 0.35) : null); }
             if(near && typeof near.index==='number'){
               var wall = __plan2d.elements[near.index];
               if(wall && wall.type==='wall'){
@@ -957,18 +993,14 @@
     }
   if(__plan2d.tool==='wall' && __plan2d.chainActive){ if(ev.key==='Enter'){ endWallChainSession(); ev.preventDefault(); ev.stopPropagation(); return; } if(ev.key==='Escape'){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; plan2dDraw(); ev.preventDefault(); ev.stopPropagation(); return; } }
     if(ev.key==='Delete' || ev.key==='Backspace'){ 
-      // Delete selected guide first if any
-      if(__plan2d.selectedGuide){
-        try {
-          if(__plan2d.selectedGuide.dir==='v'){
-            if(Array.isArray(__plan2d.guidesV) && __plan2d.selectedGuide.index>=0 && __plan2d.selectedGuide.index<__plan2d.guidesV.length){ __plan2d.guidesV.splice(__plan2d.selectedGuide.index,1); }
-          } else if(__plan2d.selectedGuide.dir==='h'){
-            if(Array.isArray(__plan2d.guidesH) && __plan2d.selectedGuide.index>=0 && __plan2d.selectedGuide.index<__plan2d.guidesH.length){ __plan2d.guidesH.splice(__plan2d.selectedGuide.index,1); }
-          }
-        }catch(_gdel){}
-        __plan2d.selectedGuide=null; __plan2d.dragGuide=null; plan2dDraw(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return;
+      // Route all deletion through unified helper to ensure full redraw & dirty state reset
+      if(typeof window.plan2dDeleteSelection==='function'){
+        var didDel = false; try { didDel = window.plan2dDeleteSelection(); } catch(_del){ didDel=false; }
+        if(didDel){ ev.preventDefault(); ev.stopPropagation(); return; }
+      } else {
+        // Fallback (legacy): element only
+        if(__plan2d.selectedIndex>=0){ plan2dEraseElementAt(__plan2d.selectedIndex); plan2dSetSelection(-1); try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clr){} plan2dDraw(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return; }
       }
-      if(__plan2d.selectedIndex>=0){ plan2dEraseElementAt(__plan2d.selectedIndex); plan2dSetSelection(-1); plan2dDraw(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return; }
     }
     // Toggle window full height (floor-to-ceiling) when 'F' pressed and a window is selected
     if(ev.key==='f' || ev.key==='F'){

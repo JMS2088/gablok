@@ -2,6 +2,8 @@
 // Populate the 2D Floor Plan from the current 3D model for the currently selected floor
 // Extracted from app.js for modularity; loaded by bootstrap before app core.
 function populatePlan2DFromDesign(){
+  // Optional force flag: populatePlan2DFromDesign(true) will bypass userEdited/ manual wall guards
+  var __force = (arguments.length>0 && arguments[0]===true);
   // Round-trip diagnostics ring buffer helper
   function __rtPush(evt){ 
     try { 
@@ -19,7 +21,7 @@ function populatePlan2DFromDesign(){
       var now = Date.now(); if(!window.__rtTraceLastSave || now - window.__rtTraceLastSave > 1500){ try { localStorage.setItem('gablok_rtTrace_v1', JSON.stringify(buf)); window.__rtTraceLastSave = now; } catch(_ps){} }
     } catch(_e){}
   }
-  // Preserve user-drawn manual walls: if any exist, skip destructive populate to prevent disappearance.
+  // Preserve user-drawn manual walls OR any prior 2D user edits: if any exist, skip destructive populate to prevent disappearance.
   try {
     if (window.__plan2d) {
       var hasManual=false;
@@ -31,10 +33,11 @@ function populatePlan2DFromDesign(){
         }
       }
       __rtPush({ kind:'populate-start', floor: (typeof window.currentFloor==='number')?window.currentFloor:0, manualWalls: manualCount, willSkip: !!hasManual });
-      if(hasManual){
-        if(console && console.debug) console.debug('[PLAN2D POPULATE] Skipped (manual walls present)');
-        __rtPush({ kind:'populate-skip-manual', reason:'manual-walls-present' });
-        // Do NOT reset userEdited so openPlan2DModal continues to respect draft
+      // Skip populate when user has manual walls OR has already edited the plan (walls deleted / moved), unless forced.
+      if(!__force && (hasManual || (__plan2d.__userEdited===true))){
+        if(console && console.debug) console.debug('[PLAN2D POPULATE] Skipped (', hasManual? 'manual walls present':'userEdited=true', ')');
+        __rtPush({ kind:'populate-skip', reason: hasManual? 'manual-walls-present':'user-edited' });
+        // Maintain existing __userEdited state so future opens keep draft
         return false; // signal no populate performed
       }
       __plan2d.__userEdited = false; // reset only when overwriting from 3D

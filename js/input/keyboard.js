@@ -29,14 +29,8 @@
             if (did){ ev.preventDefault(); ev.stopPropagation(); return; }
           } catch(_d2d){}
         }
-        // 3D fallback: reuse events.js logic by dispatching Delete so its listener processes.
-        try {
-          if (typeof selectedRoomId === 'string' && selectedRoomId) {
-            // Let events.js listener handle actual removal; just prevent page scroll
-            ev.preventDefault(); ev.stopPropagation();
-            return;
-          }
-        } catch(_d3d){}
+        // Do NOT consume Delete for 3D here; allow events.js keydown to handle room / wall strip deletion.
+        // (events.js will call preventDefault itself once it processes the deletion.)
       }
       // Arrow key nudging for both contexts when an object selected (unless editing input)
       if (!editing && selectedRoomId && (key==='ArrowLeft'||key==='ArrowRight'||key==='ArrowUp'||key==='ArrowDown')) {
