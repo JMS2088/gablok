@@ -605,9 +605,9 @@
   .shortcut-grid .right { color:#334155; }
 
   /* Info panel: reduce type and increase line height for readability */
-  #info-content { font-size: 12px; line-height: 2.8; }
+  #info-content { font-size: 12px; line-height: 3.4; }
   #info-content p, #info-content ul, #info-content li { font-size: inherit; line-height: inherit; }
-  .info-section-title { font-size: 13px; line-height: 2.8; }
+  .info-section-title { font-size: 14px; line-height: 3.2; }
   #info-content h2 { font-size: 20px !important; line-height: 2.8; }
 
   /* SVG icon shrink override */

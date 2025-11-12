@@ -1069,6 +1069,44 @@
           hdr.insertBefore(controls, hdr.firstChild);
           controls.__movedInto2D = true;
         }
+        // While in 2D plan view: hide render, labels, clean view buttons, level dropdown & related select
+        try {
+          var btnRender = document.getElementById('btn-render-walls');
+          var btnLabels = document.getElementById('btn-hide-labels');
+          var btnClean = document.getElementById('btn-clean-view');
+          var levelDd = document.getElementById('levelDropdown');
+          var levelSel = document.getElementById('levelSelect');
+          if(btnRender) btnRender.style.display='none';
+          if(btnLabels) btnLabels.style.display='none';
+          if(btnClean) btnClean.style.display='none';
+          if(levelDd) levelDd.style.display='none';
+          if(levelSel) levelSel.style.display='none';
+          var floorPlanBtn = document.getElementById('btn-floorplan');
+          if(floorPlanBtn){
+            floorPlanBtn.__origText = floorPlanBtn.textContent;
+            floorPlanBtn.textContent = '3D View';
+            floorPlanBtn.title = 'Return to 3D View';
+            if(!floorPlanBtn.__swapHandler){
+              floorPlanBtn.__swapHandler = function(ev){
+                try{ if(ev){ ev.preventDefault(); ev.stopPropagation(); } }catch(_eEv){}
+                try{ if(typeof window.closePlan2DModal==='function') window.closePlan2DModal(); }catch(_eClose){}
+                // Ensure user lands and focuses in 3D area
+                try{
+                  var cv = document.getElementById('canvas');
+                  if(cv){ if(!cv.hasAttribute('tabindex')) cv.setAttribute('tabindex','0'); }
+                  requestAnimationFrame(function(){
+                    try{ if(cv && typeof cv.scrollIntoView==='function') cv.scrollIntoView({ behavior:'smooth', block:'center', inline:'center' }); }catch(_eScr){}
+                    try{ if(cv && typeof cv.focus==='function') cv.focus({ preventScroll:true }); }catch(_eF){}
+                  });
+                }catch(_e3d){}
+                try{ if(typeof window.renderLoop==='function') window.renderLoop(); }catch(_eR){}
+                try{ if(typeof window.updateStatus==='function') window.updateStatus('Returned to 3D View'); }catch(_eS){}
+                return false;
+              };
+              floorPlanBtn.addEventListener('click', floorPlanBtn.__swapHandler, true);
+            }
+          }
+        }catch(_hide2d){}
       } catch(e){}
       plan2dBind(); plan2dCursor();
       // Load drafts from storage and bring in guides/elements for this floor
@@ -1140,6 +1178,25 @@
       __plan2d.chainActive=false; __plan2d.chainPoints=[];
       try{ var page=document.getElementById('plan2d-page'); if(page) page.style.display='none'; }catch(_d){}
       try{ var controls=document.getElementById('controls'); if(controls && controls.__movedInto2D){ var parent=controls.__origParent; var next=controls.__origNext; if(parent){ if(next) parent.insertBefore(controls,next); else parent.appendChild(controls);} controls.__movedInto2D=false; } }catch(_rest){}
+      // Restore hidden buttons/dropdowns and original Floor Plan button label
+      try {
+        var btnRender = document.getElementById('btn-render-walls');
+        var btnLabels = document.getElementById('btn-hide-labels');
+        var btnClean = document.getElementById('btn-clean-view');
+        var levelDd = document.getElementById('levelDropdown');
+        var levelSel = document.getElementById('levelSelect');
+        if(btnRender) btnRender.style.display='';
+        if(btnLabels) btnLabels.style.display='';
+        if(btnClean) btnClean.style.display='';
+        if(levelDd) levelDd.style.display='';
+        if(levelSel) levelSel.style.display='';
+        var floorPlanBtn = document.getElementById('btn-floorplan');
+        if(floorPlanBtn){
+          if(floorPlanBtn.__swapHandler){ floorPlanBtn.removeEventListener('click', floorPlanBtn.__swapHandler, true); floorPlanBtn.__swapHandler=null; }
+          if(floorPlanBtn.__origText){ floorPlanBtn.textContent = floorPlanBtn.__origText; }
+          floorPlanBtn.title = 'Open 2D floor plan editor';
+        }
+      }catch(_restore2d){}
       // Remove CAD mode when leaving 2D editor to restore original theme for 3D view
       try { if(document && document.body) document.body.classList.remove('cad-mode'); } catch(_cadRem){}
       plan2dDraw();
