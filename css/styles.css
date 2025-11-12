@@ -605,10 +605,16 @@
   .shortcut-grid .right { color:#334155; }
 
   /* Info panel: reduce type and increase line height for readability */
-  #info-content { font-size: 14px; line-height: 3.4; }
+  /* Increased vertical line spacing per latest request */
+  #info-content { font-size: 14px; line-height: 4.2; }
   #info-content p, #info-content ul, #info-content li { font-size: inherit; line-height: inherit; }
-  .info-section-title { font-size: 14px; line-height: 3.2; }
-  #info-content h2 { font-size: 17px !important; line-height: 3.8; }
+  .info-section-title { font-size: 14px; line-height: 3.8; }
+  #info-content h2 { font-size: 17px !important; line-height: 4.4; }
+  /* Force list item line-height expansion (list view) */
+  #info-content li { line-height: 8.6 !important; }
+  #info-content ul { line-height: 8.6 !important; }
+  /* Apply same to pricing panel for consistency */
+  #pricing-content li, #pricing-content ul { line-height: 2.4 !important; }
 
   /* SVG icon shrink override */
   .dropdown-item svg { flex-shrink:0; }
@@ -738,6 +744,11 @@
   }
   
   #info-content li, #pricing-content li { margin-bottom: 8px; }
+
+  /* Info modal: increase vertical spacing between lists and sections */
+  #info-content ul { margin-bottom: 28px !important; }
+  #info-content li { margin-bottom: 14px !important; }
+  #info-content section { margin: 22px 0 26px !important; padding-bottom: 16px !important; }
   
   .pricing-section {
     margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee;
