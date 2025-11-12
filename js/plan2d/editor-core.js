@@ -346,6 +346,29 @@
   }
   window.plan2dEraseAt = window.plan2dEraseAt || plan2dEraseAt;
 
+  // Nudge helpers ---------------------------------------------------------
+  // Move the currently selected wall by (dx,dy) in plan units (meters)
+  function plan2dNudgeSelection(dx, dy){
+    try{
+      if(!__plan2d || !__plan2d.active) return false;
+      var idx = (typeof __plan2d.selectedIndex==='number') ? __plan2d.selectedIndex : -1;
+      if(idx < 0) return false;
+      var e = (__plan2d.elements||[])[idx]; if(!e) return false;
+      if(e.type === 'wall'){
+        e.x0 += dx; e.x1 += dx; e.y0 += dy; e.y1 += dy;
+        // Keep view stable and mark as user edit
+        try { __plan2d.freezeCenterScaleUntil = Date.now() + 400; __plan2d.autoFitEnabled = false; __plan2d.__userEdited = true; __plan2d.freezeSyncUntil = Date.now() + 200; } catch(_fzN){}
+        // Force full redraw for simplicity; movement area is small but computing bbox requires prev state
+        try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrN){}
+        plan2dDraw();
+        plan2dEdited();
+        return true;
+      }
+    }catch(_n){ /* non-fatal */ }
+    return false;
+  }
+  if(typeof window.plan2dNudgeSelection!=='function') window.plan2dNudgeSelection = plan2dNudgeSelection;
+
   // Unified selection deletion entry point (used by global keyboard router)
   // Deletes, in priority order: selected guide, selected wall subsegment, selected element.
   // Returns true if something was removed.

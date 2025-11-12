@@ -17,6 +17,30 @@
       var key = ev.key;
       var isDel = (key==='Delete' || key==='Backspace' || key==='Del' || ev.keyCode===46 || ev.keyCode===8 || ev.code==='Delete');
       var editing = isEditingElement(document.activeElement);
+      // Quick shortcuts: L toggles labels, V toggles clean view (only when not typing)
+      if(!editing && (key==='l' || key==='L')){ try { if(typeof window.toggleLabelsVisibility==='function'){ window.toggleLabelsVisibility(); ev.preventDefault(); ev.stopPropagation(); return; } } catch(_kl){} }
+      if(!editing && (key==='v' || key==='V')){ try { if(typeof window.toggleCleanView==='function'){ window.toggleCleanView(); ev.preventDefault(); ev.stopPropagation(); return; } } catch(_kv){} }
+      // Arrow key nudging for 2D selected wall
+      if (!editing && (key==='ArrowLeft'||key==='ArrowRight'||key==='ArrowUp'||key==='ArrowDown')){
+        try {
+          if (window.__plan2d && __plan2d.active && typeof __plan2d.selectedIndex==='number' && __plan2d.selectedIndex>=0){
+            var els = __plan2d.elements||[]; var e = els[__plan2d.selectedIndex];
+            if (e && e.type==='wall'){
+              var base = (__plan2d.gridStep || 0.1);
+              var step = ev.shiftKey ? (base*10) : base; // 0.1m normal, 1.0m with Shift by default
+              var dx=0, dy=0;
+              if (key==='ArrowLeft') dx = -step;
+              else if (key==='ArrowRight') dx = step;
+              else if (key==='ArrowUp') dy = -step;
+              else if (key==='ArrowDown') dy = step;
+              if ((dx||dy) && typeof window.plan2dNudgeSelection==='function'){
+                var did = window.plan2dNudgeSelection(dx,dy);
+                if (did){ ev.preventDefault(); ev.stopPropagation(); return; }
+              }
+            }
+          }
+        } catch(_n2d){}
+      }
       // Unified deletion handling: prefer active 2D selection, else 3D selection/wall strip.
       if (isDel && !editing) {
         var now = Date.now();
@@ -32,7 +56,7 @@
         // Do NOT consume Delete for 3D here; allow events.js keydown to handle room / wall strip deletion.
         // (events.js will call preventDefault itself once it processes the deletion.)
       }
-      // Arrow key nudging for both contexts when an object selected (unless editing input)
+      // Arrow key nudging for 3D selected object (unless editing input)
       if (!editing && selectedRoomId && (key==='ArrowLeft'||key==='ArrowRight'||key==='ArrowUp'||key==='ArrowDown')) {
         var step = ev.shiftKey ? 1.0 : 0.1;
         var obj = (typeof findObjectById==='function')? findObjectById(selectedRoomId):null;

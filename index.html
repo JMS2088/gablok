@@ -19,6 +19,8 @@
 <div id="controls">
 		<button onclick="addNewRoom()">+ Add Room</button>
 	<button id="btn-render-walls" class="secondary" title="Toggle wall render mode">Render: Lines</button>
+	<button id="btn-hide-labels" class="secondary" title="Hide/show labels" onclick="toggleLabelsVisibility()">Hide Labels</button>
+	<button id="btn-clean-view" class="secondary" title="Toggle clean view (hide UI)" onclick="toggleCleanView()">Clean View</button>
 	<!-- Custom Level Dropdown (replaces native select) -->
 	<div id="levelDropdown" class="dropdown" aria-label="Level Menu">
 		<button id="levelButton" class="dropdown-button" type="button">
@@ -156,11 +158,11 @@
 		<div id="info-body">
 			<section>
 				<h3 class="info-section-title">Camera</h3>
-				<ul class="info-list">
-					<li>Drag: rotate view</li>
-					<li>Shift + Drag: pan view</li>
-					<li>Mouse wheel: zoom in/out</li>
-				</ul>
+				<div class="shortcut-grid">
+					<div class="left"><span class="kbd">Drag</span></div><div class="right">Rotate view</div>
+					<div class="left"><span class="kbd">Shift</span> + <span class="kbd">Drag</span></div><div class="right">Pan view</div>
+					<div class="left"><span class="kbd">Wheel</span></div><div class="right">Zoom in/out</div>
+				</div>
 			</section>
 			<section>
 				<h3 class="info-section-title">Main Toolbar (top)</h3>
@@ -226,12 +228,21 @@
 				</ul>
 			</section>
 			<section>
-				<h3 class="info-section-title">Keyboard</h3>
-				<ul class="info-list">
-					<li><strong>Escape</strong>: Clear selection.</li>
-					<li><strong>Delete</strong>: Delete selected object (3D) or element (2D).</li>
-					<li><strong>Arrow Keys</strong> (2D): Nudge selection. Hold Shift to move faster; Alt for finer steps.</li>
-				</ul>
+				<h3 class="info-section-title">Keyboard Shortcuts</h3>
+				<div class="shortcut-grid">
+					<div class="left"><span class="kbd">Esc</span></div><div class="right">Clear selection</div>
+					<div class="left"><span class="kbd">Del</span>/<span class="kbd">⌫</span></div><div class="right">Delete selected (3D room / 2D element)</div>
+					<div class="left"><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span></div><div class="right">Nudge 3D object (when selected)</div>
+					<div class="left"><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span> (2D)</div><div class="right">Nudge selected wall (grid step). <span class="kbd">Shift</span>=×10</div>
+					<div class="left"><span class="kbd">R</span></div><div class="right">Toggle wall render mode (Lines⇄Solid)</div>
+					<div class="left"><span class="kbd">L</span></div><div class="right">Hide / show labels & corner numbers</div>
+					<div class="left"><span class="kbd">V</span></div><div class="right">Toggle clean view (UI-free preview)</div>
+					<div class="left"><span class="kbd">Ctrl</span> + <span class="kbd">Z</span></div><div class="right">Undo</div>
+					<div class="left"><span class="kbd">Ctrl</span> + <span class="kbd">Y</span> / <span class="kbd">Ctrl</span> + <span class="kbd">Shift</span> + <span class="kbd">Z</span></div><div class="right">Redo</div>
+					<div class="left"><span class="kbd">Space</span> (2D)</div><div class="right">Hold to temporarily pan canvas</div>
+					<div class="left"><span class="kbd">Enter</span> (2D)</div><div class="right">Finish wall chain</div>
+					<div class="left"><span class="kbd">Shift</span> + Click (2D)</div><div class="right">Add wall segment to chain</div>
+				</div>
 			</section>
 		</div>
 	</div>

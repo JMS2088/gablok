@@ -221,6 +221,19 @@
     border-color: #007acc !important;
     box-shadow: 0 3px 12px rgba(0,122,204,0.35) !important;
   }
+
+  /* Clean view mode: hide all overlay UI except canvas */
+  body.clean-view #controls,
+  body.clean-view #labels-3d,
+  body.clean-view #measurements,
+  body.clean-view #status,
+  body.clean-view #account-button { display:none !important; }
+  body.clean-view #canvas { pointer-events:auto; }
+
+  /* Hidden labels state (only labels hidden) */
+  body.hide-labels #labels-3d { display:none !important; }
+  body.hide-labels #btn-hide-labels { background:#dc2626 !important; color:#ffffff !important; }
+  body.clean-view #btn-clean-view { display:none !important; }
   
   select {
       padding: 10px 30px 10px 10px; /* extra right padding for arrow */
@@ -580,6 +593,23 @@
   .info-list { margin:0 0 8px 18px; }
   .info-sublist { margin:6px 0 0 18px; }
 
+  /* Smart, modern typography for info modal */
+  #info-content { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+  .info-section-title { font-weight: 700; color:#0f172a; letter-spacing: 0.2px; }
+  #info-content section { margin: 14px 0 16px; padding: 0 0 10px; border-bottom: 1px solid #eef2f7; }
+  #info-content section:last-of-type { border-bottom: none; }
+  /* Keyboard keycaps */
+  .kbd { display:inline-block; min-width: 18px; padding: 2px 6px; border:1px solid #cbd5e1; border-bottom-width:2px; border-radius:6px; background:#f8fafc; color:#0f172a; font: 500 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; text-align:center; box-shadow: 0 1px 0 rgba(0,0,0,0.03); }
+  .shortcut-grid { display:grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: 6px 14px; align-items:center; margin: 8px 0 6px; }
+  .shortcut-grid .left { color:#0f172a; }
+  .shortcut-grid .right { color:#334155; }
+
+  /* Info panel: reduce type and increase line height for readability */
+  #info-content { font-size: 12px; line-height: 2.8; }
+  #info-content p, #info-content ul, #info-content li { font-size: inherit; line-height: inherit; }
+  .info-section-title { font-size: 13px; line-height: 2.8; }
+  #info-content h2 { font-size: 20px !important; line-height: 2.8; }
+
   /* SVG icon shrink override */
   .dropdown-item svg { flex-shrink:0; }
 
@@ -745,6 +775,34 @@
   #room-palette-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1; }
   #room-palette-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 95vw; height: 95vh; background: #fff; border-radius: 24px; border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 14px 50px rgba(0,0,0,0.28); display: grid; grid-template-columns: minmax(420px, calc(50% + 200px)) minmax(360px, calc(50% - 200px)); overflow: hidden; z-index: 2; }
   #room-palette-content .close-button { z-index: 2; }
+
+  /* --------------------------------------------------------------
+     Global font-size downsizing (-2px across UI)
+     Corner labels are canvas-drawn and unaffected by CSS.
+     -------------------------------------------------------------- */
+  :root {
+    --label-btn-font-size: 8px; /* was 10px */
+  }
+  /* Generic controls */
+  button, .dropdown-button { font-size: 12px !important; }
+  .dropdown-item { font-size: 12px !important; }
+  .dropdown-title { font-size: 10px !important; }
+  select { font-size: 12px !important; }
+  /* Measurement panel */
+  .measurement-label, .measurement-input, #save-measurements { font-size: 12px !important; }
+  /* 2D overlays text */
+  #plan2d-wall-group #plan2d-scale, #plan2d-wall-group > div { font-size: 8px !important; }
+  /* Info & Pricing */
+  #info-content h2, #pricing-content h2 { font-size: 18px !important; line-height: 4.0; }
+  .pricing-section h3 { font-size: 14px !important; }
+  /* Reset & Loading */
+  #reset-title { font-size: 22px !important; }
+  #reset-desc, #reset-cancel-btn { font-size: 13px !important; }
+  #loading-title { font-size: 30px !important; }
+  #loading-subtitle { font-size: 12px !important; }
+  /* Share notes */
+  #share-note { font-size: 11px !important; }
+  #share-hint { font-size: 10px !important; }
   #room-palette-left { padding: 20px 20px 28px 20px; border-right: 1px solid #eee; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
   #room-palette-right { padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 0; }
   #room-palette-right > h3 { margin: 0 0 8px 0; text-align: center; align-self: center; }

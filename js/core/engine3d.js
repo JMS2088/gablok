@@ -762,7 +762,8 @@
       // Small helper to draw a unique corner code near a world point (x,z) at a given height
       function drawCornerCodeAt(xw, yw, zw){
         try {
-          if (!window.__showCornerCodes) return;
+          // Respect global UI hide flags (labelsHidden / cleanView) in addition to showCornerCodes toggle
+          if (!window.__showCornerCodes || window.__labelsHidden || window.__cleanViewActive) return;
           var key = null;
           // Quantize to centimeters for stable keys across frames
           function kf(v){ return Math.round((+v||0)*100)/100; }

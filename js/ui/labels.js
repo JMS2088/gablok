@@ -14,11 +14,50 @@
   // Unified HUD controls: labels, overlay buttons, and canvas handles in one module.
   // Enable unified handle drawing and disable per-renderer handle drawing.
   window.__useUnifiedHUDHandles = true;
+  // Global flags for visibility modes
+  window.__labelsHidden = false;
+  window.__cleanViewActive = false;
+
+  // Public toggles -------------------------------------------------
+  window.toggleLabelsVisibility = function(){
+    try {
+      window.__labelsHidden = !window.__labelsHidden;
+      var body = document.body; if(!body) return;
+      body.classList.toggle('hide-labels', window.__labelsHidden);
+      // Force labels redraw removal if hiding
+      if(window.__labelsHidden){
+        var c = document.getElementById('labels-3d'); if(c){ while(c.firstChild) c.removeChild(c.firstChild); }
+      } else {
+        if(typeof window.updateLabels==='function') window.updateLabels();
+      }
+      // Update button text if present
+      try { var btn=document.getElementById('btn-hide-labels'); if(btn) btn.textContent = window.__labelsHidden? 'Show Labels':'Hide Labels'; }catch(_btxt){}
+    }catch(_tLbl){}
+  };
+  window.toggleCleanView = function(){
+    try {
+      window.__cleanViewActive = !window.__cleanViewActive;
+      var body=document.body; if(!body) return;
+      body.classList.toggle('clean-view', window.__cleanViewActive);
+      // When entering clean view also hide labels; when exiting restore label state based on __labelsHidden
+      if(window.__cleanViewActive){
+        if(!window.__labelsHidden){ window.__labelsHidden=true; body.classList.add('hide-labels'); }
+      } else {
+        if(!window.__labelsHidden){ body.classList.remove('hide-labels'); }
+      }
+      // Redraw (skip labels if hidden)
+      try { if(typeof renderLoop==='function') renderLoop(); }catch(_rLoop){}
+      if(!window.__labelsHidden && typeof window.updateLabels==='function') window.updateLabels();
+      try { var btn=document.getElementById('btn-clean-view'); if(btn) btn.textContent = window.__cleanViewActive? 'Exit Clean View':'Clean View'; }catch(_btxt2){}
+    }catch(_tCV){}
+  };
   // Always provide the authoritative labels implementation.
   // If a stub exists (from engine bootstrap), override it.
   window.updateLabels = function updateLabels(){
     try {
       var container = document.getElementById('labels-3d'); if(!container) return;
+  // Respect global hide-labels flag
+  if(window.__labelsHidden){ while(container.firstChild) container.removeChild(container.firstChild); return; }
       // When the 2D floor plan is active, remove all DOM labels/buttons from the 2D area.
       try {
         if (window.__plan2d && __plan2d.active) {
