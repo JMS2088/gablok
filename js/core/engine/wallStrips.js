@@ -109,8 +109,19 @@
         }
       } catch(_eKeys) {}
       try { var prev = window.__lastPerimeterEdges || null; if (prev){ Object.keys(prev).forEach(function(k){ perimeterKeys[k]=true; }); } } catch(_ePrev) {}
+      // Only remove strips that originated from rooms (tagged or have roomId/garageId).
+      // Preserve free-standing user walls even if they align with a room perimeter.
       window.wallStrips = window.wallStrips.filter(function(ws){
-        try { if (!ws) return false; if (ws[tag]) return false; var lev=(ws.level||0); var k=edgeKeyWithLevel(lev,ws.x0,ws.z0,ws.x1,ws.z1); if (perimeterKeys[k]) return false; return true; } catch(_eF){ return true; }
+        try {
+          if (!ws) return false;
+          var lev = (ws.level||0);
+          var fromRoom = !!ws[tag] || !!ws.roomId || !!ws.garageId;
+          if (!fromRoom) return true; // keep user/free wall strips
+          // If this is a perimeter strip from rooms, drop it when it matches a current perimeter edge
+          var k = edgeKeyWithLevel(lev, ws.x0, ws.z0, ws.x1, ws.z1);
+          if (perimeterKeys[k]) return false;
+          return true;
+        } catch(_eF){ return true; }
       });
       var afterLen = window.wallStrips.length;
       var removed = Math.max(0, beforeLen - afterLen);

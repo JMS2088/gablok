@@ -354,8 +354,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           // Map plan bbox to world rect
           var wx=(__ctx.centerX||0) + (minX+maxX)/2;
           var wz=(__ctx.centerZ||0) + sgnG*((minY+maxY)/2);
-          var wW = Math.max(0.5, quantizeMeters(maxX-minX, 2));
-          var wD = Math.max(0.5, quantizeMeters(maxY-minY, 2));
+          var wW = Math.max(0.5, (maxX - minX));
+          var wD = Math.max(0.5, (maxY - minY));
           var roomG = createRoom(wx, wz, targetLevel);
           roomG.width = wW; roomG.depth = wD; roomG.height = 3; roomG.name = 'Room';
           roomG.groupId = gid;
@@ -1178,6 +1178,29 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       try { __emitApplySummary({ action: 'strips-only', roomsRect: 0, roomsPoly: 0, strips: (Array.isArray(merged)? merged.length : (Array.isArray(strips)? strips.length: 0)) }); } catch(_s) {}
       window.__rtTracePush({ kind:'apply-action', action: (stripsOnly?'strips-only':'standalone-strips'), level: targetLevel, newRooms:0, newStrips:(Array.isArray(merged)? merged.length:0) });
       try { window.__rtTracePush({ kind:'apply-final', level: targetLevel, prev:{ rooms:prevRoomsLevelCount, strips:prevStripsLevelCount }, new:{ rooms:0, strips:(Array.isArray(merged)? merged.length:0) }, reuse: __reuseStats, roomsFound:0, polyRooms:0, vanishRoom:(prevRoomsLevelCount>0 && 0===0), vanishReason:(prevRoomsLevelCount>0?'no-rooms-detected':null) }); } catch(_rtFinalStrips){}
+      // Auto consistency check for strips-only path as well
+      try {
+        if (typeof window.check2D3DConsistency === 'function') {
+          var resS = window.check2D3DConsistency({ level: targetLevel });
+          var detS = { kind: 'consistency-apply', level: targetLevel };
+          if (resS && !resS.error) {
+            detS.twoD = resS.twoDCount; detS.threeD = resS.threeDCount;
+            detS.missingCount = resS.missingCount; detS.extraCount = resS.extraCount;
+            if (Array.isArray(resS.missing) && resS.missing.length) detS.missingSample = resS.missing.slice(0,5);
+            if (Array.isArray(resS.extra) && resS.extra.length) detS.extraSample = resS.extra.slice(0,5);
+            if ('length2D' in resS) detS.length2D = resS.length2D;
+            if ('length3D' in resS) detS.length3D = resS.length3D;
+            if ('area2D' in resS) detS.area2D = resS.area2D;
+            if ('area3D' in resS) detS.area3D = resS.area3D;
+            if ('volume2D' in resS) detS.volume2D = resS.volume2D;
+            if ('volume3D' in resS) detS.volume3D = resS.volume3D;
+            if ('lengthDiff' in resS) detS.lengthDiff = resS.lengthDiff;
+            if ('areaDiff' in resS) detS.areaDiff = resS.areaDiff;
+            if ('volumeDiff' in resS) detS.volumeDiff = resS.volumeDiff;
+          } else { detS.error = resS && resS.error || 'unknown'; }
+          window.__rtTracePush(detS);
+        }
+      } catch(_chkS){}
       return;
     }
 
@@ -1350,8 +1373,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           var t0d=Math.max(0,Math.min(1,de.t0||0)), t1d=Math.max(0,Math.min(1,de.t1||0));
           var axd = hostD.x0 + (hostD.x1-hostD.x0)*t0d; var ayd = hostD.y0 + (hostD.y1-hostD.y0)*t0d;
           var bxd = hostD.x0 + (hostD.x1-hostD.x0)*t1d; var byd = hostD.y0 + (hostD.y1-hostD.y0)*t1d;
-          var dwx0 = (__plan2d.centerX||0) + axd; var dwz0 = (__plan2d.centerZ||0) + sgnp*ayd;
-          var dwx1 = (__plan2d.centerX||0) + bxd; var dwz1 = (__plan2d.centerZ||0) + sgnp*byd;
+          var dwx0 = (__ctx.centerX||0) + axd; var dwz0 = (__ctx.centerZ||0) + sgnp*ayd;
+          var dwx1 = (__ctx.centerX||0) + bxd; var dwz1 = (__ctx.centerZ||0) + sgnp*byd;
           var dhM = (typeof de.heightM==='number') ? de.heightM : ((__plan2d&&__plan2d.doorHeightM)||2.04);
           openingsW.push({ type:'door', x0: dwx0, z0: dwz0, x1: dwx1, z1: dwz1, sillM: 0, heightM: dhM, meta: (de.meta||null) });
     __reuseStats.new++; __reuseStats.newDoor++;
@@ -1369,8 +1392,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
                 var u0=spans[si][0], u1=spans[si][1];
                 var ax = pa2.x + (pb2.x - pa2.x)*u0; var ay = pa2.y + (pb2.y - pa2.y)*u0;
                 var bx = pa2.x + (pb2.x - pa2.x)*u1; var by = pa2.y + (pb2.y - pa2.y)*u1;
-                var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgnp*ay;
-                var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgnp*by;
+                var wx0 = (__ctx.centerX||0) + ax; var wz0 = (__ctx.centerZ||0) + sgnp*ay;
+                var wx1 = (__ctx.centerX||0) + bx; var wz1 = (__ctx.centerZ||0) + sgnp*by;
                 openingsW.push({ type:'window', x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: null });
                 __reuseStats.new++; __reuseStats.newWin++;
               }
@@ -1380,8 +1403,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             var fdRec = freeDoors[fd]; var pa3=polyPts[fdRec.edgeIdx], pb3=polyPts[(fdRec.edgeIdx+1)%polyPts.length];
             var axd2 = pa3.x + (pb3.x - pa3.x)*fdRec.s0; var ayd2 = pa3.y + (pb3.y - pa3.y)*fdRec.s0;
             var bxd2 = pa3.x + (pb3.x - pa3.x)*fdRec.s1; var byd2 = pa3.y + (pb3.y - pa3.y)*fdRec.s1;
-            var dwx0b = (__plan2d.centerX||0) + axd2; var dwz0b = (__plan2d.centerZ||0) + sgnp*ayd2;
-            var dwx1b = (__plan2d.centerX||0) + bxd2; var dwz1b = (__plan2d.centerZ||0) + sgnp*byd2;
+            var dwx0b = (__ctx.centerX||0) + axd2; var dwz0b = (__ctx.centerZ||0) + sgnp*ayd2;
+            var dwx1b = (__ctx.centerX||0) + bxd2; var dwz1b = (__ctx.centerZ||0) + sgnp*byd2;
             openingsW.push({ type:'door', x0: dwx0b, z0: dwz0b, x1: dwx1b, z1: dwz1b, sillM: 0, heightM: fdRec.heightM, meta: fdRec.meta||null });
             __reuseStats.new++; __reuseStats.newDoor++;
           }
@@ -1424,12 +1447,12 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         if (approxEq(B.minX, R.minX) && approxEq(B.maxX, R.maxX) && approxEq(B.minY, R.minY) && approxEq(B.maxY, R.maxY)) { dupRect = true; break; }
       }
       if (dupRect) continue;
-      var s = (__plan2d.yFromWorldZSign||1);
-  var wx=(__plan2d.centerX||0) + (R.minX+R.maxX)/2, wz=(__plan2d.centerZ||0) + s*((R.minY+R.maxY)/2); // map plan coords back to world using stored center
+        var s = (__ctx.ySign||1);
+      var wx=(__ctx.centerX||0) + (R.minX+R.maxX)/2, wz=(__ctx.centerZ||0) + s*((R.minY+R.maxY)/2); // map plan coords back to world using stored center
   var w=R.maxX-R.minX, d=R.maxY-R.minY;
     var room=createRoom(wx, wz, targetLevel);
-  room.width=Math.max(0.5, quantizeMeters(w, 2));
-  room.depth=Math.max(0.5, quantizeMeters(d, 2));
+  room.width=Math.max(0.5, w);
+  room.depth=Math.max(0.5, d);
       room.height=3;
       room.name='Room';
       __preserveRoomPosition(room);
@@ -1622,21 +1645,21 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
 
   // Additionally, extrude interior 2D walls (non-perimeter) into 3D wall strips for this level
   try {
-    var sgn2 = (__plan2d.yFromWorldZSign||1);
+    var sgn2 = (__ctx.ySign||1);
     var strips2 = [];
     var __attachedOpenings2 = Object.create(null);
     for (var wi2=0; wi2<elemsSrc.length; wi2++){
       var ew = elemsSrc[wi2]; if(!ew || ew.type!=='wall') continue;
-      // Skip only explicit non-room component outlines; extrude all user walls (both perimeter and interior)
-      if (ew.wallRole === 'nonroom') continue;
+      // Skip non-room component outlines and room perimeters to avoid duplicating edges of rooms
+      if (ew.wallRole === 'nonroom' || ew.wallRole === 'room') continue;
       var subs2 = plan2dBuildWallSubsegments(elemsSrc, wi2) || [];
       for (var sj2=0; sj2<subs2.length; sj2++){
         var sg2 = subs2[sj2];
         var rec2 = {
-          x0: (__plan2d.centerX||0) + sg2.ax,
-          z0: (__plan2d.centerZ||0) + sgn2*sg2.ay,
-          x1: (__plan2d.centerX||0) + sg2.bx,
-          z1: (__plan2d.centerZ||0) + sgn2*sg2.by,
+          x0: (__ctx.centerX||0) + sg2.ax,
+          z0: (__ctx.centerZ||0) + sgn2*sg2.ay,
+          x1: (__ctx.centerX||0) + sg2.bx,
+          z1: (__ctx.centerZ||0) + sgn2*sg2.by,
           thickness: (ew.thickness||__plan2d.wallThicknessM||0.3),
           height: (__plan2d.wallHeightM||3.0),
           baseY: (targetLevel||0) * 3.5,
@@ -1653,8 +1676,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
               var t0=Math.max(0,Math.min(1,el.t0||0)), t1=Math.max(0,Math.min(1,el.t1||0)); if(t1<t0){ var tt=t0; t0=t1; t1=tt; }
               var ax = host.x0 + (host.x1-host.x0)*t0; var ay = host.y0 + (host.y1-host.y0)*t0;
               var bx = host.x0 + (host.x1-host.x0)*t1; var by = host.y0 + (host.y1-host.y0)*t1;
-              var wx0 = (__plan2d.centerX||0) + ax; var wz0 = (__plan2d.centerZ||0) + sgn2*ay;
-              var wx1 = (__plan2d.centerX||0) + bx; var wz1 = (__plan2d.centerZ||0) + sgn2*by;
+              var wx0 = (__ctx.centerX||0) + ax; var wz0 = (__ctx.centerZ||0) + sgn2*ay;
+              var wx1 = (__ctx.centerX||0) + bx; var wz1 = (__ctx.centerZ||0) + sgn2*by;
               var sill = (el.type==='window') ? ((typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0)) : 0;
               var hM = (typeof el.heightM==='number') ? el.heightM : ((el.type==='door') ? ((__plan2d&&__plan2d.doorHeightM)||2.04) : ((__plan2d&&__plan2d.windowHeightM)||1.5));
               outs.push({ type: el.type, x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: (el.meta||null) });
@@ -1703,6 +1726,29 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       else vanishReason = 'cleared-during-rebuild';
     }
     window.__rtTracePush({ kind:'apply-final', level: targetLevel, prev:{ rooms:prevRoomsLevelCount, strips:prevStripsLevelCount }, new:{ rooms:finalRooms, strips:finalStrips, openings:openingsCountLevel }, roomsFound:roomsFound.length, polyRooms:polyRooms.length, vanishRoom:vanishRoom, vanishReason:vanishReason });
+    // Auto consistency check: log compact 2D↔3D edge/area/volume mismatch summary
+    try {
+      if (typeof window.check2D3DConsistency === 'function') {
+        var resA = window.check2D3DConsistency({ level: targetLevel });
+        var detA = { kind: 'consistency-apply', level: targetLevel };
+        if (resA && !resA.error) {
+          detA.twoD = resA.twoDCount; detA.threeD = resA.threeDCount;
+          detA.missingCount = resA.missingCount; detA.extraCount = resA.extraCount;
+          if (Array.isArray(resA.missing) && resA.missing.length) detA.missingSample = resA.missing.slice(0,5);
+          if (Array.isArray(resA.extra) && resA.extra.length) detA.extraSample = resA.extra.slice(0,5);
+          if ('length2D' in resA) detA.length2D = resA.length2D;
+          if ('length3D' in resA) detA.length3D = resA.length3D;
+          if ('area2D' in resA) detA.area2D = resA.area2D;
+          if ('area3D' in resA) detA.area3D = resA.area3D;
+          if ('volume2D' in resA) detA.volume2D = resA.volume2D;
+          if ('volume3D' in resA) detA.volume3D = resA.volume3D;
+          if ('lengthDiff' in resA) detA.lengthDiff = resA.lengthDiff;
+          if ('areaDiff' in resA) detA.areaDiff = resA.areaDiff;
+          if ('volumeDiff' in resA) detA.volumeDiff = resA.volumeDiff;
+        } else { detA.error = resA && resA.error || 'unknown'; }
+        window.__rtTracePush(detA);
+      }
+    } catch(_chkA) {}
     try { window.__rtTracePush({ kind:'apply-reuse-stats', level: targetLevel, reuse: __reuseStats }); } catch(_rtRS){}
   } catch(_rtFinal){}
   } catch(e){ console.error('applyPlan2DTo3D failed', e); updateStatus('Apply to 3D failed'); }

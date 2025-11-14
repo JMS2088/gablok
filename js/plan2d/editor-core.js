@@ -34,6 +34,50 @@
     };
   }
 
+  // Tombstones: remember user-deleted room perimeter edges (per floor) so Populate won't re-add them
+  function plan2dGetTombstonesForFloor(floor){
+    try{
+      if(!window.__plan2d.__deletedRoomEdges) window.__plan2d.__deletedRoomEdges = {};
+      var f = (typeof floor==='number'? floor : (typeof window.currentFloor==='number'? window.currentFloor:0));
+      var arr = window.__plan2d.__deletedRoomEdges[f];
+      if(!Array.isArray(arr)) { arr = []; window.__plan2d.__deletedRoomEdges[f] = arr; }
+      return arr;
+    }catch(_t){ return []; }
+  }
+  function plan2dRecordDeletedRoomEdge(x0,y0,x1,y1, floor){
+    try{
+      var arr = plan2dGetTombstonesForFloor(floor);
+      var EPS=1e-4;
+      function same(a,b){ return Math.abs(a-b) <= EPS; }
+      // Dedup: check both directions
+      for(var i=0;i<arr.length;i++){
+        var t=arr[i];
+        if((same(t.x0,x0)&&same(t.y0,y0)&&same(t.x1,x1)&&same(t.y1,y1))||(same(t.x0,x1)&&same(t.y0,y1)&&same(t.x1,x0)&&same(t.y1,y0))) return;
+      }
+      arr.push({x0:x0,y0:y0,x1:x1,y1:y1});
+    }catch(_r){}
+  }
+  function plan2dReconcileTombstones(){
+    try{
+      var f = (typeof window.currentFloor==='number'? window.currentFloor:0);
+      var arr = plan2dGetTombstonesForFloor(f); if(!arr.length) return;
+      var els = __plan2d.elements||[]; var EPS=1e-4;
+      function same(a,b){ return Math.abs(a-b) <= EPS; }
+      function wallMatches(t){
+        for(var i=0;i<els.length;i++){ var e=els[i]; if(!e||e.type!=='wall') continue;
+          if((same(e.x0,t.x0)&&same(e.y0,t.y0)&&same(e.x1,t.x1)&&same(e.y1,t.y1))||(same(e.x0,t.x1)&&same(e.y0,t.y1)&&same(e.x1,t.x0)&&same(e.y1,t.y0))) return true;
+        }
+        return false;
+      }
+      var kept=[]; for(var j=0;j<arr.length;j++){ var t=arr[j]; if(!wallMatches(t)) kept.push(t); }
+      window.__plan2d.__deletedRoomEdges[f] = kept;
+    }catch(_c){}
+  }
+  // Expose for potential diagnostics
+  if(typeof window.plan2dRecordDeletedRoomEdge!=='function') window.plan2dRecordDeletedRoomEdge = plan2dRecordDeletedRoomEdge;
+  if(typeof window.plan2dGetTombstonesForFloor!=='function') window.plan2dGetTombstonesForFloor = plan2dGetTombstonesForFloor;
+  if(typeof window.plan2dReconcileTombstones!=='function') window.plan2dReconcileTombstones = plan2dReconcileTombstones;
+
   // Incremental redraw dirty rectangle helpers ---------------------------------
   // Merge a world-space bbox {minX,minY,maxX,maxY} into the current dirtyRect and flag incremental draw.
   function plan2dMarkDirty(minX, minY, maxX, maxY){
@@ -73,7 +117,10 @@
         elements: JSON.parse(JSON.stringify(__plan2d.elements||[])),
         guidesV: JSON.parse(JSON.stringify(__plan2d.guidesV||[])),
         guidesH: JSON.parse(JSON.stringify(__plan2d.guidesH||[])),
-        userEdited: !!__plan2d.__userEdited
+        userEdited: !!__plan2d.__userEdited,
+        deletedRoomEdges: (function(){
+          try{ if(!__plan2d.__deletedRoomEdges) return undefined; var out = __plan2d.__deletedRoomEdges[floor]; return Array.isArray(out)? JSON.parse(JSON.stringify(out)) : undefined; }catch(_t){ return undefined; }
+        })()
       };
       window.__plan2dDrafts[floor] = payload;
       savePlan2dDraftsToStorage();
@@ -88,6 +135,12 @@
         __plan2d.guidesV = JSON.parse(JSON.stringify(data.guidesV||[]));
         __plan2d.guidesH = JSON.parse(JSON.stringify(data.guidesH||[]));
         __plan2d.__userEdited = !!data.userEdited;
+        try{
+          if(data.deletedRoomEdges && Array.isArray(data.deletedRoomEdges)){
+            if(!__plan2d.__deletedRoomEdges) __plan2d.__deletedRoomEdges={};
+            __plan2d.__deletedRoomEdges[floor] = JSON.parse(JSON.stringify(data.deletedRoomEdges));
+          }
+        }catch(_ld){}
       } else {
         __plan2d.elements = [];
         __plan2d.guidesV = [];
@@ -153,6 +206,8 @@
       // Disable future auto-fit after first user edit; require manual Fit button to re-enable
       if(typeof __plan2d.autoFitEnabled==='undefined' || __plan2d.autoFitEnabled===true){ __plan2d.autoFitEnabled=false; }
     } catch(_v){}
+    // If user re-added a previously deleted edge, drop its tombstone
+    try { plan2dReconcileTombstones(); } catch(_rt){}
     // Record an undo checkpoint for 2D edits (coalesced per-floor)
     try { if (typeof window.historyPushChange === 'function') window.historyPushChange('plan2d-edit', { coalesce: true, coalesceKey: (typeof window.currentFloor === 'number' ? window.currentFloor : 0) }); } catch(_hpcPlan){}
   // optional non-destructive 3D sync, guarded to avoid spam during drags
@@ -349,11 +404,21 @@
   window.plan2dEraseElementAt = window.plan2dEraseElementAt || plan2dEraseElementAt;
   // Safe erase wrapper used by deletion paths to normalize state & prevent view jump
   function plan2dEraseElementAtSafe(idx){
+    // Pre-capture for tombstone
+    try{
+      var elsCap = __plan2d.elements||[]; var toDel = elsCap[idx];
+      if(toDel && toDel.type==='wall'){
+        var isRoomEdge = (toDel.wallRole==='room') || (typeof toDel.groupId==='string' && toDel.groupId.indexOf('room:')===0);
+        if(isRoomEdge){ plan2dRecordDeletedRoomEdge(toDel.x0,toDel.y0,toDel.x1,toDel.y1, (typeof window.currentFloor==='number'? window.currentFloor:0)); }
+      }
+    }catch(_cap){}
     var ok = plan2dEraseElementAt(idx);
     if(ok){
       try {
         // Prevent auto-fit or accidental repopulation after deletion
         __plan2d.autoFitEnabled = false; __plan2d.freezeCenterScaleUntil = Date.now() + 1000; __plan2d.freezeSyncUntil = Date.now() + 800; __plan2d.__userEdited = true;
+        // Suppress non-destructive populate-append for a short cooldown so deleted walls don't reappear
+        __plan2d.__suppressPopulateAppendUntil = Date.now() + 2000;
         // Force polygon + measurement caches invalidation
         if(__plan2d.__cache){ __plan2d.__cache.roomPolysVersion = -1; __plan2d.__cache.roomPolys = null; }
       } catch(_safeDel){}
@@ -368,7 +433,7 @@
   function plan2dEraseAt(p){ 
   var win=plan2dFindNearestOfTypes(p,['window'],0.2); if(win.index>=0){ if(plan2dEraseElementAtSafe(win.index)){ __plan2d.hoverIndex=-1; try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrW){} plan2dDraw(); plan2dEdited(); } return; }
   var dor=plan2dFindNearestOfTypes(p,['door'],0.2); if(dor.index>=0){ if(plan2dEraseElementAtSafe(dor.index)){ __plan2d.hoverIndex=-1; try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrD){} plan2dDraw(); plan2dEdited(); } return; }
-    var segHit=plan2dHitWallSubsegment && plan2dHitWallSubsegment(p,0.15); if(segHit){ __plan2d.selectedSubsegment=segHit; if(plan2dDeleteSelectedSubsegment && plan2dDeleteSelectedSubsegment()){ __plan2d.selectedSubsegment=null; __plan2d.hoverIndex=-1; plan2dAutoSnapAndJoin(); try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrS){} plan2dDraw(); plan2dEdited(); return; } }
+    var segHit=plan2dHitWallSubsegment && plan2dHitWallSubsegment(p,0.15); if(segHit){ __plan2d.selectedSubsegment=segHit; var __ss=segHit; var __wIdx = (__ss && typeof __ss.wallIndex==='number')? __ss.wallIndex : -1; var __wRef = (__wIdx>=0 && (__plan2d.elements||[])[__wIdx])? __plan2d.elements[__wIdx] : null; if(plan2dDeleteSelectedSubsegment && plan2dDeleteSelectedSubsegment()){ try{ if(__wRef && __wRef.type==='wall' && (__wRef.wallRole==='room' || (typeof __wRef.groupId==='string' && __wRef.groupId.indexOf('room:')===0))){ if(__ss && typeof window.plan2dRecordDeletedRoomEdge==='function'){ window.plan2dRecordDeletedRoomEdge(__ss.ax,__ss.ay,__ss.bx,__ss.by,(typeof window.currentFloor==='number'? window.currentFloor:0)); } } }catch(_tb){} __plan2d.selectedSubsegment=null; __plan2d.hoverIndex=-1; plan2dAutoSnapAndJoin(); try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrS){} try{ __plan2d.__userEdited = true; __plan2d.__suppressPopulateAppendUntil = Date.now() + 2000; }catch(_supS){} plan2dDraw(); plan2dEdited(); return; } }
     plan2dHoverErase(p); if(__plan2d.hoverIndex>=0){ var delIdx=__plan2d.hoverIndex; plan2dEraseElementAtSafe(delIdx); __plan2d.hoverIndex=-1; try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrE){} plan2dDraw(); plan2dEdited(); }
     // Always freeze view and suppress auto-fit after any erase tool deletion to prevent recenter flashes
     try { __plan2d.freezeCenterScaleUntil = Date.now() + 600; __plan2d.autoFitEnabled = false; __plan2d.__userEdited = true; __plan2d.preventAutoFitUntil = Date.now() + 1000; } catch(_fzErase){}
@@ -430,6 +495,7 @@
           __plan2d.selectedSubsegment=null; __plan2d.hoverIndex=-1;
           try{ plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin(); }catch(_sj){}
           try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clrS){}
+          try{ __plan2d.__userEdited = true; __plan2d.__suppressPopulateAppendUntil = Date.now() + 2000; }catch(_supSel){}
           plan2dDraw(); plan2dEdited();
           return true;
         }
@@ -1042,7 +1108,7 @@
         if(didDel){ ev.preventDefault(); ev.stopPropagation(); return; }
       } else {
         // Fallback (legacy): element only
-        if(__plan2d.selectedIndex>=0){ plan2dEraseElementAt(__plan2d.selectedIndex); plan2dSetSelection(-1); try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clr){} plan2dDraw(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return; }
+        if(__plan2d.selectedIndex>=0){ if(typeof plan2dEraseElementAtSafe==='function'){ plan2dEraseElementAtSafe(__plan2d.selectedIndex); } else { plan2dEraseElementAt(__plan2d.selectedIndex); } plan2dSetSelection(-1); try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_clr){} plan2dDraw(); plan2dEdited(); ev.preventDefault(); ev.stopPropagation(); return; }
       }
     }
     // Toggle window full height (floor-to-ceiling) when 'F' pressed and a window is selected
@@ -1231,7 +1297,7 @@
   function plan2dExport(){ try{ var data=JSON.stringify(__plan2d.elements); var blob=new Blob([data],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='plan2d.json'; a.click(); URL.revokeObjectURL(a.href); if(updateStatus) updateStatus('2D plan exported'); }catch(e){ try{ updateStatus && updateStatus('Export failed'); }catch(_){} } }
   window.plan2dExport = window.plan2dExport || plan2dExport;
   // Clear ------------------------------------------------------------------
-  function plan2dClear(){ try { __plan2d.elements=[]; __plan2d.selectedIndex=-1; __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); plan2dEdited(); updateStatus && updateStatus('2D plan cleared'); } catch(e){ /* ignore */ } }
+  function plan2dClear(){ try { __plan2d.elements=[]; __plan2d.selectedIndex=-1; __plan2d.chainActive=false; __plan2d.chainPoints=[]; try{ var f=(typeof window.currentFloor==='number'? window.currentFloor:0); if(__plan2d.__deletedRoomEdges && __plan2d.__deletedRoomEdges[f]) delete __plan2d.__deletedRoomEdges[f]; }catch(_cl){} plan2dDraw(); plan2dEdited(); updateStatus && updateStatus('2D plan cleared'); } catch(e){ /* ignore */ } }
   window.plan2dClear = window.plan2dClear || plan2dClear;
   // Import -----------------------------------------------------------------
   function plan2dImport(data){ try { if(typeof data==='string'){ data = JSON.parse(data); } if(Array.isArray(data)){ __plan2d.elements = JSON.parse(JSON.stringify(data)); __plan2d.selectedIndex=-1; plan2dDraw(); plan2dEdited(); updateStatus && updateStatus('2D plan imported'); return true; } } catch(e){ try{ updateStatus && updateStatus('Import failed'); }catch(_){} } return false; }

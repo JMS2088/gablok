@@ -21,6 +21,24 @@ function populatePlan2DFromDesign(){
       var now = Date.now(); if(!window.__rtTraceLastSave || now - window.__rtTraceLastSave > 1500){ try { localStorage.setItem('gablok_rtTrace_v1', JSON.stringify(buf)); window.__rtTraceLastSave = now; } catch(_ps){} }
     } catch(_e){}
   }
+  // Auto consistency check: compare current 2D vs 3D and push to trace
+  function __consistencyAfterPopulate(labelFloor){
+    try {
+      var floor = (typeof labelFloor==='number') ? labelFloor : (typeof window.currentFloor==='number' ? window.currentFloor : 0);
+      if (typeof window.check2D3DConsistency === 'function') {
+        var res = window.check2D3DConsistency({ level: floor });
+        // only include compact payload to avoid bloating storage; sample first 5 of each
+        var det = { kind: 'consistency-populate', floor: floor };
+        if (res && !res.error) {
+          det.twoD = res.twoDCount; det.threeD = res.threeDCount;
+          det.missingCount = res.missingCount; det.extraCount = res.extraCount;
+          if (Array.isArray(res.missing) && res.missing.length) det.missingSample = res.missing.slice(0,5);
+          if (Array.isArray(res.extra) && res.extra.length) det.extraSample = res.extra.slice(0,5);
+        } else { det.error = res && res.error || 'unknown'; }
+        __rtPush(det);
+      }
+    } catch(_cec) { /* ignore */ }
+  }
   // Preserve user-drawn manual walls OR any prior 2D user edits: if any exist, skip destructive populate to prevent disappearance.
   try {
     if (window.__plan2d) {
@@ -36,9 +54,59 @@ function populatePlan2DFromDesign(){
       // Skip populate when user has manual walls OR has already edited the plan (walls deleted / moved), unless forced.
       if(!__force && (hasManual || (__plan2d.__userEdited===true))){
         if(console && console.debug) console.debug('[PLAN2D POPULATE] Skipped (', hasManual? 'manual walls present':'userEdited=true', ')');
+        // If a deletion just occurred, do not append room edges back immediately.
+        try {
+          var nowTS = Date.now();
+          if (typeof __plan2d.__suppressPopulateAppendUntil === 'number' && nowTS < __plan2d.__suppressPopulateAppendUntil) {
+            __rtPush({ kind:'populate-skip', reason: 'recent-delete', until: __plan2d.__suppressPopulateAppendUntil });
+            return false;
+          }
+        } catch(_sup){ /* ignore */ }
+        // Non-destructive append: add missing 3D room edges as 2D walls so newly added rooms appear
+        try {
+          var lvlNowA = (typeof window.currentFloor==='number')? window.currentFloor:0;
+          var roomsA = Array.isArray(window.allRooms)? window.allRooms : [];
+          var sgnA = (__plan2d.yFromWorldZSign||1);
+          var cxA = (isFinite(__plan2d.centerX)? __plan2d.centerX : 0);
+          var czA = (isFinite(__plan2d.centerZ)? __plan2d.centerZ : 0);
+          var elemsArr = Array.isArray(__plan2d.elements)? __plan2d.elements : (__plan2d.elements=[]);
+          // Tombstones: do not re-append edges the user deleted on this floor
+          function tombstoneMatchesA(x0,y0,x1,y1){
+            try{
+              var arr = (typeof window.plan2dGetTombstonesForFloor==='function') ? window.plan2dGetTombstonesForFloor(lvlNowA) : [];
+              if(!Array.isArray(arr) || !arr.length) return false;
+              var EPS=0.01; function same(a,b){ return Math.abs(a-b)<=EPS; }
+              for(var ti=0; ti<arr.length; ti++){
+                var t = arr[ti];
+                if((same(t.x0,x0)&&same(t.y0,y0)&&same(t.x1,x1)&&same(t.y1,y1)) || (same(t.x0,x1)&&same(t.y0,y1)&&same(t.x1,x0)&&same(t.y1,y0))) return true;
+              }
+              return false;
+            }catch(_tm){ return false; }
+          }
+          function wallMatchesA(x0,y0,x1,y1){ var EPS=0.01; for(var i=0;i<elemsArr.length;i++){ var w=elemsArr[i]; if(!w||w.type!=='wall') continue; if(Math.abs(w.x0-x0)<EPS && Math.abs(w.y0-y0)<EPS && Math.abs(w.x1-x1)<EPS && Math.abs(w.y1-y1)<EPS) return true; if(Math.abs(w.x0-x1)<EPS && Math.abs(w.y0-y1)<EPS && Math.abs(w.x1-x0)<EPS && Math.abs(w.y1-y0)<EPS) return true; } return false; }
+          var appended=0;
+          for (var riA=0; riA<roomsA.length; riA++){
+            var rA = roomsA[riA]; if(!rA) continue; if ((rA.level||0)!==lvlNowA) continue;
+            var hwA=(rA.width||0)/2, hdA=(rA.depth||0)/2; if(hwA<=0||hdA<=0) continue;
+            var xL = (rA.x - hwA) - cxA, xR = (rA.x + hwA) - cxA;
+            var yT = sgnA * ((rA.z - hdA) - czA), yB = sgnA * ((rA.z + hdA) - czA);
+            var edgesA = [
+              {x0:xL,y0:yT,x1:xR,y1:yT}, {x0:xR,y0:yT,x1:xR,y1:yB}, {x0:xR,y0:yB,x1:xL,y1:yB}, {x0:xL,y0:yB,x1:xL,y1:yT}
+            ];
+            for (var ej=0; ej<edgesA.length; ej++){
+              var W=edgesA[ej]; if(wallMatchesA(W.x0,W.y0,W.x1,W.y1)) continue; if(tombstoneMatchesA(W.x0,W.y0,W.x1,W.y1)) continue;
+              elemsArr.push({ type:'wall', x0:W.x0, y0:W.y0, x1:W.x1, y1:W.y1, thickness:(__plan2d.wallThicknessM||0.3), groupId: 'room:'+(rA.id||'') }); appended++;
+            }
+          }
+          if (appended>0){ try { if(typeof plan2dDraw==='function') plan2dDraw(); } catch(_dr){}
+            __rtPush({ kind:'populate-append-rooms', floor: lvlNowA, appended: appended });
+            try { __consistencyAfterPopulate(lvlNowA); } catch(_ca){}
+            return true;
+          }
+        } catch(_appendRooms){ /* if append fails, fall through to skip */ }
         __rtPush({ kind:'populate-skip', reason: hasManual? 'manual-walls-present':'user-edited' });
         // Maintain existing __userEdited state so future opens keep draft
-        return false; // signal no populate performed
+        return false; // signal no destructive populate performed
       }
       __plan2d.__userEdited = false; // reset only when overwriting from 3D
     }
@@ -209,6 +277,7 @@ function populatePlan2DFromDesign(){
         }
       } catch(_ensureAddedRoomWalls) { /* tolerate failure */ }
   try { if(window.__plan2d) __plan2d.__userEdited=false; }catch(_ueUserStrips){}
+  try { __consistencyAfterPopulate((typeof currentFloor==='number')? currentFloor : undefined); } catch(_chk0) {}
   return true;
     }
   } catch(_prefE) { /* ignore and fallback to room-driven path */ }
@@ -336,6 +405,7 @@ function populatePlan2DFromDesign(){
         });
       }
   try { if(window.__plan2d) __plan2d.__userEdited=false; }catch(_ueStrips){}
+  try { __consistencyAfterPopulate((typeof lvlNow0==='number')? lvlNow0 : undefined); } catch(_chk1) {}
   return true;
     } catch(e) { return false; }
   }
@@ -836,6 +906,7 @@ function populatePlan2DFromDesign(){
   } catch(_dbg1) {}
   // Clear preservation flag after this populate so future resizes can occur normally
   try { if (__plan2d && __plan2d.__preserveCenterScaleOnAdd) delete __plan2d.__preserveCenterScaleOnAdd; } catch(_clr) {}
+  try { __consistencyAfterPopulate((typeof currentFloor==='number')? currentFloor : undefined); } catch(_chk2) {}
   return true;
 }
 

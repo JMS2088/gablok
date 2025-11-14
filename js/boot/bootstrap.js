@@ -112,6 +112,7 @@
   { label: 'Keyboard router', url: 'js/input/keyboard.js?v=20251109-1', critical: true },
   { label: 'Plan apply', url: 'js/core/plan-apply.js?v=20251101-7', critical: true },
   { label: 'Plan populate', url: 'js/core/plan-populate.js?v=20251101-4', critical: true },
+  { label: 'Consistency checks', url: 'js/core/consistency.js?v=20251128-1', critical: false },
     { label: 'Trace panel', url: 'js/ui/trace-panel.js?v=20251109-1', critical: false },
   { label: 'Admin client', url: 'js/ui/admin.js?v=20251109-1', critical: false },
   // Core UI modals
