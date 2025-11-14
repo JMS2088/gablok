@@ -39,11 +39,13 @@
       window.__cleanViewActive = !window.__cleanViewActive;
       var body=document.body; if(!body) return;
       body.classList.toggle('clean-view', window.__cleanViewActive);
-      // When entering clean view also hide labels; when exiting restore label state based on __labelsHidden
+      // When entering Clean View, hide labels; when exiting, ALWAYS show labels
       if(window.__cleanViewActive){
-        if(!window.__labelsHidden){ window.__labelsHidden=true; body.classList.add('hide-labels'); }
+        window.__labelsHidden = true;
+        body.classList.add('hide-labels');
       } else {
-        if(!window.__labelsHidden){ body.classList.remove('hide-labels'); }
+        window.__labelsHidden = false;
+        body.classList.remove('hide-labels');
       }
       // Redraw (skip labels if hidden)
       try { if(typeof renderLoop==='function') renderLoop(); }catch(_rLoop){}

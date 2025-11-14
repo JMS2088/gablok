@@ -1378,6 +1378,21 @@
       try {
         /* no-op: opening outlines suppressed in solid mode */
       } catch(_eOpen) {}
+      // SAFETY WIREFRAME OVERLAY — ensure long edges draw even when near-plane culls projections
+      try {
+        var P = (typeof window.__proj==='object' && window.__proj) || null;
+        var nearEps = 0.01;
+        var kBlend = Math.max(0, Math.min(1, (typeof window.PERSPECTIVE_STRENGTH==='number'? window.PERSPECTIVE_STRENGTH:0.88)));
+        var refZ = Math.max(0.5, (window.camera && camera.distance) || 12);
+        var scalePx = (P && P.scale) || 600;
+        function toCam3(p){ if(!P) return null; var rx=p.x-P.cam[0], ry=p.y-P.cam[1], rz=p.z-P.cam[2]; return { cx: rx*P.right[0] + ry*P.right[1] + rz*P.right[2], cy: rx*P.up[0] + ry*P.up[1] + rz*P.up[2], cz: rx*P.fwd[0] + ry*P.fwd[1] + rz*P.fwd[2] }; }
+        function camToScreen3(v){ if(!v) return null; var czEff = v.cz * kBlend + refZ * (1 - kBlend); var s = scalePx / czEff; return { x: (canvas.width/2) + (v.cx * s) + pan.x, y: (canvas.height/2) - (v.cy * s) + pan.y }; }
+        function clipSegNear(a, b){ if(!a||!b) return null; var ina=a.cz>=nearEps, inb=b.cz>=nearEps; if(ina&&inb) return [a,b]; if(!ina&&!inb) return null; var t=(nearEps-a.cz)/((b.cz-a.cz)||1e-9); var I={ cx:a.cx+(b.cx-a.cx)*t, cy:a.cy+(b.cy-a.cy)*t, cz:nearEps }; return ina?[a,I]:[I,b]; }
+        function strokeClippedEdge(W0, W1){ var a=toCam3(W0), b=toCam3(W1); var seg=clipSegNear(a,b); if(!seg) return false; var s0=camToScreen3(seg[0]), s1=camToScreen3(seg[1]); if(!s0||!s1) return false; ctx.save(); ctx.strokeStyle = edgeCol; ctx.lineWidth = onLevel ? 2.0 : 1.2; ctx.beginPath(); ctx.moveTo(s0.x,s0.y); ctx.lineTo(s1.x,s1.y); ctx.stroke(); ctx.restore(); return true; }
+        // Only add overlay if the standard projected edge was missing (prevent double-drawing)
+        if (!(pAt && pBt)) { strokeClippedEdge(At, Bt); }
+        if (!(pCt && pDt)) { strokeClippedEdge(Ct, Dt); }
+      } catch(_wf) {}
       // Restore context before exiting solid rendering branch
       ctx.restore();
       return;

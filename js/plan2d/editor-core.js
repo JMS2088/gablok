@@ -434,6 +434,32 @@
           return true;
         }
       }
+      // If no 2D selection but a 3D room label selection exists, delete that room
+      try {
+        var has2DSelection = false;
+        if (__plan2d.selectedGuide) has2DSelection = true;
+        if (__plan2d.selectedSubsegment) has2DSelection = true;
+        if (Array.isArray(__plan2d.selectedIndices) && __plan2d.selectedIndices.length>0) has2DSelection = true;
+        if (!has2DSelection && typeof __plan2d.selectedIndex==='number' && __plan2d.selectedIndex>=0) has2DSelection = true;
+        if (!has2DSelection && (typeof window.selectedRoomId==='string' || typeof window.selectedRoomId==='number') && window.selectedRoomId){
+          var rid = window.selectedRoomId;
+          var rIdx = -1; var rooms = Array.isArray(window.allRooms)? window.allRooms : [];
+          for (var ri=0; ri<rooms.length; ri++){ var rr = rooms[ri]; if(rr && rr.id === rid){ rIdx = ri; break; } }
+          if (rIdx > -1 && rooms.length > 1){
+            var delRoom = rooms[rIdx];
+            rooms.splice(rIdx, 1);
+            try { if (typeof window.selectObject==='function') window.selectObject(null, { noRender: true }); else { window.selectedRoomId = null; if (typeof window.updateMeasurements==='function') window.updateMeasurements(); } } catch(_clrSel) {}
+            try { if (typeof window.historyPushChange==='function') window.historyPushChange('3d-delete', { target: 'room', id: delRoom.id, coalesce: false }); } catch(_hist) {}
+            try { if (typeof window.updateStatus==='function') window.updateStatus((delRoom.name||'Room') + ' deleted'); } catch(_st) {}
+            try { if (window.__plan2d && __plan2d.active && !__plan2d.__userEdited && typeof window.populatePlan2DFromDesign==='function'){ window.populatePlan2DFromDesign(); } } catch(_pop) {}
+            try { if (typeof window.plan2dResetDirty==='function') window.plan2dResetDirty(); } catch(_rd) {}
+            try { if (typeof window.plan2dDraw==='function') window.plan2dDraw(); } catch(_d2d) {}
+            try { if (typeof window.renderLoop==='function') window.renderLoop(); } catch(_r3d) {}
+            return true;
+          }
+        }
+      } catch(_del3dIn2d) { /* non-fatal */ }
+
       // Direct element deletion (wall/window/door) – supports multi-select
       var set = Array.isArray(__plan2d.selectedIndices) ? __plan2d.selectedIndices.slice() : [];
       if(set.length <= 1 && __plan2d.selectedIndex>=0){ set = [__plan2d.selectedIndex]; }
@@ -453,92 +479,9 @@
           return true;
         }
       }
-    } catch(_delSel){ /* non-fatal */ }
-    return false;
+      return false;
+    } catch(e){ return false; }
   }
-  if(typeof window.plan2dDeleteSelection!=='function') window.plan2dDeleteSelection = plan2dDeleteSelection;
-
-  // Bounds & view ----------------------------------------------------------
-  function plan2dComputeBounds(){ var els=__plan2d.elements||[]; var minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity; for(var i=0;i<els.length;i++){ var e=els[i]; if(!e) continue; var include=function(x,y){ minX=Math.min(minX,x); maxX=Math.max(maxX,x); minY=Math.min(minY,y); maxY=Math.max(maxY,y); }; if(e.type==='wall'){ include(e.x0,e.y0); include(e.x1,e.y1); } else if(e.type==='door' || e.type==='window'){ if(typeof e.host==='number'){ var host=els[e.host]; if(host && host.type==='wall'){ var ax=host.x0+(host.x1-host.x0)*(e.t0||0), ay=host.y0+(host.y1-host.y0)*(e.t0||0); var bx=host.x0+(host.x1-host.x0)*(e.t1||0), by=host.y0+(host.y1-host.y0)*(e.t1||0); include(ax,ay); include(bx,by); } } else { include(e.x0,e.y0); include(e.x1,e.y1); } } } if(!isFinite(minX)||!isFinite(maxX)||!isFinite(minY)||!isFinite(maxY)) return null; return {minX,minY,maxX,maxY}; }
-  window.plan2dComputeBounds = window.plan2dComputeBounds || plan2dComputeBounds;
-  function plan2dFitViewToContent(marginPx, opts){
-    try{
-      // Respect auto-fit disable unless explicitly forced
-      // Global disable: never auto-fit due to object additions or syncs unless caller forces
-      if(__plan2d && (__plan2d.autoFitEnabled===false || window.__disableAutoFitOnAdd===true) && !(opts && opts.force)) return false;
-      // NEW: protective window after deletions/snap operations to prevent unintended recenter flashes
-      try { if(__plan2d && typeof __plan2d.preventAutoFitUntil==='number' && Date.now() < __plan2d.preventAutoFitUntil && !(opts && opts.force)) return false; } catch(_paf){}
-      var c=document.getElementById('plan2d-canvas'); if(!c) return false; var b=plan2dComputeBounds(); if(!b) return false; var dpr=window.devicePixelRatio||1; var W=c.width,H=c.height; var contentW=Math.max(0.01,b.maxX-b.minX); var contentH=Math.max(0.01,b.maxY-b.minY); var margin=Math.max(0,(marginPx||40)*dpr); var sX=(W-2*margin)/contentW; var sY=(H-2*margin)/contentH; var sNew=Math.max(10,Math.min(800,Math.min(sX,sY))); __plan2d.scale=sNew; var cx=(b.minX+b.maxX)*0.5; var cy=(b.minY+b.maxY)*0.5; __plan2d.panX=-cx; __plan2d.panY=-cy; plan2dDraw(); return true;
-    }catch(e){ return false; }
-  }
-  window.plan2dFitViewToContent = window.plan2dFitViewToContent || plan2dFitViewToContent;
-
-  // Animated initial fit (eased zoom) -------------------------------------
-  // Provides a smooth eased transition when the 2D modal is first opened instead of a jarring jump.
-  // Only runs once per modal open; subsequent population retries may still call the instant fit if needed.
-  function plan2dAnimateInitialFit(marginPx, opts){
-    try{
-      if(!__plan2d.active) return false;
-      if(__plan2d.initialZoomDone){ return plan2dFitViewToContent(marginPx); }
-      var c=document.getElementById('plan2d-canvas'); if(!c) return false;
-      var b=plan2dComputeBounds(); if(!b){ return plan2dFitViewToContent(marginPx); }
-      var dpr=window.devicePixelRatio||1; var W=c.width,H=c.height; if(!W||!H) return false;
-      var contentW=Math.max(0.01,b.maxX-b.minX); var contentH=Math.max(0.01,b.maxY-b.minY);
-      var margin=Math.max(0,(marginPx||40)*dpr);
-      var sX=(W-2*margin)/contentW; var sY=(H-2*margin)/contentH;
-      // Allow a fixed target scale via opts.targetScale; otherwise compute a fit-based target.
-      var requested = (opts && typeof opts.targetScale==='number') ? opts.targetScale : null;
-      var targetScale = (requested!=null) ? Math.max(10, Math.min(800, requested)) : Math.max(10,Math.min(800,Math.min(sX,sY)));
-      var cx=(b.minX+b.maxX)*0.5; var cy=(b.minY+b.maxY)*0.5; var targetPanX=-cx; var targetPanY=-cy;
-      var duration = (opts && opts.durationMs) ? opts.durationMs : 600; // ms
-      var easeName = (opts && opts.easing) || 'easeOutCubic';
-      // Starting values: either current scale (if already near) or a gentle under-zoom to highlight motion.
-      var startScale = __plan2d.scale || 50;
-      // If current scale is very different, clamp start to 60% of target for a nicer motion; else keep as-is.
-      if(startScale > targetScale * 0.95 || startScale < targetScale * 0.4){ startScale = targetScale * 0.6; }
-      var startPanX = __plan2d.panX || 0; var startPanY = __plan2d.panY || 0;
-      // Easing functions (t in [0,1])
-      var easings = {
-        easeOutCubic: function(t){ return 1 - Math.pow(1 - t, 3); },
-        easeInOutQuad: function(t){ return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t + 2, 2)/2; }
-      };
-      var ease = easings[easeName] || easings.easeOutCubic;
-      // Lock interactive zoom/pan during animation to avoid jumping.
-      __plan2d.zoomLocked = true;
-      var anim = { start: performance.now(), duration: duration, canceled:false };
-      __plan2d.__initialAnim = anim;
-      var reveal = !!(opts && opts.revealCanvas);
-      var revealed=false;
-      var lockPan = !!(opts && opts.lockPan);
-      function step(){
-        if(anim.canceled){ return; }
-        // Abort if user starts drawing or panning mid-animation (respect user intent)
-        if(__plan2d.userDrawingActive || __plan2d.panning){ anim.canceled=true; __plan2d.zoomLocked=false; plan2dFitViewToContent(marginPx); __plan2d.initialZoomDone=true; return; }
-        var now = performance.now(); var t = (now - anim.start)/anim.duration; if(t >= 1){ t = 1; }
-        var k = ease(t);
-        __plan2d.scale = startScale + (targetScale - startScale) * k;
-        if(!lockPan){
-          __plan2d.panX = startPanX + (targetPanX - startPanX) * k;
-          __plan2d.panY = startPanY + (targetPanY - startPanY) * k;
-        }
-        if(reveal && !revealed){
-          try{
-            var ov=document.getElementById('plan2d-overlay');
-            var l2=document.getElementById('labels-2d');
-            c.style.visibility='visible'; if(ov) ov.style.visibility='visible'; if(l2) l2.style.visibility='visible';
-          }catch(_rv){}
-          revealed=true;
-        }
-        // Update scale label live for feedback
-        try{ var scl=document.getElementById('plan2d-scale'); if(scl){ scl.textContent='1:'+Math.round(100*(100/__plan2d.scale))/100; } }catch(_sl){}
-        plan2dDraw();
-        if(t < 1){ requestAnimationFrame(step); } else { __plan2d.zoomLocked=false; __plan2d.initialZoomDone=true; }
-      }
-      requestAnimationFrame(step);
-      return true;
-    }catch(e){ return false; }
-  }
-  window.plan2dAnimateInitialFit = window.plan2dAnimateInitialFit || plan2dAnimateInitialFit;
 
   // Flip vertical axis (mirror) -------------------------------------------
   function plan2dFlipVertical(){ try{ var els=__plan2d.elements||[]; for(var i=0;i<els.length;i++){ var e=els[i]; if(!e) continue; if(e.type==='wall'){ e.y0=-(e.y0||0); e.y1=-(e.y1||0); } else if(e.type==='window' || e.type==='door'){ if(typeof e.host!=='number'){ e.y0=-(e.y0||0); e.y1=-(e.y1||0); } } } __plan2d.yFromWorldZSign = (__plan2d.yFromWorldZSign===1? -1:1); plan2dSetSelection(-1); __plan2d.dragWindow=__plan2d.dragDoor=__plan2d.dragDoorWhole=__plan2d.dragWall=null; __plan2d.start=null; __plan2d.last=null; plan2dDraw(); plan2dEdited(); }catch(e){} }
@@ -1149,12 +1092,10 @@
         // While in 2D plan view: hide render, labels, clean view buttons, level dropdown & related select
         try {
           var btnRender = document.getElementById('btn-render-walls');
-          var btnLabels = document.getElementById('btn-hide-labels');
           var btnClean = document.getElementById('btn-clean-view');
           var levelDd = document.getElementById('levelDropdown');
           var levelSel = document.getElementById('levelSelect');
           if(btnRender) btnRender.style.display='none';
-          if(btnLabels) btnLabels.style.display='none';
           if(btnClean) btnClean.style.display='none';
           if(levelDd) levelDd.style.display='none';
           if(levelSel) levelSel.style.display='none';
@@ -1258,12 +1199,10 @@
       // Restore hidden buttons/dropdowns and original Floor Plan button label
       try {
         var btnRender = document.getElementById('btn-render-walls');
-        var btnLabels = document.getElementById('btn-hide-labels');
         var btnClean = document.getElementById('btn-clean-view');
         var levelDd = document.getElementById('levelDropdown');
         var levelSel = document.getElementById('levelSelect');
         if(btnRender) btnRender.style.display='';
-        if(btnLabels) btnLabels.style.display='';
         if(btnClean) btnClean.style.display='';
         if(levelDd) levelDd.style.display='';
         if(levelSel) levelSel.style.display='';

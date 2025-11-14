@@ -248,6 +248,56 @@
   }
 
   /**
+   * Reset only in-memory scene state (3D + 2D) before importing a file.
+   * Does NOT touch localStorage or camera; leaves UI controls as-is.
+   * Ensures old content and drafts do not bleed into the newly imported data.
+   */
+  function resetSceneForImport() {
+    try {
+      // 3D entities
+      allRooms = [];
+      wallStrips = [];
+      stairsComponent = null;
+      try { window.stairsComponents = []; } catch(_rs){}
+      pergolaComponents = [];
+      garageComponents = [];
+      poolComponents = [];
+      roofComponents = [];
+      balconyComponents = [];
+      furnitureItems = [];
+      selectedRoomId = null;
+      selectedWallStripIndex = -1;
+      // Keep currentFloor and camera/pan so user context remains intact
+
+      // 2D editor state (clear current in-memory plan and guides)
+      try {
+        if (window.__plan2d) {
+          __plan2d.elements = [];
+          __plan2d.guidesV = [];
+          __plan2d.guidesH = [];
+          __plan2d.selectedIndex = -1;
+          __plan2d.selectedIndices = [];
+          __plan2d.selectedSubsegment = null;
+          __plan2d.chainActive = false;
+          __plan2d.chainPoints = [];
+          if (typeof window.plan2dResetDirty === 'function') plan2dResetDirty();
+          if (typeof window.plan2dDraw === 'function') plan2dDraw();
+        }
+      } catch(_p2d) {}
+
+      // Clear any render caches that could re-draw stale outlines
+      try { window.__roomOutlineCache = {}; } catch(_oc) {}
+      try { window.__extCornerSnap = {}; } catch(_sn) {}
+
+      // Re-render scene after purge
+      try { if (typeof renderLoop === 'function') renderLoop(); } catch(_r) {}
+      try { if (typeof updateStatus === 'function') updateStatus('Cleared scene for import'); } catch(_s) {}
+    } catch (e) {
+      console.warn('resetSceneForImport failed', e);
+    }
+  }
+
+  /**
    * Remove duplicate entities by ID across all entity arrays.
    * Prevents ID collisions and state corruption after imports/merges.
    */
@@ -288,6 +338,7 @@
   window.saveProjectSilently = saveProjectSilently;
   window.loadProject = loadProject;
   window.resetAll = resetAll;
+  window.resetSceneForImport = resetSceneForImport;
   window.dedupeAllEntities = dedupeAllEntities;
 
 })();

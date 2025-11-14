@@ -232,7 +232,6 @@
 
   /* Hidden labels state (only labels hidden) */
   body.hide-labels #labels-3d { display:none !important; }
-  body.hide-labels #btn-hide-labels { background:#dc2626 !important; color:#ffffff !important; }
   body.clean-view #btn-clean-view { display:none !important; }
   
   select {
@@ -743,9 +742,9 @@
   #info-content ul { margin: 0 0 15px 20px; color: #555; line-height: 2.4 !important; }
   /* Account > Information & Help view: match Info modal spacing */
   #account-info-body { font-size: 14px; }
-  #account-info-body p { margin: 0 0 15px 0; line-height: 2.4 !important; color: #555; }
-  #account-info-body ul { margin: 0 0 15px 20px; color: #555; line-height: 2.4 !important; }
-  #account-info-body li { margin-bottom: 14px; line-height: 2.4 !important; }
+  #account-info-body p { margin: 0 0 15px 0; line-height: 1.8 !important; color: #555; }
+  #account-info-body ul { margin: 0 0 15px 20px; color: #555; line-height: 1.8 !important; }
+  #account-info-body li { margin-bottom: 14px; line-height: 1.8 !important; }
   
   #info-content li, #pricing-content li { margin-bottom: 8px; }
 

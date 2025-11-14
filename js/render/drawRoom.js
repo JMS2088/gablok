@@ -160,6 +160,35 @@ function drawRoom(room) {
       }
       return out;
     }
+    // Perimeter failover cache: keep last good screen-space base outline per room so outline never disappears
+    try { if (!window.__roomOutlineCache) window.__roomOutlineCache = {}; } catch(_cacheInit) {}
+    function drawOutlineFromScreenPts(pts, roomId){
+      try {
+        if (Array.isArray(pts) && pts.length >= 2) {
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (var i=1;i<pts.length;i++){ ctx.lineTo(pts[i].x, pts[i].y); }
+          ctx.closePath();
+          ctx.stroke();
+          // update cache
+          try { if (roomId!=null) window.__roomOutlineCache[roomId] = pts.map(function(p){ return {x:p.x, y:p.y}; }); } catch(_cUpd) {}
+          try { window.__roomOutlineDrawCount = (window.__roomOutlineDrawCount||0) + 1; } catch(_eCnt) {}
+          return true;
+        }
+      } catch(_drawFail) {}
+      // fallback to cached outline if draw failed or insufficient pts
+      try {
+        var cached = (roomId!=null && window.__roomOutlineCache) ? window.__roomOutlineCache[roomId] : null;
+        if (Array.isArray(cached) && cached.length >= 2){
+          ctx.beginPath(); ctx.moveTo(cached[0].x, cached[0].y);
+          for (var j=1;j<cached.length;j++){ ctx.lineTo(cached[j].x, cached[j].y); }
+          ctx.closePath(); ctx.stroke();
+          try { window.__roomOutlineDrawCount = (window.__roomOutlineDrawCount||0) + 1; } catch(_eCnt2) {}
+          return true;
+        }
+      } catch(_cacheDraw) {}
+      return false;
+    }
     // Consider grouped rooms (L/U composites): if one member is selected, highlight all in the group
     var selected = false;
     try {
@@ -179,17 +208,34 @@ function drawRoom(room) {
     var projected = null;
     var corners = null;
     if (!hasFootprint) {
+      // Rectangular room case — honor rotation so the perimeter outline remains attached in all poses
       var hw = room.width / 2;
       var hd = room.depth / 2;
+      var rot = ((room.rotation || 0) * Math.PI) / 180;
+      var cos = Math.cos(rot), sin = Math.sin(rot);
+      function rotPoint(dx, dz) {
+        // Rotate local (dx,dz) around the room center by room.rotation, return world X/Z
+        return {
+          x: room.x + dx * cos - dz * sin,
+          z: room.z + dx * sin + dz * cos
+        };
+      }
+      // Base four corners in CCW starting at (-x,-z)
+      var c1 = rotPoint(-hw, -hd);
+      var c2 = rotPoint(+hw, -hd);
+      var c3 = rotPoint(+hw, +hd);
+      var c4 = rotPoint(-hw, +hd);
+      var y0 = roomFloorY;
+      var y1 = roomFloorY + room.height;
       corners = [
-        {x: room.x - hw, y: roomFloorY, z: room.z - hd},
-        {x: room.x + hw, y: roomFloorY, z: room.z - hd},
-        {x: room.x + hw, y: roomFloorY, z: room.z + hd},
-        {x: room.x - hw, y: roomFloorY, z: room.z + hd},
-        {x: room.x - hw, y: roomFloorY + room.height, z: room.z - hd},
-        {x: room.x + hw, y: roomFloorY + room.height, z: room.z - hd},
-        {x: room.x + hw, y: roomFloorY + room.height, z: room.z + hd},
-        {x: room.x - hw, y: roomFloorY + room.height, z: room.z + hd}
+        { x: c1.x, y: y0, z: c1.z },
+        { x: c2.x, y: y0, z: c2.z },
+        { x: c3.x, y: y0, z: c3.z },
+        { x: c4.x, y: y0, z: c4.z },
+        { x: c1.x, y: y1, z: c1.z },
+        { x: c2.x, y: y1, z: c2.z },
+        { x: c3.x, y: y1, z: c3.z },
+        { x: c4.x, y: y1, z: c4.z }
       ];
       projected = new Array(corners.length);
       for (var i = 0; i < corners.length; i++) {
@@ -234,23 +280,24 @@ function drawRoom(room) {
         }
         // outline (skip only while actively dragging in solid mode)
         if (!suppressWire) {
-          ctx.beginPath(); var so = camToScreen(baseClip[0]); if(so){ ctx.moveTo(so.x, so.y); }
-          for (var bo=1; bo<baseClip.length; bo++){ var sb2 = camToScreen(baseClip[bo]); if(sb2){ ctx.lineTo(sb2.x, sb2.y); } }
-          ctx.closePath(); ctx.stroke();
-          try { window.__roomOutlineDrawCount = (window.__roomOutlineDrawCount||0) + 1; } catch(_eCnt0) {}
+          // Build screen-space outline list and use failover cache if needed
+          var scPts = [];
+          for (var bo=0; bo<baseClip.length; bo++){ var spt = camToScreen(baseClip[bo]); if (spt) scPts.push({x:spt.x, y:spt.y}); }
+          drawOutlineFromScreenPts(scPts, room.id);
         }
       }
       // Fallback: if clipping removed the whole base (camera extremely close), still stroke raw projected rectangle
       else if (!suppressWire) {
         try {
-          var p0 = project3D(basePts[0].x, basePts[0].y, basePts[0].z);
-          var p1 = project3D(basePts[1].x, basePts[1].y, basePts[1].z);
-          var p2 = project3D(basePts[2].x, basePts[2].y, basePts[2].z);
-          var p3 = project3D(basePts[3].x, basePts[3].y, basePts[3].z);
-          if (p0 && p1 && p2 && p3) {
-            ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.lineTo(p3.x,p3.y); ctx.closePath(); ctx.stroke();
+          var scAlt = [];
+          for (var ai=0; ai<basePts.length; ai++){ var pr = project3D(basePts[ai].x, basePts[ai].y, basePts[ai].z); if (pr) scAlt.push({x:pr.x, y:pr.y}); }
+          if (!drawOutlineFromScreenPts(scAlt, room.id)) {
+            // still nothing: rely on cache via helper
+            drawOutlineFromScreenPts([], room.id);
           }
-        } catch(_eRectFallback) {}
+        } catch(_eRectFallback) {
+          drawOutlineFromScreenPts([], room.id);
+        }
       }
       // Edges: FULL 3D WIREFRAME in all modes (draw base, verticals, and top)
       if (!suppressWire) {
@@ -289,28 +336,27 @@ function drawRoom(room) {
         }
         // Base outline — skip only while actively dragging in solid mode
         if (!suppressWire) {
-          ctx.beginPath(); var b1 = camToScreen(baseClip[0]); if(b1){ ctx.moveTo(b1.x, b1.y); }
-          for (var bo=1; bo<baseClip.length; bo++){ var sb2 = camToScreen(baseClip[bo]); if(sb2){ ctx.lineTo(sb2.x, sb2.y); } }
-          ctx.closePath();
-          ctx.stroke();
-          try { window.__roomOutlineDrawCount = (window.__roomOutlineDrawCount||0) + 1; } catch(_eCnt1) {}
+          var scPts2 = [];
+          for (var bo=0; bo<baseClip.length; bo++){ var sp = camToScreen(baseClip[bo]); if (sp) scPts2.push({x:sp.x, y:sp.y}); }
+          drawOutlineFromScreenPts(scPts2, room.id);
         }
       }
       // Polygon fallback (same reasoning as rectangle): ensure outline visible if near-plane clipping discards all points
       else if (!suppressWire && Array.isArray(room.footprint) && room.footprint.length >= 3) {
         try {
-          var firstProj = null;
-          ctx.beginPath();
+          var scPoly = [];
           for (var fpi=0; fpi<room.footprint.length; fpi++) {
             var pRaw = room.footprint[fpi];
             var pScr = project3D(pRaw.x, roomFloorY, pRaw.z);
             if (!pScr) continue;
-            if (!firstProj) { ctx.moveTo(pScr.x, pScr.y); firstProj = pScr; }
-            else { ctx.lineTo(pScr.x, pScr.y); }
+            scPoly.push({x:pScr.x, y:pScr.y});
           }
-          if (firstProj) { ctx.closePath(); ctx.stroke(); }
-          try { if (firstProj) window.__roomOutlineDrawCount = (window.__roomOutlineDrawCount||0) + 1; } catch(_eCnt2) {}
-        } catch(_ePolyFallback) {}
+          if (!drawOutlineFromScreenPts(scPoly, room.id)) {
+            drawOutlineFromScreenPts([], room.id);
+          }
+        } catch(_ePolyFallback) {
+          drawOutlineFromScreenPts([], room.id);
+        }
       }
       // Top outline (clipped) — ALWAYS draw for full 3D wireframe, regardless of mode
       var topClip = clipPolyNear(topCam);

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>3D Home Configurator with Pricing</title>
 <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-<link rel="stylesheet" href="css/styles.css?v=20251112-4">
+<link rel="stylesheet" href="css/styles.css?v=20251112-6">
 </head>
 <body>
 
@@ -20,7 +20,6 @@
 		<button onclick="addNewRoom()">+ Add Room</button>
 	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor">Floor Plan</button>
 	<button id="btn-render-walls" class="secondary" title="Toggle wall render mode">Render: Lines</button>
-	<button id="btn-hide-labels" class="secondary" title="Hide/show labels" onclick="toggleLabelsVisibility()">Hide Labels</button>
 	<button id="btn-clean-view" class="secondary" title="Toggle clean view (hide UI)" onclick="toggleCleanView()">Clean View</button>
 	<!-- Custom Level Dropdown (replaces native select) -->
 	<div id="levelDropdown" class="dropdown" aria-label="Level Menu">
@@ -232,7 +231,7 @@
 				<div class="shortcut-grid">
 					<div class="left"><span class="kbd">Esc</span></div><div class="right">Clear selection</div>
 					<div class="left"><span class="kbd">Del</span>/<span class="kbd">⌫</span></div><div class="right">Delete selected (3D room / 2D element)</div>
-					<div class="left"><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span></div><div class="right">Nudge 3D object (when selected)</div>
+					<div class="left"><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span></div><div class="right">Nudge 3D object (when selected). <span class="kbd">Shift</span>=×10</div>
 					<div class="left"><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span> (2D)</div><div class="right">Nudge selected wall(s) (grid step). <span class="kbd">Shift</span>=×10</div>
 					<div class="left"><span class="kbd">R</span></div><div class="right">Toggle wall render mode (Lines⇄Solid)</div>
 					<div class="left"><span class="kbd">L</span></div><div class="right">Hide / show labels & corner numbers</div>
@@ -243,6 +242,11 @@
 					<div class="left"><span class="kbd">Enter</span> (2D)</div><div class="right">Finish wall chain</div>
 					<div class="left"><span class="kbd">Shift</span> + Click (2D)</div><div class="right">Add/remove wall to multi-selection (Select tool) / Add wall segment to chain (Wall tool)</div>
 					<div class="left">Drag on selected wall (2D)</div><div class="right">Move all selected walls together (group move)</div>
+					<div class="left"><span class="kbd">F</span> (2D)</div><div class="right">Toggle selected window Full Height (floor-to-ceiling)</div>
+					<div class="left"><span class="kbd">P</span> (2D)</div><div class="right">Toggle performance HUD (<span class="kbd">Shift</span>+<span class="kbd">P</span> for extended)</div>
+					<div class="left"><span class="kbd">G</span> (2D)</div><div class="right">Toggle 2D WebGL preview</div>
+					<div class="left"><span class="kbd">Shift</span> + Drag wall end (2D)</div><div class="right">Snap the dragged wall to 45° increments</div>
+					<div class="left"><span class="kbd">Shift</span> + Drag group (2D)</div><div class="right">Constrain group move to horizontal or vertical</div>
 				</div>
 			</section>
 		</div>

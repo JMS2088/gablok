@@ -28,7 +28,16 @@
       registerExport('json', async function(){ try{ download('gablok-project.json', serializeProject(), 'application/json'); updateStatus && updateStatus('Exported JSON'); } catch(e){ try{ updateStatus('JSON export failed'); }catch(_){} } });
     }
     if (typeof restoreProject==='function') {
-      registerImport('json', async function(file){ try{ var text = await file.text(); restoreProject(text); renderLoop && renderLoop(); updateStatus && updateStatus('Imported project'); } catch(e){ try{ updateStatus('JSON import failed'); }catch(_){} } });
+      registerImport('json', async function(file){
+        try {
+          var text = await file.text();
+          // Purge current scene so restored project does not mix with old content
+          try { if (typeof window.resetSceneForImport === 'function') window.resetSceneForImport(); } catch(_ri) {}
+          restoreProject(text);
+          renderLoop && renderLoop();
+          updateStatus && updateStatus('Imported project');
+        } catch(e){ try{ updateStatus('JSON import failed'); }catch(_){} }
+      });
     }
   } catch(e) {}
 

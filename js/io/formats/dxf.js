@@ -101,6 +101,8 @@
 
   async function importFile(file){
     try {
+      // Clear existing 3D and 2D state so the new plan starts clean
+      try { if (typeof window.resetSceneForImport === 'function') window.resetSceneForImport(); } catch(_ri) {}
       var text = await file.text();
       // Quick signature sanity check for ASCII DXF
       if (!/\bSECTION\b[\s\S]*\bENTITIES\b/.test(text)) {

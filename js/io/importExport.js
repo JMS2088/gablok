@@ -150,6 +150,8 @@
    */
   function importSVGFloorplan(svgText, fileName) {
     try {
+      // Ensure a clean slate so previous content doesn't overlap
+      try { if (typeof window.resetSceneForImport === 'function') window.resetSceneForImport(); } catch(_ri) {}
       var parser = new DOMParser();
       var doc = parser.parseFromString(svgText, 'image/svg+xml');
       // Parser error detection (browser inserts <parsererror>)
