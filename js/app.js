@@ -620,7 +620,8 @@ function commitFloorplanRooms(){
     room.name = 'Imported ' + (i+1);
     allRooms.push(room); created++;
     // Reflect immediately in 2D so added rooms show walls without extra steps
-    try { if (typeof populatePlan2DFromDesign==='function') { populatePlan2DFromDesign(); if (window.__plan2d && __plan2d.active && typeof plan2dDraw==='function') plan2dDraw(); } } catch(_e2d) {}
+    // Force populate to bypass userEdited/manual-wall guard during import commit
+    try { if (typeof populatePlan2DFromDesign==='function') { populatePlan2DFromDesign(true); if (window.__plan2d && __plan2d.active && typeof plan2dDraw==='function') plan2dDraw(); } } catch(_e2d) {}
   }
   saveProjectSilently();
   // Clear selection using unified helper for immediate measurement panel refresh

@@ -963,27 +963,49 @@
               // Remove wall strips whose segment key is in oldSet but not in newSet (stale) on same level
               function keyForStrip(ws){ var a=ws.x0.toFixed(3)+','+ws.z0.toFixed(3); var b=ws.x1.toFixed(3)+','+ws.z1.toFixed(3); return (a<b? a+'|'+b : b+'|'+a); }
               var before = wallStrips.length;
+              // Only consider purging strips that actually belong to the dragged room.
+              // Avoid removing unrelated walls that happen to share geometry.
               wallStrips = wallStrips.filter(function(ws){
                 try {
                   if (!ws) return false;
                   if ((ws.level||0) !== (roomNow.level||0)) return true;
+                  if (ws.roomId !== roomNow.id) return true;
                   var k = keyForStrip(ws);
-                  if (oldSet[k] && !newSet[k]) return false; // stale perimeter
-                  // Additionally, if this was generated as a room perimeter strip (tagged) and belongs to roomId but endpoints moved, purge
-                  if (ws.roomId === roomNow.id) {
-                    if (!newSet[k]) return false;
-                  }
+                  // For the dragged room's own perimeter strips, remove if the edge is no longer part of its new geometry
+                  if (!newSet[k]) return false;
                   return true;
                 } catch(_e){ return true; }
               });
               var removed = before - wallStrips.length;
-              // Fallback coarse purge if nothing matched but box shifted notably (user dragged in line mode)
+              // Restrictive coarse purge: only remove strips in the old box that belonged to this room.
               if (removed === 0 && info.oldBox) {
                 var shiftDist = Math.hypot((roomNow.x||0) - (info.originalX||info.oldBox.centerX||roomNow.x), (roomNow.z||0) - (info.originalZ||info.oldBox.centerZ||roomNow.z));
                 if (shiftDist > 0.05) {
-                  var pad = 0.05; // slight pad around old box
-                  var purged = (typeof window.purgeWallStripsInBox==='function') ? window.purgeWallStripsInBox(roomNow.level||0, info.oldBox.minX-pad, info.oldBox.minZ-pad, info.oldBox.maxX+pad, info.oldBox.maxZ+pad) : 0;
-                  removed += purged;
+                  var pad = 0.05;
+                  var minXb = info.oldBox.minX - pad, maxXb = info.oldBox.maxX + pad;
+                  var minZb = info.oldBox.minZ - pad, maxZb = info.oldBox.maxZ + pad;
+                  function segIntersects(x0,z0,x1,z1){
+                    if ((x0 < minXb && x1 < minXb) || (x0 > maxXb && x1 > maxXb) || (z0 < minZb && z1 < minZb) || (z0 > maxZb && z1 > maxZb)) return false;
+                    function inside(x,z){ return x>=minXb && x<=maxXb && z>=minZb && z<=maxZb; }
+                    if (inside(x0,z0) || inside(x1,z1)) return true;
+                    function orient(ax,ay,bx,by,cx,cy){ var v=(bx-ax)*(cy-ay)-(by-ay)*(cx-ax); return (v>0)?1:(v<0?-1:0); }
+                    function inter(ax,ay,bx,by,cx,cy,dx,dy){ var o1=orient(ax,ay,bx,by,cx,cy), o2=orient(ax,ay,bx,by,dx,dy), o3=orient(cx,cy,dx,dy,ax,ay), o4=orient(cx,cy,dx,dy,bx,by); if(o1!==o2 && o3!==o4) return true; return false; }
+                    if (inter(x0,z0,x1,z1, minXb,minZb, maxXb,minZb)) return true;
+                    if (inter(x0,z0,x1,z1, maxXb,minZb, maxXb,maxZb)) return true;
+                    if (inter(x0,z0,x1,z1, maxXb,maxZb, minXb,maxZb)) return true;
+                    if (inter(x0,z0,x1,z1, minXb,maxZb, minXb,minZb)) return true;
+                    return false;
+                  }
+                  var beforeBox = wallStrips.length;
+                  wallStrips = wallStrips.filter(function(ws){
+                    try {
+                      if (!ws) return false;
+                      if ((ws.level||0)!==(roomNow.level||0)) return true;
+                      if (ws.roomId !== roomNow.id) return true;
+                      return !segIntersects(ws.x0||0, ws.z0||0, ws.x1||0, ws.z1||0);
+                    } catch(_e){ return true; }
+                  });
+                  removed += Math.max(0, beforeBox - wallStrips.length);
                 }
               }
               if (removed > 0) {

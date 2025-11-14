@@ -557,10 +557,24 @@
       var footprints = __collectFootprints(level);
       function collides(nx,nz){
         var ax0 = nx - halfW, ax1 = nx + halfW, az0 = nz - halfD, az1 = nz + halfD;
+        // Existing rooms on this level
         for (var i=0;i<footprints.length;i++){
           var f=footprints[i]; var bx0=f.x - (f.w||0)/2, bx1=f.x + (f.w||0)/2, bz0=f.z - (f.d||0)/2, bz1=f.z + (f.d||0)/2;
           if (__aabbOverlap(ax0,ax1,az0,az1, bx0,bx1,bz0,bz1)) return true;
         }
+        // Keep a small clearance from existing wall strips so we don't "complete" 3-wall clusters
+        try {
+          var margin = 0.25; // meters
+          var strips = Array.isArray(window.wallStrips) ? window.wallStrips : [];
+          for (var si=0; si<strips.length; si++){
+            var ws = strips[si]; if(!ws) continue; if ((ws.level||0)!==level) continue;
+            var sx0 = Math.min(ws.x0, ws.x1) - margin;
+            var sx1 = Math.max(ws.x0, ws.x1) + margin;
+            var sz0 = Math.min(ws.z0, ws.z1) - margin;
+            var sz1 = Math.max(ws.z0, ws.z1) + margin;
+            if (__aabbOverlap(ax0,ax1,az0,az1, sx0,sx1,sz0,sz1)) return true;
+          }
+        } catch(_e) {}
         return false;
       }
       function snapCenter(x,z){ try { var s=applySnap({x:x,z:z,width:width||1,depth:depth||1,level:level}); return {x:s.x,z:s.z}; } catch(e){ return {x:x,z:z}; } }
@@ -615,7 +629,8 @@
         }
       } catch(_ePreserve) {}
       // Sync 2D immediately so walls appear without needing manual refresh
-      try { if (typeof populatePlan2DFromDesign==='function') { populatePlan2DFromDesign(); if (window.__plan2d && __plan2d.active && typeof plan2dDraw==='function') plan2dDraw(); } } catch(_e2d2) {}
+      // Force populate to bypass userEdited/manual-wall guard for this additive action
+      try { if (typeof populatePlan2DFromDesign==='function') { populatePlan2DFromDesign(true); if (window.__plan2d && __plan2d.active && typeof plan2dDraw==='function') plan2dDraw(); } } catch(_e2d2) {}
       // Ensure new room is visible without re-centering: gently pan if offscreen.
       try {
         if (window.__plan2d && __plan2d.active) {

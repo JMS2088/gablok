@@ -167,6 +167,47 @@ function populatePlan2DFromDesign(){
           }
         }
       } catch(_eOpeningsFromStrips) { /* non-fatal */ }
+      // Ensure newly added rooms on this floor appear even if userStrips path was taken and strips don't yet include them.
+      try {
+        var lvlCurrent = (typeof window.currentFloor==='number')? window.currentFloor:0;
+        var existingWalls = __plan2d.elements.filter(function(e){ return e && e.type==='wall'; });
+        function wallMatches(x0,y0,x1,y1){
+          var EPS = 0.01; // 1 cm tolerance
+          for (var i=0;i<existingWalls.length;i++){
+            var w = existingWalls[i]; if(!w) continue;
+            if (Math.abs(w.x0 - x0) < EPS && Math.abs(w.y0 - y0) < EPS && Math.abs(w.x1 - x1) < EPS && Math.abs(w.y1 - y1) < EPS) return true;
+            if (Math.abs(w.x0 - x1) < EPS && Math.abs(w.y0 - y1) < EPS && Math.abs(w.x1 - x0) < EPS && Math.abs(w.y1 - y0) < EPS) return true; // reversed
+          }
+          return false;
+        }
+        var roomsLive = Array.isArray(window.allRooms)? window.allRooms : [];
+        for (var ri=0; ri<roomsLive.length; ri++){
+          var rAdd = roomsLive[ri]; if(!rAdd) continue; if ((rAdd.level||0)!==lvlCurrent) continue;
+          // Compute room rectangle edges in plan space (relative to cx1,cz1)
+          var hwR = (rAdd.width||0)/2, hdR=(rAdd.depth||0)/2;
+          if (hwR<=0 || hdR<=0) continue;
+          var xL = (rAdd.x - hwR) - cx1; var xR = (rAdd.x + hwR) - cx1;
+          var zT = (rAdd.z - hdR) - cz1; var zB = (rAdd.z + hdR) - cz1;
+          var yT = sgn1 * zT; var yB = sgn1 * zB;
+          var needAny = false;
+          var edges = [
+            { x0:xL, y0:yT, x1:xR, y1:yT }, // top
+            { x0:xR, y0:yT, x1:xR, y1:yB }, // right
+            { x0:xR, y0:yB, x1:xL, y1:yB }, // bottom
+            { x0:xL, y0:yB, x1:xL, y1:yT }  // left
+          ];
+          for (var eI=0; eI<edges.length; eI++){
+            var E = edges[eI];
+            if(!wallMatches(E.x0, E.y0, E.x1, E.y1)) { needAny = true; break; }
+          }
+          if (!needAny) continue; // all edges already represented by user strips
+          // Add any missing edges individually (avoid duplicates)
+          for (var eJ=0;eJ<edges.length;eJ++){
+            var W = edges[eJ]; if (wallMatches(W.x0,W.y0,W.x1,W.y1)) continue;
+            __plan2d.elements.push({ type:'wall', x0:W.x0, y0:W.y0, x1:W.x1, y1:W.y1, thickness: (__plan2d.wallThicknessM||0.3), groupId: 'room:'+ (rAdd.id||'') });
+          }
+        }
+      } catch(_ensureAddedRoomWalls) { /* tolerate failure */ }
   try { if(window.__plan2d) __plan2d.__userEdited=false; }catch(_ueUserStrips){}
   return true;
     }

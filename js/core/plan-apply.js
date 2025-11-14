@@ -329,6 +329,28 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
             minY = Math.min(minY, w.y0, w.y1); maxY = Math.max(maxY, w.y0, w.y1);
           }
           if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minY) || !isFinite(maxY)) return;
+          // Verify the grouped room still has a complete perimeter. If a user deleted one side in 2D,
+          // we must NOT reconstruct a closed room from remaining walls; let generic detection handle it.
+          try {
+            var EPS = 1e-3; // 1mm tolerance in plan units (meters)
+            var hasTop=false, hasBottom=false, hasLeft=false, hasRight=false;
+            for (var ck=0; ck<idxs.length; ck++){
+              var ww = elemsSrc[idxs[ck]]; if(!ww || ww.type!=='wall') continue;
+              var horiz = Math.abs((ww.y0||0) - (ww.y1||0)) < EPS;
+              var vert  = Math.abs((ww.x0||0) - (ww.x1||0)) < EPS;
+              if (horiz){
+                var y = ww.y0; if (Math.abs(y - minY) < EPS) hasTop = true; if (Math.abs(y - maxY) < EPS) hasBottom = true;
+              }
+              if (vert){
+                var x = ww.x0; if (Math.abs(x - minX) < EPS) hasLeft = true; if (Math.abs(x - maxX) < EPS) hasRight = true;
+              }
+            }
+            // If any side missing, skip grouped reconstruction (do not mark as nonroom)
+            if (!(hasTop && hasBottom && hasLeft && hasRight)){
+              // Incomplete perimeter: honor user deletion by leaving these walls for general processing
+              return;
+            }
+          } catch(_perimChk) { /* fail open to preserve current behavior */ }
           // Map plan bbox to world rect
           var wx=(__ctx.centerX||0) + (minX+maxX)/2;
           var wz=(__ctx.centerZ||0) + sgnG*((minY+maxY)/2);
@@ -941,8 +963,56 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       // Walls present but no closed rectangles: extrude standalone wall strips from 2D
       // Respect nonDestructive: if true and we're not in explicit stripsOnly mode, do NOT clear existing rooms
       if (!nonDestructive || stripsOnly) {
-        // Clear rooms on this level for rebuild (legacy behavior)
-        allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
+        // If we have grouped rooms reconstructed from 3D (complete perimeters), preserve them even in destructive applies.
+        // Otherwise, clear rooms on this level for rebuild (legacy behavior)
+        if (Array.isArray(__groupedRooms) && __groupedRooms.length) {
+          // Rebuild target level rooms from grouped set, attempting to reuse existing opening objects
+          // Collect previous openings for this level
+          var prevOpeningsKeep = [];
+          try {
+            allRooms.forEach(function(r){ if(r && (r.level||0)===targetLevel && Array.isArray(r.openings)) r.openings.forEach(function(op){ if(op) prevOpeningsKeep.push(op); }); });
+          } catch(_colOpenKeep) {}
+          // Remove rooms on target level and re-add grouped ones
+          allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
+          try {
+            for (var grk=0; grk<__groupedRooms.length; grk++){
+              var grpK = __groupedRooms[grk]; if(!grpK) continue;
+              var newOps = [];
+              try {
+                var gOps = Array.isArray(grpK.openings) ? grpK.openings.slice() : [];
+                for (var oiK=0; oiK<gOps.length; oiK++){
+                  var gwK = gOps[oiK]; if(!gwK) continue;
+                  var reusedK = null;
+                  var gxK = (typeof gwK.x0==='number' && typeof gwK.x1==='number') ? ((gwK.x0+gwK.x1)/2) : (gwK.x0||0);
+                  var gzK = (typeof gwK.z0==='number' && typeof gwK.z1==='number') ? ((gwK.z0+gwK.z1)/2) : (gwK.z0||0);
+                  for (var piK=0; piK<prevOpeningsKeep.length; piK++){
+                    var popK = prevOpeningsKeep[piK]; if(!popK) continue; if(popK.type !== gwK.type) continue;
+                    var pxK = (typeof popK.x0==='number' && typeof popK.x1==='number') ? ((popK.x0+popK.x1)/2) : (popK.x0||0);
+                    var pzK = (typeof popK.z0==='number' && typeof popK.z1==='number') ? ((popK.z0+popK.z1)/2) : (popK.z0||0);
+                    var dxK = pxK - gxK, dzK = pzK - gzK;
+                    // Prefer manually positioned openings with larger tolerance
+                    var tolK = popK.__manuallyPositioned ? 2.0 : 0.25;
+                    if ((dxK*dxK + dzK*dzK) <= tolK*tolK) { reusedK = prevOpeningsKeep.splice(piK,1)[0]; break; }
+                  }
+                  if (reusedK) {
+                    __reuseStats.reused++; __reuseStats[reusedK.type==='window'?'reusedWin':'reusedDoor']++;
+                    if (!reusedK.__manuallyPositioned) {
+                      try { reusedK.x0 = gwK.x0; reusedK.z0 = gwK.z0; reusedK.x1 = gwK.x1; reusedK.z1 = gwK.z1; reusedK.edge = gwK.edge || reusedK.edge; reusedK.sillM = ('sillM' in gwK) ? gwK.sillM : reusedK.sillM; reusedK.heightM = ('heightM' in gwK) ? gwK.heightM : reusedK.heightM; reusedK.meta = ('meta' in gwK) ? gwK.meta : reusedK.meta; } catch(_uK) {}
+                    }
+                    newOps.push(reusedK);
+                  } else {
+                    __reuseStats.new++; __reuseStats[gwK.type==='window'?'newWin':'newDoor']++;
+                    newOps.push(gwK);
+                  }
+                }
+              } catch(_reuseKErr) {}
+              grpK.openings = newOps;
+              allRooms.push(grpK);
+            }
+          } catch(_readdGrpK) {}
+        } else {
+          allRooms = allRooms.filter(function(r){ return (r.level||0)!==targetLevel; });
+        }
       }
       // Build strip representation for this level
   var sgn = (__ctx.ySign||1);
@@ -979,6 +1049,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       }
       for(var wi=0; wi<elemsSrc.length; wi++){
         var e = elemsSrc[wi]; if(!e || e.type!=='wall') continue;
+        // Avoid duplicating grouped room perimeters: skip walls explicitly marked as nonroom
+        if (e.wallRole === 'nonroom') continue;
         var subs = plan2dBuildWallSubsegments(elemsSrc, wi) || [];
         for(var si=0; si<subs.length; si++){
           var sg = subs[si];

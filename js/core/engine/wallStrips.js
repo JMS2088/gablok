@@ -234,9 +234,16 @@
             minZ=Math.min(minZ, prevB.minZ); maxZ=Math.max(maxZ, prevB.maxZ);
           }
           var purgeMinX=minX, purgeMaxX=maxX, purgeMinZ=minZ, purgeMaxZ=maxZ;
+          // Only purge perimeter strips that belong to the actively dragged room.
+          // Do NOT remove unrelated free walls or other rooms' strips.
           window.wallStrips=(window.wallStrips||[]).filter(function(ws){
-            if(!ws) return false; if((ws.level||0)!==levD) return true; // different level untouched
-            return !__segIntersectsBox(ws.x0||0, ws.z0||0, ws.x1||0, ws.z1||0, purgeMinX, purgeMinZ, purgeMaxX, purgeMaxZ);
+            try {
+              if(!ws) return false;
+              if((ws.level||0)!==levD) return true; // different level untouched
+              var belongsToDragged = (ws.roomId === theRoom.id);
+              if (!belongsToDragged) return true;
+              return !__segIntersectsBox(ws.x0||0, ws.z0||0, ws.x1||0, ws.z1||0, purgeMinX, purgeMinZ, purgeMaxX, purgeMaxZ);
+            } catch(_e){ return true; }
           });
           window.__lastDragBounds = { level: levD, minX: purgeMinX, maxX: purgeMaxX, minZ: purgeMinZ, maxZ: purgeMaxZ };
         }
