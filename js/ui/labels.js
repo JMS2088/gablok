@@ -43,9 +43,29 @@
       if(window.__cleanViewActive){
         window.__labelsHidden = true;
         body.classList.add('hide-labels');
+        // Also enable debug flags while in Clean View and remember previous states
+        try {
+          window.__prevDbgHandles = (window.__enableCornerHandles === true);
+          window.__prevDbgLogs = (window.__debugCornerCache === true);
+          window.__enableCornerHandles = true;
+          window.__debugCornerCache = true;
+          // Reflect in Debug dropdown checkboxes if present
+          try { var chkH = document.getElementById('chk-corner-handles'); if (chkH) chkH.checked = true; } catch(_eH) {}
+          try { var chkD = document.getElementById('chk-corner-debug'); if (chkD) chkD.checked = true; } catch(_eD) {}
+        } catch(_eDbgSet) {}
       } else {
         window.__labelsHidden = false;
         body.classList.remove('hide-labels');
+        // Restore previous debug flags when exiting Clean View
+        try {
+          var prevH = (window.__prevDbgHandles === true);
+          var prevD = (window.__prevDbgLogs === true);
+          window.__enableCornerHandles = !!prevH;
+          window.__debugCornerCache = !!prevD;
+          // Update checkboxes accordingly
+          try { var chkH2 = document.getElementById('chk-corner-handles'); if (chkH2) chkH2.checked = !!prevH; } catch(_eH2) {}
+          try { var chkD2 = document.getElementById('chk-corner-debug'); if (chkD2) chkD2.checked = !!prevD; } catch(_eD2) {}
+        } catch(_eDbgRestore) {}
       }
       // Redraw (skip labels if hidden)
       try { if(typeof renderLoop==='function') renderLoop(); }catch(_rLoop){}

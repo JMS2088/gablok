@@ -95,6 +95,22 @@
   }
   #levelDropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
 
+  /* Debug dropdown: white text on blue when hovering/open, matching other menus */
+  #debugDropdown .dropdown-button:hover {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 3px 12px rgba(0,122,204,0.35) !important;
+  }
+  #debugDropdown .dropdown-button:hover .caret svg path { stroke: #ffffff !important; }
+  #debugDropdown.open .dropdown-button {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 0 0 3px rgba(0,122,204,0.18) !important;
+  }
+  #debugDropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
+
   /* Roof type dropdown: white text on blue for rollover/open, and white text on hovered items */
   #roof-type-dropdown .dropdown-button:hover {
     color: #ffffff !important;

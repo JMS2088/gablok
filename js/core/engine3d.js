@@ -730,7 +730,7 @@
   if (typeof window.drawWallStrip === 'undefined') window.drawWallStrip = function(ws){
     try {
       if (!ws) return;
-      // Build (or reuse) a perimeter edge hash for fast suppression checks in line mode.
+      // Build (or reuse) a perimeter edge hash and corner caches once per frame.
       try {
         if (!window.__perimeterEdgeKeyHash) window.__perimeterEdgeKeyHash = null;
         // Recompute once per frame when rendering first strip (detected by sentinel flag reset in render loop)
@@ -761,6 +761,48 @@
             for (var ge=0; ge<gEdges.length; ge++){ var GA=gEdges[ge], GB=gEdges[(ge+1)%gEdges.length]; addEdge(lvlG,GA,GB); }
           }
           window.__perimeterEdgeKeyHash = hash;
+        }
+        // Corner caches: endpoint neighbor map and T-junction spatial grid
+        if (window.__rebuildCornerCachesOnce) {
+          window.__rebuildCornerCachesOnce = false;
+          // Endpoint neighbor map
+          var epMap = Object.create(null);
+          function ek(lvl,x,z){ return (lvl||0)+'|'+Math.round((+x||0)*100)+'|'+Math.round((+z||0)*100); }
+          var arrAll = window.wallStrips || [];
+          for (var ci=0; ci<arrAll.length; ci++){
+            var s = arrAll[ci]; if (!s) continue; var lvl=(s.level||0);
+            var k0 = ek(lvl,s.x0||0,s.z0||0), k1 = ek(lvl,s.x1||0,s.z1||0);
+            // direction outward from the corner along the strip
+            var L = Math.hypot((s.x1||0)-(s.x0||0),(s.z1||0)-(s.z0||0)); if (L<1e-6) continue;
+            var dir01 = { x: ((s.x1||0)-(s.x0||0))/L, z: ((s.z1||0)-(s.z0||0))/L };
+            var dir10 = { x: -dir01.x, z: -dir01.z };
+            if (!epMap[k0]) epMap[k0] = [];
+            if (!epMap[k1]) epMap[k1] = [];
+            epMap[k0].push({ s:s, dir: dir01 });
+            epMap[k1].push({ s:s, dir: dir10 });
+          }
+          window.__endpointNeighborMap = epMap;
+
+          // Spatial grid for T-junction candidate selection
+          var cellSize = 1.0; // meters
+          var grid = Object.create(null);
+          function ckey(ix,iz,lvl){ return lvl+'|'+ix+'|'+iz; }
+          function addToGrid(s){
+            var lvl=(s.level||0);
+            var minX=Math.min(s.x0||0,s.x1||0), maxX=Math.max(s.x0||0,s.x1||0);
+            var minZ=Math.min(s.z0||0,s.z1||0), maxZ=Math.max(s.z0||0,s.z1||0);
+            // small padding to catch near edges
+            minX-=0.05; minZ-=0.05; maxX+=0.05; maxZ+=0.05;
+            var ix0=Math.floor(minX/cellSize), ix1=Math.floor(maxX/cellSize);
+            var iz0=Math.floor(minZ/cellSize), iz1=Math.floor(maxZ/cellSize);
+            for (var ix=ix0; ix<=ix1; ix++){
+              for (var iz=iz0; iz<=iz1; iz++){
+                var k=ckey(ix,iz,lvl); if(!grid[k]) grid[k]=[]; grid[k].push(s);
+              }
+            }
+          }
+          for (var gi=0; gi<arrAll.length; gi++){ var sg = arrAll[gi]; if(!sg) continue; addToGrid(sg); }
+          window.__segmentGrid = { grid:grid, cellSize:cellSize };
         }
       } catch(_eEdgeHash) {}
       // While a room is actively dragged, skip drawing its pre-existing perimeter strips to avoid
@@ -852,8 +894,8 @@
           ctx.beginPath();
           // Top rectangle
           seg(pAt, pBt); seg(pBt, pCt); seg(pCt, pDt); seg(pDt, pAt);
-          // Bottom rectangle (floor edges)
-          seg(pA, pB); seg(pD, pC);
+          // Bottom rectangle (floor edges) — draw all 4 edges so corners visually join
+          seg(pA, pB); seg(pB, pC); seg(pC, pD); seg(pD, pA);
           // Vertical edges at endpoints (show height)
           seg(pA, pAt); seg(pB, pBt); seg(pC, pCt); seg(pD, pDt);
           ctx.stroke();
@@ -915,38 +957,33 @@
       var tx = dx/len, tz = dz/len; var tvec = {x:tx, z:tz};
       // Neighbor strips + directions that share this endpoint (for L-corners)
       function getNeighborAt(wx, wz){
-        var infos = [];
         try {
-          var arr = window.wallStrips || [];
-          for (var ii=0; ii<arr.length; ii++){
-            var s = arr[ii]; if(!s || s===ws) continue;
-            // Only consider neighbors on the same level to avoid cross-floor interference
-            if ((s.level||0) !== (ws.level||0)) continue;
-            var isStart = (Math.hypot((s.x0||0)-wx, (s.z0||0)-wz) < 1e-3);
-            var isEnd   = (Math.hypot((s.x1||0)-wx, (s.z1||0)-wz) < 1e-3);
-            if (!isStart && !isEnd) continue;
-            var ox = isStart ? (s.x1||0) : (s.x0||0);
-            var oz = isStart ? (s.z1||0) : (s.z0||0);
-            var vx = ox - wx, vz = oz - wz; var L = Math.hypot(vx,vz);
-            if (L > 1e-6){ infos.push({ s:s, dir:{x:vx/L, z:vz/L} }); }
+          // Use precomputed endpoint neighbor map if available
+          var epMap = window.__endpointNeighborMap || null;
+          var key = (ws.level||0)+'|'+Math.round((+wx||0)*100)+'|'+Math.round((+wz||0)*100);
+          var infos = (epMap && epMap[key]) ? epMap[key].filter(function(e){ return e && e.s !== ws; }) : null;
+          if (!infos || !infos.length) {
+            return null;
           }
-        } catch(_eNd) {}
-        if (!infos.length) return null;
-        // choose neighbor with largest angle to this segment to avoid colinear
-        var best = null, bestAng = -1;
-        for (var i=0; i<infos.length; i++){
-          var ang = angleBetween(tvec, infos[i].dir);
-          if (ang > bestAng){ bestAng = ang; best = infos[i]; }
-        }
-        if (!best) return null;
-        // Snap to perfect orthogonal if near 90° to improve 45° geometry
-        if (Math.abs(bestAng - (Math.PI/2)) < 0.10) {
-          var ortho1 = { x: -tvec.z, z: tvec.x };
-          var ortho2 = { x: tvec.z,  z: -tvec.x };
-          function _dot(a,b){ return a.x*b.x + a.z*b.z; }
-          best.dir = (_dot(best.dir, ortho1) > _dot(best.dir, ortho2)) ? _normalize2(ortho1.x, ortho1.z) : _normalize2(ortho2.x, ortho2.z);
-        }
-        return best;
+          // Prefer true L-corners: pick neighbor whose direction is closest to 90° from this strip,
+          // and explicitly ignore near-colinear cases (0° or 180°) to avoid wrong selections.
+          var best = null, bestAng = null, bestDelta = Infinity;
+          for (var i=0; i<infos.length; i++){
+            var ang = angleBetween(tvec, infos[i].dir); // [0, pi]
+            if (ang < 0.15 || ang > (Math.PI - 0.15)) continue; // ignore near-colinear
+            var delta = Math.abs(ang - (Math.PI/2));
+            if (delta < bestDelta){ bestDelta = delta; bestAng = ang; best = infos[i]; }
+          }
+          if (!best) return null;
+          // Snap to perfect orthogonal if near 90° to improve 45° geometry
+          if (Math.abs(bestAng - (Math.PI/2)) < 0.10) {
+            var ortho1 = { x: -tvec.z, z: tvec.x };
+            var ortho2 = { x:  tvec.z, z: -tvec.x };
+            function _dot(a,b){ return a.x*b.x + a.z*b.z; }
+            best.dir = (_dot(best.dir, ortho1) > _dot(best.dir, ortho2)) ? _normalize2(ortho1.x, ortho1.z) : _normalize2(ortho2.x, ortho2.z);
+          }
+          return best;
+        } catch(_eNd2) { return null; }
       }
       // Small vector helpers
       function _norm2(x,z){ return Math.hypot(x,z)||0; }
@@ -983,24 +1020,37 @@
       }
       // Find a T-junction target strip for endpoint (px,pz): close to mid-segment of another strip
       function findTJunction(px,pz){
-        var arr = window.wallStrips || []; var best=null; var bestD=1e9;
-        for (var ii=0; ii<arr.length; ii++){
-          var s = arr[ii]; if(!s || s===ws) continue;
-          // Same-level only to prevent other floors from affecting T-trim
-          if ((s.level||0) !== (ws.level||0)) continue;
-          var sx0=s.x0||0, sz0=s.z0||0, sx1=s.x1||0, sz1=s.z1||0;
-          var info = pointSegInfo(px,pz, sx0,sz0, sx1,sz1);
-          if (!info) continue;
-          // Skip if our projected contact point is too close to neighbor endpoints -> this is an L-corner, not a T
-          var endDistA = Math.hypot(info.qx - sx0, info.qz - sz0);
-          var endDistB = Math.hypot(info.qx - sx1, info.qz - sz1);
-          if (Math.min(endDistA, endDistB) < 0.06) continue; // 6cm from endpoints => treat as corner
-          // Only accept points well inside the segment and within a tight distance tolerance
-          if (info.u > 0.02 && info.u < 0.98){ // strictly inside segment
-            if (info.d < bestD && info.d < 0.03){ best={ s:s, info:info }; bestD=info.d; }
+        try {
+          var gridRef = window.__segmentGrid || null; if (!gridRef) return null;
+          var cellSize = gridRef.cellSize || 1.0;
+          var ix = Math.floor((+px||0)/cellSize), iz = Math.floor((+pz||0)/cellSize);
+          var lvl = (ws.level||0);
+          function gkey(ix,iz){ return lvl+'|'+ix+'|'+iz; }
+          var candidates = [];
+          for (var dxg=-1; dxg<=1; dxg++){
+            for (var dzg=-1; dzg<=1; dzg++){
+              var k = gkey(ix+dxg, iz+dzg);
+              var bucket = gridRef.grid[k]; if (!bucket || !bucket.length) continue;
+              for (var bi=0; bi<bucket.length; bi++){
+                var s = bucket[bi]; if (!s || s===ws) continue; if ((s.level||0)!==lvl) continue;
+                candidates.push(s);
+              }
+            }
           }
-        }
-        return best;
+          if (!candidates.length) return null;
+          var best=null, bestD=1e9;
+          for (var i=0; i<candidates.length; i++){
+            var s=candidates[i]; var sx0=s.x0||0, sz0=s.z0||0, sx1=s.x1||0, sz1=s.z1||0;
+            var info = pointSegInfo(px,pz, sx0,sz0, sx1,sz1); if (!info) continue;
+            var endDistA = Math.hypot(info.qx - sx0, info.qz - sz0);
+            var endDistB = Math.hypot(info.qx - sx1, info.qz - sz1);
+            if (Math.min(endDistA, endDistB) < 0.06) continue;
+            if (info.u > 0.02 && info.u < 0.98){
+              if (info.d < bestD && info.d < 0.03){ best={ s:s, info:info }; bestD=info.d; }
+            }
+          }
+          return best;
+        } catch(_eTJ){ return null; }
       }
 
   // --- T-junction handling (butt join) ---  [Corner Config 007]
@@ -1021,6 +1071,12 @@
         var iR = intersectLines(pR0, tvec, qFace, ts);
         if (iL){ A.x = iL.x; A.z = iL.z; }
         if (iR){ D.x = iR.x; D.z = iR.z; }
+        // Extend this endpoint backward by half neighbor thickness so the cap is flush with neighbor's exterior face
+        try {
+          var ext = Math.max(0.01, (s.thickness||0.3) * 0.5);
+          A.x -= tvec.x * ext; A.z -= tvec.z * ext;
+          D.x -= tvec.x * ext; D.z -= tvec.z * ext;
+        } catch(_eExt0) {}
       }
       function applyTTrimAtEnd(t){
         var s = t.s; var inf = t.info; var svx = s.x1 - s.x0, svz = s.z1 - s.z0; var sl = Math.hypot(svx,svz)||1;
@@ -1032,6 +1088,12 @@
         var iR = intersectLines(pR1, {x:-tvec.x, z:-tvec.z}, qFace, ts);
         if (iL){ B.x = iL.x; B.z = iL.z; }
         if (iR){ C.x = iR.x; C.z = iR.z; }
+        // Extend this endpoint forward by half neighbor thickness for a flush cap
+        try {
+          var ext = Math.max(0.01, (s.thickness||0.3) * 0.5);
+          B.x += tvec.x * ext; B.z += tvec.z * ext;
+          C.x += tvec.x * ext; C.z += tvec.z * ext;
+        } catch(_eExt1) {}
       }
       var startIsT = false, endIsT = false;
       if (startT){ applyTTrimAtStart(startT); startIsT = true; }
@@ -1087,7 +1149,7 @@
         var __intKeyStart = (ws.level||0) + '|' + Math.round(x0*100) + '|' + Math.round(z0*100) + '|int';
         if (window.__intCornerSnap && window.__intCornerSnap[__intKeyStart]) {
           cachedIntStart = window.__intCornerSnap[__intKeyStart];
-          console.log('START CACHE HIT:', __intKeyStart, cachedIntStart);
+          if (window.__debugCornerCache) console.log('START CACHE HIT:', __intKeyStart, cachedIntStart);
         }
       } catch(_e) {}
       
@@ -1097,11 +1159,11 @@
         var __intKeyEnd = (ws.level||0) + '|' + Math.round(x1*100) + '|' + Math.round(z1*100) + '|int';
         if (window.__intCornerSnap && window.__intCornerSnap[__intKeyEnd]) {
           cachedIntEnd = window.__intCornerSnap[__intKeyEnd];
-          console.log('END CACHE HIT:', __intKeyEnd, cachedIntEnd);
+          if (window.__debugCornerCache) console.log('END CACHE HIT:', __intKeyEnd, cachedIntEnd);
         }
       } catch(_e) {}
       
-      // 007-start: local diagonal (t + n) — with asymmetric option for inner corners
+      // 007-start: local diagonal (t + n) — compute both interior and exterior intersections when neighbor exists
       if (!startIsT){
         var corner0 = { x:x0, z:z0 };
         var dxs = tvec.x + nx, dzs = tvec.z + nz; var dl = Math.hypot(dxs, dzs);
@@ -1139,87 +1201,59 @@
               if (iInt0) {
                 var __intKey0w = (ws.level||0) + '|' + Math.round(corner0.x*100) + '|' + Math.round(corner0.z*100) + '|int';
                 window.__intCornerSnap[__intKey0w] = { x: iInt0.x, z: iInt0.z };
-                console.log('START CACHE WRITE:', __intKey0w, iInt0, 'thisIntLeft=', thisIntLeft);
+                if (window.__debugCornerCache) console.log('START CACHE WRITE:', __intKey0w, iInt0, 'thisIntLeft=', thisIntLeft);
               }
             } catch(_eIntSnap0Wr) {}
           }
+
+          // Compute exterior corner intersection when neighbor exists (always), independent of convex classification
+          var iExt0 = null;
+          try {
+            if (nb0 && nb0.s){
+              var tsx = nb0.dir.x, tsz = nb0.dir.z; var nsx = -tsz, nsz = tsx;
+              var hwN2 = Math.max(0.02, (nb0.s.thickness||0.3)/2);
+              var intLeftN2 = (typeof nb0.s.__interiorLeft==='boolean') ? nb0.s.__interiorLeft : ((typeof nb0.s.__outerFaceLeft==='boolean') ? (!nb0.s.__outerFaceLeft) : null);
+              var exSignN = (intLeftN2===true) ? -1 : 1; // exterior is right if neighbor interiorLeft
+              var qOut0 = { x: corner0.x + nsx*exSignN*hwN2, z: corner0.z + nsz*exSignN*hwN2 };
+              var pOut0 = interiorLeftGlobal ? pR0s : pL0s; // our exterior at start
+              var dOut0 = tvec; var eOut0 = { x: tsx, z: tsz };
+              iExt0 = intersectLines(pOut0, dOut0, qOut0, eOut0);
+            }
+          } catch(_eX0All) { iExt0 = null; }
           
-          // Apply interior corner intersection if computed
-          if (iInt0){
-            var thisIntLeft = (typeof ws.__interiorLeft==='boolean') ? ws.__interiorLeft : ((typeof ws.__outerFaceLeft==='boolean') ? (!ws.__outerFaceLeft) : null);
-            if (thisIntLeft === true){
-              // Interior on left: set A to intersection, extend D by same amount
-              A.x = iInt0.x; A.z = iInt0.z;
-              var extendX = iInt0.x - pL0s.x;
-              var extendZ = iInt0.z - pL0s.z;
-              D.x = pR0s.x + extendX; D.z = pR0s.z + extendZ;
-            } else if (thisIntLeft === false){
-              // Interior on right: set D to intersection, extend A by same amount
-              D.x = iInt0.x; D.z = iInt0.z;
-              var extendX = iInt0.x - pR0s.x;
-              var extendZ = iInt0.z - pR0s.z;
-              A.x = pL0s.x + extendX; A.z = pL0s.z + extendZ;
-            } else {
-              // No interior side defined, use regular miter
-              if (iL0){ A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
-              if (iR0){ D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
-            }
-          } else if (isRoomPerimeter && interiorLeftGlobal != null && startConcave){
-            // Fallback to old logic only if no neighbor found
-            if (interiorLeftGlobal){
-              if (iL0){ A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
-              if (iR0){ D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
-            } else {
-              if (iR0){ D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
-              if (iL0){ A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
-            }
-          } else if (isRoomPerimeter && interiorLeftGlobal != null && startConvex){
-            // Exterior (convex) corner: make outer faces meet exactly by intersecting outer offset lines of this and neighbor
-            var nb0 = getNeighborAt(x0, z0);
-            var iExt0 = null;
-            // Use or populate a shared snap for this corner to guarantee both walls use the same point
+          // If the neighbor forms a true 90° L-corner, force a square (butt) corner instead of a 45° miter
+          var forceSquare0 = false;
+          try { if (nb0 && nb0.dir){ var ang0 = angleBetween(tvec, nb0.dir); if (Math.abs(ang0 - (Math.PI/2)) < 0.12) forceSquare0 = true; } } catch(_eAng0) {}
+          if (forceSquare0) {
+            // Square join: keep endpoints exactly at their offset corner without diagonal trimming
+            A.x = pL0s.x; A.z = pL0s.z;
+            D.x = pR0s.x; D.z = pR0s.z;
+            // Extend backward by half of neighbor thickness so cap is flush with neighbor's exterior face
             try {
-              var __key0 = (ws.level||0) + '|' + Math.round(corner0.x*100) + '|' + Math.round(corner0.z*100) + '|ext';
-              if (window.__extCornerSnap && window.__extCornerSnap[__key0]) {
-                iExt0 = window.__extCornerSnap[__key0];
-              }
-            } catch(_eSnap0Rd) {}
-            try {
-              if (!iExt0 && nb0 && nb0.s){
-                var tsx = nb0.dir.x, tsz = nb0.dir.z; var nsx = -tsz, nsz = tsx;
-                var hwN = Math.max(0.02, (nb0.s.thickness||0.3)/2);
-                var intLeftN = (typeof nb0.s.__interiorLeft==='boolean') ? nb0.s.__interiorLeft : ((typeof nb0.s.__outerFaceLeft==='boolean') ? (!nb0.s.__outerFaceLeft) : null);
-                var exSignN = (intLeftN===true) ? -1 : 1; // exterior is right if interiorLeft
-                var qOut0 = { x: corner0.x + nsx*exSignN*hwN, z: corner0.z + nsz*exSignN*hwN };
-                var pOut0 = interiorLeftGlobal ? pR0s : pL0s; // our exterior at start
-                var dOut0 = tvec; var eOut0 = { x: tsx, z: tsz };
-                iExt0 = intersectLines(pOut0, dOut0, qOut0, eOut0);
-              }
-            } catch(_eX0) { iExt0 = null; }
-            // Persist the snapped point for neighbors (quantize to cm to stabilize)
-            try {
-              if (iExt0) {
-                var __key0w = (ws.level||0) + '|' + Math.round(corner0.x*100) + '|' + Math.round(corner0.z*100) + '|ext';
-                window.__extCornerSnap[__key0w] = { x: iExt0.x, z: iExt0.z };
-              }
-            } catch(_eSnap0Wr) {}
-            if (interiorLeftGlobal){
-              // exterior is right: set D to exterior intersection or fallback; miter A (interior)
-              if (iExt0){ D.x = iExt0.x; D.z = iExt0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
-              if (iL0){ A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
-            } else {
-              // exterior is left: set A to exterior intersection or fallback; miter D (interior)
-              if (iExt0){ A.x = iExt0.x; A.z = iExt0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
-              if (iR0){ D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
-            }
+              var extSq0 = (nb0 && nb0.s && nb0.s.thickness ? nb0.s.thickness : (ws.thickness||0.3)) * 0.5;
+              A.x -= tvec.x * extSq0; A.z -= tvec.z * extSq0;
+              D.x -= tvec.x * extSq0; D.z -= tvec.z * extSq0;
+            } catch(_eSq0) {}
           } else {
-            // Default symmetric 45° miter
-            if (iL0){ A.x = iL0.x; A.z = iL0.z; }
-            if (iR0){ D.x = iR0.x; D.z = iR0.z; }
+            // Apply snapped intersections prioritizing seamless joins on both faces
+            var thisIntLeft2 = (typeof ws.__interiorLeft==='boolean') ? ws.__interiorLeft : ((typeof ws.__outerFaceLeft==='boolean') ? (!ws.__outerFaceLeft) : null);
+            if (thisIntLeft2 === true){
+              // A is interior, D is exterior
+              if (iInt0) { A.x = iInt0.x; A.z = iInt0.z; } else if (iL0) { A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
+              if (iExt0) { D.x = iExt0.x; D.z = iExt0.z; } else if (iR0) { D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
+            } else if (thisIntLeft2 === false){
+              // D is interior, A is exterior
+              if (iInt0) { D.x = iInt0.x; D.z = iInt0.z; } else if (iR0) { D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
+              if (iExt0) { A.x = iExt0.x; A.z = iExt0.z; } else if (iL0) { A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
+            } else {
+              // Unknown interior side: keep symmetric miter
+              if (iL0){ A.x = iL0.x; A.z = iL0.z; }
+              if (iR0){ D.x = iR0.x; D.z = iR0.z; }
+            }
           }
         }
       }
-      // 007-end: local diagonal (t − n) — with asymmetric option for inner corners
+      // 007-end: local diagonal (t − n) — compute both interior and exterior intersections when neighbor exists
       if (!endIsT){
         var corner1 = { x:x1, z:z1 };
         var dxse = tvec.x - nx, dzse = tvec.z - nz; var dle = Math.hypot(dxse, dzse);
@@ -1258,83 +1292,53 @@
               if (iInt1) {
                 var __intKey1w = (ws.level||0) + '|' + Math.round(corner1.x*100) + '|' + Math.round(corner1.z*100) + '|int';
                 window.__intCornerSnap[__intKey1w] = { x: iInt1.x, z: iInt1.z };
-                console.log('END CACHE WRITE:', __intKey1w, iInt1, 'thisIntLeft=', thisIntLeft);
+                if (window.__debugCornerCache) console.log('END CACHE WRITE:', __intKey1w, iInt1, 'thisIntLeft=', thisIntLeft);
               }
             } catch(_eIntSnap1Wr) {}
           }
+
+          // Compute exterior intersection at end when neighbor exists
+          var iExt1 = null;
+          try {
+            if (nb1 && nb1.s){
+              var tsx = nb1.dir.x, tsz = nb1.dir.z; var nsx = -tsz, nsz = tsx;
+              var hwN2 = Math.max(0.02, (nb1.s.thickness||0.3)/2);
+              var intLeftN2 = (typeof nb1.s.__interiorLeft==='boolean') ? nb1.s.__interiorLeft : ((typeof nb1.s.__outerFaceLeft==='boolean') ? (!nb1.s.__outerFaceLeft) : null);
+              var exSignN = (intLeftN2===true) ? -1 : 1;
+              var qOut1 = { x: corner1.x + nsx*exSignN*hwN2, z: corner1.z + nsz*exSignN*hwN2 };
+              var pOut1 = interiorLeftGlobal ? pR1s : pL1s; // our exterior at end
+              var dOut1 = { x: -tvec.x, z: -tvec.z }; var eOut1 = { x: tsx, z: tsz };
+              iExt1 = intersectLines(pOut1, dOut1, qOut1, eOut1);
+            }
+          } catch(_eX1All) { iExt1 = null; }
           
-          // Apply interior corner intersection if computed
-          if (iInt1){
-            var thisIntLeft = (typeof ws.__interiorLeft==='boolean') ? ws.__interiorLeft : ((typeof ws.__outerFaceLeft==='boolean') ? (!ws.__outerFaceLeft) : null);
-            if (thisIntLeft === true){
-              // Interior on left: set B to intersection, extend C by same amount
-              B.x = iInt1.x; B.z = iInt1.z;
-              var extendX = iInt1.x - pL1s.x;
-              var extendZ = iInt1.z - pL1s.z;
-              C.x = pR1s.x + extendX; C.z = pR1s.z + extendZ;
-            } else if (thisIntLeft === false){
-              // Interior on right: set C to intersection, extend B by same amount
-              C.x = iInt1.x; C.z = iInt1.z;
-              var extendX = iInt1.x - pR1s.x;
-              var extendZ = iInt1.z - pR1s.z;
-              B.x = pL1s.x + extendX; B.z = pL1s.z + extendZ;
-            } else {
-              // No interior side defined, use regular miter
-              if (iL1){ B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
-              if (iR1){ C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
-            }
-          } else if (isRoomPerimeter && interiorLeftGlobal != null && endConcave){
-            // Fallback to old logic only if no neighbor found
-            if (interiorLeftGlobal){
-              if (iL1){ B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
-              if (iR1){ C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
-            } else {
-              if (iR1){ C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
-              if (iL1){ B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
-            }
-          } else if (isRoomPerimeter && interiorLeftGlobal != null && endConvex){
-            // Exterior (convex) corner: intersect outer offset lines to make outer faces meet
-            var nb1 = getNeighborAt(x1, z1);
-            var iExt1 = null;
-            // Shared snap read
+          // Force square (butt) corner at true 90°
+          var forceSquare1 = false;
+          try { if (nb1 && nb1.dir){ var ang1 = angleBetween(tvec, nb1.dir); if (Math.abs(ang1 - (Math.PI/2)) < 0.12) forceSquare1 = true; } } catch(_eAng1) {}
+          if (forceSquare1) {
+            B.x = pL1s.x; B.z = pL1s.z;
+            C.x = pR1s.x; C.z = pR1s.z;
+            // Extend forward by half of neighbor thickness for flush cap
             try {
-              var __key1 = (ws.level||0) + '|' + Math.round(corner1.x*100) + '|' + Math.round(corner1.z*100) + '|ext';
-              if (window.__extCornerSnap && window.__extCornerSnap[__key1]) {
-                iExt1 = window.__extCornerSnap[__key1];
-              }
-            } catch(_eSnap1Rd) {}
-            try {
-              if (!iExt1 && nb1 && nb1.s){
-                var tsx = nb1.dir.x, tsz = nb1.dir.z; var nsx = -tsz, nsz = tsx;
-                var hwN = Math.max(0.02, (nb1.s.thickness||0.3)/2);
-                var intLeftN = (typeof nb1.s.__interiorLeft==='boolean') ? nb1.s.__interiorLeft : ((typeof nb1.s.__outerFaceLeft==='boolean') ? (!nb1.s.__outerFaceLeft) : null);
-                var exSignN = (intLeftN===true) ? -1 : 1;
-                var qOut1 = { x: corner1.x + nsx*exSignN*hwN, z: corner1.z + nsz*exSignN*hwN };
-                var pOut1 = interiorLeftGlobal ? pR1s : pL1s; // our exterior at end
-                var dOut1 = { x: -tvec.x, z: -tvec.z }; var eOut1 = { x: tsx, z: tsz };
-                iExt1 = intersectLines(pOut1, dOut1, qOut1, eOut1);
-              }
-            } catch(_eX1) { iExt1 = null; }
-            // Persist snap
-            try {
-              if (iExt1) {
-                var __key1w = (ws.level||0) + '|' + Math.round(corner1.x*100) + '|' + Math.round(corner1.z*100) + '|ext';
-                window.__extCornerSnap[__key1w] = { x: iExt1.x, z: iExt1.z };
-              }
-            } catch(_eSnap1Wr) {}
-            if (interiorLeftGlobal){
-              // exterior is right: set C to exterior intersection; miter B
-              if (iExt1){ C.x = iExt1.x; C.z = iExt1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
-              if (iL1){ B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
-            } else {
-              // exterior is left: set B to exterior intersection; miter C
-              if (iExt1){ B.x = iExt1.x; B.z = iExt1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
-              if (iR1){ C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
-            }
+              var extSq1 = (nb1 && nb1.s && nb1.s.thickness ? nb1.s.thickness : (ws.thickness||0.3)) * 0.5;
+              B.x += tvec.x * extSq1; B.z += tvec.z * extSq1;
+              C.x += tvec.x * extSq1; C.z += tvec.z * extSq1;
+            } catch(_eSq1) {}
           } else {
-            // Default symmetric 45° miter
-            if (iL1){ B.x = iL1.x; B.z = iL1.z; }
-            if (iR1){ C.x = iR1.x; C.z = iR1.z; }
+            // Apply snapped intersections on both faces
+            var thisIntLeftE = (typeof ws.__interiorLeft==='boolean') ? ws.__interiorLeft : ((typeof ws.__outerFaceLeft==='boolean') ? (!ws.__outerFaceLeft) : null);
+            if (thisIntLeftE === true){
+              // B is interior, C is exterior
+              if (iInt1) { B.x = iInt1.x; B.z = iInt1.z; } else if (iL1) { B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
+              if (iExt1) { C.x = iExt1.x; C.z = iExt1.z; } else if (iR1) { C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
+            } else if (thisIntLeftE === false){
+              // C is interior, B is exterior
+              if (iInt1) { C.x = iInt1.x; C.z = iInt1.z; } else if (iR1) { C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
+              if (iExt1) { B.x = iExt1.x; B.z = iExt1.z; } else if (iL1) { B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
+            } else {
+              if (iL1){ B.x = iL1.x; B.z = iL1.z; }
+              if (iR1){ C.x = iR1.x; C.z = iR1.z; }
+            }
           }
         }
       }
@@ -1416,6 +1420,7 @@
       var canLeft = (pA&&pB&&pBt&&pAt);
       var canRight = (pD&&pC&&pCt&&pDt);
       var canTop = (pAt&&pBt&&pCt&&pDt);
+      var canBottom = (pA&&pB&&pC&&pD);
       var drewFace = false;
       // Compute simple Lambert-like shading from camera forward to face normal to follow perspective
       function __shade(dot){
@@ -1440,6 +1445,19 @@
     ctx.strokeStyle = onLevel ? 'rgba(71,85,105,0.22)' : 'rgba(148,163,184,0.18)';
     ctx.lineWidth = 1.0;
     ctx.beginPath(); ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); ctx.closePath(); ctx.stroke();
+    ctx.restore();
+    drewFace = true;
+  }
+  // Bottom face fill (when valid) to ensure closed prism (cube)
+  if (canBottom) {
+    ctx.beginPath(); ctx.moveTo(pA.x,pA.y); ctx.lineTo(pB.x,pB.y); ctx.lineTo(pC.x,pC.y); ctx.lineTo(pD.x,pD.y); ctx.closePath();
+    ctx.fillStyle = onLevel ? 'rgba(71,85,105,0.12)' : 'rgba(148,163,184,0.1)';
+    ctx.fill();
+    // Light stroke to seal rounding seams on floor
+    ctx.save();
+    ctx.strokeStyle = onLevel ? 'rgba(71,85,105,0.18)' : 'rgba(148,163,184,0.14)';
+    ctx.lineWidth = 1.0;
+    ctx.beginPath(); ctx.moveTo(pA.x,pA.y); ctx.lineTo(pB.x,pB.y); ctx.lineTo(pC.x,pC.y); ctx.lineTo(pD.x,pD.y); ctx.closePath(); ctx.stroke();
     ctx.restore();
     drewFace = true;
   }
@@ -1544,7 +1562,7 @@
   if (pD && pDt) { ctx.moveTo(pD.x,pD.y); ctx.lineTo(pDt.x,pDt.y); }
   ctx.stroke();
       
-      // Store corner positions for draggable handles
+      // Store corner positions for draggable handles (only if enabled)
       if (!window.__cornerHandles) window.__cornerHandles = [];
       
       // Function to draw draggable handle (all corners draggable)
@@ -1585,19 +1603,20 @@
         });
       }
       
-      // All 8 corners are draggable with unique numbers
-      // Bottom corners: 1=A, 2=B, 3=C, 4=D
-      drawDraggableHandle(pA, 1, '1', A, ws, 'A');
-      drawDraggableHandle(pB, 2, '2', B, ws, 'B');
-      drawDraggableHandle(pC, 3, '3', C, ws, 'C');
-      drawDraggableHandle(pD, 4, '4', D, ws, 'D');
-      
-      // Top corners: 5=At, 6=Bt, 7=Ct, 8=Dt
-      drawDraggableHandle(pAt, 5, '5', At, ws, 'At');
-      drawDraggableHandle(pBt, 6, '6', Bt, ws, 'Bt');
-      drawDraggableHandle(pCt, 7, '7', Ct, ws, 'Ct');
-      drawDraggableHandle(pDt, 8, '8', Dt, ws, 'Dt');
-      drawCornerLabel(pCt, 7, '7');
+      // Gate drawing of handles behind a flag to avoid per-frame overhead unless needed
+      var __drawHandles = (window.__enableCornerHandles === true);
+      if (__drawHandles) {
+        // Bottom corners: 1=A, 2=B, 3=C, 4=D
+        drawDraggableHandle(pA, 1, '1', A, ws, 'A');
+        drawDraggableHandle(pB, 2, '2', B, ws, 'B');
+        drawDraggableHandle(pC, 3, '3', C, ws, 'C');
+        drawDraggableHandle(pD, 4, '4', D, ws, 'D');
+        // Top corners: 5=At, 6=Bt, 7=Ct, 8=Dt
+        drawDraggableHandle(pAt, 5, '5', At, ws, 'At');
+        drawDraggableHandle(pBt, 6, '6', Bt, ws, 'Bt');
+        drawDraggableHandle(pCt, 7, '7', Ct, ws, 'Ct');
+        drawDraggableHandle(pDt, 8, '8', Dt, ws, 'Dt');
+      }
       drawCornerLabel(pDt, 8, '8');
       // Draw translucent blue glass for windows on all three planes: center, left face, right face
       var glassFill = 'rgba(56,189,248,0.25)';
@@ -2092,8 +2111,9 @@
         }
         // Draw interior wall strips (extruded 2D walls)
         try {
-          // Mark that perimeter edge map should be rebuilt once before drawing strips in this frame
+          // Mark that perimeter edge map and corner caches should be rebuilt once before drawing strips in this frame
           window.__rebuildPerimeterEdgeHashOnce = true;
+          window.__rebuildCornerCachesOnce = true;
           if (window.__showCornerCodes && typeof window.computeCornerCodes==='function') { window.computeCornerCodes(); }
           // Ensure exterior miter snaps are ready before the very first draw in this frame
           try { if (typeof window.computeExteriorCornerSnaps==='function') window.computeExteriorCornerSnaps(); } catch(_eSnapPre) {}

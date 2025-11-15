@@ -21,6 +21,29 @@
 	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor">Floor Plan</button>
 	<button id="btn-render-walls" class="secondary" title="Toggle wall render mode">Render: Lines</button>
 	<button id="btn-clean-view" class="secondary" title="Toggle clean view (hide UI)" onclick="toggleCleanView()">Clean View</button>
+	<!-- Debug Dropdown: quick toggles for corner handles and debug logs -->
+	<div id="debugDropdown" class="dropdown" aria-label="Debug Menu">
+		<button id="debugButton" class="dropdown-button" type="button">
+			<span>Debug</span>
+			<span class="caret">
+				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+		</button>
+		<div id="debugList" class="dropdown-list" role="menu">
+			<div class="dropdown-item">
+				<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+					<input type="checkbox" id="chk-corner-handles" />
+					<span>Corner Handles</span>
+				</label>
+			</div>
+			<div class="dropdown-item">
+				<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+					<input type="checkbox" id="chk-corner-debug" />
+					<span>Corner Debug Logs</span>
+				</label>
+			</div>
+		</div>
+	</div>
 	<!-- Custom Level Dropdown (replaces native select) -->
 	<div id="levelDropdown" class="dropdown" aria-label="Level Menu">
 		<button id="levelButton" class="dropdown-button" type="button">
@@ -495,6 +518,60 @@
 <script src="js/smoke/smoke2d.js?v=20251101-1"></script>
 <!-- Optional 3D smoke (e.g., ?test3d=kitchen) -->
 <script src="js/smoke/smoke3d.js?v=20251105-1"></script>
+
+<script>
+// Debug dropdown: manage open state and wire toggles to global flags
+document.addEventListener('DOMContentLoaded', () => {
+	try {
+		const btn = document.getElementById('debugButton');
+		const list = document.getElementById('debugList');
+		const chkHandles = document.getElementById('chk-corner-handles');
+		const chkDebug = document.getElementById('chk-corner-debug');
+		const dropdown = document.getElementById('debugDropdown');
+
+		function setOpen(open){
+			if (!dropdown) return;
+			if (open) dropdown.classList.add('open'); else dropdown.classList.remove('open');
+		}
+		if (btn) {
+			btn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				const isOpen = dropdown.classList.contains('open');
+				setOpen(!isOpen);
+			});
+		}
+		document.addEventListener('click', (e) => {
+			if (!dropdown) return;
+			if (!dropdown.contains(e.target)) setOpen(false);
+		});
+
+		// Load saved states
+		try {
+			const v1 = localStorage.getItem('gablok_dbg_cornerHandles');
+			const v2 = localStorage.getItem('gablok_dbg_cornerDebug');
+			if (v1 !== null) window.__enableCornerHandles = (v1 === '1');
+			if (v2 !== null) window.__debugCornerCache = (v2 === '1');
+		} catch(_eLS) {}
+		if (chkHandles) chkHandles.checked = (window.__enableCornerHandles === true);
+		if (chkDebug) chkDebug.checked = (window.__debugCornerCache === true);
+
+		function rerender(){ try { if (typeof window.renderLoop === 'function') window.renderLoop(); } catch(_eR) {} }
+		if (chkHandles) {
+			chkHandles.addEventListener('change', () => {
+				window.__enableCornerHandles = !!chkHandles.checked;
+				try { localStorage.setItem('gablok_dbg_cornerHandles', window.__enableCornerHandles ? '1' : '0'); } catch(_e) {}
+				rerender();
+			});
+		}
+		if (chkDebug) {
+			chkDebug.addEventListener('change', () => {
+				window.__debugCornerCache = !!chkDebug.checked;
+				try { localStorage.setItem('gablok_dbg_cornerDebug', window.__debugCornerCache ? '1' : '0'); } catch(_e) {}
+			});
+		}
+	} catch(_eDbg) {}
+});
+</script>
 
 
 <!-- 2D Floor Plan Editor Modal -->
