@@ -251,7 +251,16 @@
       if (now >= nextAllowed) {
         __plan2d.__next3DSync = now + SYNC_INTERVAL;
         if(typeof window.applyPlan2DTo3D === 'function'){
-          window.applyPlan2DTo3D(undefined,{allowRooms:true,quiet:true,level:(typeof window.currentFloor==='number'? window.currentFloor:0),nonDestructive:true,preservePositions:false});
+          // Live sync from 2D should NOT auto-create rooms when walls close.
+          // Extrude walls as strips only.
+          window.applyPlan2DTo3D(undefined,{
+            stripsOnly:true,
+            allowRooms:false,
+            quiet:true,
+            level:(typeof window.currentFloor==='number'? window.currentFloor:0),
+            nonDestructive:true,
+            preservePositions:false
+          });
         }
       } else {
         // Schedule a trailing sync if one isn't already queued
@@ -261,7 +270,14 @@
             try {
               __plan2d.__syncPending = false;
               if(typeof window.applyPlan2DTo3D === 'function'){
-                window.applyPlan2DTo3D(undefined,{allowRooms:true,quiet:true,level:(typeof window.currentFloor==='number'? window.currentFloor:0),nonDestructive:true,preservePositions:false});
+                window.applyPlan2DTo3D(undefined,{
+                  stripsOnly:true,
+                  allowRooms:false,
+                  quiet:true,
+                  level:(typeof window.currentFloor==='number'? window.currentFloor:0),
+                  nonDestructive:true,
+                  preservePositions:false
+                });
               }
             } catch(_ts){}
           }, Math.max(40, nextAllowed - now));

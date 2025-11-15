@@ -40,15 +40,16 @@
           try{ __plan2d.autoFitEnabled=false; __plan2d.freezeCenterScaleUntil=Date.now()+1000; }catch(_af){}
           try { if (typeof window.__rtActionPush==='function') window.__rtActionPush({ kind:'2d-apply-click', level:(typeof window.currentFloor==='number'? window.currentFloor:0), elements:(Array.isArray(__plan2d.elements)? __plan2d.elements.length:0) }); } catch(_tap){}
           if(typeof window.applyPlan2DTo3D==='function'){
-            // Explicit user apply should rebuild 3D faithfully: disable nonDestructive to remove rooms
-            // when rectangles are no longer closed (e.g., a wall was deleted in 2D)
+            // Requirement: Do NOT auto-complete closed walls into rooms.
+            // The Apply button extrudes as standalone wall strips only.
             window.applyPlan2DTo3D(undefined, {
-              allowRooms:true,
+              stripsOnly:true,
+              allowRooms:false,
               quiet:false,
               level:(typeof window.currentFloor==='number'? window.currentFloor:0),
+              // Still destructive to clear any stale rooms on this level
               nonDestructive:false,
               preservePositions:false,
-              // Hint for future: if applyPlan2DTo3D adds view-changing behavior later we can read this flag.
               preserveView:true
             });
           }
@@ -70,7 +71,7 @@
             }
           }catch(_close2d){}
         } else if(typeof window.applyPlan2DTo3D==='function') {
-          window.applyPlan2DTo3D(undefined,{allowRooms:true,quiet:false,level:(typeof window.currentFloor==='number'? window.currentFloor:0), preservePositions:false});
+          window.applyPlan2DTo3D(undefined,{ stripsOnly:true, allowRooms:false, quiet:false, level:(typeof window.currentFloor==='number'? window.currentFloor:0), preservePositions:false });
           // If 2D not active (defensive), ensure page hidden
           try{ var pg2=document.getElementById('plan2d-page'); if(pg2) pg2.style.display='none'; }catch(_pghide){}
         }

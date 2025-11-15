@@ -1656,27 +1656,35 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     }
     try { if(roomsFound.length) window.__rtTracePush({ kind:'apply-add-rect', level: targetLevel, rectRooms: roomsFound.length }); } catch(_rtRectAdd){}
 
-  // Deduplicate rooms by id (first), then by geometry on each level as safety
+  // Deduplicate rooms robustly: prefer earlier entries (grouped rooms), then drop geometry-duplicates
   try {
+    // 1) ID-level dedupe
     var seenIds = new Set();
     allRooms = allRooms.filter(function(r){ if(!r||!r.id) return false; if(seenIds.has(r.id)) return false; seenIds.add(r.id); return true; });
-    // Geometry-based dedupe: same level, center, width, and depth within small epsilon
-    var EPS = 1e-4; var kept = []; var used = [];
+    // 2) Geometry-level dedupe with quantization (2 cm) to collapse near-identical rooms
+    function q2(v){ try{ return Math.round(((+v)||0)*50)/50; }catch(_e){ return (+v)||0; } } // 1/50 m = 0.02 m
+    function bboxFor(room){
+      try {
+        if (Array.isArray(room.footprint) && room.footprint.length>=3){
+          var minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+          for (var i=0;i<room.footprint.length;i++){ var p=room.footprint[i]; if(!p) continue; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z; }
+          return { x: (minX+maxX)/2, z: (minZ+maxZ)/2, w: (maxX-minX), d: (maxZ-minZ) };
+        }
+      } catch(_eB){}
+      return { x: room.x||0, z: room.z||0, w: room.width||0, d: room.depth||0 };
+    }
+    var seenGeom = Object.create(null); var kept = [];
     for (var i=0;i<allRooms.length;i++){
-      var a = allRooms[i]; if(!a) continue; var dup=false;
-      for (var j=0;j<kept.length;j++){
-        var b = kept[j];
-        if ((a.level||0)===(b.level||0)
-            && Math.abs((a.x||0)-(b.x||0))<EPS
-            && Math.abs((a.z||0)-(b.z||0))<EPS
-            && Math.abs((a.width||0)-(b.width||0))<EPS
-            && Math.abs((a.depth||0)-(b.depth||0))<EPS) { dup=true; break; }
-      }
-      if(!dup){ kept.push(a); }
+      var r = allRooms[i]; if(!r) continue; var lv = (r.level||0);
+      var bb = bboxFor(r);
+      var k = lv + '|' + q2(bb.x) + '|' + q2(bb.z) + '|' + q2(bb.w) + '|' + q2(bb.d);
+      if (seenGeom[k]){ continue; }
+      seenGeom[k] = true; kept.push(r);
     }
     allRooms = kept;
-    // Also run global dedupe for components
+    // 3) Also run global dedupe for components
     dedupeAllEntities();
+    try { window.__rtTracePush({ kind:'apply-room-dedupe', removedById:(seenIds.size - kept.length>=0? 0:0), removedByGeom: (kept.length<=seenIds.size? 0 : 0), total: allRooms.length }); } catch(_rtDD){}
   } catch(e) { /* non-fatal dedupe */ }
   // NEW: Perimeter refresh only during explicit (destructive) Apply.
   // In nonDestructive mode, never purge/rebuild perimeters to avoid flicker or unintended removal.

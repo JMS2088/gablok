@@ -849,6 +849,8 @@
           ctx.beginPath();
           // Top rectangle
           seg(pAt, pBt); seg(pBt, pCt); seg(pCt, pDt); seg(pDt, pAt);
+          // Bottom rectangle (floor edges)
+          seg(pA, pB); seg(pD, pC);
           // Vertical edges at endpoints (show height)
           seg(pA, pAt); seg(pB, pBt); seg(pC, pCt); seg(pD, pDt);
           ctx.stroke();
@@ -1393,6 +1395,9 @@
   if (pCt && pDt) { ctx.moveTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); }
   // Cap Dt->At only if no neighbor at start
   if (!startHasNeighbor && pDt && pAt){ ctx.moveTo(pDt.x,pDt.y); ctx.lineTo(pAt.x,pAt.y); }
+  // Floor edges: add bottom long edges along the floor plane for visual grounding
+  if (pA && pB) { ctx.moveTo(pA.x,pA.y); ctx.lineTo(pB.x,pB.y); }
+  if (pD && pC) { ctx.moveTo(pD.x,pD.y); ctx.lineTo(pC.x,pC.y); }
   ctx.stroke();
       // Draw translucent blue glass for windows on all three planes: center, left face, right face
       var glassFill = 'rgba(56,189,248,0.25)';
