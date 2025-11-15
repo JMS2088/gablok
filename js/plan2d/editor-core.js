@@ -367,7 +367,51 @@
   }
   window.plan2dMergeColinearWalls = window.plan2dMergeColinearWalls || plan2dMergeColinearWalls;
 
-  function plan2dFinalize(a,b){ if(!a||!b) return; var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x; var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return; if(__plan2d.tool==='wall'){ __plan2d.elements.push({type:'wall',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM, manual:true, level:(typeof window.currentFloor==='number'? window.currentFloor:0)}); plan2dMergeColinearWalls(); } else if(__plan2d.tool==='window'){ __plan2d.elements.push({type:'window',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM, level:(typeof window.currentFloor==='number'? window.currentFloor:0)}); } else if(__plan2d.tool==='door'){ __plan2d.elements.push({type:'door',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:0.9,meta:{hinge:'left',swing:'in'}, level:(typeof window.currentFloor==='number'? window.currentFloor:0)}); } plan2dEdited(); }
+  // Helper: check if an exact wall segment already exists on the same floor
+  function plan2dHasExactWall(ax, ay, bx, by, level){
+    try {
+      var els = __plan2d.elements||[]; var L = (typeof level==='number'? level : (typeof window.currentFloor==='number'? window.currentFloor:0));
+      // Normalize endpoints (sorted) for comparison
+      var k1x=ax, k1y=ay, k2x=bx, k2y=by;
+      if (k2x < k1x || (k2x===k1x && k2y<k1y)) { var tx=k1x, ty=k1y; k1x=k2x; k1y=k2y; k2x=tx; k2y=ty; }
+      for (var i=0;i<els.length;i++){
+        var e=els[i]; if(!e || e.type!=='wall') continue;
+        var eLevel = (typeof e.level==='number'? e.level : 0); if(eLevel!==L) continue;
+        var ex0=e.x0, ey0=e.y0, ex1=e.x1, ey1=e.y1;
+        // Normalize stored endpoints
+        if (ex1 < ex0 || (ex1===ex0 && ey1<ey0)) { var tx2=ex0, ty2=ey0; ex0=ex1; ey0=ey1; ex1=tx2; ey1=ty2; }
+        if (ex0===k1x && ey0===k1y && ex1===k2x && ey1===k2y) return true;
+      }
+    } catch(_e) {}
+    return false;
+  }
+  // Helper: add wall segment if not already present
+  function plan2dAddWallIfNew(ax, ay, bx, by, opts){
+    var level = opts && typeof opts.level==='number' ? opts.level : (typeof window.currentFloor==='number'? window.currentFloor:0);
+    if (plan2dHasExactWall(ax, ay, bx, by, level)) return false;
+    (__plan2d.elements||(__plan2d.elements=[])).push({
+      type:'wall', x0:ax, y0:ay, x1:bx, y1:by,
+      thickness: (__plan2d.wallThicknessM),
+      manual: !!(opts && opts.manual),
+      level: level
+    });
+    return true;
+  }
+  
+  function plan2dFinalize(a,b){
+    if(!a||!b) return;
+    var dx=b.x-a.x, dy=b.y-a.y; if(Math.abs(dx)>Math.abs(dy)) b.y=a.y; else b.x=a.x;
+    var len=Math.sqrt((b.x-a.x)**2+(b.y-a.y)**2); if(len<0.05) return;
+    if(__plan2d.tool==='wall'){
+      var added = plan2dAddWallIfNew(a.x,a.y,b.x,b.y,{ manual:true, level:(typeof window.currentFloor==='number'? window.currentFloor:0) });
+      if(added){ plan2dMergeColinearWalls(); }
+    } else if(__plan2d.tool==='window'){
+      __plan2d.elements.push({type:'window',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:__plan2d.wallThicknessM, level:(typeof window.currentFloor==='number'? window.currentFloor:0)});
+    } else if(__plan2d.tool==='door'){
+      __plan2d.elements.push({type:'door',x0:a.x,y0:a.y,x1:b.x,y1:b.y,thickness:0.9,meta:{hinge:'left',swing:'in'}, level:(typeof window.currentFloor==='number'? window.currentFloor:0)});
+    }
+    plan2dEdited();
+  }
   window.plan2dFinalize = window.plan2dFinalize || plan2dFinalize;
 
   function plan2dFinalizeChain(){ try { var pts=Array.isArray(__plan2d.chainPoints)?__plan2d.chainPoints:[]; if(pts.length<2){ __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dDraw(); return; } for(var i=0;i<pts.length-1;i++){ var a=pts[i], b=pts[i+1]; var segLen=Math.hypot(b.x-a.x,b.y-a.y); if(segLen<0.05) continue; var ax=a.x, ay=a.y, bx=b.x, by=b.y; if(Math.abs(bx-ax)>Math.abs(by-ay)) by=ay; else bx=ax; __plan2d.elements.push({type:'wall',x0:ax,y0:ay,x1:bx,y1:by,thickness:__plan2d.wallThicknessM}); plan2dMergeColinearWalls(); } __plan2d.chainActive=false; __plan2d.chainPoints=[]; plan2dAutoSnapAndJoin(); plan2dDraw(); plan2dEdited(); }catch(e){} }
@@ -723,8 +767,8 @@
             if(Math.abs(bx-ax) >= Math.abs(by-ay)) by = ay; else bx = ax;
             var segLen = Math.hypot(bx-ax, by-ay);
             if(segLen >= 0.05){
-              __plan2d.elements.push({type:'wall', x0:ax, y0:ay, x1:bx, y1:by, thickness:__plan2d.wallThicknessM, manual:true, level:(typeof window.currentFloor==='number'? window.currentFloor:0)});
-              plan2dEdited();
+              var added2 = plan2dAddWallIfNew(ax, ay, bx, by, { manual:true, level:(typeof window.currentFloor==='number'? window.currentFloor:0) });
+              if(added2){ plan2dEdited(); }
             }
             // Add the (potentially adjusted) endpoint for the continuing chain preview
             __plan2d.chainPoints.push({x:bx, y:by});
