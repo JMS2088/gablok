@@ -1036,6 +1036,14 @@
       var startIsT = false, endIsT = false;
       if (startT){ applyTTrimAtStart(startT); startIsT = true; }
       if (endT){ applyTTrimAtEnd(endT); endIsT = true; }
+      
+      // Apply manual corner overrides if they exist (all 8 corners)
+      if (ws.__manualCorners) {
+        if (ws.__manualCorners.A) { A.x = ws.__manualCorners.A.x; A.z = ws.__manualCorners.A.z; }
+        if (ws.__manualCorners.B) { B.x = ws.__manualCorners.B.x; B.z = ws.__manualCorners.B.z; }
+        if (ws.__manualCorners.C) { C.x = ws.__manualCorners.C.x; C.z = ws.__manualCorners.C.z; }
+        if (ws.__manualCorners.D) { D.x = ws.__manualCorners.D.x; D.z = ws.__manualCorners.D.z; }
+      }
 
       // Corner mitering (L-corners)
       // 007: default symmetric 45° miter; 007-Inner: for room perimeters, keep interior face uncut on concave corners only
@@ -1072,6 +1080,27 @@
       var endConcave = __endClass.concave;
       var startConvex = __startClass.convex;
       var endConvex = __endClass.convex;
+      
+      // ALWAYS check interior corner cache at start, even before classification
+      var cachedIntStart = null;
+      try {
+        var __intKeyStart = (ws.level||0) + '|' + Math.round(x0*100) + '|' + Math.round(z0*100) + '|int';
+        if (window.__intCornerSnap && window.__intCornerSnap[__intKeyStart]) {
+          cachedIntStart = window.__intCornerSnap[__intKeyStart];
+          console.log('START CACHE HIT:', __intKeyStart, cachedIntStart);
+        }
+      } catch(_e) {}
+      
+      // ALWAYS check interior corner cache at end
+      var cachedIntEnd = null;
+      try {
+        var __intKeyEnd = (ws.level||0) + '|' + Math.round(x1*100) + '|' + Math.round(z1*100) + '|int';
+        if (window.__intCornerSnap && window.__intCornerSnap[__intKeyEnd]) {
+          cachedIntEnd = window.__intCornerSnap[__intKeyEnd];
+          console.log('END CACHE HIT:', __intKeyEnd, cachedIntEnd);
+        }
+      } catch(_e) {}
+      
       // 007-start: local diagonal (t + n) — with asymmetric option for inner corners
       if (!startIsT){
         var corner0 = { x:x0, z:z0 };
@@ -1082,45 +1111,66 @@
           var pR0s = { x: corner0.x - nx*hw, z: corner0.z - nz*hw };
           var iL0 = intersectLines(pL0s, tvec, corner0, cutDir);
           var iR0 = intersectLines(pR0s, tvec, corner0, cutDir);
-          if (isRoomPerimeter && interiorLeftGlobal != null && startConcave){
-            // Inner corner: compute proper intersection for interior face using neighbor geometry
-            var nb0 = getNeighborAt(x0, z0);
-            var iInt0 = null;
-            // Try to read from shared interior corner snap cache first
-            try {
-              var __intKey0 = (ws.level||0) + '|' + Math.round(corner0.x*100) + '|' + Math.round(corner0.z*100) + '|int';
-              if (window.__intCornerSnap && window.__intCornerSnap[__intKey0]) {
-                iInt0 = window.__intCornerSnap[__intKey0];
-              }
-            } catch(_eIntSnap0Rd) {}
-            if (!iInt0 && nb0 && nb0.s){
-              var tsx = nb0.dir.x, tsz = nb0.dir.z; var nsx = -tsz, nsz = tsx;
-              var hwN = Math.max(0.02, (nb0.s.thickness||0.3)/2);
-              var intLeftN = (typeof nb0.s.__interiorLeft==='boolean') ? nb0.s.__interiorLeft : ((typeof nb0.s.__outerFaceLeft==='boolean') ? (!nb0.s.__outerFaceLeft) : null);
-              if (interiorLeftGlobal){
-                // interior is left (A): neighbor's interior is RIGHT at concave corners (faces inward)
-                var inSignN = (intLeftN===true) ? -1 : 1;
-                var qIn0 = { x: corner0.x + nsx*inSignN*hwN, z: corner0.z + nsz*inSignN*hwN };
-                iInt0 = intersectLines(pL0s, tvec, qIn0, {x: tsx, z: tsz});
-              } else {
-                // interior is right (D): neighbor's interior is LEFT at concave corners (faces inward)
-                var inSignN = (intLeftN===true) ? 1 : -1;
-                var qIn0 = { x: corner0.x + nsx*inSignN*hwN, z: corner0.z + nsz*inSignN*hwN };
-                iInt0 = intersectLines(pR0s, tvec, qIn0, {x: tsx, z: tsz});
-              }
-              // Store in cache for other walls at this corner
-              try {
-                if (iInt0) {
-                  var __intKey0w = (ws.level||0) + '|' + Math.round(corner0.x*100) + '|' + Math.round(corner0.z*100) + '|int';
-                  window.__intCornerSnap[__intKey0w] = { x: iInt0.x, z: iInt0.z };
-                }
-              } catch(_eIntSnap0Wr) {}
+          
+          // ALWAYS compute interior corner intersection when neighbor exists
+          var nb0 = getNeighborAt(x0, z0);
+          var iInt0 = cachedIntStart; // Use cached value if available
+          if (!iInt0 && nb0 && nb0.s){
+            // For concave interior corners: compute where interior faces meet
+            var hwN = Math.max(0.02, (nb0.s.thickness||0.3)/2);
+            var intLeftN = (typeof nb0.s.__interiorLeft==='boolean') ? nb0.s.__interiorLeft : ((typeof nb0.s.__outerFaceLeft==='boolean') ? (!nb0.s.__outerFaceLeft) : null);
+            var nbTangent = { x: nb0.dir.x, z: nb0.dir.z };
+            var nbNormal = { x: -nbTangent.z, z: nbTangent.x };
+            
+            // Determine which face is interior on neighbor
+            var nbIntSign = (intLeftN===true) ? 1 : -1;
+            var nbIntOffset = { x: corner0.x + nbNormal.x * nbIntSign * hwN, z: corner0.z + nbNormal.z * nbIntSign * hwN };
+            
+            // Determine which face is interior on THIS wall
+            var thisIntLeft = (typeof ws.__interiorLeft==='boolean') ? ws.__interiorLeft : ((typeof ws.__outerFaceLeft==='boolean') ? (!ws.__outerFaceLeft) : null);
+            
+            if (thisIntLeft === true){
+              iInt0 = intersectLines(pL0s, tvec, nbIntOffset, nbTangent);
+            } else if (thisIntLeft === false){
+              iInt0 = intersectLines(pR0s, tvec, nbIntOffset, nbTangent);
             }
+            
+            try {
+              if (iInt0) {
+                var __intKey0w = (ws.level||0) + '|' + Math.round(corner0.x*100) + '|' + Math.round(corner0.z*100) + '|int';
+                window.__intCornerSnap[__intKey0w] = { x: iInt0.x, z: iInt0.z };
+                console.log('START CACHE WRITE:', __intKey0w, iInt0, 'thisIntLeft=', thisIntLeft);
+              }
+            } catch(_eIntSnap0Wr) {}
+          }
+          
+          // Apply interior corner intersection if computed
+          if (iInt0){
+            var thisIntLeft = (typeof ws.__interiorLeft==='boolean') ? ws.__interiorLeft : ((typeof ws.__outerFaceLeft==='boolean') ? (!ws.__outerFaceLeft) : null);
+            if (thisIntLeft === true){
+              // Interior on left: set A to intersection, extend D by same amount
+              A.x = iInt0.x; A.z = iInt0.z;
+              var extendX = iInt0.x - pL0s.x;
+              var extendZ = iInt0.z - pL0s.z;
+              D.x = pR0s.x + extendX; D.z = pR0s.z + extendZ;
+            } else if (thisIntLeft === false){
+              // Interior on right: set D to intersection, extend A by same amount
+              D.x = iInt0.x; D.z = iInt0.z;
+              var extendX = iInt0.x - pR0s.x;
+              var extendZ = iInt0.z - pR0s.z;
+              A.x = pL0s.x + extendX; A.z = pL0s.z + extendZ;
+            } else {
+              // No interior side defined, use regular miter
+              if (iL0){ A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
+              if (iR0){ D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
+            }
+          } else if (isRoomPerimeter && interiorLeftGlobal != null && startConcave){
+            // Fallback to old logic only if no neighbor found
             if (interiorLeftGlobal){
-              if (iInt0){ A.x = iInt0.x; A.z = iInt0.z; } else if (iL0){ A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
+              if (iL0){ A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
               if (iR0){ D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
             } else {
-              if (iInt0){ D.x = iInt0.x; D.z = iInt0.z; } else if (iR0){ D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
+              if (iR0){ D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
               if (iL0){ A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
             }
           } else if (isRoomPerimeter && interiorLeftGlobal != null && startConvex){
@@ -1180,45 +1230,66 @@
           var back = { x: -tvec.x, z: -tvec.z };
           var iL1 = intersectLines(pL1s, back, corner1, cutDirE);
           var iR1 = intersectLines(pR1s, back, corner1, cutDirE);
-          if (isRoomPerimeter && interiorLeftGlobal != null && endConcave){
-            // Inner corner: compute proper intersection for interior face using neighbor geometry
-            var nb1 = getNeighborAt(x1, z1);
-            var iInt1 = null;
-            // Try to read from shared interior corner snap cache first
-            try {
-              var __intKey1 = (ws.level||0) + '|' + Math.round(corner1.x*100) + '|' + Math.round(corner1.z*100) + '|int';
-              if (window.__intCornerSnap && window.__intCornerSnap[__intKey1]) {
-                iInt1 = window.__intCornerSnap[__intKey1];
-              }
-            } catch(_eIntSnap1Rd) {}
-            if (!iInt1 && nb1 && nb1.s){
-              var tsx = nb1.dir.x, tsz = nb1.dir.z; var nsx = -tsz, nsz = tsx;
-              var hwN = Math.max(0.02, (nb1.s.thickness||0.3)/2);
-              var intLeftN = (typeof nb1.s.__interiorLeft==='boolean') ? nb1.s.__interiorLeft : ((typeof nb1.s.__outerFaceLeft==='boolean') ? (!nb1.s.__outerFaceLeft) : null);
-              if (interiorLeftGlobal){
-                // interior is left (B): neighbor's interior is RIGHT at concave corners (faces inward)
-                var inSignN = (intLeftN===true) ? -1 : 1;
-                var qIn1 = { x: corner1.x + nsx*inSignN*hwN, z: corner1.z + nsz*inSignN*hwN };
-                iInt1 = intersectLines(pL1s, back, qIn1, {x: tsx, z: tsz});
-              } else {
-                // interior is right (C): neighbor's interior is LEFT at concave corners (faces inward)
-                var inSignN = (intLeftN===true) ? 1 : -1;
-                var qIn1 = { x: corner1.x + nsx*inSignN*hwN, z: corner1.z + nsz*inSignN*hwN };
-                iInt1 = intersectLines(pR1s, back, qIn1, {x: tsx, z: tsz});
-              }
-              // Store in cache for other walls at this corner
-              try {
-                if (iInt1) {
-                  var __intKey1w = (ws.level||0) + '|' + Math.round(corner1.x*100) + '|' + Math.round(corner1.z*100) + '|int';
-                  window.__intCornerSnap[__intKey1w] = { x: iInt1.x, z: iInt1.z };
-                }
-              } catch(_eIntSnap1Wr) {}
+          
+          // ALWAYS compute interior corner intersection when neighbor exists
+          var nb1 = getNeighborAt(x1, z1);
+          var iInt1 = cachedIntEnd; // Use cached value if available
+          if (!iInt1 && nb1 && nb1.s){
+            // For concave interior corners: compute where interior faces meet
+            var hwN = Math.max(0.02, (nb1.s.thickness||0.3)/2);
+            var intLeftN = (typeof nb1.s.__interiorLeft==='boolean') ? nb1.s.__interiorLeft : ((typeof nb1.s.__outerFaceLeft==='boolean') ? (!nb1.s.__outerFaceLeft) : null);
+            var nbTangent = { x: nb1.dir.x, z: nb1.dir.z };
+            var nbNormal = { x: -nbTangent.z, z: nbTangent.x };
+            
+            // Determine which face is interior on neighbor
+            var nbIntSign = (intLeftN===true) ? 1 : -1;
+            var nbIntOffset = { x: corner1.x + nbNormal.x * nbIntSign * hwN, z: corner1.z + nbNormal.z * nbIntSign * hwN };
+            
+            // Determine which face is interior on THIS wall
+            var thisIntLeft = (typeof ws.__interiorLeft==='boolean') ? ws.__interiorLeft : ((typeof ws.__outerFaceLeft==='boolean') ? (!ws.__outerFaceLeft) : null);
+            
+            if (thisIntLeft === true){
+              iInt1 = intersectLines(pL1s, back, nbIntOffset, nbTangent);
+            } else if (thisIntLeft === false){
+              iInt1 = intersectLines(pR1s, back, nbIntOffset, nbTangent);
             }
+            
+            try {
+              if (iInt1) {
+                var __intKey1w = (ws.level||0) + '|' + Math.round(corner1.x*100) + '|' + Math.round(corner1.z*100) + '|int';
+                window.__intCornerSnap[__intKey1w] = { x: iInt1.x, z: iInt1.z };
+                console.log('END CACHE WRITE:', __intKey1w, iInt1, 'thisIntLeft=', thisIntLeft);
+              }
+            } catch(_eIntSnap1Wr) {}
+          }
+          
+          // Apply interior corner intersection if computed
+          if (iInt1){
+            var thisIntLeft = (typeof ws.__interiorLeft==='boolean') ? ws.__interiorLeft : ((typeof ws.__outerFaceLeft==='boolean') ? (!ws.__outerFaceLeft) : null);
+            if (thisIntLeft === true){
+              // Interior on left: set B to intersection, extend C by same amount
+              B.x = iInt1.x; B.z = iInt1.z;
+              var extendX = iInt1.x - pL1s.x;
+              var extendZ = iInt1.z - pL1s.z;
+              C.x = pR1s.x + extendX; C.z = pR1s.z + extendZ;
+            } else if (thisIntLeft === false){
+              // Interior on right: set C to intersection, extend B by same amount
+              C.x = iInt1.x; C.z = iInt1.z;
+              var extendX = iInt1.x - pR1s.x;
+              var extendZ = iInt1.z - pR1s.z;
+              B.x = pL1s.x + extendX; B.z = pL1s.z + extendZ;
+            } else {
+              // No interior side defined, use regular miter
+              if (iL1){ B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
+              if (iR1){ C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
+            }
+          } else if (isRoomPerimeter && interiorLeftGlobal != null && endConcave){
+            // Fallback to old logic only if no neighbor found
             if (interiorLeftGlobal){
-              if (iInt1){ B.x = iInt1.x; B.z = iInt1.z; } else if (iL1){ B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
+              if (iL1){ B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
               if (iR1){ C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
             } else {
-              if (iInt1){ C.x = iInt1.x; C.z = iInt1.z; } else if (iR1){ C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
+              if (iR1){ C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
               if (iL1){ B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
             }
           } else if (isRoomPerimeter && interiorLeftGlobal != null && endConvex){
@@ -1272,6 +1343,15 @@
       var Bt = {x:B.x, y:baseY+h, z:B.z};
       var Ct = {x:C.x, y:baseY+h, z:C.z};
       var Dt = {x:D.x, y:baseY+h, z:D.z};
+      
+      // Apply manual top corner overrides if they exist (all 4 top corners)
+      if (ws.__manualCorners) {
+        if (ws.__manualCorners.At) { At.x = ws.__manualCorners.At.x; At.z = ws.__manualCorners.At.z; }
+        if (ws.__manualCorners.Bt) { Bt.x = ws.__manualCorners.Bt.x; Bt.z = ws.__manualCorners.Bt.z; }
+        if (ws.__manualCorners.Ct) { Ct.x = ws.__manualCorners.Ct.x; Ct.z = ws.__manualCorners.Ct.z; }
+        if (ws.__manualCorners.Dt) { Dt.x = ws.__manualCorners.Dt.x; Dt.z = ws.__manualCorners.Dt.z; }
+      }
+      
       // Project (after potential miter adjustments)
   var pA=project3D(A.x,A.y,A.z), pB=project3D(B.x,B.y,B.z), pC=project3D(C.x,C.y,C.z), pD=project3D(D.x,D.y,D.z);
     var pAt=project3D(At.x,At.y,At.z), pBt=project3D(Bt.x,Bt.y,Bt.z), pCt=project3D(Ct.x,Ct.y,Ct.z), pDt=project3D(Dt.x,Dt.y,Dt.z);
@@ -1445,24 +1525,80 @@
       }
   var startHasNeighbor = hasNeighborAt(x0, z0) || startIsT;
   var endHasNeighbor = hasNeighborAt(x1, z1) || endIsT;
-  // Stroke only the long edges and any exposed caps; keep lines very subtle
+  // Stroke all 12 edges of the wall rectangular prism to form a complete wireframe cube
   ctx.beginPath();
-  // Long edge At->Bt
+  // Top face - 4 edges
   if (pAt && pBt) { ctx.moveTo(pAt.x,pAt.y); ctx.lineTo(pBt.x,pBt.y); }
-  // Cap Bt->Ct only if no neighbor at end
-  if (!endHasNeighbor && pBt && pCt){ ctx.moveTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); }
-  // Long edge Ct->Dt
+  if (pBt && pCt) { ctx.moveTo(pBt.x,pBt.y); ctx.lineTo(pCt.x,pCt.y); }
   if (pCt && pDt) { ctx.moveTo(pCt.x,pCt.y); ctx.lineTo(pDt.x,pDt.y); }
-  // Cap Dt->At only if no neighbor at start
-  if (!startHasNeighbor && pDt && pAt){ ctx.moveTo(pDt.x,pDt.y); ctx.lineTo(pAt.x,pAt.y); }
-  // Floor edges: add bottom long edges along the floor plane for visual grounding
+  if (pDt && pAt) { ctx.moveTo(pDt.x,pDt.y); ctx.lineTo(pAt.x,pAt.y); }
+  // Bottom face - 4 edges
   if (pA && pB) { ctx.moveTo(pA.x,pA.y); ctx.lineTo(pB.x,pB.y); }
-  // Cap B->C only if no neighbor at end
-  if (!endHasNeighbor && pB && pC){ ctx.moveTo(pB.x,pB.y); ctx.lineTo(pC.x,pC.y); }
-  if (pD && pC) { ctx.moveTo(pD.x,pD.y); ctx.lineTo(pC.x,pC.y); }
-  // Cap D->A only if no neighbor at start
-  if (!startHasNeighbor && pD && pA){ ctx.moveTo(pD.x,pD.y); ctx.lineTo(pA.x,pA.y); }
+  if (pB && pC) { ctx.moveTo(pB.x,pB.y); ctx.lineTo(pC.x,pC.y); }
+  if (pC && pD) { ctx.moveTo(pC.x,pC.y); ctx.lineTo(pD.x,pD.y); }
+  if (pD && pA) { ctx.moveTo(pD.x,pD.y); ctx.lineTo(pA.x,pA.y); }
+  // Vertical edges - 4 edges connecting bottom to top
+  if (pA && pAt) { ctx.moveTo(pA.x,pA.y); ctx.lineTo(pAt.x,pAt.y); }
+  if (pB && pBt) { ctx.moveTo(pB.x,pB.y); ctx.lineTo(pBt.x,pBt.y); }
+  if (pC && pCt) { ctx.moveTo(pC.x,pC.y); ctx.lineTo(pCt.x,pCt.y); }
+  if (pD && pDt) { ctx.moveTo(pD.x,pD.y); ctx.lineTo(pDt.x,pDt.y); }
   ctx.stroke();
+      
+      // Store corner positions for draggable handles
+      if (!window.__cornerHandles) window.__cornerHandles = [];
+      
+      // Function to draw draggable handle (all corners draggable)
+      function drawDraggableHandle(p, num, label, worldPos, ws, vertexKey){
+        if (!p) return;
+        var handleRadius = 8;
+        
+        // Draw handle circle
+        ctx.save();
+        ctx.fillStyle = 'rgba(100,200,255,0.8)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, handleRadius, 0, Math.PI*2);
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw label
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.lineWidth = 3;
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.strokeText(label, p.x, p.y);
+        ctx.fillText(label, p.x, p.y);
+        ctx.restore();
+        
+        // Store for interaction
+        window.__cornerHandles.push({
+          x: p.x,
+          y: p.y,
+          radius: handleRadius,
+          worldPos: worldPos,
+          wallStrip: ws,
+          vertexKey: vertexKey,
+          label: label
+        });
+      }
+      
+      // All 8 corners are draggable with unique numbers
+      // Bottom corners: 1=A, 2=B, 3=C, 4=D
+      drawDraggableHandle(pA, 1, '1', A, ws, 'A');
+      drawDraggableHandle(pB, 2, '2', B, ws, 'B');
+      drawDraggableHandle(pC, 3, '3', C, ws, 'C');
+      drawDraggableHandle(pD, 4, '4', D, ws, 'D');
+      
+      // Top corners: 5=At, 6=Bt, 7=Ct, 8=Dt
+      drawDraggableHandle(pAt, 5, '5', At, ws, 'At');
+      drawDraggableHandle(pBt, 6, '6', Bt, ws, 'Bt');
+      drawDraggableHandle(pCt, 7, '7', Ct, ws, 'Ct');
+      drawDraggableHandle(pDt, 8, '8', Dt, ws, 'Dt');
+      drawCornerLabel(pCt, 7, '7');
+      drawCornerLabel(pDt, 8, '8');
       // Draw translucent blue glass for windows on all three planes: center, left face, right face
       var glassFill = 'rgba(56,189,248,0.25)';
       var glassStroke = onLevel ? 'rgba(56,189,248,0.55)' : 'rgba(148,163,184,0.7)';

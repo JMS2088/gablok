@@ -1466,5 +1466,115 @@
         } catch(_move) { /* non-fatal */ }
       }
     });
+    
+    // ---------------------------------------------------------------------------
+    // 3D Corner Handle Dragging (for corners 1, 4, 5, 8)
+    // ---------------------------------------------------------------------------
+    (function(){
+      var dragState = null;
+      
+      // Helper: unproject screen point to 3D ground plane (y=baseY)
+      function unprojectToGround(screenX, screenY, baseY) {
+        if (typeof window.unproject3D !== 'function') return null;
+        var ray = window.unproject3D(screenX, screenY);
+        if (!ray || !ray.origin || !ray.direction) return null;
+        // Intersect ray with plane y = baseY
+        var t = (baseY - ray.origin.y) / ray.direction.y;
+        if (!isFinite(t) || t < 0) return null;
+        return {
+          x: ray.origin.x + ray.direction.x * t,
+          y: baseY,
+          z: ray.origin.z + ray.direction.z * t
+        };
+      }
+      
+      // Mouse down on canvas3d: check if clicking a handle
+      var canvas3d = document.getElementById('canvas3d');
+      if (canvas3d) {
+        canvas3d.addEventListener('mousedown', function(e) {
+          var rect = canvas3d.getBoundingClientRect();
+          var mx = e.clientX - rect.left;
+          var my = e.clientY - rect.top;
+          
+          if (!window.__cornerHandles || window.__cornerHandles.length === 0) return;
+          
+          // Find handle under cursor
+          for (var i = 0; i < window.__cornerHandles.length; i++) {
+            var h = window.__cornerHandles[i];
+            var dist = Math.hypot(h.x - mx, h.y - my);
+            if (dist <= h.radius) {
+              // Start drag
+              dragState = {
+                handle: h,
+                startMouse: { x: mx, y: my },
+                startWorld: { x: h.worldPos.x, y: h.worldPos.y, z: h.worldPos.z }
+              };
+              e.preventDefault();
+              e.stopPropagation();
+              canvas3d.style.cursor = 'grabbing';
+              return;
+            }
+          }
+        }, true);
+        
+        canvas3d.addEventListener('mousemove', function(e) {
+          var rect = canvas3d.getBoundingClientRect();
+          var mx = e.clientX - rect.left;
+          var my = e.clientY - rect.top;
+          
+          if (dragState) {
+            // Dragging: unproject to ground plane
+            var worldPos = unprojectToGround(e.clientX, e.clientY, dragState.startWorld.y);
+            if (worldPos) {
+              // Update vertex position
+              dragState.handle.worldPos.x = worldPos.x;
+              dragState.handle.worldPos.z = worldPos.z;
+              
+              // Mark wall strip as modified
+              var ws = dragState.handle.wallStrip;
+              if (!ws.__manualCorners) ws.__manualCorners = {};
+              ws.__manualCorners[dragState.handle.vertexKey] = {
+                x: worldPos.x,
+                z: worldPos.z
+              };
+              
+              // Re-render
+              try { if (typeof renderLoop === 'function') renderLoop(); } catch(_r) {}
+            }
+            e.preventDefault();
+            e.stopPropagation();
+          } else {
+            // Hover detection
+            if (!window.__cornerHandles) return;
+            var overHandle = false;
+            for (var i = 0; i < window.__cornerHandles.length; i++) {
+              var h = window.__cornerHandles[i];
+              var dist = Math.hypot(h.x - mx, h.y - my);
+              if (dist <= h.radius) {
+                overHandle = true;
+                break;
+              }
+            }
+            canvas3d.style.cursor = overHandle ? 'grab' : '';
+          }
+        }, true);
+        
+        canvas3d.addEventListener('mouseup', function(e) {
+          if (dragState) {
+            dragState = null;
+            canvas3d.style.cursor = '';
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }, true);
+        
+        document.addEventListener('mouseup', function() {
+          if (dragState) {
+            dragState = null;
+            if (canvas3d) canvas3d.style.cursor = '';
+          }
+        });
+      }
+    })();
   };
 })();
