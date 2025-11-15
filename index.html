@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>3D Home Configurator with Pricing</title>
+<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+<link rel="stylesheet" href="css/styles.css?v=20251112-6">
+</head>
+<body>
+
+<button id="account-button" title="Account" aria-label="Account">
+	<svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+		<circle cx="12" cy="8" r="4" stroke="#0f172a" stroke-width="2" fill="#ffffff"/>
+		<path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="#0f172a" stroke-width="2" fill="none" stroke-linecap="round"/>
+	</svg>
+</button>
+
+<div id="controls">
+		<button onclick="addNewRoom()">+ Add Room</button>
+	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor">Floor Plan</button>
+	<button id="btn-render-walls" class="secondary" title="Toggle wall render mode">Render: Lines</button>
+	<button id="btn-clean-view" class="secondary" title="Toggle clean view (hide UI)" onclick="toggleCleanView()">Clean View</button>
+	<!-- Debug Dropdown: quick toggles for corner handles and debug logs -->
+	<div id="debugDropdown" class="dropdown" aria-label="Debug Menu">
+		<button id="debugButton" class="dropdown-button" type="button">
+			<span>Debug</span>
+			<span class="caret">
+				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+		</button>
+		<div id="debugList" class="dropdown-list" role="menu">
+			<div class="dropdown-item">
+				<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+					<input type="checkbox" id="chk-corner-handles" />
+					<span>Corner Handles</span>
+				</label>
+			</div>
+			<div class="dropdown-item">
+				<label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+					<input type="checkbox" id="chk-corner-debug" />
+					<span>Corner Debug Logs</span>
+				</label>
+			</div>
+		</div>
+	</div>
+	<!-- Custom Level Dropdown (replaces native select) -->
+	<div id="levelDropdown" class="dropdown" aria-label="Level Menu">
+		<button id="levelButton" class="dropdown-button" type="button">
+			<span id="levelButtonText">Ground Floor</span>
+			<span class="caret">
+				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+		</button>
+		<div id="levelList" class="dropdown-list" role="menu">
+			<div class="dropdown-item" data-value="0">Ground Floor</div>
+			<div class="dropdown-item" data-value="1">First Floor</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-item" data-value="stairs">+ Stairs</div>
+			<div class="dropdown-item" data-value="pergola">+ Pergola</div>
+			<div class="dropdown-item" data-value="garage">+ Garage</div>
+			<div class="dropdown-item" data-value="roof">+ Roof</div>
+			<div class="dropdown-item" data-value="pool">+ Pool</div>
+			<div class="dropdown-item" data-value="balcony">+ Balcony</div>
+		</div>
+	</div>
+	<!-- Hidden native select kept for fallback and API compatibility -->
+	<select id="levelSelect" onchange="switchLevel()">
+		<option value="0">Ground Floor</option>
+		<option value="1">First Floor</option>
+		<option value="stairs">+ Stairs</option>
+		<option value="pergola">+ Pergola</option>
+		<option value="garage">+ Garage</option>
+		<option value="roof">+ Roof</option>
+		<option value="pool">+ Pool</option>
+		<option value="balcony">+ Balcony</option>
+	</select>
+	<!-- Reset and Price moved into Main Menu -->
+	<div id="actionsDropdown" class="dropdown" aria-label="Main Menu">
+		<button id="actionsButton" class="dropdown-button" type="button">
+			<span>Main Menu</span>
+			<span class="caret">
+				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+		</button>
+		<div id="actionsList" class="dropdown-list" role="menu">
+			<div class="dropdown-item" data-action="reset">Reset</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-title">Project</div>
+			<div class="dropdown-item" data-action="price">Price</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-title">Export</div>
+			<div class="dropdown-item" data-action="obj">⬇ 3D - OBJ</div>
+			<div class="dropdown-item" data-action="pdf">📄 PDF (Export Views)</div>
+			<div class="dropdown-item" data-action="json-download">⬇ JSON</div>
+			<div class="dropdown-item" data-action="dxf-export">⬇ Floorplan (DXF)</div>
+			<div class="dropdown-item" data-action="dwg-export">⬇ Floorplan (DWG)</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-title">Import</div>
+			<div class="dropdown-item" data-action="obj-upload">⬆ 3D - OBJ</div>
+			<div class="dropdown-item" data-action="pdf-floorplan-upload">⬆ Floorplan (PDF)</div>
+			<div class="dropdown-item" data-action="svg-floorplan-upload">⬆ Floorplan (SVG)</div>
+			<div class="dropdown-item" data-action="dxf-floorplan-upload">⬆ Floorplan (DXF)</div>
+			<div class="dropdown-item" data-action="dwg-floorplan-upload">⬆ Floorplan (DWG)</div>
+			<div class="dropdown-item" data-action="json-upload">⬆ JSON</div>
+		</div>
+	</div>
+	<!-- Navigation Compass: sits next to Main Menu dropdown -->
+	<div id="nav-compass" aria-label="North" title="North">
+		<canvas id="nav-compass-canvas" width="44" height="44"></canvas>
+	</div>
+</div>
+
+<canvas id="canvas"></canvas>
+<div id="labels-3d"></div>
+<div id="status">Ready</div>
+
+
+<div id="measurements">
+	<h3>Object Measurements</h3>
+	<div class="measurement-item">
+		<span class="measurement-label">Name:</span>
+		<input class="measurement-input" id="input-name" type="text" maxlength="60" />
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label">Width (X):</span>
+		<input class="measurement-input" id="input-width" type="number" step="0.1" min="1" max="40" />
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label">Depth (Z):</span>
+		<input class="measurement-input" id="input-depth" type="number" step="0.1" min="1" max="40" />
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label">Height (Y):</span>
+		<input class="measurement-input" id="input-height" type="number" step="0.1" min="0.5" max="10" />
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label">Position X:</span>
+		<input class="measurement-input" id="input-pos-x" type="number" step="0.1" min="-100" max="100" />
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label">Position Z:</span>
+		<input class="measurement-input" id="input-pos-z" type="number" step="0.1" min="-100" max="100" />
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label">Floor:</span>
+		<span class="measurement-value" id="measure-floor">--</span>
+	</div>
+	<button id="save-measurements">Save</button>
+</div>
+
+<!-- Room palette modal for adding furniture -->
+<div id="room-palette-modal">
+	<div id="room-palette-content">
+		<button class="close-button" onclick="hideRoomPalette()">&times;</button>
+		<div id="room-palette-left">
+			<h3 id="room-palette-title">Room</h3>
+			<canvas id="room-preview-canvas" width="360" height="260"></canvas>
+		</div>
+		<div id="room-palette-right">
+			<h3>Furniture List</h3>
+			<div class="room-palette-actions">
+				<button class="secondary" id="palette-clear" title="Clear preview items">Clear</button>
+				<button id="palette-commit" title="Add preview items to room">Add to Room</button>
+			</div>
+			<div id="palette-list"></div>
+		</div>
+	</div>
+	<div id="room-palette-backdrop" onclick="hideRoomPalette()"></div>
+	</div>
+
+
+<div id="info-modal">
+	<div id="info-backdrop" onclick="hideInfo()"></div>
+	<div id="info-content">
+		<div id="info-header">
+			<strong>Information & Help</strong>
+			<button class="secondary" onclick="hideInfo()" title="Close">✕</button>
+		</div>
+		<div id="info-body">
+			<section>
+				<h3 class="info-section-title">Camera</h3>
+				<div class="shortcut-grid">
+					<div class="left"><span class="kbd">Drag</span></div><div class="right">Rotate view</div>
+					<div class="left"><span class="kbd">Shift</span> + <span class="kbd">Drag</span></div><div class="right">Pan view</div>
+					<div class="left"><span class="kbd">Wheel</span></div><div class="right">Zoom in/out</div>
+				</div>
+			</section>
+			<section>
+				<h3 class="info-section-title">Main Toolbar (top)</h3>
+				<ul class="info-list">
+					<li><strong>+ Add Room</strong>: Create a new rectangular room. Drag its edges or use handles to resize.</li>
+		                    <li><strong>Render</strong>: Toggle free-standing walls between simple lines (draft) and solid 300mm walls.</li>
+					<li><strong>Level Menu</strong>: Switch between Ground/First floors and add components:
+						<ul class="info-sublist">
+							<li><strong>+ Stairs</strong>: Add a staircase component.</li>
+							<li><strong>+ Pergola</strong>: Add an outdoor pergola structure.</li>
+							<li><strong>+ Garage</strong>: Add a garage volume.</li>
+							<li><strong>+ Roof</strong>: Add a roof. Change style via the Roof Type dropdown; rotate with the 360° button.</li>
+							<li><strong>+ Pool</strong>: Add a pool cutout.</li>
+							<li><strong>+ Balcony</strong>: Add a balcony platform.</li>
+						</ul>
+					</li>
+					<li><strong>Main Menu 7 Reset</strong>: Clear the project (confirmation required).</li>
+					<li><strong>Main Menu 7 Price</strong>: Open pricing panel.</li>
+					<li><strong>Main Menu &rsaquo; Reset</strong>: Clear the project (confirmation required).</li>
+					<li><strong>Main Menu &rsaquo; Price</strong>: Open pricing panel.</li>
+						<ul class="info-sublist">
+							<li><strong>Information</strong>: Open this help.</li>
+							<li><strong>Project</strong>: Price.</li>
+							<li><strong>Share</strong>: Get a shareable URL.</li>
+							<li><strong>Export</strong>: OBJ (3D), PDF (views), JSON (project), DXF/DWG (floorplan).</li>
+							<li><strong>Import</strong>: OBJ, PDF/SVG/DXF/DWG floorplans, JSON.</li>
+						</ul>
+					</li>
+				</ul>
+			</section>
+			<section>
+				<h3 class="info-section-title">3D Editing</h3>
+				<ul class="info-list">
+					<li><strong>Labels</strong>: Name labels are always visible. Selected items reveal Edit and 360° buttons.</li>
+					<li><strong>Edit</strong>: Opens the Room Palette to add furniture to the selected room.</li>
+					<li><strong>360°</strong>: Rotates the selected item by 45° per click (roof, stairs, garage, furniture where applicable).</li>
+					<li><strong>Handles</strong>: Colored X/Z handles resize width/depth; Y handle adjusts height (when available).</li>
+					<li><strong>Object Measurements</strong>: Right panel for precise sizing and naming; click Save to apply.</li>
+				</ul>
+			</section>
+			<section>
+				<h3 class="info-section-title">2D Floor Plan Editor</h3>
+				<ul class="info-list">
+					<li><strong>Select</strong> (default): Click to select doors/windows/walls. <strong>Shift+Click</strong> adds/removes walls to a multi-selection. Delete removes selection. Arrow keys nudge. Hold Space to pan.</li>
+					<li><strong>Wall</strong>: Draw axis-aligned walls. Shift-click to chain segments. Double-click or press Enter to finish. Close loops to form rooms.</li>
+					<li><strong>Window</strong>: Click a wall to place; drag endpoints to size. Use the Window Type dropdown for Standard/Full height.</li>
+					<li><strong>Door</strong>: Click a wall to place; drag endpoints to size. Use the Door Swing dropdown to set In/Out.</li>
+					<li><strong>Erase</strong>: Click to remove elements under the cursor.</li>
+					<li><strong>Fit</strong>: Fit view to current content.</li>
+					<li><strong>Flip Y</strong>: Mirror vertical axis to match 3D orientation.</li>
+					<li><strong>Clear</strong>: Remove all elements in the 2D plan (confirmation required).</li>
+					<li><strong>Apply to 3D</strong>: Apply changes and automatically return to 3D view.</li>
+					<li><strong>Floor Toggle</strong>: Switch between Ground/First floors while editing.</li>
+				</ul>
+			</section>
+			<section>
+				<h3 class="info-section-title">Room Palette (Furniture)</h3>
+				<ul class="info-list">
+					<li><strong>Preview</strong>: Drag to orbit the preview; drag items within room bounds.</li>
+					<li><strong>Add to Room</strong>: Commit preview items to the selected room.</li>
+					<li><strong>Clear</strong>: Remove all preview items (keeps existing room furniture).</li>
+					<li><strong>Visuals</strong>: Beds show pillows and a sheet; kitchen shows sinks/hob. Dimensions shown in item details.</li>
+				</ul>
+			</section>
+			<section>
+				<h3 class="info-section-title">Keyboard Shortcuts</h3>
+				<div class="shortcut-grid">
+					<div class="left"><span class="kbd">Esc</span></div><div class="right">Clear selection</div>
+					<div class="left"><span class="kbd">Del</span>/<span class="kbd">⌫</span></div><div class="right">Delete selected (3D room / 2D element)</div>
+					<div class="left"><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span></div><div class="right">Nudge 3D object (when selected). <span class="kbd">Shift</span>=×10</div>
+					<div class="left"><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span> (2D)</div><div class="right">Nudge selected wall(s) (grid step). <span class="kbd">Shift</span>=×10</div>
+					<div class="left"><span class="kbd">R</span></div><div class="right">Toggle wall render mode (Lines⇄Solid)</div>
+					<div class="left"><span class="kbd">L</span></div><div class="right">Hide / show labels & corner numbers</div>
+					<div class="left"><span class="kbd">V</span></div><div class="right">Toggle clean view (UI-free preview)</div>
+					<div class="left"><span class="kbd">Ctrl</span> + <span class="kbd">Z</span></div><div class="right">Undo</div>
+					<div class="left"><span class="kbd">Ctrl</span> + <span class="kbd">Y</span> / <span class="kbd">Ctrl</span> + <span class="kbd">Shift</span> + <span class="kbd">Z</span></div><div class="right">Redo</div>
+					<div class="left"><span class="kbd">Space</span> (2D)</div><div class="right">Hold to temporarily pan canvas</div>
+					<div class="left"><span class="kbd">Enter</span> (2D)</div><div class="right">Finish wall chain</div>
+					<div class="left"><span class="kbd">Shift</span> + Click (2D)</div><div class="right">Add/remove wall to multi-selection (Select tool) / Add wall segment to chain (Wall tool)</div>
+					<div class="left">Drag on selected wall (2D)</div><div class="right">Move all selected walls together (group move)</div>
+					<div class="left"><span class="kbd">F</span> (2D)</div><div class="right">Toggle selected window Full Height (floor-to-ceiling)</div>
+					<div class="left"><span class="kbd">P</span> (2D)</div><div class="right">Toggle performance HUD (<span class="kbd">Shift</span>+<span class="kbd">P</span> for extended)</div>
+					<div class="left"><span class="kbd">G</span> (2D)</div><div class="right">Toggle 2D WebGL preview</div>
+					<div class="left"><span class="kbd">Shift</span> + Drag wall end (2D)</div><div class="right">Snap the dragged wall to 45° increments</div>
+					<div class="left"><span class="kbd">Shift</span> + Drag group (2D)</div><div class="right">Constrain group move to horizontal or vertical</div>
+				</div>
+			</section>
+		</div>
+	</div>
+</div>
+
+<!-- Share URL Modal -->
+
+<div id="share-modal">
+	<div id="share-backdrop" onclick="hideShare()"></div>
+	<div id="share-content">
+		<div id="share-header">
+			<strong>Share Link</strong>
+			<button class="secondary" onclick="hideShare()" title="Close">✕</button>
+		</div>
+		<div id="share-body">
+			<div id="share-note">Open your share link in a new tab. In Codespaces, this will be the forwarded URL.</div>
+			<div id="share-row">
+				<a id="share-open" class="secondary" target="_blank" rel="noopener">Open</a>
+			</div>
+			<div id="share-hint"></div>
+		</div>
+	</div>
+  
+</div>
+
+<!-- Admin Modal -->
+<div id="admin-modal">
+	<div id="admin-backdrop" onclick="hideAdmin()"></div>
+	<div id="admin-content">
+		<div id="admin-header">
+			<strong>Admin: Users & Error Logs</strong>
+			<button class="secondary" onclick="hideAdmin()" title="Close">✕</button>
+		</div>
+		<div id="admin-body">
+			<section class="admin-section">
+				<h3>Users</h3>
+				<ul id="admin-users" class="admin-list"></ul>
+			</section>
+			<section class="admin-section">
+				<h3>Errors</h3>
+				<ul id="admin-errors" class="admin-list"></ul>
+			</section>
+		</div>
+	</div>
+  
+</div>
+
+<!-- Account Modal (full-screen splash with left nav) -->
+<div id="account-modal" aria-hidden="true">
+	<div id="account-splash"></div>
+	<div id="account-sheet">
+		<nav id="account-nav">
+			<h3>Account</h3>
+			<button class="account-nav-btn active" data-view="profile">Profile</button>
+			<button class="account-nav-btn" data-view="projects">Projects</button>
+			<button class="account-nav-btn" data-view="settings">Settings</button>
+			<button class="account-nav-btn" data-view="payments">Payments</button>
+			<div style="margin:14px 6px 6px; font-size:11px; font-weight:600; color:#64748b;">App</div>
+			<button class="account-nav-btn" data-view="info" data-action="info">Information</button>
+			<button class="account-nav-btn" data-view="share" data-action="share">Share</button>
+			<button class="account-nav-btn" data-view="admin" data-action="admin">Admin</button>
+		</nav>
+		<main id="account-main">
+			<button id="account-close" class="secondary" title="Close">✕</button>
+			<section id="account-view-profile">
+				<h2>Your Profile</h2>
+				<form id="account-form" class="account-form">
+					<div class="account-field"><label for="acc-first">First name</label><input id="acc-first" name="firstName" /></div>
+					<div class="account-field"><label for="acc-last">Last name</label><input id="acc-last" name="lastName" /></div>
+					<div class="account-field full"><label for="acc-email">Email</label><input id="acc-email" name="email" type="email" /></div>
+					<div class="account-field"><label for="acc-office">Office number</label><input id="acc-office" name="office" /></div>
+					<div class="account-field"><label for="acc-mobile">Mobile</label><input id="acc-mobile" name="mobile" /></div>
+					<div class="account-field full"><label for="acc-company">Company name</label><input id="acc-company" name="company" /></div>
+					<div class="account-actions full">
+						<button type="button" id="account-save">Save</button>
+						<button type="button" id="account-cancel" class="secondary">Cancel</button>
+					</div>
+				</form>
+			</section>
+			<section id="account-view-projects" style="display:none">
+				<h2>Projects</h2>
+				<p>Project management coming soon.</p>
+			</section>
+			<section id="account-view-settings" style="display:none">
+				<h2>Settings</h2>
+				<p>App settings will appear here.</p>
+			</section>
+			<section id="account-view-payments" style="display:none">
+				<h2>Payments</h2>
+				<p>Payment methods and billing will appear here.</p>
+			</section>
+					<section id="account-view-info" style="display:none">
+						<h2>Information & Help</h2>
+						<div id="account-info-body" class="account-scroll"></div>
+					</section>
+					<section id="account-view-share" style="display:none">
+						<h2>Share Project</h2>
+						<div class="share-inline">
+							<label class="share-label" for="account-share-url">Project URL</label>
+							<input id="account-share-url" type="text" readonly />
+							<div class="share-buttons">
+								<button id="account-share-open" class="secondary" type="button">Open</button>
+								<button id="account-share-copy" type="button">Copy</button>
+							</div>
+							<div id="account-share-hint" class="share-hint"></div>
+						</div>
+					</section>
+					<section id="account-view-admin" style="display:none">
+						<h2>Admin Logs</h2>
+						<div style="display:flex; align-items:center; gap:10px;">
+							<button id="account-admin-refresh" class="secondary" type="button">Refresh</button>
+							<div id="account-admin-spinner" class="spinner" aria-label="Loading"></div>
+						</div>
+						<div class="admin-inline">
+							<div class="admin-column">
+								<h3>Users</h3>
+								<ul id="account-admin-users" class="admin-list"></ul>
+							</div>
+							<div class="admin-column">
+								<h3>Errors</h3>
+								<ul id="account-admin-errors" class="admin-list"></ul>
+							</div>
+						</div>
+					</section>
+		</main>
+	</div>
+</div>
+
+<input type="file" id="upload-file" accept="application/json" />
+<input type="file" id="upload-obj-file" accept=".obj" />
+<input type="file" id="upload-pdf-floorplan" accept="application/pdf" />
+<input type="file" id="upload-svg-floorplan" accept="image/svg+xml,.svg" />
+<input type="file" id="upload-dxf-floorplan" accept=".dxf,application/dxf,application/x-dxf,text/plain" />
+<input type="file" id="upload-dwg-floorplan" accept=".dwg,application/acad,application/x-acad,application/autocad-dwg" />
+
+<!-- Floorplan Import Modal -->
+
+<div id="floorplan-modal">
+	<div id="floorplan-backdrop"></div>
+	<div id="floorplan-content">
+		<div class="floorplan-header">
+			<strong>Import Floorplan (PDF)</strong>
+			<button id="floorplan-close" class="secondary" title="Close">✕</button>
+		</div>
+		<div id="floorplan-stage">
+			<div id="floorplan-stage-main">
+				<canvas id="floorplan-canvas"></canvas>
+				<canvas id="floorplan-overlay"></canvas>
+			</div>
+			<div id="floorplan-sidebar">
+				<div class="floorplan-page-row">
+					<span class="floorplan-page-label">Page</span>
+					<button id="fp-page-prev" class="secondary" title="Previous page">◀</button>
+					<input id="fp-page-input" type="number" min="1" value="1" />
+					<span class="floorplan-page-label">/ <span id="fp-page-total">1</span></span>
+					<button id="fp-page-next" class="secondary" title="Next page">▶</button>
+				</div>
+				<div>
+					<div class="floorplan-steps-title">Steps</div>
+
+					<ol class="floorplan-steps-list">
+						<li>Calibrate scale: click two points, enter real distance</li>
+						<li>Draw rooms: drag to place rectangles</li>
+						<li>Commit rooms to scene</li>
+					</ol>
+				</div>
+				<div class="floorplan-tools-row">
+					<button id="fp-mode-calibrate">Calibrate</button>
+					<button id="fp-mode-place">Place Room</button>
+					<button id="fp-undo" class="secondary">Undo</button>
+					<button id="fp-refine-detect" class="secondary" title="Re-run automatic detection">Refine Detect</button>
+				</div>
+				<div class="floorplan-distances-column">
+					<label class="floorplan-small-label">Real distance (m) for last two clicks</label>
+					<input id="fp-real-distance" type="number" min="0.1" max="1000" step="0.1" value="1.0" />
+					<button id="fp-apply-scale" class="secondary">Apply Scale</button>
+				</div>
+				<div class="floorplan-auto-box">
+					<div class="floorplan-auto-title">Auto Detection</div>
+					<label class="floorplan-auto-label">Min Room (m)
+							<input id="fp-auto-min" type="number" step="0.5" min="1" value="2" />
+					</label>
+					<label class="floorplan-auto-label">Max Aspect Ratio
+							<input id="fp-auto-ar" type="number" step="0.5" min="2" value="8" />
+					</label>
+					<label class="floorplan-auto-label">Border Ink ≥
+							<input id="fp-auto-border" type="number" step="0.05" min="0" max="1" value="0.15" />
+					</label>
+				</div>
+				<div class="floorplan-small-text">
+					<div>Scale: <span id="fp-scale-display">—</span> px/m</div>
+					<div>Rooms queued: <span id="fp-rooms-count">0</span></div>
+				</div>
+				<div class="floorplan-commit-row">
+					<button id="fp-commit">Commit to Scene</button>
+					<button id="fp-cancel" class="secondary">Cancel</button>
+				</div>
+			</div>
+		</div>
+	</div>
+  
+</div>
+
+<div id="pricing-modal">
+    <div id="pricing-content">
+		<button class="close-button" onclick="hidePricing()">&times;</button>
+		<h2>Project Pricing</h2>
+			<div class="pricing-settings-row">
+				<label class="pricing-field-label">
+					Concrete thickness (mm)
+					<input id="pricing-slab-mm" type="number" min="50" max="300" step="5" value="100" />
+				</label>
+				<label class="pricing-field-label">
+					Soil rate ($/m³)
+					<input id="pricing-soil-per-m3" type="number" min="0" step="10" value="600" />
+				</label>
+				<button id="pricing-apply" class="secondary" title="Apply pricing settings">Apply</button>
+			</div>
+		<div id="pricing-breakdown">
+			<div class="pricing-section">
+				<h3>Rooms</h3>
+				<div id="room-pricing"></div>
+			</div>
+			<div class="pricing-section">
+				<h3>Additional Components</h3>
+				<div id="component-pricing"></div>
+			</div>
+			<div class="pricing-section">
+				<h3>Concrete & Site Works</h3>
+				<div id="concrete-pricing"></div>
+			</div>
+			<div class="pricing-section total-section">
+				<h3>Total Estimate</h3>
+				<div id="total-pricing"></div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- Splash/progress overlay (non-deferred to show immediately) -->
+<script src="js/boot/splash.js?v=20251101-1"></script>
+<!-- Coordinated bootstrap: loads all modules with progress, then starts app -->
+<script src="js/boot/bootstrap.js?v=20251101-1"></script>
+<!-- Optional smoke tests (enable 2D editor smoke with ?smoke2d=1 in URL) -->
+<script src="js/smoke/smoke2d.js?v=20251101-1"></script>
+<!-- Optional 3D smoke (e.g., ?test3d=kitchen) -->
+<script src="js/smoke/smoke3d.js?v=20251105-1"></script>
+
+<script>
+// Debug dropdown: manage open state and wire toggles to global flags
+document.addEventListener('DOMContentLoaded', () => {
+	try {
+		const btn = document.getElementById('debugButton');
+		const list = document.getElementById('debugList');
+		const chkHandles = document.getElementById('chk-corner-handles');
+		const chkDebug = document.getElementById('chk-corner-debug');
+		const dropdown = document.getElementById('debugDropdown');
+
+		function setOpen(open){
+			if (!dropdown) return;
+			if (open) dropdown.classList.add('open'); else dropdown.classList.remove('open');
+		}
+		if (btn) {
+			btn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				const isOpen = dropdown.classList.contains('open');
+				setOpen(!isOpen);
+			});
+		}
+		document.addEventListener('click', (e) => {
+			if (!dropdown) return;
+			if (!dropdown.contains(e.target)) setOpen(false);
+		});
+
+		// Load saved states
+		try {
+			const v1 = localStorage.getItem('gablok_dbg_cornerHandles');
+			const v2 = localStorage.getItem('gablok_dbg_cornerDebug');
+			if (v1 !== null) window.__enableCornerHandles = (v1 === '1');
+			if (v2 !== null) window.__debugCornerCache = (v2 === '1');
+		} catch(_eLS) {}
+		if (chkHandles) chkHandles.checked = (window.__enableCornerHandles === true);
+		if (chkDebug) chkDebug.checked = (window.__debugCornerCache === true);
+
+		function rerender(){ try { if (typeof window.renderLoop === 'function') window.renderLoop(); } catch(_eR) {} }
+		if (chkHandles) {
+			chkHandles.addEventListener('change', () => {
+				window.__enableCornerHandles = !!chkHandles.checked;
+				try { localStorage.setItem('gablok_dbg_cornerHandles', window.__enableCornerHandles ? '1' : '0'); } catch(_e) {}
+				rerender();
+			});
+		}
+		if (chkDebug) {
+			chkDebug.addEventListener('change', () => {
+				window.__debugCornerCache = !!chkDebug.checked;
+				try { localStorage.setItem('gablok_dbg_cornerDebug', window.__debugCornerCache ? '1' : '0'); } catch(_e) {}
+			});
+		}
+	} catch(_eDbg) {}
+});
+</script>
+
+
+<!-- 2D Floor Plan Editor Modal -->
+<!-- Elevate 2D plan modal above all other UI (previous duplicate used z-index 12000) -->
+
+<div id="plan2d-page">
+	<div id="plan2d-content">
+		<div id="plan2d-header">
+			<!-- Removed duplicate subset nav: unified main #controls is dynamically relocated here -->
+			<!-- Centered floor toggle absolutely relative to full header width -->
+			<div id="plan2d-floor-center">
+				<div class="plan2d-floor-toggle" role="group" aria-label="Switch Floor">
+					<button id="plan2d-floor-ground" type="button" title="Switch to Ground Floor">Ground</button>
+					<button id="plan2d-floor-first" type="button" title="Switch to First Floor">First</button>
+				</div>
+				<div id="plan2d-compass"></div>
+			</div>
+			<div id="plan2d-toolbar-right">
+				<!-- Make Select the first tool left-to-right -->
+				<button id="plan2d-tool-select" title="Select elements to edit/delete">Select</button>
+				<div id="plan2d-wall-group">
+					<button id="plan2d-tool-wall" title="Draw Walls (300mm thick)">Wall</button>
+					<div><span>Scale: </span><span id="plan2d-scale">1:100</span></div>
+				</div>
+				<button id="plan2d-tool-window" title="Draw Windows (thin line)">Window</button>
+				<button id="plan2d-tool-door" title="Draw Doors">Door</button>
+				<!-- Opening property controls moved below Import JSON -->
+				<button id="plan2d-tool-erase" title="Erase elements">Erase</button>
+				<!-- View utilities: fit and flip orientation -->
+				<button id="plan2d-fit" title="Fit view to current 2D content">Fit</button>
+				<button id="plan2d-flip-y" title="Flip vertical to mirror 3D orientation">Flip Y</button>
+				<button id="plan2d-clear" class="secondary" title="Clear drawing">Clear</button>
+				<button id="plan2d-close" class="secondary" title="Close 2D editor">✕</button>
+			</div>
+		</div>
+	<!-- Absolute-positioned rulers and stage to match resize logic and restore left-side overlay -->
+	<canvas id="plan2d-ruler-top"></canvas>
+	<canvas id="plan2d-ruler-left"></canvas>
+	<div id="plan2d-stage">
+		<canvas id="plan2d-canvas"></canvas>
+		<canvas id="plan2d-overlay"></canvas>
+		<canvas id="labels-2d"></canvas>
+		<!-- Floating side overlay (left-hand menu) restored -->
+		<div id="plan2d-side-overlay">
+			<button id="plan2d-apply-3d" class="secondary" title="Apply this floor plan to the 3D design">Apply to 3D</button>
+			<button id="plan2d-export" class="secondary" title="Export plan JSON">Export JSON</button>
+			<button id="plan2d-import" class="secondary" title="Import plan JSON">Import JSON</button>
+			<!-- Opening dropdowns relocated here: inline row just below Import JSON -->
+			<div id="plan2d-opening-inline">
+				<select id="plan2d-window-type" class="secondary" title="Window Type">
+					<option value="standard">Window: Standard</option>
+					<option value="full">Window: Full Height</option>
+				</select>
+				<select id="plan2d-door-swing" class="secondary" title="Door Swing">
+					<option value="in">Door: Swing In</option>
+					<option value="out">Door: Swing Out</option>
+				</select>
+				<select id="plan2d-door-hinge" class="secondary" title="Door Hinge Side">
+					<option value="t0" selected>Door: Hinge Left</option>
+					<option value="t1">Door: Hinge Right</option>
+				</select>
+			</div>
+				<input type="file" id="plan2d-import-file" accept="application/json">
+		</div>
+	</div>
+	</div>
+</div>
+
+<!-- Reset Confirmation Modal -->
+
+<div id="reset-confirmation-modal">
+	<div id="reset-dialog">
+		<div id="reset-titlebar">
+			<div id="reset-icon">
+				<svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+			</div>
+			<h2 id="reset-title">Reset Everything?</h2>
+			<p id="reset-desc">This will permanently delete all your work including rooms, furniture, and settings. This action cannot be undone.</p>
+		</div>
+		<div id="reset-actions">
+			<button id="reset-cancel-btn" class="secondary">Cancel</button>
+			<button id="reset-confirm-btn">Yes, Reset Everything</button>
+		</div>
+	</div>
+</div>
+
+<script>
+// Render mode toggle for free-standing walls: Lines (default) vs Solid (300mm)
+document.addEventListener('DOMContentLoaded', () => {
+	try {
+		// Ensure initial mode defaults to 'line' (outline) unless explicitly restored
+		if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'line';
+		var btn = document.getElementById('btn-render-walls');
+		function refreshBtn() {
+			if (!btn) return;
+			btn.textContent = (window.__wallRenderMode === 'solid') ? 'Render: Solid' : 'Render: Lines';
+			// Provide a visual pressed/active style when solid mode is enabled
+			if (window.__wallRenderMode === 'solid') btn.classList.add('active'); else btn.classList.remove('active');
+		}
+		function setMode(mode){
+			try {
+				if (typeof window.setWallRenderMode === 'function') {
+					window.setWallRenderMode(mode);
+				} else {
+					window.__wallRenderMode = mode;
+					if (typeof window.updateStatus === 'function') window.updateStatus('Walls: ' + (mode==='solid'?'Solid 300mm':'Lines'));
+					if (typeof window.renderLoop === 'function') window.renderLoop();
+				}
+				refreshBtn();
+			} catch(_e) {}
+		}
+		if (btn){
+			btn.addEventListener('click', function(){
+				var next = (window.__wallRenderMode === 'solid') ? 'line' : 'solid';
+				setMode(next);
+			});
+			// If the engine already set a default (line), reflect it; otherwise enforce line
+			if (window.__wallRenderMode !== 'solid' && window.__wallRenderMode !== 'line') window.__wallRenderMode = 'line';
+			refreshBtn();
+		}
+	} catch(_eR) {}
+});
+// Reset confirmation dialog
+function showResetConfirmation() {
+	const modal = document.getElementById('reset-confirmation-modal');
+	if (modal) {
+		modal.style.display = 'flex';
+		modal.classList.remove('hidden');
+	}
+}
+
+function hideResetConfirmation() {
+	const modal = document.getElementById('reset-confirmation-modal');
+	if (modal) {
+		modal.style.display = 'none';
+		modal.classList.add('hidden');
+	}
+}
+
+function confirmReset() {
+	// Call the existing resetAll function
+	if (typeof resetAll === 'function') {
+		resetAll();
+	}
+	// Refresh the page to fully clear everything
+	setTimeout(() => {
+		location.reload();
+	}, 100);
+}
+
+// Wire up modal buttons
+document.addEventListener('DOMContentLoaded', () => {
+	const cancelBtn = document.getElementById('reset-cancel-btn');
+	const confirmBtn = document.getElementById('reset-confirm-btn');
+	const modal = document.getElementById('reset-confirmation-modal');
+	
+	if (cancelBtn) {
+		cancelBtn.addEventListener('click', hideResetConfirmation);
+	}
+	
+	if (confirmBtn) {
+		confirmBtn.addEventListener('click', confirmReset);
+	}
+	
+	// Close modal when clicking backdrop
+	if (modal) {
+		modal.addEventListener('click', (e) => {
+			if (e.target === modal) {
+				hideResetConfirmation();
+			}
+		});
+	}
+});
+</script>
+
+</body>
+</html>
+
+

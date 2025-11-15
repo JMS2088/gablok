@@ -1,0 +1,1016 @@
+  :root {
+    --btn-gap: 12px;
+    --transition-fast: 120ms;
+    --label-btn-font-size: 10px;
+    --label-btn-height: 24px;
+    --label-btn-radius: 12px;
+    --roof-rotate-size: 32px;
+  }
+  /* Utility visibility classes */
+  .is-hidden { display: none !important; }
+  .is-invisible { visibility: hidden !important; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; font-family: system-ui, sans-serif; background:#ffffff; }
+  
+  #controls {
+    position: fixed; top: 35px; left: 35px; z-index: 100;
+    /* Remove surrounding background panel */
+    background: transparent; backdrop-filter: none;
+    padding: 0; border-radius: 0; box-shadow: none;
+    display: flex; gap: var(--btn-gap); align-items: center;
+  }
+  /* Normalize child margins so spacing relies solely on container gap */
+  #controls > * { margin: 0; }
+
+  /* Custom dropdown (forces white/black regardless of native UI) */
+  .dropdown { position: relative; display: inline-block; }
+  .dropdown-button {
+    display: inline-flex; align-items: center; gap: 8px;
+    position: relative; /* anchor absolute caret */
+    background: #ffffff; color: #000000; border: 1px solid #ccc; border-radius: 6px;
+    padding: 10px 34px 10px 12px; font-size: 14px; font-weight: 400; cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, color 160ms ease;
+  }
+  .dropdown-button:hover { border-color: #b5b5b5; box-shadow: 0 3px 10px rgba(0,0,0,0.08); }
+  .dropdown-button:focus { outline: none; border-color: #007acc; box-shadow: 0 0 0 3px rgba(0,122,204,0.18); }
+  .dropdown-button .caret {
+    position: absolute; right: 12px; width: 12px; height: 8px; pointer-events: none;
+    top: 50%; transform: translateY(-50%); /* center arrow vertically */
+    display: flex; align-items: center; justify-content: center;
+  }
+  .dropdown-button .caret svg { display: block; }
+
+  /* 2D Plan floor toggle */
+  .plan2d-floor-toggle { background:#e2e8f0; padding:4px; border-radius:999px; display:inline-flex; gap:4px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.04); }
+  .plan2d-floor-toggle button { border:none; background:#ffffff; color:#111827; font-weight:400; font-size:12px; padding:6px 12px; border-radius:999px; cursor:pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.06); transition: background-color 0.2s, color 0.2s, box-shadow 0.2s; }
+  .plan2d-floor-toggle button:hover {
+    background: #007acc;
+    color: #ffffff;
+    box-shadow: 0 3px 12px rgba(0,122,204,0.35);
+  }
+  .plan2d-floor-toggle button.active { background:#007acc; color:#ffffff; box-shadow: 0 2px 8px rgba(0,122,204,0.35); }
+
+  /* Remove thick focus keyline on the 2D Plan modal container while preserving keyboard focus */
+  #plan2d-content { outline: none; }
+  #plan2d-content:focus { outline: none !important; box-shadow: 0 22px 70px -8px rgba(0,0,0,0.55); }
+
+  /* Hide 1–2px browser focus outline around the 2D canvases when they are focused for keyboard input */
+  #plan2d-canvas:focus, #plan2d-overlay:focus { outline: none !important; }
+  #plan2d-canvas, #plan2d-overlay { -webkit-tap-highlight-color: transparent; }
+
+  /* Removed specialized 2D secondary overrides to unify with global styles */
+  .dropdown-button .caret svg path { stroke: #333; }
+  .dropdown.open .dropdown-button { border-color: #007acc; box-shadow: 0 0 0 3px rgba(0,122,204,0.12); }
+
+  /* Main menu (actions) specific hover/open styles: white text on brand blue */
+  #actionsDropdown .dropdown-button:hover {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 3px 12px rgba(0,122,204,0.35) !important;
+  }
+  #actionsDropdown .dropdown-button:hover .caret svg path { stroke: #ffffff !important; }
+  #actionsDropdown.open .dropdown-button {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 0 0 3px rgba(0,122,204,0.18) !important;
+  }
+  #actionsDropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
+
+  /* Level dropdown: same white-on-blue rollover/open behavior */
+  #levelDropdown .dropdown-button:hover {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 3px 12px rgba(0,122,204,0.35) !important;
+  }
+  #levelDropdown .dropdown-button:hover .caret svg path { stroke: #ffffff !important; }
+  #levelDropdown.open .dropdown-button {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 0 0 3px rgba(0,122,204,0.18) !important;
+  }
+  #levelDropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
+
+  /* Debug dropdown: white text on blue when hovering/open, matching other menus */
+  #debugDropdown .dropdown-button:hover {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 3px 12px rgba(0,122,204,0.35) !important;
+  }
+  #debugDropdown .dropdown-button:hover .caret svg path { stroke: #ffffff !important; }
+  #debugDropdown.open .dropdown-button {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 0 0 3px rgba(0,122,204,0.18) !important;
+  }
+  #debugDropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
+
+  /* Roof type dropdown: white text on blue for rollover/open, and white text on hovered items */
+  #roof-type-dropdown .dropdown-button:hover {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 3px 12px rgba(0,122,204,0.35) !important;
+  }
+  #roof-type-dropdown .dropdown-button:hover .caret svg path { stroke: #ffffff !important; }
+  #roof-type-dropdown.open .dropdown-button {
+    color: #ffffff !important;
+    background-color: #007acc !important;
+    border-color: #007acc !important;
+    box-shadow: 0 0 0 3px rgba(0,122,204,0.18) !important;
+  }
+  #roof-type-dropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
+  /* Dropdown list item rollover: brand blue background with white text (scoped to roof dropdown only) */
+  #roof-type-dropdown .dropdown-list .dropdown-item:hover {
+    background-color: #007acc !important;
+    color: #ffffff !important;
+  }
+
+  /* Pulse highlight when opening the roof dropdown */
+  @keyframes dropdownPulse {
+    0% { box-shadow: 0 0 0 0 rgba(0,122,204,0.45); }
+    100% { box-shadow: 0 0 0 16px rgba(0,122,204,0); }
+  }
+  #roof-type-dropdown.pulse .dropdown-button {
+    animation: dropdownPulse 0.65s ease-out;
+  }
+
+  /* Main menu: make all secondary buttons white with black text (except primary Add Room) */
+  #controls button.secondary {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #ccc !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    font-weight: 400 !important;
+  }
+  /* Hover state matches main menu rollover: brand blue background, white text */
+  #controls button.secondary:hover {
+    background-color: #007acc !important;
+    color: #ffffff !important;
+    border-color: #007acc !important;
+    box-shadow: 0 3px 12px rgba(0,122,204,0.35) !important;
+  }
+
+  .dropdown-list {
+    position: absolute; top: calc(100% + 6px); left: 0; min-width: 180px; max-height: 300px; overflow: auto;
+    background: #ffffff; color: #000000; border: 1px solid #d1d5db; border-radius: 8px; box-shadow: 0 10px 24px rgba(0,0,0,0.14);
+    padding: 6px 0; z-index: 200; display: none;
+  }
+  .dropdown.open .dropdown-list { display: block; }
+  /* Actions menu: show full submenu without scrolling */
+  #actionsDropdown .dropdown-list {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .dropdown-item {
+    padding: 8px 12px; font-size: 14px; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 8px;
+  }
+  .dropdown-item:hover { background: #f2f4f7; }
+  .dropdown-item.disabled { color: #9aa0a6; cursor: default; }
+  .dropdown-item.separator { padding: 4px 0; margin: 4px 0; border-top: 1px solid #e5e7eb; cursor: default; }
+  .dropdown-title { font-size: 12px; font-weight: 700; color: #6b7280; padding: 6px 12px 4px 12px; text-transform: uppercase; letter-spacing: 0.04em; cursor: default; }
+  
+  button {
+    padding: 10px 16px; border: none; border-radius: 6px; 
+    background: #007acc; color: white; cursor: pointer; font-size: 14px; font-weight: 400;
+    transition: background 0.2s, color 0.2s, border-color 0.2s, box-shadow 0.2s;
+  }
+  button:hover {
+    background: #005999;
+    box-shadow: 0 3px 12px rgba(0,122,204,0.35);
+  }
+  /* =====================================================================
+     GLOBAL BUTTON SYSTEM — DO NOT FRAGMENT OR REMOVE
+     ---------------------------------------------------------------------
+     All interactive buttons share a unified base style (above). 2D editor
+     tool buttons and side overlay buttons receive enhanced hover and a
+     persistent selected state for clarity against the dark grid.
+     Adjust colors with care; maintain sufficient contrast (WCAG AA).
+     ===================================================================== */
+  /* 2D Tool / Overlay buttons: ensure strong hover contrast on dark bg */
+  #plan2d-toolbar-right button,
+  #plan2d-side-overlay > button,
+  .plan2d-floor-toggle button,
+  #plan2d-opening-inline select { position: relative; }
+  #plan2d-toolbar-right button:hover,
+  #plan2d-side-overlay > button:hover,
+  .plan2d-floor-toggle button:hover {
+    background: #0093ff !important; /* brighter brand blue */
+    color: #ffffff !important;
+    box-shadow: 0 0 0 2px rgba(0,147,255,0.45), 0 4px 18px rgba(0,0,0,0.55) !important;
+  }
+  /* Selected (active tool) state */
+  #plan2d-toolbar-right button.selected {
+    background: #0ea5e9 !important; /* cyan accent */
+    color: #ffffff !important;
+    box-shadow: 0 0 0 2px rgba(14,165,233,0.55), 0 3px 14px rgba(0,0,0,0.5) !important;
+  }
+  #plan2d-toolbar-right button.selected:hover {
+    background: #0284c7 !important; /* slightly deeper on hover */
+    box-shadow: 0 0 0 2px rgba(2,132,199,0.55), 0 4px 16px rgba(0,0,0,0.55) !important;
+  }
+  /* Focus visible ring for keyboard accessibility */
+  #plan2d-toolbar-right button:focus-visible,
+  #plan2d-side-overlay > button:focus-visible,
+  .plan2d-floor-toggle button:focus-visible,
+  #plan2d-opening-inline select:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(14,165,233,0.65), 0 0 0 6px rgba(14,165,233,0.18);
+  }
+  /* Secondary buttons inside 2D dark context: lighten base for contrast */
+  #plan2d-page button.secondary { background:#f8fafc !important; color:#0f172a !important; border:1px solid #cbd5e1 !important; }
+  #plan2d-page button.secondary:hover { background:#0093ff !important; color:#ffffff !important; border-color:#0093ff !important; }
+  /* Clear button destructive hint */
+  #plan2d-clear:hover { background:#dc2626 !important; color:#ffffff !important; border-color:#dc2626 !important; box-shadow:0 0 0 2px rgba(220,38,38,0.4), 0 3px 14px rgba(0,0,0,0.55) !important; }
+  /* Close button distinct neutral hover (avoid accidental destructive feel) */
+  #plan2d-close:hover { background:#374151 !important; color:#ffffff !important; border-color:#374151 !important; }
+  button.secondary { background: #f0f0f0; color: #333; border: 1px solid #ccc; }
+  button.secondary:hover {
+    background-color: #007acc !important;
+    color: #ffffff !important;
+    border-color: #007acc !important;
+    box-shadow: 0 3px 12px rgba(0,122,204,0.35) !important;
+  }
+
+  /* Clean view mode: hide all overlay UI except canvas */
+  body.clean-view #controls,
+  body.clean-view #labels-3d,
+  body.clean-view #measurements,
+  body.clean-view #status,
+  body.clean-view #account-button { display:none !important; }
+  body.clean-view #canvas { pointer-events:auto; }
+
+  /* Hidden labels state (only labels hidden) */
+  body.hide-labels #labels-3d { display:none !important; }
+  body.clean-view #btn-clean-view { display:none !important; }
+  
+  select {
+      padding: 10px 30px 10px 10px; /* extra right padding for arrow */
+    border: 1px solid #ccc !important;
+    border-radius: 6px !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 14px !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    -moz-appearance: none !important;
+      background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%23333' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+    background-size: 12px 8px;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, color 160ms ease !important;
+    }
+
+  /* Elegant rollover for dropdowns */
+  select:hover {
+    border-color: #b5b5b5 !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+  }
+  select:focus {
+    outline: none !important;
+    border-color: #007acc !important;
+    box-shadow: 0 0 0 3px rgba(0,122,204,0.18) !important;
+  }
+
+  /* Ensure dropdown options also appear with white background and black text */
+  select option {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+  /* Optional: subtle hover and selected states for options (browser support varies) */
+  select option:hover {
+    background-color: #f2f4f7;
+    color: #000000;
+  }
+  select option:checked {
+    background-color: #e9f3fb;
+    color: #000000;
+  }
+
+  /* Make sure the main actions menu is consistent */
+  #actionsMenu, #levelSelect {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    min-width: 150px;
+  }
+  
+  #measurements {
+    position: fixed; top: 90px; right: 35px; z-index: 100;
+    background: rgba(255,255,255,0.95); backdrop-filter: blur(10px);
+    padding: 15px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    min-width: 200px; width: 340px; font-family: monospace; font-size: 12px;
+    display: none;
+  }
+
+  /* 2D plan right-side overlay: match main controls container (transparent, no panel) */
+  #plan2d-side-overlay {
+    position: absolute; right: 35px; top: 110px; z-index: 4; /* pushed down from standard 35px to 110px per user request */
+    display: flex; flex-direction: column; gap: var(--btn-gap);
+    background: transparent; border: 0; border-radius: 0; padding: 0;
+    backdrop-filter: none;
+  }
+  #plan2d-side-overlay > * { margin: 0; }
+  /* Make right-hand side overlay buttons the same height as main navigation */
+  #plan2d-side-overlay > button {
+    /* Match Floor Plan button height: rely on shared padding (10px vertical) */
+    min-height: unset; /* remove forced 44px */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center; /* center text/content horizontally */
+    padding: 10px 14px; /* unified horizontal padding (same left/right) */
+  }
+  /* Make key overlay buttons 25px wider total (≈ +12px left/right) */
+  #plan2d-apply-3d,
+  #plan2d-export,
+  #plan2d-import {
+    width: 170px;            /* fixed width to prevent jumping */
+    padding-left: 16px;      /* restore comfortable inner spacing */
+    padding-right: 16px;
+  }
+
+  /* Opening controls row (moved from inline styles) */
+  #plan2d-opening-inline {
+    display: flex; flex-direction: column; gap: 8px; align-items: stretch; margin-top: 6px;
+  }
+  #plan2d-opening-inline select {
+    padding: 4px 6px; font-size: 12px; width: 100%;
+  }
+  /* Make the Window Type dropdown match the width of the buttons above */
+  #plan2d-window-type {
+    width: 100%; /* expands to the width of the side overlay, which is dictated by the widest button */
+  }
+  /* Default hidden, JS will toggle to show when relevant */
+  #plan2d-window-type,
+  #plan2d-door-swing,
+  #plan2d-door-hinge { display: none; }
+  #plan2d-window-type.visible,
+  #plan2d-door-swing.visible,
+  #plan2d-door-hinge.visible { display: inline-block; }
+
+  /* 2D plan top-right toolbar: 35px from top/right, styles in CSS not inline */
+  #plan2d-toolbar-right {
+    position: absolute; top: 35px; right: 35px;
+    /* Evenly spaced, equal-width controls */
+    display: grid;
+    grid-auto-flow: column;          /* lay out children in columns */
+    grid-auto-columns: max-content;  /* size to content for consistent visual gaps */
+    gap: var(--btn-gap);             /* uniform gaps between items */
+    justify-content: start;          /* avoid distributing extra space */
+    align-items: start;              /* align tops so Wall group does not push buttons down */
+  }
+  /* Normalize child margins so spacing relies solely on grid gap */
+  #plan2d-toolbar-right > * { margin: 0; }
+  /* Make the 2D toolbar buttons match main navigation height (~44px) */
+  #plan2d-toolbar-right > button {
+    /* Match Floor Plan button height by removing fixed 44px and using shared padding */
+    min-height: unset;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center; /* center text/content horizontally */
+    padding: 10px 14px; /* unified horizontal padding */
+  }
+  /* Allow natural widths; rely on grid gap for spacing */
+  #plan2d-toolbar-right > * { min-width: 0; }
+  #plan2d-toolbar-right > button { width: auto; }
+  #plan2d-wall-group { width: auto; }
+
+  /* Wall tool group (button + scale label) moved from inline */
+  #plan2d-wall-group {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  #plan2d-wall-group #plan2d-scale { font-size: 10px; color: #ffffff; line-height: 1; }
+  /* Force scale label container text ("Scale:" and value) to white and set unified 10px size */
+  #plan2d-wall-group > div { color: #ffffff; font-size: 10px; line-height: 1; }
+
+  /* Hide the inline file input used by Import JSON trigger */
+  #plan2d-import-file { display: none; }
+  
+  #measurements.visible { display: block; }
+  
+  #measurements h3 {
+  margin: 0 0 10px 0; font-size: 14px; font-weight: 600; color: #333;
+    text-align: center; font-family: system-ui, sans-serif;
+  }
+  
+  #measurements .measurement-item {
+    display: flex; justify-content: space-between; align-items: center; margin: 5px 0;
+    padding: 3px 0; border-bottom: 1px solid #eee;
+  }
+  #measurements .measurement-label { min-width: 90px; }
+  
+  #measurements .measurement-label { color: #666; font-weight: 500; }
+  #measurements .measurement-value { color: #333; font-weight: 600; }
+  #measurements .measurement-input {
+    /* Increased width to accommodate 4-5 digits plus spinner arrows without clipping */
+    width: 90px; /* was 60px */
+    min-width: 90px;
+    font-family: monospace;
+    font-size: 12px;
+    color: #333;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin-left: 8px;
+    text-align: right;
+    box-sizing: border-box; /* ensure padding doesn't shrink visible numeric area */
+  }
+
+  /* Wider name input for better readability */
+  #input-name.measurement-input {
+    width: calc(100% - 90px - 8px);
+    max-width: none;
+    text-align: left;
+    font-family: system-ui, sans-serif;
+  }
+  
+  /* =====================
+     Inline styles moved to CSS (batch 1)
+     ===================== */
+  #levelSelect { display: none; }
+  #nav-compass { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
+  #nav-compass-canvas { width: 44px; height: 44px; pointer-events: none; }
+  #save-measurements { margin-top: 10px; padding: 6px 16px; }
+  
+  /* Info modal */
+  #info-modal { display: none; position: fixed; inset: 0; z-index: 11000; align-items: center; justify-content: center; }
+  /* Ensure Info modal shows when JS toggles 'visible' */
+  #info-modal.visible { display: flex; }
+  #info-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+  #info-content { position: relative; width: min(980px, 96vw); max-height: calc(100vh - 40px); overflow: auto; background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
+  #info-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; position: sticky; top: 0; z-index: 1; }
+  #info-header strong { flex: 1; }
+  #info-body { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 18px; }
+
+  /* Share modal */
+  #share-modal { display: none; position: fixed; inset: 0; z-index: 11000; align-items: center; justify-content: center; }
+  /* Ensure Share modal shows when JS toggles 'visible' */
+  #share-modal.visible { display: flex; }
+  #share-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+  #share-content { position: relative; width: min(720px, 95vw); background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); display: flex; flex-direction: column; overflow: hidden; }
+  #share-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; }
+  #share-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  #share-note { font-size: 13px; color: #334155; }
+  #share-row { display: flex; gap: 8px; align-items: center; }
+  #share-open { text-decoration: none; display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 8px; border: 1px solid #cbd5e1; }
+  #share-hint { font-size: 12px; color: #64748b; }
+
+  /* Hidden file inputs */
+  #upload-file, #upload-obj-file, #upload-pdf-floorplan, #upload-svg-floorplan, #upload-dxf-floorplan, #upload-dwg-floorplan { display: none; }
+  /* Share badge styles moved from JS */
+  #share-badge {
+    display:inline-flex; align-items:center; gap:6px; margin-left:8px;
+    padding:4px 8px; border:1px solid #e5e7eb; border-radius:8px;
+    background:#ffffff; font:12px system-ui, sans-serif; white-space: normal;
+    max-width:70vw; flex-wrap: wrap;
+  }
+  #share-badge-link {
+    color:#1f2937; text-decoration:none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size:12px; overflow-wrap:anywhere;
+  }
+
+  /* 2D Page shell */
+  #plan2d-page { display:none; position:fixed; inset:0; z-index:12000; }
+  #plan2d-content { position:absolute; inset:0; width:100%; height:100vh; background:repeating-linear-gradient(0deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px), repeating-linear-gradient(90deg,#111827,#111827 28px,#1e293b 28px,#1e293b 56px); display:flex; flex-direction:column; overflow:hidden; }
+  /* CAD MODE: Replace dark stylized background with professional white drafting paper when enabled */
+  body.cad-mode #plan2d-content { background:#ffffff !important; }
+  body.cad-mode #plan2d-canvas { background:#ffffff !important; }
+  body.cad-mode #plan2d-overlay { background:transparent !important; }
+  /* Rulers switch to light theme in CAD mode */
+  body.cad-mode #plan2d-ruler-top, body.cad-mode #plan2d-ruler-left { background:#ffffff !important; }
+  /* Tool / floor toggle contrast adjustments on white */
+  body.cad-mode .plan2d-floor-toggle { background:#ffffff !important; border:1px solid #cbd5e1 !important; box-shadow:none !important; }
+  body.cad-mode .plan2d-floor-toggle button { background:#f8fafc !important; color:#0f172a !important; box-shadow:none !important; border:1px solid #cbd5e1 !important; }
+  body.cad-mode .plan2d-floor-toggle button.active { background:#0ea5e9 !important; color:#ffffff !important; border-color:#0ea5e9 !important; }
+  /* Toolbar buttons: neutral outline with vivid selected state */
+  body.cad-mode #plan2d-toolbar-right button { background:#f8fafc !important; color:#0f172a !important; border:1px solid #cbd5e1 !important; }
+  body.cad-mode #plan2d-toolbar-right button:hover { background:#0ea5e9 !important; color:#ffffff !important; border-color:#0ea5e9 !important; }
+  body.cad-mode #plan2d-toolbar-right button.selected { background:#0284c7 !important; color:#ffffff !important; border-color:#0284c7 !important; }
+  /* Side overlay buttons alignment */
+  body.cad-mode #plan2d-side-overlay > button { background:#f8fafc !important; color:#0f172a !important; border:1px solid #cbd5e1 !important; }
+  body.cad-mode #plan2d-side-overlay > button:hover { background:#0ea5e9 !important; color:#ffffff !important; border-color:#0ea5e9 !important; }
+  /* Measurement text color adaptation */
+  body.cad-mode .plan2d-measure-label { color:#0f172a !important; }
+  #plan2d-header { display:flex; align-items:center; gap:14px; padding:4px 8px; background:transparent; border-bottom:none; position:relative; z-index:2; }
+  #plan2d-floor-center { position:absolute; top:36px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; z-index:1; pointer-events:auto; }
+  .plan2d-floor-toggle { display:flex; gap:4px; background:rgba(15,23,42,0.85); padding:6px 10px; border:1px solid rgba(148,163,184,0.35); border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.4); }
+  #plan2d-compass { display:none; }
+  #plan2d-ruler-top { position:absolute; top:0; left:28px; right:0; height:28px; background:#0f172a; display:block; box-shadow:none; border:none; }
+  #plan2d-ruler-left { position:absolute; top:28px; left:0; bottom:0; width:28px; background:#0f172a; display:block; box-shadow:none; border:none; }
+  #plan2d-stage { position:absolute; top:28px; left:28px; right:0; bottom:0; }
+  #plan2d-canvas { position:absolute; inset:0; width:100%; height:100%; background:#0b1220; display:block; cursor:crosshair; }
+  #plan2d-overlay, #labels-2d { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; }
+
+  /* Floorplan import modal */
+  #floorplan-modal { display:none; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center; }
+  #floorplan-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
+  #floorplan-content { position:relative; width: min(1200px, 95vw); height: calc(100vh - 40px); max-height:100vh; background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden; }
+  #floorplan-stage { display:flex; min-height:0; height:100%; }
+  #floorplan-stage-main { flex:1; position:relative; background:#0b1020; display:flex; align-items:stretch; justify-content:stretch; }
+  #floorplan-canvas { width:100%; height:100%; background:#0b1020; display:block; }
+  #floorplan-overlay { position:absolute; inset:0; pointer-events:none; }
+  #floorplan-sidebar { width:280px; border-left:1px solid #e5e7eb; padding:10px; display:flex; flex-direction:column; gap:10px; background:#fff; overflow:auto; }
+  #fp-page-input { width:56px; }
+  #fp-commit { flex:1; }
+
+  /* Reset confirmation modal */
+  #reset-confirmation-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:20000; align-items:center; justify-content:center; }
+  #reset-dialog { background:#ffffff; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,0.4); max-width:440px; width:90%; padding:32px 28px; animation:slideUp 0.3s ease; }
+  #reset-titlebar { text-align:center; margin-bottom:24px; }
+  #reset-icon { width:64px; height:64px; margin:0 auto 16px; background:linear-gradient(135deg, #ef4444, #dc2626); border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 8px 20px rgba(239,68,68,0.3); }
+  #reset-title { font-size:24px; font-weight:700; color:#111827; margin-bottom:8px; }
+  #reset-desc { font-size:15px; color:#6b7280; line-height:1.6; }
+  #reset-actions { display:flex; gap:12px; }
+  #reset-cancel-btn { flex:1; padding:12px; font-size:15px; font-weight:400; }
+  
+  /* Debug overlay (migrated from JS inline) */
+  .debug-overlay { position:fixed; top:8px; left:8px; z-index:99999; background:rgba(0,0,0,0.75); color:#fff; font:12px/1.35 monospace; padding:8px 10px; border-radius:8px; pointer-events:none; }
+
+  /* =====================
+    Loading overlay (migrated from inline <style> in index.html)
+    ===================== */
+  #loading-overlay { position:fixed; inset:0; background:linear-gradient(135deg,#0a0e1a 0%,#1a1f35 100%); color:#e2e8f0; display:flex; align-items:center; justify-content:center; z-index:10000; transition:opacity 0.8s ease; animation:fadeIn 0.6s ease; }
+  #loading-overlay.hide { opacity:0; pointer-events:none; }
+  @keyframes fadeIn { from{opacity:0;} to{opacity:1;} }
+  @keyframes slideUp { from{opacity:0; transform:translateY(30px);} to{opacity:1; transform:translateY(0);} }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.6;} }
+  @keyframes shimmer { 0%{background-position:-1000px 0;} 100%{background-position:1000px 0;} }
+  #loading-card { width:min(520px,90vw); padding:40px 32px; background:rgba(255,255,255,0.05); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 100px rgba(0,122,204,0.1); animation:slideUp 0.8s ease; }
+  #loading-title { font-size:32px; font-weight:700; margin-bottom:8px; letter-spacing:1px; text-align:center; color:#ffffff; }
+  #loading-subtitle { font-size:14px; color:#94a3b8; text-align:center; margin-bottom:32px; font-weight:400; }
+  #loading-bar { width:100%; height:8px; background:rgba(255,255,255,0.08); border-radius:999px; overflow:hidden; border:1px solid rgba(255,255,255,0.1); position:relative; }
+  #loading-bar-inner { height:100%; width:0%; background:linear-gradient(90deg,#3b82f6,#60a5fa,#3b82f6); background-size:200% 100%; animation:shimmer 2s linear infinite; transition:width 0.4s cubic-bezier(0.4,0,0.2,1); border-radius:999px; box-shadow:0 0 20px rgba(59,130,246,0.5); }
+  #loading-text { margin-top:16px; font-size:13px; color:#cbd5e1; text-align:center; animation:pulse 2s ease infinite; }
+  #loading-list { margin-top:24px; display:flex; flex-direction:column; gap:12px; }
+  #loading-continue { display:none; margin-top:24px; align-self:center; padding:10px 24px; border:1px solid rgba(59,130,246,0.5); border-radius:8px; background:rgba(59,130,246,0.1); color:#60a5fa; cursor:pointer; font-weight:400; transition:all 0.3s ease; }
+  #loading-continue:hover { background:rgba(59,130,246,0.2); border-color:#60a5fa; box-shadow:0 0 20px rgba(59,130,246,0.3); transform:translateY(-2px); }
+
+  /* Roof controls (migrated from JS inline styling) */
+  #roof-controls { display:none; gap:8px; align-items:center; margin-left:8px; }
+  #roof-controls.visible { display:inline-flex; }
+  .roof-label { font-size:12px; color:#374151; }
+  #reset-confirm-btn { flex:1; padding:12px; font-size:15px; font-weight:400; background:#ef4444; border:none; color:#ffffff; border-radius:8px; cursor:pointer; transition:all 0.2s; }
+
+  /* Floorplan modal remaining inline styles */
+  #floorplan-modal { display:none; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center; }
+  #floorplan-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
+  #floorplan-content { position:relative; width:min(1200px,95vw); height:calc(100vh - 40px); max-height:100vh; background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); display:flex; flex-direction:column; overflow:hidden; }
+  .floorplan-header { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid #e5e7eb; background:#f8fafc; }
+  .floorplan-header strong { flex:1; }
+  #floorplan-stage { display:flex; min-height:0; height:100%; }
+  #floorplan-stage-main { flex:1; position:relative; background:#0b1020; display:flex; align-items:stretch; justify-content:stretch; }
+  #floorplan-canvas { width:100%; height:100%; background:#0b1020; display:block; }
+  #floorplan-overlay { position:absolute; inset:0; pointer-events:none; }
+  #floorplan-sidebar { width:280px; border-left:1px solid #e5e7eb; padding:10px; display:flex; flex-direction:column; gap:10px; background:#fff; overflow:auto; }
+  .floorplan-page-row { display:flex; align-items:center; gap:6px; }
+  .floorplan-page-label { font-size:12px; color:#374151; }
+  #fp-page-input { width:56px; }
+  .floorplan-steps-title { font-weight:600; margin-bottom:6px; }
+  .floorplan-steps-list { margin:0 0 6px 18px; padding:0; }
+  .floorplan-tools-row { display:flex; gap:6px; flex-wrap:wrap; }
+  .floorplan-distances-column { display:flex; flex-direction:column; gap:6px; }
+  .floorplan-small-label { font-size:12px; color:#374151; }
+  .floorplan-auto-box { display:flex; flex-direction:column; gap:4px; background:#f8fafc; padding:8px; border:1px solid #e5e7eb; border-radius:8px; }
+  .floorplan-auto-title { font-size:12px; font-weight:600; color:#1e293b; display:flex; align-items:center; gap:4px; }
+  .floorplan-auto-label { font-size:11px; color:#475569; display:flex; flex-direction:column; gap:2px; }
+  /* Inputs inside auto box should be compact and full width */
+  .floorplan-auto-label input { width:100%; font-size:11px; }
+  .floorplan-small-text { font-size:12px; color:#374151; }
+  .floorplan-commit-row { margin-top:auto; display:flex; gap:8px; }
+  #fp-commit { flex:1; }
+
+  /* Pricing modal remaining inline styles */
+  #pricing-modal { display:none; position:fixed; inset:0; z-index:15000; align-items:center; justify-content:center; }
+  /* Ensure Pricing modal shows when JS toggles 'visible' */
+  #pricing-modal.visible { display:flex; }
+  #pricing-content { position:relative; width:min(880px,95vw); max-height:calc(100vh - 40px); overflow:auto; background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); padding:24px; }
+  .pricing-settings-row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin:8px 0 12px; padding:10px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; }
+  .pricing-field-label { font-size:12px; color:#374151; display:flex; flex-direction:column; gap:4px; }
+  #pricing-slab-mm, #pricing-soil-per-m3 { width:120px; }
+
+  /* Room palette modal */
+  #room-palette-modal { display:none; position:fixed; inset:0; z-index:13000; align-items:center; justify-content:center; }
+  #room-palette-content { position:relative; width:min(960px,96vw); max-height:calc(100vh - 40px); background:#fff; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.25); display:flex; padding:18px; gap:18px; }
+  #room-palette-left { display:flex; flex-direction:column; gap:10px; }
+  #room-palette-right { display:flex; flex-direction:column; gap:10px; flex:1; }
+  .room-palette-actions { display:flex; gap:8px; align-items:center; justify-content:center; margin-bottom:8px; }
+  #room-palette-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
+
+  /* Info modal section titles & lists */
+  .info-section-title { margin:0 0 8px; }
+  .info-list { margin:0 0 8px 18px; }
+  .info-sublist { margin:12px 0 0 18px; }
+
+  /* Smart, modern typography for info modal */
+  #info-content { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+  .info-section-title { font-weight: 700; color:#0f172a; letter-spacing: 0.2px; }
+  #info-content section { margin: 14px 0 16px; padding: 0 0 10px; border-bottom: 1px solid #eef2f7; }
+  #info-content section:last-of-type { border-bottom: none; }
+  /* Keyboard keycaps */
+  .kbd { display:inline-block; min-width: 18px; padding: 2px 6px; border:1px solid #cbd5e1; border-bottom-width:2px; border-radius:6px; background:#f8fafc; color:#0f172a; font: 500 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; text-align:center; box-shadow: 0 1px 0 rgba(0,0,0,0.03); }
+  .shortcut-grid { display:grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: 6px 14px; align-items:center; margin: 8px 0 6px; }
+  .shortcut-grid .left { color:#0f172a; }
+  .shortcut-grid .right { color:#334155; }
+
+  /* Info panel: reduce type and increase line height for readability */
+  /* Increased vertical line spacing per latest request */
+  #info-content { font-size: 14px; line-height: 4.2; }
+  #info-content p, #info-content ul, #info-content li { font-size: inherit; line-height: inherit; }
+  .info-section-title { font-size: 14px; line-height: 3.8; }
+  #info-content h2 { font-size: 17px !important; line-height: 4.4; }
+  /* Force list item line-height expansion (list view) – doubled from ~1.6 to ~3.2 */
+  #info-content li { line-height: 2.4 !important; }
+  #info-content ul { line-height: 2.4 !important; }
+  /* Apply same to pricing panel for consistency */
+  #pricing-content li, #pricing-content ul { line-height: 2.4 !important; }
+
+  /* SVG icon shrink override */
+  .dropdown-item svg { flex-shrink:0; }
+
+  /* Hide test canvas border style inline moved */
+  #test-canvas { border:1px solid black; }
+  
+  #status {
+    /* Hidden per request to remove diagnostics label */
+    display: none;
+    position: fixed; bottom: 20px; right: 20px; z-index: 100;
+    background: rgba(0,0,0,0.8); color: white; padding: 10px 15px;
+    border-radius: 8px; font-family: monospace; font-size: 12px;
+  }
+  
+  #canvas {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: #f8fbff; /* solid to remove perceived top keyline from gradient */
+    cursor: grab; display: block; z-index: 1; /* ensure canvas sits above page background */
+  }
+  #canvas:active { cursor: grabbing; }
+  
+  #labels-3d {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 50; /* container ignores events; labels handle them */
+  }
+  
+  .room-label {
+    position: absolute; transform: translate(-50%, -50%);
+    pointer-events: all; cursor: grab; user-select: none;
+    background: white; color: #333;
+  padding: 6px 11px; border-radius: 19px; font-weight: 400; font-size: var(--label-btn-font-size);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    /* Let JS-driven per-frame opacity control handle smoothness; avoid extra CSS lag */
+    transition: opacity 0s linear;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  /* Disable hover animation for room labels */
+  .room-label:hover { 
+    transform: translate(-50%, -50%);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  }
+  .room-label.selected { background: #007acc; color: white; }
+  /* External edit button for room labels */
+  .room-edit-btn {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    z-index: 60;
+    pointer-events: auto;
+    min-width: 44px; height: var(--label-btn-height);
+    padding: 0 8px;
+    border-radius: var(--label-btn-radius);
+    border: none; /* remove 1px keyline */
+    background: #ffffff;
+    color: #007acc;
+  font-size: var(--label-btn-font-size); font-weight: 400; line-height: var(--label-btn-height); text-align: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+    cursor: pointer;
+    /* Keep in lockstep with JS-driven fade */
+    transition: opacity 0s linear;
+  }
+  .room-edit-btn:hover { filter: brightness(0.97); box-shadow: 0 6px 18px rgba(0,0,0,0.25); }
+  /* Improve hover contrast: white text on brand background */
+  .room-edit-btn:hover {
+    background: #007acc;
+    color: #ffffff;
+    filter: none;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    /* no border */
+  }
+  .room-edit-btn:active { transform: translate(-50%, -50%) scale(0.96); }
+  /* Roof rotate button: match stairs 360 handle (violet circle, white border/text) */
+  .roof-rotate-btn {
+    position: absolute;
+    z-index: 60;
+    pointer-events: auto;
+    width: var(--roof-rotate-size); height: var(--roof-rotate-size); text-align: center;
+    display: flex; align-items: center; justify-content: center;
+    transform: translate(-50%, -50%);
+    border-radius: calc(var(--roof-rotate-size) / 2); border: 2px solid rgba(255,255,255,0.9);
+  background: #8b5cf6; color: #ffffff; font-weight: 400; font-size: 12px;
+    box-shadow: none;
+    cursor: pointer;
+    transition: opacity 0s linear, transform 0.06s ease, background-color var(--transition-fast) ease, color var(--transition-fast) ease, border-color var(--transition-fast) ease;
+  }
+  .roof-rotate-btn:hover {
+    background: #7c3aed; /* slightly darker violet on hover */
+    color: #ffffff;
+    border-color: rgba(255,255,255,0.95);
+    box-shadow: none;
+  }
+  /* Prevent any positional/scale change on press to keep button static */
+  .roof-rotate-btn:active { transform: translate(-50%, -50%); }
+  .label-edit-btn {
+    z-index: 60; /* above labels */
+    border: 1px solid rgba(0,0,0,0.15);
+    background: #fff;
+    color: #333;
+    width: 22px; height: 22px; line-height: 20px; text-align: center;
+  border-radius: 11px; font-size: 12px; font-weight: 400; cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+  .label-edit-btn:hover { filter: brightness(0.95); }
+  
+  /* Legacy modal styles: restrict to Info only to avoid overriding Pricing z-index/display */
+  #info-modal {
+    display: none; position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200;
+  }
+  
+  #info-content {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: white; padding: 30px; border-radius: 12px; max-width: 700px;
+    width: 700px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  }
+  
+  #info-content h2, #pricing-content h2 {
+    margin: 0 0 20px 0; color: #333; font-size: 24px;
+  }
+  
+  /* Separate paragraph line-height: keep Pricing tighter, expand Info panel */
+  #pricing-content p { margin: 0 0 15px 0; line-height: 1.6; color: #555; }
+  #info-content p { margin: 0 0 15px 0; line-height: 2.4 !important; color: #555; }
+  
+  #pricing-content ul { margin: 0 0 15px 20px; color: #555; }
+  #info-content ul { margin: 0 0 15px 20px; color: #555; line-height: 2.4 !important; }
+  /* Account > Information & Help view: match Info modal spacing */
+  #account-info-body { font-size: 14px; }
+  #account-info-body p { margin: 0 0 15px 0; line-height: 1.8 !important; color: #555; }
+  #account-info-body ul { margin: 0 0 15px 20px; color: #555; line-height: 1.8 !important; }
+  #account-info-body li { margin-bottom: 14px; line-height: 1.8 !important; }
+  
+  #info-content li, #pricing-content li { margin-bottom: 8px; }
+
+  /* Info modal: increase vertical spacing between lists and sections */
+  #info-content ul { margin-bottom: 28px !important; }
+  #info-content li { margin-bottom: 14px !important; }
+  #info-content section { margin: 22px 0 26px !important; padding-bottom: 16px !important; }
+  
+  .pricing-section {
+    margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #eee;
+  }
+  
+  .pricing-section h3 { margin: 0 0 10px 0; color: #333; font-size: 16px; }
+  
+  .pricing-item {
+    display: flex; justify-content: space-between; margin: 5px 0; padding: 2px 0;
+  }
+  
+  .pricing-item-name { color: #666; }
+  .pricing-item-cost { color: #333; font-weight: 600; }
+  
+  .total-section {
+    border-bottom: none; background: #f8f9fa; padding: 15px; border-radius: 8px;
+  }
+  
+  .total-section .pricing-item { font-size: 16px; font-weight: 700; }
+  
+  .close-button {
+    position: absolute; top: 15px; right: 20px; background: none; border: none;
+    font-size: 24px; cursor: pointer; color: #999;
+    transition: color 0.2s, transform 0.1s;
+  }
+  .close-button:hover {
+    color: #007acc;
+    transform: scale(1.1);
+  }
+
+  /* Room palette modal */
+  #room-palette-modal { position: fixed; inset: 0; display: none; z-index: 9999; align-items: center; justify-content: center; }
+  /* When opened via JS (class 'visible'), display the flex container so children layout. Without this, Edit buttons appeared broken because modal stayed hidden. */
+  #room-palette-modal.visible { display: flex; }
+  #room-palette-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1; }
+  #room-palette-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 95vw; height: 95vh; background: #fff; border-radius: 24px; border: 1px solid rgba(0,0,0,0.08); box-shadow: 0 14px 50px rgba(0,0,0,0.28); display: grid; grid-template-columns: minmax(420px, calc(50% + 200px)) minmax(360px, calc(50% - 200px)); overflow: hidden; z-index: 2; }
+  #room-palette-content .close-button { z-index: 2; }
+
+  /* --------------------------------------------------------------
+     Global font-size downsizing (-2px across UI)
+     Corner labels are canvas-drawn and unaffected by CSS.
+     -------------------------------------------------------------- */
+  :root {
+    --label-btn-font-size: 8px; /* was 10px */
+  }
+  /* Generic controls */
+  button, .dropdown-button { font-size: 12px !important; }
+  .dropdown-item { font-size: 12px !important; }
+  .dropdown-title { font-size: 10px !important; }
+  select { font-size: 12px !important; }
+  /* Measurement panel */
+  .measurement-label, .measurement-input, #save-measurements { font-size: 12px !important; }
+  /* 2D overlays text */
+  #plan2d-wall-group #plan2d-scale, #plan2d-wall-group > div { font-size: 8px !important; }
+  /* Info & Pricing */
+  #info-content h2, #pricing-content h2 { font-size: 18px !important; line-height: 4.0; }
+  .pricing-section h3 { font-size: 14px !important; }
+  /* Reset & Loading */
+  #reset-title { font-size: 22px !important; }
+  #reset-desc, #reset-cancel-btn { font-size: 13px !important; }
+  #loading-title { font-size: 30px !important; }
+  #loading-subtitle { font-size: 12px !important; }
+  /* Share notes */
+  #share-note { font-size: 11px !important; }
+  #share-hint { font-size: 10px !important; }
+  #room-palette-left { padding: 20px 20px 28px 20px; border-right: 1px solid #eee; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  #room-palette-right { padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 0; }
+  #room-palette-right > h3 { margin: 0 0 8px 0; text-align: center; align-self: center; }
+  #palette-list { margin-top: 10px; overflow: auto; border: 1px solid #eee; border-radius: 8px; padding: 12px; gap: 12px; display: grid; grid-template-columns: 1fr; width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; justify-items: stretch; flex: 1 1 auto; min-height: 0; }
+  .palette-item { border: 1px solid #ddd; border-radius: 8px; padding: 12px; cursor: pointer; display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: center; transition: box-shadow 0.2s, transform 0.1s ease; background: #fff; }
+  .palette-item:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+  .palette-item:active { transform: scale(0.98); }
+  .palette-thumb { width: 110px; height: 84px; border: 1px solid #eee; border-radius: 6px; background: repeating-linear-gradient(45deg, #fafafa, #fafafa 10px, #f3f3f3 10px, #f3f3f3 20px); display: flex; align-items: center; justify-content: center; }
+  .palette-thumb-canvas { width: 100%; height: 100%; display: block; }
+  .palette-name { font-size: 14px; font-weight: 600; color: #333; }
+  .palette-dims { font-size: 12px; color: #666; margin-top: 2px; }
+  .palette-desc { font-size: 12px; color: #7a7a7a; margin-top: 2px; }
+
+  /* Fixed 500x500 frame for the room preview */
+  #room-palette-left h3 { align-self: center; text-align: center; margin-bottom: 6px; }
+  #room-preview-canvas { flex: 1 1 auto; width: 100%; border: 1px solid #e6e8eb; border-radius: 8px; background: #ffffff; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03); cursor: grab; min-height: 0; }
+  #room-preview-canvas:active { cursor: grabbing; }
+
+  /* Reset Confirmation Modal */
+  #reset-confirmation-modal.hidden { display: none; }
+  #reset-confirmation-modal .modal-buttons button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+  }
+  #reset-confirmation-modal .modal-buttons button:active {
+    transform: translateY(0);
+  }
+  #reset-confirm-btn:hover {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  }
+  @keyframes modalFadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  #reset-confirmation-modal .modal-card {
+    animation: modalFadeIn 0.3s ease;
+  }
+
+  /* Admin modal */
+  #admin-modal { display: none; position: fixed; inset: 0; z-index: 16000; align-items: center; justify-content: center; }
+  #admin-modal.visible { display: flex; }
+  #admin-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
+  #admin-content { position: relative; width: min(980px, 96vw); max-height: calc(100vh - 40px); overflow: auto; background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
+  #admin-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; position: sticky; top: 0; z-index: 1; }
+  #admin-header strong { flex: 1; }
+  #admin-body { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 18px; }
+  .admin-section { border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; }
+  .admin-section h3 { margin: 0 0 10px 0; }
+  .admin-list { list-style: none; padding: 0; margin: 0; }
+  .admin-list li { padding: 8px 6px; border-bottom: 1px solid #f1f5f9; }
+  .admin-list li:last-child { border-bottom: none; }
+  .admin-user-id { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; color: #0f172a; }
+  .admin-meta { color: #64748b; font-size: 12px; }
+  .admin-error { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #1f2937; }
+
+  /* Account button (top-right) */
+  #account-button {
+    position: fixed; top: 28px; right: 28px; z-index: 1200; width: 45px; height: 45px;
+    border-radius: 999px; border: 1px solid #e5e7eb; background: #ffffff; color: #0f172a;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08); cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-weight: 400; font-family: system-ui, sans-serif;
+    transition: transform 0.1s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  }
+  #account-button:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
+  #account-button:active { transform: scale(0.98); }
+  #account-button svg { width: 24px; height: 24px; }
+
+  /* Account modal + splash animation */
+  #account-modal { position: fixed; inset: 0; display: none; z-index: 17000; }
+  #account-modal.visible { display: block; }
+  #account-modal.showing #account-nav { animation: accountNavIn 500ms cubic-bezier(0.2,0.8,0.2,1) forwards 180ms; }
+  #account-modal.showing #account-main { animation: accountMainIn 520ms cubic-bezier(0.2,0.8,0.2,1) forwards 240ms; }
+  #account-modal.closing #account-nav { animation: accountNavOut 360ms ease forwards; }
+  #account-modal.closing #account-main { animation: accountMainOut 360ms ease forwards; }
+  /* Rainbow background with gentle spin and motion-blur like transition */
+  #account-splash {
+    position: absolute; inset: 0;
+    background: conic-gradient(from 0deg, #ff0055, #ff6a00, #ffef00, #21d07a, #22a1ff, #7a5cff, #ff33aa, #ff0055);
+    animation: accountSplashIn 520ms cubic-bezier(0.2,0.8,0.2,1) forwards;
+    overflow: hidden;
+  }
+  #account-splash::before {
+    content: ""; position: absolute; inset: -20%;
+    background: conic-gradient(from 0deg, #ff0055, #ff6a00, #ffef00, #21d07a, #22a1ff, #7a5cff, #ff33aa, #ff0055);
+    filter: blur(24px) saturate(1.05);
+    opacity: 0.9;
+    animation: rainbowSpin 60s linear infinite;
+  }
+  /* Subtle radial glow */
+  #account-splash::after {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(1200px 800px at 80% 8%, rgba(255,255,255,0.35), rgba(255,255,255,0) 60%);
+    pointer-events: none;
+  }
+  /* Closing state: add slight blur+fade */
+  #account-modal.closing #account-splash { animation: accountSplashOut 420ms ease forwards; }
+  @keyframes rainbowSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  @keyframes accountSplashIn {
+    0% { opacity: 0; transform: scale(0.965); filter: blur(18px); }
+    60% { opacity: 1; transform: scale(1.008); filter: blur(6px); }
+    100% { opacity: 1; transform: scale(1); filter: blur(0px); }
+  }
+  @keyframes accountSplashOut {
+    0% { opacity: 1; transform: scale(1); filter: blur(0px); }
+    100% { opacity: 0; transform: scale(0.98); filter: blur(14px); }
+  }
+  #account-sheet {
+    position: absolute; inset: 0; display: flex; gap: 20px; align-items: flex-start; justify-content: center; padding: 48px 32px; background: transparent; color: #0f172a;
+  }
+  #account-nav {
+    width: 280px; max-height: calc(100% - 96px); overflow: auto;
+    background: rgba(255,255,255,0.88); backdrop-filter: blur(10px) saturate(1.05);
+    border: 1px solid #e5e7eb; border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+    padding: 18px 14px; position: relative; z-index: 2;
+  }
+  #account-nav h3 { margin: 0 0 12px 6px; font-size: 14px; color: #334155; }
+  .account-nav-btn {
+    width: 100%; text-align: left; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 10px;
+    border: 1px solid transparent; background: transparent; cursor: pointer; font-weight: 400; color: #0f172a;
+  }
+  .account-nav-btn:hover { background: #f1f5f9; }
+  .account-nav-btn.active { background: #e0ecff; border-color: #bfdbfe; }
+  /* Start hidden for animation staging */
+  #account-nav, #account-main { opacity: 0; }
+  @keyframes accountNavIn { 0% { transform: translateY(18px) scale(.96); opacity: 0; } 55% { opacity:1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+  @keyframes accountMainIn { 0% { transform: translateY(24px) scale(.95); opacity: 0; } 60% { opacity:1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+  @keyframes accountNavOut { 0% { transform: translateY(0) scale(1); opacity:1; } 100% { transform: translateY(12px) scale(.96); opacity:0; } }
+  @keyframes accountMainOut { 0% { transform: translateY(0) scale(1); opacity:1; } 100% { transform: translateY(16px) scale(.95); opacity:0; } }
+  #account-main {
+    width: min(980px, calc(100% - 360px)); max-height: calc(100% - 96px); overflow: auto;
+    background: rgba(255,255,255,0.92); backdrop-filter: blur(10px) saturate(1.05);
+    border: 1px solid #e5e7eb; border-radius: 16px; box-shadow: 0 12px 36px rgba(0,0,0,0.14);
+    padding: 24px; position: relative; z-index: 2;
+  }
+  #account-main h2 { margin: 0 0 12px 0; }
+  #account-close { position: absolute; top: 12px; right: 16px; z-index: 2; }
+  .account-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .account-form .full { grid-column: 1 / -1; }
+  .account-field { display: flex; flex-direction: column; gap: 4px; }
+  .account-field label { font-size: 12px; color: #475569; }
+  .account-field input { height: 36px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px 10px; font-size: 14px; }
+  .account-actions { margin-top: 8px; display: flex; gap: 8px; }
+  .account-actions button { padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5e1; background: #ffffff; }
+
+  /* Scrollable help content inside Account */
+  .account-scroll { max-height: calc(70vh - 80px); overflow-y: auto; padding-right: 8px; }
+  .account-scroll::-webkit-scrollbar { width: 10px; }
+  .account-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.1); border-radius: 6px; }
+  .account-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.25); border-radius: 6px; }
+  .account-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.4); }
+
+  /* Inline Share layout */
+  .share-inline { display: flex; flex-direction: column; gap: 10px; max-width: 640px; }
+  .share-label { font-size: 13px; font-weight: 600; color: #334155; }
+  #account-share-url { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: rgba(255,255,255,0.6); font-size: 14px; }
+  .share-buttons { display: flex; gap: 10px; }
+  #account-share-open, #account-share-copy { flex: 0 0 auto; }
+  .share-hint { font-size: 12px; color: #64748b; }
+
+  /* Admin inline columns */
+  .admin-inline { display: flex; flex-wrap: wrap; gap: 24px; }
+  .admin-column { flex: 1 1 300px; min-width: 280px; }
+  .admin-column h3 { margin: 4px 0 8px; font-size: 15px; }
+
+  /* Spinner */
+  .spinner { width: 18px; height: 18px; border: 3px solid rgba(0,0,0,0.15); border-top-color: #007acc; border-radius: 50%; animation: spin 0.8s linear infinite; display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #account-admin-refresh { margin-bottom: 8px; }
+
+  /* Responsive stacking for small screens */
+  @media (max-width: 900px) {
+    #account-sheet { align-items: stretch; justify-content: stretch; padding: 24px 16px; }
+    #account-nav, #account-main { width: 100%; max-height: none; }
+  }
