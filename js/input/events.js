@@ -412,7 +412,7 @@
         try { if (!canvas.hasAttribute('tabindex')) canvas.setAttribute('tabindex','0'); canvas.focus({preventScroll:true}); } catch(_cfocus2){}
         updateStatus((hitObj.name||hitObj.type||'Item') + ' selected');
         renderLoop();
-        return;
+        // Do not return: allow left-drag after selection to orbit the camera
       }
 
       mouse.down = true;
@@ -1094,6 +1094,25 @@
       if (typeof clampCamera === 'function') clampCamera();
       else { camera.distance = Math.max(camera.minDistance||6, Math.min(camera.maxDistance||140, camera.distance)); }
     });
+
+    // Global wheel zoom proxy so zoom works even when hovering labels/overlays
+    // Guarded to avoid interfering with 2D editor or modals
+    document.addEventListener('wheel', function(e){
+      try {
+        // Ignore when 2D editor active or a modal/palette is open
+        if (window.__plan2d && __plan2d.active) return;
+        var tgt = e.target;
+        if (tgt && (tgt.closest && (tgt.closest('#room-palette-content') || tgt.closest('.dropdown-list') || tgt.closest('#info-content')))) return;
+        // Only react if event is over the 3D canvas area or labels overlay/body
+        var overCanvas = !!(tgt && tgt.closest && tgt.closest('#canvas'));
+        var overLabels = !!(tgt && tgt.closest && tgt.closest('#labels-3d'));
+        var overBody = (tgt === document.body || tgt === document.documentElement);
+        if (!(overCanvas || overLabels || overBody)) return;
+        e.preventDefault();
+        camera.distance *= e.deltaY > 0 ? 1.08 : 0.92;
+        if (typeof clampCamera === 'function') clampCamera();
+      } catch(_w) {}
+    }, { passive: false });
     
     // ------------------------------------------------------------------
     // TOUCH / MOBILE GESTURES (single‑finger orbit or handle drag, pinch zoom, two‑finger pan)

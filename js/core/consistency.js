@@ -46,19 +46,28 @@
   function collect3DEdges(level){
     var edges=[]; var points=[]; var lvl=(level||0);
     try{
-      // Room perimeters (rectangles)
+      // Room perimeters: prefer polygon footprints; otherwise honor rotation for rectangles
       if (Array.isArray(window.allRooms)){
         for (var i=0;i<allRooms.length;i++){
           var r=allRooms[i]; if(!r|| (r.level||0)!==lvl) continue;
-          var halfW=(r.width||0)/2, halfD=(r.depth||0)/2;
-          var minX=(r.x||0)-halfW, maxX=(r.x||0)+halfW;
-          var minZ=(r.z||0)-halfD, maxZ=(r.z||0)+halfD;
-          var p1={x:minX,z:minZ}, p2={x:maxX,z:minZ}, p3={x:maxX,z:maxZ}, p4={x:minX,z:maxZ};
-          edges.push({a:p1, b:p2}); edges.push({a:p2, b:p3}); edges.push({a:p3, b:p4}); edges.push({a:p4, b:p1});
-          points.push(p1,p2,p3,p4);
+          if (Array.isArray(r.footprint) && r.footprint.length>=2){
+            for (var k=0; k<r.footprint.length; k++){
+              var A=r.footprint[k], B=r.footprint[(k+1)%r.footprint.length]; if(!A||!B) continue;
+              var a={x:(+A.x||0), z:(+A.z||0)}, b={x:(+B.x||0), z:(+B.z||0)};
+              edges.push({a:a,b:b}); points.push(a,b);
+            }
+          } else {
+            var hw=(+r.width||0)/2, hd=(+r.depth||0)/2; if(hw>0 && hd>0){
+              var rot=((+r.rotation||0)%360)*Math.PI/180; var c=Math.cos(rot), s=Math.sin(rot);
+              function R(dx,dz){ return { x:(r.x||0)+dx*c - dz*s, z:(r.z||0)+dx*s + dz*c }; }
+              var p1=R(-hw,-hd), p2=R(+hw,-hd), p3=R(+hw,+hd), p4=R(-hw,+hd);
+              edges.push({a:p1,b:p2}); edges.push({a:p2,b:p3}); edges.push({a:p3,b:p4}); edges.push({a:p4,b:p1});
+              points.push(p1,p2,p3,p4);
+            }
+          }
         }
       }
-      // Free-standing / interior strips
+      // Free-standing / interior strips from 3D engine
       if (Array.isArray(window.wallStrips)){
         for (var j=0;j<wallStrips.length;j++){
           var s=wallStrips[j]; if(!s || (s.level||0)!==lvl) continue;
@@ -94,7 +103,7 @@
 
   if (typeof window.check2D3DConsistency !== 'function'){
     window.check2D3DConsistency = function check2D3DConsistency(opts){
-      opts = opts||{}; var lvl = (typeof opts.level==='number')? opts.level: (window.currentLevel||0);
+      opts = opts||{}; var lvl = (typeof opts.level==='number')? opts.level: (window.currentFloor||0);
       try {
         var ctx = getCtx();
         var coll2d = collect2DEdges(lvl), coll3d = collect3DEdges(lvl);
@@ -107,7 +116,13 @@
           var polys = window.plan2dComputeRoomPolygonsLite(__plan2d.elements, { strictClosedLoopsOnly: true }) || [];
           for (var pi=0; pi<polys.length; pi++){ var wp = toWorldPoly(polys[pi], ctx); area2 += polyArea(wp); }
         } }catch(_ea){}
-        var area3 = 0; try{ if (Array.isArray(window.allRooms)){ for (var ri=0; ri<allRooms.length; ri++){ var r=allRooms[ri]; if(!r|| (r.level||0)!==lvl) continue; area3 += Math.max(0, (r.width||0)) * Math.max(0, (r.depth||0)); } } }catch(_er){}
+        var area3 = 0; try{ if (Array.isArray(window.allRooms)){ for (var ri=0; ri<allRooms.length; ri++){ var r=allRooms[ri]; if(!r|| (r.level||0)!==lvl) continue; if (Array.isArray(r.footprint) && r.footprint.length>=3){
+              // Compute polygon area in X/Z plane
+              var A=0; for (var ii=0,jj=r.footprint.length-1; ii<r.footprint.length; jj=ii++){
+                var pi=r.footprint[ii], pj=r.footprint[jj]; var cross=((pj.x||0)*(pi.z||0))-((pi.x||0)*(pj.z||0)); A+=cross;
+              }
+              area3 += Math.abs(A/2);
+            } else { area3 += Math.max(0,(r.width||0)) * Math.max(0,(r.depth||0)); } } } }catch(_er){}
         var heightGuess = (window.__plan2d && __plan2d.wallHeightM) || 3.0;
         var vol2 = area2 * heightGuess;
         var vol3 = 0; try { if (Array.isArray(window.allRooms)){ for (var vi=0; vi<allRooms.length; vi++){ var rr=allRooms[vi]; if(!rr|| (rr.level||0)!==lvl) continue; var h=(typeof rr.height==='number' && rr.height>0)? rr.height: heightGuess; vol3 += Math.max(0,(rr.width||0)) * Math.max(0,(rr.depth||0)) * h; } } }catch(_ev){}

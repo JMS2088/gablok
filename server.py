@@ -376,11 +376,31 @@ def run(host='0.0.0.0', port=8000, directory=None):
     if directory is None:
         directory = os.path.abspath('.')
     handler = lambda *args, **kwargs: NoCacheHandler(*args, directory=directory, **kwargs)
+    httpd = None
+    bind_error = None
     try:
         httpd = ReusableHTTPServer((host, port), handler)
     except OSError as e:
-        print(f"Failed to bind to {host}:{port} -> {e}")
-        raise
+        bind_error = e
+        # If the address is already in use, attempt a small range of fallback ports
+        try:
+            err_no = getattr(e, 'errno', None)
+        except Exception:
+            err_no = None
+        if err_no in (98, 48) or 'Address already in use' in str(e):
+            base_port = int(port)
+            for p in range(base_port + 1, base_port + 21):
+                try:
+                    httpd = ReusableHTTPServer((host, p), handler)
+                    port = p
+                    print(f"Port {base_port} busy, switched to {p}", flush=True)
+                    bind_error = None
+                    break
+                except OSError:
+                    continue
+        if httpd is None:
+            print(f"Failed to bind to {host}:{port} -> {bind_error}")
+            raise bind_error
     # Expose the bound port to handlers for URL generation
     try:
         os.environ['GABLOK_BOUND_PORT'] = str(port)

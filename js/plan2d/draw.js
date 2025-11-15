@@ -217,59 +217,7 @@
         }
       } catch(e) { /* non-fatal chain preview */ }
       
-      // Room footprint fill (drawn UNDER walls)
-      // When 2D editor is active, compute polygons directly from current wall graph to follow live shape.
-      // Otherwise, fall back to 3D rooms (allRooms) if present.
-      try {
-        ctx.save();
-        ctx.fillStyle = 'rgba(148,163,184,0.18)'; // slate-400 at ~18%
-        var drewAny = false;
-        if (window.__plan2d && __plan2d.active && Array.isArray(__plan2d.elements) && typeof window.plan2dComputeRoomPolygonsLite==='function'){
-          // Cache polygon detection across frames; invalidated when __plan2d.__version changes
-          try { __plan2d.__cache = __plan2d.__cache || {}; } catch(_c){}
-          var polys = null;
-          try {
-            var vNow = (__plan2d.__version||0);
-            if (__plan2d.__cache.roomPolys && __plan2d.__cache.roomPolysVersion === vNow) {
-              polys = __plan2d.__cache.roomPolys;
-            } else {
-              polys = window.plan2dComputeRoomPolygonsLite(__plan2d.elements, { strictClosedLoopsOnly:false });
-              __plan2d.__cache.roomPolys = polys; __plan2d.__cache.roomPolysVersion = vNow;
-            }
-          } catch(_pc) { polys = window.plan2dComputeRoomPolygonsLite(__plan2d.elements, { strictClosedLoopsOnly:false }); }
-          for (var pi=0; pi<polys.length; pi++){
-            var poly = polys[pi]; if(!Array.isArray(poly) || poly.length<3) continue;
-            try {
-              ctx.beginPath();
-              var p0s = worldToScreen2D(poly[0].x, poly[0].y); ctx.moveTo(p0s.x, p0s.y);
-              for (var vi=1; vi<poly.length; vi++){ var ps = worldToScreen2D(poly[vi].x, poly[vi].y); ctx.lineTo(ps.x, ps.y); }
-              ctx.closePath(); ctx.fill(); drewAny = true;
-            } catch(_pf2){ /* ignore bad polygon */ }
-          }
-        }
-        if (!drewAny && Array.isArray(window.allRooms)){
-          // Map world (x,z) to plan (x,y) using the same per-floor center and Y sign used elsewhere
-          var lvlNowFill = (typeof window.currentFloor==='number' ? window.currentFloor : 0);
-          var cxF = (typeof __plan2d.centerX==='number' && isFinite(__plan2d.centerX)) ? __plan2d.centerX : 0;
-          var czF = (typeof __plan2d.centerZ==='number' && isFinite(__plan2d.centerZ)) ? __plan2d.centerZ : 0;
-          var sgnF = (__plan2d.yFromWorldZSign || 1);
-          function mapPlanFill(wx, wz){ return worldToScreen2D((wx - cxF), sgnF * (wz - czF)); }
-          for (var rf=0; rf<allRooms.length; rf++){
-            var rFill = allRooms[rf]; if(!rFill) continue; var rLvlF = (typeof rFill.level==='number' ? rFill.level : 0); if (rLvlF !== lvlNowFill) continue;
-            try {
-              if (Array.isArray(rFill.footprint) && rFill.footprint.length>=3){
-                var fp = rFill.footprint; ctx.beginPath(); var p0 = mapPlanFill(fp[0].x, fp[0].z); ctx.moveTo(p0.x, p0.y);
-                for (var vi=1; vi<fp.length; vi++){ var p = mapPlanFill(fp[vi].x, fp[vi].z); ctx.lineTo(p.x,p.y); }
-                ctx.closePath(); ctx.fill();
-              } else {
-                var hw = (rFill.width||0)/2, hd = (rFill.depth||0)/2; var c1 = mapPlanFill(rFill.x-hw, rFill.z-hd); var c2 = mapPlanFill(rFill.x+hw, rFill.z-hd); var c3 = mapPlanFill(rFill.x+hw, rFill.z+hd); var c4 = mapPlanFill(rFill.x-hw, rFill.z+hd);
-                ctx.beginPath(); ctx.moveTo(c1.x,c1.y); ctx.lineTo(c2.x,c2.y); ctx.lineTo(c3.x,c3.y); ctx.lineTo(c4.x,c4.y); ctx.closePath(); ctx.fill();
-              }
-            } catch(_rf){ /* ignore */ }
-          }
-        }
-        ctx.restore();
-      } catch(_roomFill){ /* non-fatal room fill */ }
+      // Room footprint fills removed by request: no alpha floor planes in 2D
   // Elements
   var tWallsStart = (performance&&performance.now)?performance.now():Date.now();
       // Precompute connections at endpoints to extend walls and make corners flush
@@ -870,7 +818,7 @@
             // Use a distinctive rose color
             drawBox(rf.x, rf.z, rf.width, rf.depth, rf.rotation||0, '#f43f5e', 'rgba(244,63,94,0.14)', 0.90, (rf.name||'Roof'));
           }
-          // 2D Room labels (footprint fill is drawn earlier under walls)
+          // 2D Room labels
           try {
             if (Array.isArray(allRooms)){
               var __dprR = window.devicePixelRatio || 1;
@@ -919,6 +867,34 @@
               }
             }
           } catch(e) { /* ignore room labels */ }
+          // If user is dragging a grouped set of walls that belong to a room, shift that room's label live
+          try {
+            if (__plan2d && __plan2d.dragGroup && Array.isArray(__plan2d.dragGroup.roomIds)){
+              var dg = __plan2d.dragGroup;
+              var ids = dg.roomIds;
+              var dxS = (typeof dg.dxS==='number') ? dg.dxS : 0;
+              var dyS = (typeof dg.dyS==='number') ? dg.dyS : 0;
+              if (labelBoxes && (dxS||dyS) && ids.length){
+                var scale = (__plan2d.scale||50);
+                var dxPx = dxS * scale;
+                var dyPx = -dyS * scale; // y up in plan -> y down in screen
+                var idSet = Object.create(null);
+                for (var si=0; si<ids.length; si++){ idSet[ids[si]] = true; }
+                for (var bi=0; bi<labelBoxes.length; bi++){
+                  var b = labelBoxes[bi];
+                  if(!b || b.kind!=='room') continue;
+                  if(!b.id || !idSet[b.id]) continue;
+                  b.x = Math.round(b.x + dxPx);
+                  b.y = Math.round(b.y + dyPx);
+                  // Clamp inside canvas bounds to avoid cut-offs
+                  try {
+                    var cEl = document.getElementById('plan2d-canvas');
+                    if (cEl){ var cw = cEl.width||0, ch = cEl.height||0; b.x = Math.max(6, Math.min(b.x, Math.max(6, cw - (b.w||0) - 6))); b.y = Math.max(6, Math.min(b.y, Math.max(6, ch - (b.h||0) - 6))); }
+                  } catch(_clamp){}
+                }
+              }
+            }
+          } catch(_lblShift){}
           // After drawing backgrounds, draw the label texts on the labels-2d canvas (handled later)
           __plan2d.__labelBoxes2D = labelBoxes;
         }

@@ -2,6 +2,48 @@
 // Populate the 2D Floor Plan from the current 3D model for the currently selected floor
 // Extracted from app.js for modularity; loaded by bootstrap before app core.
 function populatePlan2DFromDesign(){
+    // Helper: deduplicate rooms by ID, else by geometry signature (level + center/size or footprint bbox)
+    function dedupRooms(arr){
+      try{
+        if(!Array.isArray(arr)) return [];
+        var byId = Object.create(null); var unique=[];
+        for(var i=0;i<arr.length;i++){
+          var r=arr[i]; if(!r) continue; var id=(r.id==null? null : String(r.id));
+          if(id && !byId[id]){ byId[id]=true; unique.push(r); }
+          else if(!id){ unique.push(r); }
+        }
+        // For entries without IDs or repeated IDs with identical geometry, collapse by signature
+        var seen = Object.create(null), out=[];
+        function sigOf(r){
+          try{
+            var lvl = (r.level||0);
+            if(Array.isArray(r.footprint) && r.footprint.length>=3){
+              var minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+              for(var k=0;k<r.footprint.length;k++){ var p=r.footprint[k]; if(!p) continue; if(p.x<minX)minX=p.x; if(p.x>maxX)maxX=p.x; if(p.z<minZ)minZ=p.z; if(p.z>maxZ)maxZ=p.z; }
+              var q=function(v){ return Math.round((+v||0)*100)/100; };
+              return ['fp',lvl,q(minX),q(maxX),q(minZ),q(maxZ)].join('|');
+            }
+            var q2=function(v){ return Math.round((+v||0)*100)/100; };
+            var rot = Math.round(((r.rotation||0)%360));
+            return ['bb',lvl,q2(r.x||0),q2(r.z||0),q2(r.width||0),q2(r.depth||0),rot].join('|');
+          }catch(_sg){ return 'err'; }
+        }
+        for(var j=0;j<unique.length;j++){
+          var rr=unique[j]; var s=sigOf(rr); if(seen[s]) continue; seen[s]=true; out.push(rr);
+        }
+        return out;
+      }catch(_d){ return Array.isArray(arr)? arr.slice(): []; }
+    }
+    // Locally shadow global rooms with a deduplicated list for this populate run
+    var allRooms = Array.isArray(window.allRooms) ? dedupRooms(window.allRooms) : [];
+  // Track drag edge transitions to create a brief post-drag freeze window
+  try {
+    var nowDrag = !!window.__dragging3DRoom;
+    if (typeof window.__prev3DDragFlag === 'boolean' && window.__prev3DDragFlag && !nowDrag) {
+      window.__last3DDragEnd = Date.now();
+    }
+    window.__prev3DDragFlag = nowDrag;
+  } catch(_df) {}
   // Optional force flag: populatePlan2DFromDesign(true) will bypass userEdited/ manual wall guards
   var __force = (arguments.length>0 && arguments[0]===true);
   // Round-trip diagnostics ring buffer helper
@@ -21,6 +63,14 @@ function populatePlan2DFromDesign(){
       var now = Date.now(); if(!window.__rtTraceLastSave || now - window.__rtTraceLastSave > 1500){ try { localStorage.setItem('gablok_rtTrace_v1', JSON.stringify(buf)); window.__rtTraceLastSave = now; } catch(_ps){} }
     } catch(_e){}
   }
+  // If a 3D room is being dragged, avoid mutating 2D elements to keep alpha panels stable.
+  try {
+    if (!__force && typeof window !== 'undefined' && window.__dragging3DRoom) {
+      try { if (typeof console !== 'undefined' && console.debug) console.debug('[PLAN2D POPULATE] Skipped during 3D drag'); } catch(_l) {}
+      try { __rtPush({ kind:'populate-skip', reason:'dragging3d' }); } catch(_t) {}
+      return true;
+    }
+  } catch(_dg) {}
   // Auto consistency check: compare current 2D vs 3D and push to trace
   function __consistencyAfterPopulate(labelFloor){
     try {
@@ -38,6 +88,60 @@ function populatePlan2DFromDesign(){
         __rtPush(det);
       }
     } catch(_cec) { /* ignore */ }
+  }
+  // Helper: build an array of plan-space edges for a room/component, honoring rotation or polygon footprint
+  function buildRoomEdgesPlan(room, cxPlan, czPlan, signYZ){
+    try{
+      var s = (signYZ===-1||signYZ===1)? signYZ : (__plan2d.yFromWorldZSign||1);
+      var cx = isFinite(cxPlan)? cxPlan : (isFinite(__plan2d.centerX)? __plan2d.centerX : 0);
+      var cz = isFinite(czPlan)? czPlan : (isFinite(__plan2d.centerZ)? __plan2d.centerZ : 0);
+      var edges=[];
+      // Prefer polygon footprint if available
+      if (Array.isArray(room.footprint) && room.footprint.length>=2){
+        for (var i=0;i<room.footprint.length;i++){
+          var a = room.footprint[i], b = room.footprint[(i+1)%room.footprint.length];
+          if(!a||!b) continue;
+          var x0 = (a.x - cx), y0 = s * (a.z - cz);
+          var x1 = (b.x - cx), y1 = s * (b.z - cz);
+          edges.push({ x0:x0, y0:y0, x1:x1, y1:y1 });
+        }
+        return edges;
+      }
+      // Otherwise compute from width/depth with optional rotation
+      var w = +room.width||0, d=+room.depth||0; var hw=w/2, hd=d/2;
+      if(hw<=0 || hd<=0) return edges;
+      var rotDeg = +room.rotation||0; var rot = (rotDeg%360) * Math.PI / 180;
+      function rotW(px,pz){ var dx=px-room.x, dz=pz-room.z; return { x: room.x + dx*Math.cos(rot) - dz*Math.sin(rot), z: room.z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+      if (Math.abs(rot) > 1e-6){
+        var c1=rotW(room.x-hw, room.z-hd), c2=rotW(room.x+hw, room.z-hd), c3=rotW(room.x+hw, room.z+hd), c4=rotW(room.x-hw, room.z+hd);
+        var p1={x:(c1.x-cx), y:s*(c1.z-cz)}, p2={x:(c2.x-cx), y:s*(c2.z-cz)}, p3={x:(c3.x-cx), y:s*(c3.z-cz)}, p4={x:(c4.x-cx), y:s*(c4.z-cz)};
+        edges.push({x0:p1.x,y0:p1.y,x1:p2.x,y1:p2.y});
+        edges.push({x0:p2.x,y0:p2.y,x1:p3.x,y1:p3.y});
+        edges.push({x0:p3.x,y0:p3.y,x1:p4.x,y1:p4.y});
+        edges.push({x0:p4.x,y0:p4.y,x1:p1.x,y1:p1.y});
+      } else {
+        var xL=(room.x-hw)-cx, xR=(room.x+hw)-cx, yT=s*((room.z-hd)-cz), yB=s*((room.z+hd)-cz);
+        edges.push({x0:xL,y0:yT,x1:xR,y1:yT});
+        edges.push({x0:xR,y0:yT,x1:xR,y1:yB});
+        edges.push({x0:xR,y0:yB,x1:xL,y1:yB});
+        edges.push({x0:xL,y0:yB,x1:xL,y1:yT});
+      }
+      return edges;
+    }catch(_e){ return []; }
+  }
+  // Stable world-coord attachment on walls to survive center changes across sessions
+  function ensureWorldCoordsForWall(w, cx, cz, sgn){
+    try{
+      if(!w || w.type!=='wall') return;
+      var has = (typeof w.wx0==='number' && typeof w.wz0==='number' && typeof w.wx1==='number' && typeof w.wz1==='number');
+      if(!has){
+        w.wx0 = cx + (w.x0||0); w.wz0 = cz + sgn * (w.y0||0);
+        w.wx1 = cx + (w.x1||0); w.wz1 = cz + sgn * (w.y1||0);
+      }
+    }catch(_ew){ /* tolerate */ }
+  }
+  function computeWorldForPlanEdge(x0,y0,x1,y1,cx,cz,sgn){
+    return { wx0: cx + x0, wz0: cz + sgn*y0, wx1: cx + x1, wz1: cz + sgn*y1 };
   }
   // Preserve user-drawn manual walls OR any prior 2D user edits: if any exist, skip destructive populate to prevent disappearance.
   try {
@@ -70,35 +174,158 @@ function populatePlan2DFromDesign(){
           var cxA = (isFinite(__plan2d.centerX)? __plan2d.centerX : 0);
           var czA = (isFinite(__plan2d.centerZ)? __plan2d.centerZ : 0);
           var elemsArr = Array.isArray(__plan2d.elements)? __plan2d.elements : (__plan2d.elements=[]);
-          // Tombstones: do not re-append edges the user deleted on this floor
-          function tombstoneMatchesA(x0,y0,x1,y1){
+          // Helper: dedupe walls by world-space endpoints (order-insensitive; 1cm quantization)
+          function dedupeWallsWorld(){
+            try{
+              var map=Object.create(null), out=[]; var removed=0;
+              function kf(v){ return Math.round((+v||0)*100)/100; } // 1cm
+              for (var i=0;i<elemsArr.length;i++){
+                var e=elemsArr[i]; if(!e){ continue; }
+                if(e.type!=='wall'){ out.push(e); continue; }
+                // Attach stable world endpoints if missing
+                ensureWorldCoordsForWall(e, cxA, czA, sgnA);
+                var wx0 = (typeof e.wx0==='number')? e.wx0 : (cxA + e.x0);
+                var wz0 = (typeof e.wz0==='number')? e.wz0 : (czA + sgnA*e.y0);
+                var wx1 = (typeof e.wx1==='number')? e.wx1 : (cxA + e.x1);
+                var wz1 = (typeof e.wz1==='number')? e.wz1 : (czA + sgnA*e.y1);
+                var a = kf(wx0)+","+kf(wz0), b = kf(wx1)+","+kf(wz1);
+                var key = (a<b)? (a+"|"+b) : (b+"|"+a);
+                if(map[key]){ removed++; continue; }
+                map[key]=true; out.push(e);
+              }
+              if(removed>0){ __plan2d.elements = out; elemsArr = __plan2d.elements; try{ __rtPush({ kind:'populate-dedupe-append', floor:lvlNowA, removed:removed }); }catch(_d){} }
+            }catch(_dd){}
+          }
+          // Tombstones: use world-space comparison so re-centering doesn't revive deleted edges
+          function tombstoneMatchesWorldA(x0,y0,x1,y1){
             try{
               var arr = (typeof window.plan2dGetTombstonesForFloor==='function') ? window.plan2dGetTombstonesForFloor(lvlNowA) : [];
               if(!Array.isArray(arr) || !arr.length) return false;
               var EPS=0.01; function same(a,b){ return Math.abs(a-b)<=EPS; }
+              // Map plan->world using current center/sign
+              var wx0 = cxA + x0, wz0 = czA + sgnA*y0;
+              var wx1 = cxA + x1, wz1 = czA + sgnA*y1;
               for(var ti=0; ti<arr.length; ti++){
                 var t = arr[ti];
-                if((same(t.x0,x0)&&same(t.y0,y0)&&same(t.x1,x1)&&same(t.y1,y1)) || (same(t.x0,x1)&&same(t.y0,y1)&&same(t.x1,x0)&&same(t.y1,y0))) return true;
+                if (typeof t.wx0==='number' && typeof t.wz0==='number' && typeof t.wx1==='number' && typeof t.wz1==='number'){
+                  if((same(t.wx0,wx0)&&same(t.wz0,wz0)&&same(t.wx1,wx1)&&same(t.wz1,wz1)) || (same(t.wx0,wx1)&&same(t.wz0,wz1)&&same(t.wx1,wx0)&&same(t.wz1,wz0))) return true;
+                } else {
+                  // Fallback to plan-space match if legacy tombstone has no world coords
+                  if((same(t.x0,x0)&&same(t.y0,y0)&&same(t.x1,x1)&&same(t.y1,y1)) || (same(t.x0,x1)&&same(t.y0,y1)&&same(t.x1,x0)&&same(t.y1,y0))) return true;
+                }
               }
               return false;
             }catch(_tm){ return false; }
           }
-          function wallMatchesA(x0,y0,x1,y1){ var EPS=0.01; for(var i=0;i<elemsArr.length;i++){ var w=elemsArr[i]; if(!w||w.type!=='wall') continue; if(Math.abs(w.x0-x0)<EPS && Math.abs(w.y0-y0)<EPS && Math.abs(w.x1-x1)<EPS && Math.abs(w.y1-y1)<EPS) return true; if(Math.abs(w.x0-x1)<EPS && Math.abs(w.y0-y1)<EPS && Math.abs(w.x1-x0)<EPS && Math.abs(w.y1-y0)<EPS) return true; } return false; }
+          function wallMatchesWorld(x0,y0,x1,y1){
+            var EPS=0.01; // 1cm in world
+            // Compute target edge in world using current center/sign
+            var tgt = computeWorldForPlanEdge(x0,y0,x1,y1,cxA,czA,sgnA);
+            for(var i=0;i<elemsArr.length;i++){
+              var w=elemsArr[i]; if(!w||w.type!=='wall') continue;
+              ensureWorldCoordsForWall(w, cxA, czA, sgnA);
+              var same = (Math.abs((w.wx0||0)-tgt.wx0)<EPS && Math.abs((w.wz0||0)-tgt.wz0)<EPS && Math.abs((w.wx1||0)-tgt.wx1)<EPS && Math.abs((w.wz1||0)-tgt.wz1)<EPS);
+              var sameRev = (Math.abs((w.wx0||0)-tgt.wx1)<EPS && Math.abs((w.wz0||0)-tgt.wz1)<EPS && Math.abs((w.wx1||0)-tgt.wx0)<EPS && Math.abs((w.wz1||0)-tgt.wz0)<EPS);
+              if(same||sameRev) return true;
+            }
+            return false;
+          }
           var appended=0;
+          var appendedByRoom = Object.create(null);
           for (var riA=0; riA<roomsA.length; riA++){
             var rA = roomsA[riA]; if(!rA) continue; if ((rA.level||0)!==lvlNowA) continue;
-            var hwA=(rA.width||0)/2, hdA=(rA.depth||0)/2; if(hwA<=0||hdA<=0) continue;
-            var xL = (rA.x - hwA) - cxA, xR = (rA.x + hwA) - cxA;
-            var yT = sgnA * ((rA.z - hdA) - czA), yB = sgnA * ((rA.z + hdA) - czA);
-            var edgesA = [
-              {x0:xL,y0:yT,x1:xR,y1:yT}, {x0:xR,y0:yT,x1:xR,y1:yB}, {x0:xR,y0:yB,x1:xL,y1:yB}, {x0:xL,y0:yB,x1:xL,y1:yT}
-            ];
+            // Skip if this room already has any grouped wall(s) in the draft to avoid duplicates
+            try {
+              var gIdA = 'room:' + (rA.id||'');
+              var alreadyGroupPresent = false;
+              for (var chk=0; chk<elemsArr.length; chk++){
+                var ew = elemsArr[chk]; if(!ew || ew.type!=='wall') continue;
+                if (ew.groupId === gIdA) { alreadyGroupPresent = true; break; }
+              }
+              if (alreadyGroupPresent) continue;
+            } catch(_grpSkip) {}
+            var edgesA = buildRoomEdgesPlan(rA, cxA, czA, sgnA);
+            if (!edgesA || edgesA.length===0) continue;
             for (var ej=0; ej<edgesA.length; ej++){
-              var W=edgesA[ej]; if(wallMatchesA(W.x0,W.y0,W.x1,W.y1)) continue; if(tombstoneMatchesA(W.x0,W.y0,W.x1,W.y1)) continue;
-              elemsArr.push({ type:'wall', x0:W.x0, y0:W.y0, x1:W.x1, y1:W.y1, thickness:(__plan2d.wallThicknessM||0.3), groupId: 'room:'+(rA.id||'') }); appended++;
+              var W=edgesA[ej]; if(wallMatchesWorld(W.x0,W.y0,W.x1,W.y1)) continue; if(tombstoneMatchesWorldA(W.x0,W.y0,W.x1,W.y1)) continue;
+              var newW = { type:'wall', x0:W.x0, y0:W.y0, x1:W.x1, y1:W.y1, thickness:(__plan2d.wallThicknessM||0.3), groupId: 'room:'+(rA.id||''), wallRole:'room', level: lvlNowA, roomLevel: lvlNowA };
+              // Stamp stable world endpoints
+              var we = computeWorldForPlanEdge(W.x0,W.y0,W.x1,W.y1,cxA,czA,sgnA);
+              newW.wx0 = we.wx0; newW.wz0 = we.wz0; newW.wx1 = we.wx1; newW.wz1 = we.wz1;
+              elemsArr.push(newW); appended++; appendedByRoom[rA.id||''] = (appendedByRoom[rA.id||'']||0)+1;
             }
           }
-          if (appended>0){ try { if(typeof plan2dDraw==='function') plan2dDraw(); } catch(_dr){}
+          // If we appended any walls for rooms, also create their openings (windows/doors)
+          try {
+            if (appended>0) {
+              // Helper: find nearest wall in plan for a given room group and attach opening endpoints
+              function attachOpeningForRoom(room, op){
+                try{
+                  var group = 'room:' + (room.id||'');
+                  // Convert world opening endpoints to plan coords
+                  var p0 = { x: (op.x0 - cxA), y: sgnA * (op.z0 - czA) };
+                  var p1 = { x: (op.x1 - cxA), y: sgnA * (op.z1 - czA) };
+                  var bestIdx=-1, bestDist=Infinity;
+                  for (var wi=0; wi<elemsArr.length; wi++){
+                    var w = elemsArr[wi]; if(!w || w.type!=='wall') continue;
+                    if (w.groupId !== group) continue; // must match same room
+                    var len = Math.hypot(w.x1-w.x0, w.y1-w.y0); if(len<0.01) continue;
+                    var dx=w.x1-w.x0, dy=w.y1-w.y0;
+                    var midX=(p0.x+p1.x)/2, midY=(p0.y+p1.y)/2;
+                    var t = Math.max(0, Math.min(1, ((midX - w.x0) * dx + (midY - w.y0) * dy) / (len*len)));
+                    var cxW = w.x0 + t*dx, cyW = w.y0 + t*dy;
+                    var dist = Math.hypot(midX - cxW, midY - cyW);
+                    if (dist < bestDist) { bestDist = dist; bestIdx = wi; }
+                  }
+                  if (bestIdx>=0 && bestDist < 0.5) {
+                    var host = elemsArr[bestIdx];
+                    if (typeof plan2dProjectParamOnWall === 'function'){
+                      var t0 = plan2dProjectParamOnWall(p0, host);
+                      var t1 = plan2dProjectParamOnWall(p1, host);
+                      if (op.type === 'window'){
+                        var win = { type:'window', host: bestIdx, t0: t0, t1: t1, thickness: (host.thickness||__plan2d.wallThicknessM), level: lvlNowA, __fromAppend:true };
+                        if (typeof op.sillM==='number') win.sillM = op.sillM;
+                        if (typeof op.heightM==='number') win.heightM = op.heightM;
+                        if (op.meta) win.meta = op.meta;
+                        elemsArr.push(win);
+                      } else if (op.type === 'door'){
+                        var widthM = Math.hypot(p1.x-p0.x, p1.y-p0.y);
+                        elemsArr.push({ type:'door', host: bestIdx, t0: t0, t1: t1, widthM: widthM, heightM: (typeof op.heightM==='number'? op.heightM : (__plan2d.doorHeightM||2.04)), thickness: (host.thickness||__plan2d.wallThicknessM), meta: (op.meta||{ hinge:'t0', swing:'in' }), level: lvlNowA, __fromAppend:true });
+                      }
+                    }
+                  }
+                }catch(_ao){}
+              }
+              for (var riB=0; riB<roomsA.length; riB++){
+                var rB = roomsA[riB]; if(!rB) continue; if((rB.level||0)!==lvlNowA) continue;
+                var rid = rB.id||''; if(!appendedByRoom[rid]) continue; // only if we appended walls for this room
+                var ops = Array.isArray(rB.openings) ? rB.openings : [];
+                for (var oi=0; oi<ops.length; oi++){
+                  var op = ops[oi]; if(!op) continue;
+                  // Support only openings with world endpoints; skip incomplete
+                  if (typeof op.x0==='number' && typeof op.z0==='number' && typeof op.x1==='number' && typeof op.z1==='number'){
+                    attachOpeningForRoom(rB, op);
+                  } else if (op.edge && typeof op.startM==='number' && typeof op.endM==='number'){
+                    // Convert legacy edge-based opening to world endpoints
+                    var hw = (+rB.width||0)/2, hd = (+rB.depth||0)/2;
+                    var rot = ((+rB.rotation||0)%360) * Math.PI/180;
+                    function rW(px,pz){ var dx=px-rB.x, dz=pz-rB.z; return { x: rB.x + dx*Math.cos(rot) - dz*Math.sin(rot), z: rB.z + dx*Math.sin(rot) + dz*Math.cos(rot) }; }
+                    var xL=rB.x-hw, xR=rB.x+hw, zT=rB.z-hd, zB=rB.z+hd;
+                    var A,B;
+                    if (op.edge==='minZ'){ A=rW(xL, zT); B=rW(xL+(op.endM||0), zT); A=rW(xL+(op.startM||0), zT); }
+                    else if (op.edge==='maxZ'){ A=rW(xL, zB); B=rW(xL+(op.endM||0), zB); A=rW(xL+(op.startM||0), zB); }
+                    else if (op.edge==='minX'){ A=rW(xL, zT+(op.startM||0)); B=rW(xL, zT+(op.endM||0)); }
+                    else if (op.edge==='maxX'){ A=rW(xR, zT+(op.startM||0)); B=rW(xR, zT+(op.endM||0)); }
+                    if (A && B){ attachOpeningForRoom(rB, { type: op.type, x0:A.x, z0:A.z, x1:B.x, z1:B.z, heightM: op.heightM, sillM: op.sillM, meta: op.meta }); }
+                  }
+                }
+              }
+            }
+          } catch(_appendOpenings) { /* non-fatal */ }
+          if (appended>0){
+            // One more safety: dedupe any coincident walls that slipped through
+            try { dedupeWallsWorld(); } catch(_dd2){}
+            try { if(typeof plan2dDraw==='function') plan2dDraw(); } catch(_dr){}
             __rtPush({ kind:'populate-append-rooms', floor: lvlNowA, appended: appended });
             try { __consistencyAfterPopulate(lvlNowA); } catch(_ca){}
             return true;
@@ -202,6 +429,8 @@ function populatePlan2DFromDesign(){
           y1: sgn1 * (ws1.z1 - cz1),
           thickness: (ws1.thickness || __plan2d.wallThicknessM || 0.3)
         };
+        // Stamp stable world endpoints
+        wEl.wx0 = ws1.x0; wEl.wz0 = ws1.z0; wEl.wx1 = ws1.x1; wEl.wz1 = ws1.z1;
         __plan2d.elements.push(wEl);
         wallIdxMap.set(ws1, idxW);
       }
@@ -248,22 +477,31 @@ function populatePlan2DFromDesign(){
           }
           return false;
         }
+        function dedupeWallsWorldUserStrips(){
+          try{
+            var s=sgn1, cx=cx1, cz=cz1; var map=Object.create(null), out=[]; var removed=0;
+            function kf(v){ return Math.round((+v||0)*100)/100; }
+            for (var i=0;i<__plan2d.elements.length;i++){
+              var e=__plan2d.elements[i]; if(!e){ continue; }
+              if(e.type!=='wall'){ out.push(e); continue; }
+              // Prefer stamped world coords if present
+              var wx0 = (typeof e.wx0==='number')? e.wx0 : (cx + e.x0);
+              var wz0 = (typeof e.wz0==='number')? e.wz0 : (cz + s*e.y0);
+              var wx1 = (typeof e.wx1==='number')? e.wx1 : (cx + e.x1);
+              var wz1 = (typeof e.wz1==='number')? e.wz1 : (cz + s*e.y1);
+              var a=kf(wx0)+","+kf(wz0), b=kf(wx1)+","+kf(wz1); var key=(a<b)?(a+"|"+b):(b+"|"+a);
+              if(map[key]){ removed++; continue; }
+              map[key]=true; out.push(e);
+            }
+            if(removed>0){ __plan2d.elements = out; try{ __rtPush({ kind:'populate-dedupe-userStrips', floor:lvlCurrent, removed:removed }); }catch(_r){} }
+          }catch(_de){}
+        }
         var roomsLive = Array.isArray(window.allRooms)? window.allRooms : [];
         for (var ri=0; ri<roomsLive.length; ri++){
           var rAdd = roomsLive[ri]; if(!rAdd) continue; if ((rAdd.level||0)!==lvlCurrent) continue;
-          // Compute room rectangle edges in plan space (relative to cx1,cz1)
-          var hwR = (rAdd.width||0)/2, hdR=(rAdd.depth||0)/2;
-          if (hwR<=0 || hdR<=0) continue;
-          var xL = (rAdd.x - hwR) - cx1; var xR = (rAdd.x + hwR) - cx1;
-          var zT = (rAdd.z - hdR) - cz1; var zB = (rAdd.z + hdR) - cz1;
-          var yT = sgn1 * zT; var yB = sgn1 * zB;
+          // Build edges from rotation/footprint-aware helper
+          var edges = buildRoomEdgesPlan(rAdd, cx1, cz1, sgn1);
           var needAny = false;
-          var edges = [
-            { x0:xL, y0:yT, x1:xR, y1:yT }, // top
-            { x0:xR, y0:yT, x1:xR, y1:yB }, // right
-            { x0:xR, y0:yB, x1:xL, y1:yB }, // bottom
-            { x0:xL, y0:yB, x1:xL, y1:yT }  // left
-          ];
           for (var eI=0; eI<edges.length; eI++){
             var E = edges[eI];
             if(!wallMatches(E.x0, E.y0, E.x1, E.y1)) { needAny = true; break; }
@@ -272,8 +510,10 @@ function populatePlan2DFromDesign(){
           // Add any missing edges individually (avoid duplicates)
           for (var eJ=0;eJ<edges.length;eJ++){
             var W = edges[eJ]; if (wallMatches(W.x0,W.y0,W.x1,W.y1)) continue;
-            __plan2d.elements.push({ type:'wall', x0:W.x0, y0:W.y0, x1:W.x1, y1:W.y1, thickness: (__plan2d.wallThicknessM||0.3), groupId: 'room:'+ (rAdd.id||'') });
+            __plan2d.elements.push({ type:'wall', x0:W.x0, y0:W.y0, x1:W.x1, y1:W.y1, thickness: (__plan2d.wallThicknessM||0.3), groupId: 'room:'+ (rAdd.id||''), wallRole:'room', level: lvlCurrent, roomLevel: lvlCurrent });
           }
+          // After adding a room's edges, run dedupe to ensure no coincident walls remain
+          dedupeWallsWorldUserStrips();
         }
       } catch(_ensureAddedRoomWalls) { /* tolerate failure */ }
   try { if(window.__plan2d) __plan2d.__userEdited=false; }catch(_ueUserStrips){}
@@ -395,14 +635,16 @@ function populatePlan2DFromDesign(){
       var sgn0 = (__plan2d.yFromWorldZSign||1);
       for (var wsi1=0; wsi1<wallStrips.length; wsi1++){
         var ws1 = wallStrips[wsi1]; if(!ws1 || (ws1.level||0)!==lvlNow0) continue;
-        __plan2d.elements.push({
+            var newW2 = {
           type: 'wall',
           x0: ws1.x0 - cx0,
           y0: sgn0 * (ws1.z0 - cz0),
           x1: ws1.x1 - cx0,
           y1: sgn0 * (ws1.z1 - cz0),
           thickness: (ws1.thickness || __plan2d.wallThicknessM || 0.3)
-        });
+            };
+            newW2.wx0 = ws1.x0; newW2.wz0 = ws1.z0; newW2.wx1 = ws1.x1; newW2.wz1 = ws1.z1;
+            __plan2d.elements.push(newW2);
       }
   try { if(window.__plan2d) __plan2d.__userEdited=false; }catch(_ueStrips){}
   try { __consistencyAfterPopulate((typeof lvlNow0==='number')? lvlNow0 : undefined); } catch(_chk1) {}
@@ -507,10 +749,17 @@ function populatePlan2DFromDesign(){
     useMinX = minX; useMaxX = maxX; useMinZ = minZ; useMaxZ = maxZ;
   }
   var spanX = Math.max(0.5, useMaxX - useMinX); var spanZ = Math.max(0.5, useMaxZ - useMinZ);
-  // If we're applying opening-only edits, freeze center/scale to avoid subtle canvas jumps
+  // Freeze center/scale when needed to avoid visual jumps (openings edits or active 3D drag)
   var __freezeScale = false;
   try {
-    if (__plan2d && __plan2d.freezeCenterScaleUntil && Date.now() < __plan2d.freezeCenterScaleUntil) {
+    var freezeActive = false;
+    // Respect existing freeze window
+    if (__plan2d && __plan2d.freezeCenterScaleUntil && Date.now() < __plan2d.freezeCenterScaleUntil) freezeActive = true;
+    // Also freeze while a 3D room drag is in progress to keep alpha panels aligned
+    if (typeof window !== 'undefined' && window.__dragging3DRoom) freezeActive = true;
+    // And briefly after drag ends to avoid single-frame jumps as bounds settle
+    try { if (!freezeActive && typeof window.__last3DDragEnd === 'number' && (Date.now() - window.__last3DDragEnd) < 400) freezeActive = true; } catch(_pd) {}
+    if (freezeActive) {
       if (isFinite(__plan2d.centerX)) cx = __plan2d.centerX;
       if (isFinite(__plan2d.centerZ)) cz = __plan2d.centerZ;
       __freezeScale = true;
@@ -599,14 +848,38 @@ function populatePlan2DFromDesign(){
 
   // Build wall segments around each rectangle (rooms + structures) for this floor only, shifted relative to per-floor center.
   __plan2d.elements = [];
+  // Tombstone helper for full populate: world-space edge match against this floor
+  function __tombstoneMatchesWorldFull(wx0,wz0,wx1,wz1, floor){
+    try{
+      var arr = (typeof window.plan2dGetTombstonesForFloor==='function') ? window.plan2dGetTombstonesForFloor(floor) : [];
+      if(!Array.isArray(arr) || !arr.length) return false;
+      var EPS=0.01; function same(a,b){ return Math.abs(a-b)<=EPS; }
+      for (var ti=0; ti<arr.length; ti++){
+        var t=arr[ti];
+        if (typeof t.wx0==='number' && typeof t.wz0==='number' && typeof t.wx1==='number' && typeof t.wz1==='number'){
+          if((same(t.wx0,wx0)&&same(t.wz0,wz0)&&same(t.wx1,wx1)&&same(t.wz1,wz1)) || (same(t.wx0,wx1)&&same(t.wz0,wz1)&&same(t.wx1,wx0)&&same(t.wz1,wz0))) return true;
+        } else {
+          // Legacy fallback is not reliable after re-centering; ignore to avoid false re-creation
+        }
+      }
+      return false;
+    }catch(_tmf){ return false; }
+  }
   function addRectWalls(minX,maxX,minZ,maxZ, groupId, srcLevel){
     var s = (__plan2d.yFromWorldZSign||1);
     var x0=minX - cx, x1=maxX - cx, y0=s*(minZ - cz), y1=s*(maxZ - cz); // map z->y with sign
   var lvlTag = (typeof srcLevel==='number'? srcLevel : lvl);
-  var idxTop = __plan2d.elements.length;     __plan2d.elements.push({type:'wall', x0:x0,y0:y0, x1:x1,y1:y0, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvlTag});
-  var idxRight = __plan2d.elements.length;   __plan2d.elements.push({type:'wall', x0:x1,y0:y0, x1:x1,y1:y1, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvlTag});
-  var idxBottom = __plan2d.elements.length;  __plan2d.elements.push({type:'wall', x0:x1,y0:y1, x1:x0,y1:y1, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvlTag});
-  var idxLeft = __plan2d.elements.length;    __plan2d.elements.push({type:'wall', x0:x0,y0:y1, x1:x0,y1:y0, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvlTag});
+  // Compute world endpoints and skip if tombstoned (rooms only)
+  function pushIfOK(px0,py0,px1,py1){
+    var wx0 = cx + px0, wz0 = cz + s*py0; var wx1 = cx + px1, wz1 = cz + s*py1;
+    var isRoomEdge = groupId && typeof groupId==='string' && groupId.indexOf('room:')===0;
+    if (isRoomEdge && __tombstoneMatchesWorldFull(wx0,wz0,wx1,wz1,lvlTag)) return -1;
+    var idx = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:px0,y0:py0, x1:px1,y1:py1, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvlTag}); return idx;
+  }
+  var idxTop = pushIfOK(x0,y0, x1,y0);
+  var idxRight = pushIfOK(x1,y0, x1,y1);
+  var idxBottom = pushIfOK(x1,y1, x0,y1);
+  var idxLeft = pushIfOK(x0,y1, x0,y0);
     return { top: idxTop, right: idxRight, bottom: idxBottom, left: idxLeft, coords: {x0:x0,x1:x1,y0:y0,y1:y1} };
   }
   function addRotatedRectWalls(cxW, czW, w, d, rotationDeg, groupId, srcLevel){
@@ -617,10 +890,16 @@ function populatePlan2DFromDesign(){
     function toPlan(p){ return { x: (p.x - cx), y: s * (p.z - cz) }; }
     var p1=toPlan(c1), p2=toPlan(c2), p3=toPlan(c3), p4=toPlan(c4);
   var lvlTag2 = (typeof srcLevel==='number'? srcLevel : lvl);
-  var i1 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p1.x,y0:p1.y, x1:p2.x,y1:p2.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvlTag2});
-  var i2 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p2.x,y0:p2.y, x1:p3.x,y1:p3.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvlTag2});
-  var i3 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p3.x,y0:p3.y, x1:p4.x,y1:p4.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvlTag2});
-  var i4 = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:p4.x,y0:p4.y, x1:p1.x,y1:p1.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvlTag2});
+  function pushIfOK2(pa,pb){
+    var wx0 = cx + pa.x, wz0 = cz + s*pa.y; var wx1 = cx + pb.x, wz1 = cz + s*pb.y;
+    var isRoomEdge = groupId && typeof groupId==='string' && groupId.indexOf('room:')===0;
+    if (isRoomEdge && __tombstoneMatchesWorldFull(wx0,wz0,wx1,wz1,lvlTag2)) return -1;
+    var idx = __plan2d.elements.length; __plan2d.elements.push({type:'wall', x0:pa.x,y0:pa.y, x1:pb.x,y1:pb.y, thickness:__plan2d.wallThicknessM, groupId: groupId||null, level: lvlTag2}); return idx;
+  }
+  var i1 = pushIfOK2(p1,p2);
+  var i2 = pushIfOK2(p2,p3);
+  var i3 = pushIfOK2(p3,p4);
+  var i4 = pushIfOK2(p4,p1);
     return { top: i1, right: i2, bottom: i3, left: i4, coords: {p1:p1,p2:p2,p3:p3,p4:p4} };
   }
   function markWallRole(idxObj, role){
@@ -889,6 +1168,30 @@ function populatePlan2DFromDesign(){
       try { __plan2d.__userEdited=false; }catch(_flag){}
     }
   } catch(_eSynth) {}
+  // Final world-space dedupe safety (collapse any coincident walls across all paths)
+  try {
+    var sgnD = (__plan2d && (__plan2d.yFromWorldZSign===-1||__plan2d.yFromWorldZSign===1)) ? __plan2d.yFromWorldZSign : 1;
+    var cxD = (typeof __plan2d.centerX==='number' && isFinite(__plan2d.centerX)) ? __plan2d.centerX : 0;
+    var czD = (typeof __plan2d.centerZ==='number' && isFinite(__plan2d.centerZ)) ? __plan2d.centerZ : 0;
+    var arrD = Array.isArray(__plan2d.elements) ? __plan2d.elements : [];
+    var mapD = Object.create(null), outD = [], removedD = 0;
+    function kfD(v){ return Math.round((+v||0)*100)/100; }
+    for (var di=0; di<arrD.length; di++){
+      var eD = arrD[di]; if(!eD){ continue; }
+      if(eD.type!=='wall'){ outD.push(eD); continue; }
+      // Prefer stamped world coords
+      var wx0D = (typeof eD.wx0==='number')? eD.wx0 : (cxD + (eD.x0||0));
+      var wz0D = (typeof eD.wz0==='number')? eD.wz0 : (czD + sgnD*(eD.y0||0));
+      var wx1D = (typeof eD.wx1==='number')? eD.wx1 : (cxD + (eD.x1||0));
+      var wz1D = (typeof eD.wz1==='number')? eD.wz1 : (czD + sgnD*(eD.y1||0));
+      var aD = kfD(wx0D)+","+kfD(wz0D), bD = kfD(wx1D)+","+kfD(wz1D);
+      var keyD = (aD<bD)? (aD+"|"+bD) : (bD+"|"+aD);
+      if(mapD[keyD]){ removedD++; continue; }
+      mapD[keyD] = true; outD.push(eD);
+    }
+    if(removedD>0){ __plan2d.elements = outD; try{ __rtPush({ kind:'populate-dedupe-final', floor:(typeof currentFloor==='number'? currentFloor:0), removed: removedD }); }catch(_rf){} }
+  } catch(_finalDed){}
+
   // Final debug snapshot
   try {
     window.__plan2dDiag.lastPopulateEnd = {

@@ -190,14 +190,24 @@ if (typeof window.getLatestRoundTripTrace !== 'function') {
 function applyPlan2DTo3D(elemsSnapshot, opts){
   // Early snapshot of previous 3D state (level-specific) for vanish diagnostics
   var prevRoomsLevelCount = 0, prevStripsLevelCount = 0, prevOpeningsLevelCount = 0;
-  // Snapshot of previous rooms on target level for position preservation (width/depth match based)
+  // Snapshot of previous rooms on target level for identity preservation (position, size, name, groupId)
   var __prevRoomsSnapshot = [];
+  var __prevRoomsByGroupId = Object.create(null);
   // Reuse/new opening counters for this apply invocation
   var __reuseStats = { reused:0, new:0, reusedWin:0, newWin:0, reusedDoor:0, newDoor:0 };
   try {
     var lvlPre = (opts && typeof opts.level==='number') ? opts.level : 0;
     if (Array.isArray(window.allRooms)) {
-      for (var rpi=0; rpi<allRooms.length; rpi++){ var rrP = allRooms[rpi]; if(rrP && (rrP.level||0)===lvlPre){ prevRoomsLevelCount++; if(Array.isArray(rrP.openings)) prevOpeningsLevelCount += rrP.openings.length; __prevRoomsSnapshot.push({ id: rrP.id, x: rrP.x, z: rrP.z, width: rrP.width, depth: rrP.depth }); } }
+      for (var rpi=0; rpi<allRooms.length; rpi++){
+        var rrP = allRooms[rpi];
+        if(rrP && (rrP.level||0)===lvlPre){
+          prevRoomsLevelCount++;
+          if(Array.isArray(rrP.openings)) prevOpeningsLevelCount += rrP.openings.length;
+          var snap = { id: rrP.id, x: rrP.x, z: rrP.z, width: rrP.width, depth: rrP.depth, name: rrP.name, groupId: rrP.groupId };
+          __prevRoomsSnapshot.push(snap);
+          if (snap.groupId && !__prevRoomsByGroupId[snap.groupId]) __prevRoomsByGroupId[snap.groupId] = snap;
+        }
+      }
     }
     if (Array.isArray(window.wallStrips)) {
       for (var spi=0; spi<wallStrips.length; spi++){ var wsP = wallStrips[spi]; if(wsP && (wsP.level||0)===lvlPre) prevStripsLevelCount++; }
@@ -217,6 +227,8 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     var allowRooms = !!opts.allowRooms;
     var quiet = !!opts.quiet;
     var nonDestructive = !!opts.nonDestructive; // when true, don't clear 3D rooms if there are no room walls in 2D (e.g., during view toggles)
+    // Preserve previous room world position? Default true for 3D-originated applies; set false for 2D-originated applies
+    var preservePositions = (typeof opts.preservePositions === 'boolean') ? !!opts.preservePositions : true;
   // If caller did not explicitly specify nonDestructive AND we already have rooms on this level, default to preserving them
   if(!('nonDestructive' in opts) && prevRoomsLevelCount>0){ nonDestructive = true; }
   // When true (default), only create rooms from explicit closed loops (rectangles or single closed polygons).
@@ -241,7 +253,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         try { if (console && console.debug) console.debug('[applyPlan2DTo3D]', det); } catch(_c) {}
       } catch(_e) {}
     }
-    // Helper: attempt to preserve original room world position for matching geometry (prevents random shifts after late edits)
+    // Helper: attempt to preserve original room world position and name for matching geometry (prevents random shifts/renames after edits)
     var __preserveUsed = Object.create(null);
     function __preserveRoomPosition(roomObj){
       try {
@@ -251,9 +263,13 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           var pr = __prevRoomsSnapshot[i]; if(!pr) continue;
           if (__preserveUsed[pr.id]) continue;
           if (Math.abs((pr.width||0) - (roomObj.width||0)) <= tolSize && Math.abs((pr.depth||0) - (roomObj.depth||0)) <= tolSize){
-            // Preserve previous world center
+            // Optionally preserve previous world center (disabled for 2D-originated applies)
             var oldX = roomObj.x, oldZ = roomObj.z;
-            roomObj.x = pr.x; roomObj.z = pr.z;
+            if (preservePositions) {
+              roomObj.x = pr.x; roomObj.z = pr.z;
+            }
+            // Preserve previous room name when available
+            try { if (pr.name && typeof roomObj.name === 'string') roomObj.name = pr.name; } catch(_nm){}
             __preserveUsed[pr.id] = true;
             try { window.__rtTracePush({ kind:'apply-room-preserved', level: (roomObj.level||0), id: roomObj.id, matchId: pr.id, width: roomObj.width, depth: roomObj.depth, from:{ x:oldX, z:oldZ }, to:{ x:roomObj.x, z:roomObj.z } }); } catch(_rtPR){}
             return; // only one match
@@ -357,7 +373,10 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           var wW = Math.max(0.5, (maxX - minX));
           var wD = Math.max(0.5, (maxY - minY));
           var roomG = createRoom(wx, wz, targetLevel);
-          roomG.width = wW; roomG.depth = wD; roomG.height = 3; roomG.name = 'Room';
+          roomG.width = wW; roomG.depth = wD; roomG.height = 3;
+          // Preserve name by groupId if available, else default
+          var prevByG = (gid && __prevRoomsByGroupId[gid]) ? __prevRoomsByGroupId[gid] : null;
+          roomG.name = (prevByG && prevByG.name) ? prevByG.name : 'Room';
           roomG.groupId = gid;
           __preserveRoomPosition(roomG);
           // Openings: any window/door hosted on grouped walls -> map to world endpoints
@@ -1078,6 +1097,37 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   // Replace per-level strips with the newly computed strips (do not merge with existing)
   // This ensures deleted 2D walls are removed from 3D instead of being preserved by merge.
   var merged = _dedupeStripsByGeom(strips);
+  // Safety: if we somehow ended up with zero strips while 2D does contain walls,
+  // rebuild strips directly from walls (ignore wallRole and intersections) so they show in 3D.
+  try {
+    var hasWalls2D = false;
+    for (var __ci=0; __ci<elemsSrc.length; __ci++){ var __ce=elemsSrc[__ci]; if(__ce && __ce.type==='wall'){ hasWalls2D=true; break; } }
+    if ((Array.isArray(merged)? merged.length:0)===0 && hasWalls2D) {
+      if (typeof console !== 'undefined' && console.warn) {
+        console.warn('[applyPlan2DTo3D] Fallback: no strips after subsegments; rebuilding from raw walls');
+      }
+      var stripsFallback = [];
+      for (var wf=0; wf<elemsSrc.length; wf++){
+        var wfe = elemsSrc[wf]; if(!wfe || wfe.type!=='wall') continue;
+        // Map full wall endpoints (no subsegment splitting) to world
+        var recF = {
+          x0: (__ctx.centerX||0) + wfe.x0,
+          z0: (__ctx.centerZ||0) + sgn*(wfe.y0||0),
+          x1: (__ctx.centerX||0) + wfe.x1,
+          z1: (__ctx.centerZ||0) + sgn*(wfe.y1||0),
+          thickness: (wfe.thickness||__plan2d.wallThicknessM||0.3),
+          height: (__plan2d.wallHeightM||3.0),
+          baseY: (targetLevel||0) * 3.5,
+          level: (targetLevel||0)
+        };
+        // Attach this wall's openings once if present
+        try { recF.openings = openingsForWall(wf); } catch(_eOF) {}
+        stripsFallback.push(recF);
+      }
+      merged = _dedupeStripsByGeom(stripsFallback);
+      try { window.__rtTracePush({ kind:'apply-strips-fallback', level: targetLevel, rebuilt: (Array.isArray(merged)? merged.length:0) }); } catch(_rtFB) {}
+    }
+  } catch(_fb) { /* fallback best-effort */ }
   wallStrips = keepOther.concat(merged);
   // Persist strips. In nonDestructive mode (and not stripsOnly), do NOT clear current object selection.
   saveProjectSilently();
@@ -1289,12 +1339,14 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         if (wx<minWX) minWX=wx; if (wx>maxWX) maxWX=wx; if (wz<minWZ) minWZ=wz; if (wz>maxWZ) maxWZ=wz;
       }
       var cxW = (minWX+maxWX)/2, czW = (minWZ+maxWZ)/2;
-      var roomPoly = createRoom(cxW, czW, targetLevel);
+        var roomPoly = createRoom(cxW, czW, targetLevel);
       roomPoly.width = Math.max(0.5, quantizeMeters(maxWX - minWX, 2));
       roomPoly.depth = Math.max(0.5, quantizeMeters(maxWZ - minWZ, 2));
       roomPoly.height = 3;
-      roomPoly.name = 'Room';
-      roomPoly.groupId = PR.groupId;
+        // Preserve name by groupId when possible
+        roomPoly.groupId = PR.groupId;
+        var prevPoly = (PR.groupId && __prevRoomsByGroupId[PR.groupId]) ? __prevRoomsByGroupId[PR.groupId] : null;
+        roomPoly.name = (prevPoly && prevPoly.name) ? prevPoly.name : 'Room';
       roomPoly.footprint = worldPts; // world-space polygon footprint
   __preserveRoomPosition(roomPoly);
   // Map openings from host walls in this component to world endpoints
@@ -1454,6 +1506,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   room.width=Math.max(0.5, w);
   room.depth=Math.max(0.5, d);
       room.height=3;
+      // Preserve previous name for size-matched rooms via __preserveRoomPosition
       room.name='Room';
       __preserveRoomPosition(room);
       // Preserve grouping metadata (logical footprint union) if available
@@ -1625,19 +1678,46 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
     // Also run global dedupe for components
     dedupeAllEntities();
   } catch(e) { /* non-fatal dedupe */ }
-  // NEW: Immediately purge any stale perimeter strips from previous apply to prevent "ghost" outlines
-  // that only disappear after a subsequent drag. If we're in solid mode, rebuild fresh perimeter strips.
+  // NEW: Perimeter refresh only during explicit (destructive) Apply.
+  // In nonDestructive mode, never purge/rebuild perimeters to avoid flicker or unintended removal.
+  if(!nonDestructive){
+    try {
+      var isSolidMode = (window.__wallRenderMode === 'solid');
+      if (typeof window.removeRoomPerimeterStrips === 'function') {
+        window.removeRoomPerimeterStrips();
+        try { if (typeof window.__rtTracePush === 'function') window.__rtTracePush({ kind:'apply-perimeter-purge', level: targetLevel, solid:isSolidMode }); } catch(_rtPP){}
+      }
+      if (isSolidMode && typeof window.rebuildRoomPerimeterStrips === 'function') {
+        window.rebuildRoomPerimeterStrips(window.__roomWallThickness || 0.3);
+        try { if (typeof window.__rtTracePush === 'function') window.__rtTracePush({ kind:'apply-perimeter-rebuild', level: targetLevel, thickness:(window.__roomWallThickness||0.3) }); } catch(_rtPRB){}
+      }
+    } catch(_ePerimRefresh) { /* perimeter refresh non-fatal */ }
+  }
+  // In nonDestructive mode, ensure perimeter strips exist in solid render mode.
+  // If rooms were (re)built but there are no perimeter strips on this level, build them once.
   try {
-    var isSolidMode = (window.__wallRenderMode === 'solid');
-    if (typeof window.removeRoomPerimeterStrips === 'function') {
-      window.removeRoomPerimeterStrips();
-      try { if (typeof window.__rtTracePush === 'function') window.__rtTracePush({ kind:'apply-perimeter-purge', level: targetLevel, solid:isSolidMode }); } catch(_rtPP){}
+    if (nonDestructive) {
+      var isSolidModeND = (window.__wallRenderMode === 'solid');
+      if (isSolidModeND && (roomsFound.length>0 || polyRooms.length>0)){
+        function kfND(v){ return Math.round((+v||0)*1000)/1000; }
+        function keyND(x0,z0,x1,z1){ var a=kfND(x0)+","+kfND(z0), b=kfND(x1)+","+kfND(z1); return (a<b)?(a+"|"+b):(b+"|"+a); }
+        var needKeys = Object.create(null);
+        for (var rn=0; rn<allRooms.length; rn++){
+          var rN = allRooms[rn]; if(!rN || (rN.level||0)!==targetLevel) continue;
+          if (Array.isArray(rN.footprint) && rN.footprint.length>=2){
+            for (var ek=0; ek<rN.footprint.length; ek++){ var A=rN.footprint[ek], B=rN.footprint[(ek+1)%rN.footprint.length]; if(!A||!B) continue; needKeys[keyND(A.x,A.z,B.x,B.z)] = true; }
+          } else {
+            var hwN=(rN.width||0)/2, hdN=(rN.depth||0)/2; if(hwN>0&&hdN>0){ var xL=(rN.x||0)-hwN, xR=(rN.x||0)+hwN, zT=(rN.z||0)-hdN, zB=(rN.z||0)+hdN; var edgesN=[[xL,zT,xR,zT],[xR,zT,xR,zB],[xR,zB,xL,zB],[xL,zB,xL,zT]]; for (var eeN=0; eeN<edgesN.length; eeN++){ var EN=edgesN[eeN]; needKeys[keyND(EN[0],EN[1],EN[2],EN[3])] = true; } }
+          }
+        }
+        var haveAny=false; for (var wsI=0; wsI<wallStrips.length && !haveAny; wsI++){ var ws=wallStrips[wsI]; if(!ws || (ws.level||0)!==targetLevel) continue; var k=keyND(ws.x0,ws.z0,ws.x1,ws.z1); if (needKeys[k]) haveAny=true; }
+        if (!haveAny && typeof window.rebuildRoomPerimeterStrips === 'function'){
+          window.rebuildRoomPerimeterStrips(window.__roomWallThickness || 0.3);
+          try { if (typeof window.__rtTracePush==='function') window.__rtTracePush({ kind:'apply-perimeter-ensure', level: targetLevel }); } catch(_rtEns) {}
+        }
+      }
     }
-    if (isSolidMode && typeof window.rebuildRoomPerimeterStrips === 'function') {
-      window.rebuildRoomPerimeterStrips(window.__roomWallThickness || 0.3);
-      try { if (typeof window.__rtTracePush === 'function') window.__rtTracePush({ kind:'apply-perimeter-rebuild', level: targetLevel, thickness:(window.__roomWallThickness||0.3) }); } catch(_rtPRB){}
-    }
-  } catch(_ePerimRefresh) { /* perimeter refresh non-fatal */ }
+  } catch(_eNDPerim) { /* non-fatal */ }
   try {
     var postRooms=0; for (var vr=0; vr<allRooms.length; vr++){ var rV=allRooms[vr]; if(rV && (rV.level||0)===targetLevel) postRooms++; }
     window.__rtTracePush({ kind:'apply-post-dedupe', level: targetLevel, rooms: postRooms });
@@ -1692,8 +1772,15 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   // Append interior strips for this level, merged with existing same-level strips, and dedupe
   var keepOther2 = wallStrips.filter(function(ws){ return (ws.level||0)!==targetLevel; });
   var existingLvl2 = wallStrips.filter(function(ws){ return (ws.level||0)===targetLevel; });
-  // Replace per-level strips with newly computed interior strips for this level.
-  var merged2 = _dedupeStripsByGeom(strips2);
+  // Replace or merge per-level strips depending on destructive mode
+  var merged2;
+  if (nonDestructive) {
+    // Non-destructive: retain existing strips on this level and merge in any newly computed; dedupe geometry
+    merged2 = _dedupeStripsByGeom(existingLvl2.concat(strips2));
+  } else {
+    // Destructive: replace level strips with what 2D dictates (may be empty to intentionally clear)
+    merged2 = _dedupeStripsByGeom(strips2);
+  }
   wallStrips = keepOther2.concat(merged2);
   selectedWallStripIndex = -1;
   } catch(e){ /* interior strips non-fatal */ }

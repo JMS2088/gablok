@@ -232,6 +232,10 @@
           }
           // Disable drag-by-label when the 2D floor plan is active; allow normal click selection to proceed.
           el.addEventListener('mousedown', function(e){
+            // Allow right-drag orbit to pass through labels to the canvas
+            if (e && e.button === 2) {
+              return; // don't intercept right-click; let canvas handle orbit
+            }
             try{
               if (window.__plan2d && __plan2d.active) {
                 // Do not prevent default so the click handler can still select the room if needed.

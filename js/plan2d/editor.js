@@ -47,6 +47,7 @@
               quiet:false,
               level:(typeof window.currentFloor==='number'? window.currentFloor:0),
               nonDestructive:false,
+              preservePositions:false,
               // Hint for future: if applyPlan2DTo3D adds view-changing behavior later we can read this flag.
               preserveView:true
             });
@@ -69,7 +70,7 @@
             }
           }catch(_close2d){}
         } else if(typeof window.applyPlan2DTo3D==='function') {
-          window.applyPlan2DTo3D(undefined,{allowRooms:true,quiet:false,level:(typeof window.currentFloor==='number'? window.currentFloor:0)});
+          window.applyPlan2DTo3D(undefined,{allowRooms:true,quiet:false,level:(typeof window.currentFloor==='number'? window.currentFloor:0), preservePositions:false});
           // If 2D not active (defensive), ensure page hidden
           try{ var pg2=document.getElementById('plan2d-page'); if(pg2) pg2.style.display='none'; }catch(_pghide){}
         }
