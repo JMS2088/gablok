@@ -107,6 +107,9 @@
   // Shared exterior-corner snap map: ensures adjacent strips use the exact same
   // world coordinate at convex exterior corners, eliminating tiny gaps.
   if (typeof window.__extCornerSnap === 'undefined') window.__extCornerSnap = {};
+  // Shared interior-corner snap map: ensures adjacent strips use the exact same
+  // world coordinate at concave interior corners, eliminating gaps.
+  if (typeof window.__intCornerSnap === 'undefined') window.__intCornerSnap = {};
   // Track the set of perimeter edge keys used by the last rebuild so we can
   // remove any previously generated perimeter strips even if they don't match
   // the current footprint (prevents "ghost" solids at old positions during drags).
@@ -1080,17 +1083,45 @@
           var iL0 = intersectLines(pL0s, tvec, corner0, cutDir);
           var iR0 = intersectLines(pR0s, tvec, corner0, cutDir);
           if (isRoomPerimeter && interiorLeftGlobal != null && startConcave){
-            // Inner corner handling: preserve interior face endpoint, miter the exterior only
+            // Inner corner: compute proper intersection for interior face using neighbor geometry
+            var nb0 = getNeighborAt(x0, z0);
+            var iInt0 = null;
+            // Try to read from shared interior corner snap cache first
+            try {
+              var __intKey0 = (ws.level||0) + '|' + Math.round(corner0.x*100) + '|' + Math.round(corner0.z*100) + '|int';
+              if (window.__intCornerSnap && window.__intCornerSnap[__intKey0]) {
+                iInt0 = window.__intCornerSnap[__intKey0];
+              }
+            } catch(_eIntSnap0Rd) {}
+            if (!iInt0 && nb0 && nb0.s){
+              var tsx = nb0.dir.x, tsz = nb0.dir.z; var nsx = -tsz, nsz = tsx;
+              var hwN = Math.max(0.02, (nb0.s.thickness||0.3)/2);
+              var intLeftN = (typeof nb0.s.__interiorLeft==='boolean') ? nb0.s.__interiorLeft : ((typeof nb0.s.__outerFaceLeft==='boolean') ? (!nb0.s.__outerFaceLeft) : null);
+              if (interiorLeftGlobal){
+                // interior is left (A): neighbor's interior is RIGHT at concave corners (faces inward)
+                var inSignN = (intLeftN===true) ? -1 : 1;
+                var qIn0 = { x: corner0.x + nsx*inSignN*hwN, z: corner0.z + nsz*inSignN*hwN };
+                iInt0 = intersectLines(pL0s, tvec, qIn0, {x: tsx, z: tsz});
+              } else {
+                // interior is right (D): neighbor's interior is LEFT at concave corners (faces inward)
+                var inSignN = (intLeftN===true) ? 1 : -1;
+                var qIn0 = { x: corner0.x + nsx*inSignN*hwN, z: corner0.z + nsz*inSignN*hwN };
+                iInt0 = intersectLines(pR0s, tvec, qIn0, {x: tsx, z: tsz});
+              }
+              // Store in cache for other walls at this corner
+              try {
+                if (iInt0) {
+                  var __intKey0w = (ws.level||0) + '|' + Math.round(corner0.x*100) + '|' + Math.round(corner0.z*100) + '|int';
+                  window.__intCornerSnap[__intKey0w] = { x: iInt0.x, z: iInt0.z };
+                }
+              } catch(_eIntSnap0Wr) {}
+            }
             if (interiorLeftGlobal){
-              // interior is left: keep A at original offset; only miter D
-              if (iR0){ D.x = iR0.x; D.z = iR0.z; }
-              else { D.x = pR0s.x; D.z = pR0s.z; }
-              A.x = pL0s.x; A.z = pL0s.z;
+              if (iInt0){ A.x = iInt0.x; A.z = iInt0.z; } else if (iL0){ A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
+              if (iR0){ D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
             } else {
-              // interior is right: keep D; only miter A
-              if (iL0){ A.x = iL0.x; A.z = iL0.z; }
-              else { A.x = pL0s.x; A.z = pL0s.z; }
-              D.x = pR0s.x; D.z = pR0s.z;
+              if (iInt0){ D.x = iInt0.x; D.z = iInt0.z; } else if (iR0){ D.x = iR0.x; D.z = iR0.z; } else { D.x = pR0s.x; D.z = pR0s.z; }
+              if (iL0){ A.x = iL0.x; A.z = iL0.z; } else { A.x = pL0s.x; A.z = pL0s.z; }
             }
           } else if (isRoomPerimeter && interiorLeftGlobal != null && startConvex){
             // Exterior (convex) corner: make outer faces meet exactly by intersecting outer offset lines of this and neighbor
@@ -1150,16 +1181,45 @@
           var iL1 = intersectLines(pL1s, back, corner1, cutDirE);
           var iR1 = intersectLines(pR1s, back, corner1, cutDirE);
           if (isRoomPerimeter && interiorLeftGlobal != null && endConcave){
+            // Inner corner: compute proper intersection for interior face using neighbor geometry
+            var nb1 = getNeighborAt(x1, z1);
+            var iInt1 = null;
+            // Try to read from shared interior corner snap cache first
+            try {
+              var __intKey1 = (ws.level||0) + '|' + Math.round(corner1.x*100) + '|' + Math.round(corner1.z*100) + '|int';
+              if (window.__intCornerSnap && window.__intCornerSnap[__intKey1]) {
+                iInt1 = window.__intCornerSnap[__intKey1];
+              }
+            } catch(_eIntSnap1Rd) {}
+            if (!iInt1 && nb1 && nb1.s){
+              var tsx = nb1.dir.x, tsz = nb1.dir.z; var nsx = -tsz, nsz = tsx;
+              var hwN = Math.max(0.02, (nb1.s.thickness||0.3)/2);
+              var intLeftN = (typeof nb1.s.__interiorLeft==='boolean') ? nb1.s.__interiorLeft : ((typeof nb1.s.__outerFaceLeft==='boolean') ? (!nb1.s.__outerFaceLeft) : null);
+              if (interiorLeftGlobal){
+                // interior is left (B): neighbor's interior is RIGHT at concave corners (faces inward)
+                var inSignN = (intLeftN===true) ? -1 : 1;
+                var qIn1 = { x: corner1.x + nsx*inSignN*hwN, z: corner1.z + nsz*inSignN*hwN };
+                iInt1 = intersectLines(pL1s, back, qIn1, {x: tsx, z: tsz});
+              } else {
+                // interior is right (C): neighbor's interior is LEFT at concave corners (faces inward)
+                var inSignN = (intLeftN===true) ? 1 : -1;
+                var qIn1 = { x: corner1.x + nsx*inSignN*hwN, z: corner1.z + nsz*inSignN*hwN };
+                iInt1 = intersectLines(pR1s, back, qIn1, {x: tsx, z: tsz});
+              }
+              // Store in cache for other walls at this corner
+              try {
+                if (iInt1) {
+                  var __intKey1w = (ws.level||0) + '|' + Math.round(corner1.x*100) + '|' + Math.round(corner1.z*100) + '|int';
+                  window.__intCornerSnap[__intKey1w] = { x: iInt1.x, z: iInt1.z };
+                }
+              } catch(_eIntSnap1Wr) {}
+            }
             if (interiorLeftGlobal){
-              // interior is left: keep B; only miter C
-              if (iR1){ C.x = iR1.x; C.z = iR1.z; }
-              else { C.x = pR1s.x; C.z = pR1s.z; }
-              B.x = pL1s.x; B.z = pL1s.z;
+              if (iInt1){ B.x = iInt1.x; B.z = iInt1.z; } else if (iL1){ B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
+              if (iR1){ C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
             } else {
-              // interior is right: keep C; only miter B
-              if (iL1){ B.x = iL1.x; B.z = iL1.z; }
-              else { B.x = pL1s.x; B.z = pL1s.z; }
-              C.x = pR1s.x; C.z = pR1s.z;
+              if (iInt1){ C.x = iInt1.x; C.z = iInt1.z; } else if (iR1){ C.x = iR1.x; C.z = iR1.z; } else { C.x = pR1s.x; C.z = pR1s.z; }
+              if (iL1){ B.x = iL1.x; B.z = iL1.z; } else { B.x = pL1s.x; B.z = pL1s.z; }
             }
           } else if (isRoomPerimeter && interiorLeftGlobal != null && endConvex){
             // Exterior (convex) corner: intersect outer offset lines to make outer faces meet
@@ -1397,7 +1457,11 @@
   if (!startHasNeighbor && pDt && pAt){ ctx.moveTo(pDt.x,pDt.y); ctx.lineTo(pAt.x,pAt.y); }
   // Floor edges: add bottom long edges along the floor plane for visual grounding
   if (pA && pB) { ctx.moveTo(pA.x,pA.y); ctx.lineTo(pB.x,pB.y); }
+  // Cap B->C only if no neighbor at end
+  if (!endHasNeighbor && pB && pC){ ctx.moveTo(pB.x,pB.y); ctx.lineTo(pC.x,pC.y); }
   if (pD && pC) { ctx.moveTo(pD.x,pD.y); ctx.lineTo(pC.x,pC.y); }
+  // Cap D->A only if no neighbor at start
+  if (!startHasNeighbor && pD && pA){ ctx.moveTo(pD.x,pD.y); ctx.lineTo(pA.x,pA.y); }
   ctx.stroke();
       // Draw translucent blue glass for windows on all three planes: center, left face, right face
       var glassFill = 'rgba(56,189,248,0.25)';
@@ -1492,8 +1556,9 @@
         }
         // 2D line intersection utility
         function intersect(p,d,q,e){ var den = d.x * (-e.z) - d.z * (-e.x); if (Math.abs(den) < 1e-6) return null; var rx=q.x-p.x, rz=q.z-p.z; var a=(rx*(-e.z)-rz*(-e.x))/den; return { x: p.x + a*d.x, z: p.z + a*d.z }; }
-        // Reset snap map for this frame
+        // Reset snap maps for this frame
         try { window.__extCornerSnap = {}; } catch(_eR) { window.__extCornerSnap = {}; }
+        try { window.__intCornerSnap = {}; } catch(_eI) { window.__intCornerSnap = {}; }
         // For each corner with two or more strips, compute exterior intersection using each strip's exterior offset line
         var keys = Object.keys(map);
         for (var ki=0; ki<keys.length; ki++){
