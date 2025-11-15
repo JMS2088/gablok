@@ -171,6 +171,15 @@
       li('<strong>Floor Toggle</strong>: Switch Ground/First while editing')+
       li('<strong>Pan</strong>: Hold Space + Drag')
     );
+    // Rulers & Guides
+    section('Rulers & Guides',
+      li('<strong>Rulers</strong>: White with black ticks/text; 0.0 at the top-left; labels are meters and scale with zoom')+
+      li('<strong>Create Guides</strong>: Drag from the top ruler for vertical guides, or from the left ruler for horizontal guides')+
+      li('<strong>Snap to Guides</strong>: Drawing snaps within ~8px (screen) to nearby guides and grid for precision')+
+      li('<strong>Move/Delete</strong>: Click a guide to select, drag to reposition, press Delete to remove')+
+      li('<strong>Per Floor</strong>: Guides are saved per floor and persist across sessions, exports, and imports')+
+      li('<strong>Measurements</strong>: 2D segment lengths render automatically; exports preserve the plan + view so measurements match when reopened')
+    );
     // Keyboard shortcuts
     section('Keyboard Shortcuts',
       li('<strong>'+MOD+'+Z</strong>: Undo (up to ~60 steps)')+

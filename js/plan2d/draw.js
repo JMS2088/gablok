@@ -1418,48 +1418,79 @@
     // Draw top and left rulers: adaptive ticks/labels in meters aligned to pan/zoom
     window.plan2dDrawRulers = function plan2dDrawRulers(ctxTop, ctxLeft){
       try{
-        var c=document.getElementById('plan2d-canvas'); if(!c||!ctxTop||!ctxLeft) return;
-        var dpr=window.devicePixelRatio||1; var s=__plan2d.scale; var W=c.width, H=c.height;
-  // Avoid full clear each frame; paint background via fillRect only (no flash/mask effect)
-  ctxTop.setTransform(1,0,0,1,0,0);
-  ctxLeft.setTransform(1,0,0,1,0,0);
-  ctxTop.fillStyle='#0f172a'; ctxTop.fillRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
-  ctxLeft.fillStyle='#0f172a'; ctxLeft.fillRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
-        // Mapping helpers
-        var originX = W/2 + (__plan2d.panX * s);
-        var originY = H/2 - (__plan2d.panY * s);
-        function worldXToPx(wx){ return originX + wx*s; }
-        function worldYToPx(wy){ return originY - wy*s; }
-        // Visible world ranges
-        var minXw = (0 - originX)/s, maxXw = (W - originX)/s;
-        var minYw = (originY - H)/s, maxYw = (originY - 0)/s;
-        // Choose step for ~100px between major ticks
-        function chooseStep(){
-          var targetPx=100; var base = targetPx / Math.max(1e-6, s);
-          var pow = Math.pow(10, Math.floor(Math.log10(Math.max(1e-6, base))));
-          var steps=[1,2,5,10]; var best=steps[0]*pow; for(var i=0;i<steps.length;i++){ var st=steps[i]*pow; if(Math.abs(st-base) < Math.abs(best-base)) best=st; }
-          return best;
+        var c = document.getElementById('plan2d-canvas'); if(!c||!ctxTop||!ctxLeft) return;
+        var dpr = window.devicePixelRatio || 1;
+        var s = Math.max(1e-6, __plan2d.scale || 50); // pixels per meter
+
+        // Reset transforms and paint white backgrounds
+        ctxTop.setTransform(1,0,0,1,0,0);
+        ctxLeft.setTransform(1,0,0,1,0,0);
+        ctxTop.fillStyle = '#ffffff'; ctxTop.fillRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
+        ctxLeft.fillStyle = '#ffffff'; ctxLeft.fillRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
+
+        // Choose a metric step such that major ticks are ~100px apart
+        function chooseStepPx(){
+          var targetPx = 100; // desired px spacing between major ticks
+          // Convert candidate world steps to px
+          var worldBase = targetPx / s;
+          var pow = Math.pow(10, Math.floor(Math.log10(Math.max(1e-6, worldBase))));
+          var steps = [1,2,5,10];
+          var bestWorld = steps[0]*pow;
+          for(var i=0;i<steps.length;i++){
+            var st = steps[i]*pow;
+            if (Math.abs(st - worldBase) < Math.abs(bestWorld - worldBase)) bestWorld = st;
+          }
+          return { world: bestWorld, px: bestWorld * s };
         }
-        var step = chooseStep(); var minor = step/10;
-        // Top ruler ticks
-        ctxTop.save(); ctxTop.translate(0.5,0.5); ctxTop.strokeStyle='#94a3b8';
-        var minorStartX = Math.ceil(minXw/minor)*minor;
-        for(var xm=minorStartX; xm<=maxXw+1e-8; xm+=minor){ var px = Math.round(worldXToPx(xm)); var isMajor = (Math.abs((xm/step)-Math.round(xm/step)) < 1e-6);
+        var stepInfo = chooseStepPx();
+        var majorPx = Math.max(20, stepInfo.px);
+        var minorPx = Math.max(8, majorPx/10);
+
+        // Styles: black ticks/text on white rulers
+        var tickColor = '#000000';
+        var textColor = '#000000';
+        var fontPx = Math.max(10, Math.round(10*dpr));
+
+        // Top ruler: x increases rightward, 0 at left edge
+        ctxTop.save();
+        ctxTop.translate(0.5,0.5);
+        ctxTop.strokeStyle = tickColor;
+        ctxTop.lineWidth = 1;
+        // Minor ticks
+        for (var x=0; x<=ctxTop.canvas.width+0.5; x+=minorPx){
+          var isMajor = (Math.abs((x/majorPx) - Math.round(x/majorPx)) < 1e-6);
           var len = isMajor ? Math.floor(18*dpr) : Math.floor(10*dpr);
-          ctxTop.beginPath(); ctxTop.moveTo(px, ctxTop.canvas.height-1); ctxTop.lineTo(px, ctxTop.canvas.height-1-len); ctxTop.stroke(); }
-        ctxTop.fillStyle='#e2e8f0'; ctxTop.font=(10*dpr)+'px system-ui, sans-serif'; ctxTop.textAlign='center'; ctxTop.textBaseline='top';
-        var startX = Math.ceil(minXw/step)*step;
-        for(var xw=startX; xw<=maxXw+1e-8; xw+=step){ var px2 = Math.round(worldXToPx(xw)); var label = String((Math.abs(xw)<1e-6)?0:+xw.toFixed(2).replace(/\.00$/,'')); ctxTop.fillText(label, px2, Math.floor(2*dpr)); }
+          ctxTop.beginPath(); ctxTop.moveTo(x, ctxTop.canvas.height-1); ctxTop.lineTo(x, ctxTop.canvas.height-1-len); ctxTop.stroke();
+        }
+        // Major labels (meters)
+        ctxTop.fillStyle = textColor;
+        ctxTop.font = fontPx+'px system-ui, sans-serif';
+        ctxTop.textAlign = 'center'; ctxTop.textBaseline = 'top';
+        for (var xL=0; xL<=ctxTop.canvas.width+0.5; xL+=majorPx){
+          var meters = (xL / s);
+          var lbl = (Math.abs(meters) < 1e-6) ? '0' : (+meters.toFixed(2)).toString().replace(/\.00$/, '');
+          ctxTop.fillText(lbl, Math.round(xL), Math.floor(2*dpr));
+        }
         ctxTop.restore();
-        // Left ruler ticks
-        ctxLeft.save(); ctxLeft.translate(0.5,0.5); ctxLeft.strokeStyle='#94a3b8';
-        var minorStartY = Math.ceil(minYw/minor)*minor;
-        for(var ym=minorStartY; ym<=maxYw+1e-8; ym+=minor){ var py = Math.round(worldYToPx(ym)); var isMajorY = (Math.abs((ym/step)-Math.round(ym/step)) < 1e-6);
+
+        // Left ruler: y increases downward, 0 at top edge
+        ctxLeft.save();
+        ctxLeft.translate(0.5,0.5);
+        ctxLeft.strokeStyle = tickColor;
+        ctxLeft.lineWidth = 1;
+        for (var y=0; y<=ctxLeft.canvas.height+0.5; y+=minorPx){
+          var isMajorY = (Math.abs((y/majorPx) - Math.round(y/majorPx)) < 1e-6);
           var lenY = isMajorY ? Math.floor(18*dpr) : Math.floor(10*dpr);
-          ctxLeft.beginPath(); ctxLeft.moveTo(ctxLeft.canvas.width-1, py); ctxLeft.lineTo(ctxLeft.canvas.width-1-lenY, py); ctxLeft.stroke(); }
-        ctxLeft.fillStyle='#e2e8f0'; ctxLeft.font=(10*dpr)+'px system-ui, sans-serif'; ctxLeft.textAlign='right'; ctxLeft.textBaseline='middle';
-        var startY = Math.ceil(minYw/step)*step;
-        for(var yw=startY; yw<=maxYw+1e-8; yw+=step){ var py2 = Math.round(worldYToPx(yw)); var labelY = String((Math.abs(yw)<1e-6)?0:+yw.toFixed(2).replace(/\.00$/,'')); ctxLeft.fillText(labelY, ctxLeft.canvas.width - Math.floor(2*dpr), py2); }
+          ctxLeft.beginPath(); ctxLeft.moveTo(ctxLeft.canvas.width-1, y); ctxLeft.lineTo(ctxLeft.canvas.width-1-lenY, y); ctxLeft.stroke();
+        }
+        ctxLeft.fillStyle = textColor;
+        ctxLeft.font = fontPx+'px system-ui, sans-serif';
+        ctxLeft.textAlign = 'right'; ctxLeft.textBaseline = 'middle';
+        for (var yL=0; yL<=ctxLeft.canvas.height+0.5; yL+=majorPx){
+          var metersY = (yL / s);
+          var lblY = (Math.abs(metersY) < 1e-6) ? '0' : (+metersY.toFixed(2)).toString().replace(/\.00$/, '');
+          ctxLeft.fillText(lblY, ctxLeft.canvas.width - Math.floor(2*dpr), Math.round(yL));
+        }
         ctxLeft.restore();
       } catch(_e) { /* non-fatal rulers */ }
     };

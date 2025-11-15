@@ -5,6 +5,23 @@
   window.__requireBoot = true;
   var bootResolve; window.__bootPromise = new Promise(function(res){ bootResolve = res; });
 
+  // Dev-friendly status: show #status during boot, hide on first render unless sticky
+  (function(){
+    try{
+      var s = document.getElementById('status');
+      if (!s) return;
+      // Only auto-show if not explicitly requested hidden
+      if (!window.__debugStickyStatus) {
+        s.style.display = 'block';
+        s.textContent = 'Booting…';
+        // Hide after first frame
+        window.addEventListener('gablok:first-render', function(){
+          try { if (!window.__debugStickyStatus) s.style.display = 'none'; } catch(_e){}
+        }, { once:true });
+      }
+    } catch(_eStat){}
+  })();
+
   // Global error handler to surface early script failures in the status bar & admin log
   if (!window.__bootErrorWired) {
     window.__bootErrorWired = true;
@@ -176,6 +193,7 @@
         try { console[(m.optional? 'warn':'error')]('[Boot] '+(m.optional? 'Optional failed':'Critical failed'), m.label, 'from', m.url, errLast); } catch(_e){}
         // For critical failures, continue to next to allow app to try starting; splash has a hard cap auto-hide.
         tick(m.label + (m.optional? ' (skipped)':' (failed)'));
+        try{ var s=document.getElementById('status'); if(s && !window.__debugStickyStatus){ s.style.display='block'; s.textContent='Boot issue: '+m.label+' failed'; } }catch(_se){}
       }
       if (stepMode) { try { if (typeof window.__splashWaitForContinue==='function') await window.__splashWaitForContinue(); } catch(_e){} }
     }

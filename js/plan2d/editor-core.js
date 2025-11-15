@@ -127,6 +127,18 @@
         guidesV: JSON.parse(JSON.stringify(__plan2d.guidesV||[])),
         guidesH: JSON.parse(JSON.stringify(__plan2d.guidesH||[])),
         userEdited: !!__plan2d.__userEdited,
+        view: (function(){
+          try{
+            return {
+              scale: __plan2d.scale,
+              panX: __plan2d.panX,
+              panY: __plan2d.panY,
+              centerX: __plan2d.centerX,
+              centerZ: __plan2d.centerZ,
+              yFromWorldZSign: __plan2d.yFromWorldZSign
+            };
+          }catch(_v){ return undefined; }
+        })(),
         deletedRoomEdges: (function(){
           try{ if(!__plan2d.__deletedRoomEdges) return undefined; var out = __plan2d.__deletedRoomEdges[floor]; return Array.isArray(out)? JSON.parse(JSON.stringify(out)) : undefined; }catch(_t){ return undefined; }
         })()
@@ -144,6 +156,16 @@
         __plan2d.guidesV = JSON.parse(JSON.stringify(data.guidesV||[]));
         __plan2d.guidesH = JSON.parse(JSON.stringify(data.guidesH||[]));
         __plan2d.__userEdited = !!data.userEdited;
+        try{
+          if(data.view && typeof data.view==='object'){
+            if(isFinite(data.view.scale)) __plan2d.scale = data.view.scale;
+            if(isFinite(data.view.panX)) __plan2d.panX = data.view.panX;
+            if(isFinite(data.view.panY)) __plan2d.panY = data.view.panY;
+            if(isFinite(data.view.centerX)) __plan2d.centerX = data.view.centerX;
+            if(isFinite(data.view.centerZ)) __plan2d.centerZ = data.view.centerZ;
+            if(data.view.yFromWorldZSign===1 || data.view.yFromWorldZSign===-1) __plan2d.yFromWorldZSign = data.view.yFromWorldZSign;
+          }
+        }catch(_lv){}
         try{
           if(data.deletedRoomEdges && Array.isArray(data.deletedRoomEdges)){
             if(!__plan2d.__deletedRoomEdges) __plan2d.__deletedRoomEdges={};

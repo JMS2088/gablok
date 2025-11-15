@@ -76,7 +76,40 @@
         roofs: roofComponents || [],
         balconies: balconyComponents || [],
         furniture: furnitureItems || [],
-        currentFloor: typeof currentFloor === 'number' ? currentFloor : 0
+        currentFloor: typeof currentFloor === 'number' ? currentFloor : 0,
+        // Persist 2D drafts (per floor) including guides and view so measurements/rulers restore identically
+        plan2d: (function(){
+          try{
+            var drafts = {};
+            // Prefer existing drafts; if missing, synthesize from current in-memory state for the active floor
+            var src = (typeof window.__plan2dDrafts==='object' && window.__plan2dDrafts) ? window.__plan2dDrafts : {};
+            var floors = [0,1];
+            for(var i=0;i<floors.length;i++){
+              var f = floors[i];
+              var d = src[f];
+              if(d && typeof d==='object'){
+                drafts[f] = JSON.parse(JSON.stringify(d));
+              } else if (window.__plan2d && (typeof currentFloor==='number' ? currentFloor : 0) === f) {
+                // Minimal snapshot from current editor state
+                drafts[f] = {
+                  elements: JSON.parse(JSON.stringify(__plan2d.elements||[])),
+                  guidesV: JSON.parse(JSON.stringify(__plan2d.guidesV||[])),
+                  guidesH: JSON.parse(JSON.stringify(__plan2d.guidesH||[])),
+                  userEdited: !!__plan2d.__userEdited,
+                  view: {
+                    scale: __plan2d.scale,
+                    panX: __plan2d.panX,
+                    panY: __plan2d.panY,
+                    centerX: __plan2d.centerX,
+                    centerZ: __plan2d.centerZ,
+                    yFromWorldZSign: __plan2d.yFromWorldZSign
+                  }
+                };
+              }
+            }
+            return { drafts: drafts };
+          }catch(_p2d){ return undefined; }
+        })()
       };
       return JSON.stringify(data);
     } catch (e) {
@@ -123,6 +156,21 @@
         }
       }
       currentFloor = typeof data.currentFloor === 'number' ? data.currentFloor : currentFloor;
+      // Restore 2D drafts (per floor), including guides and view info
+      try{
+        if (data.plan2d && data.plan2d.drafts && typeof data.plan2d.drafts === 'object'){
+          window.__plan2dDrafts = JSON.parse(JSON.stringify(data.plan2d.drafts));
+          // Persist to localStorage so reopening the 2D editor picks them up
+          try { if (typeof window.savePlan2dDraftsToStorage === 'function') window.savePlan2dDraftsToStorage(); } catch(_sv) {}
+          // If 2D editor is active, reload the current floor's draft immediately
+          try {
+            if (window.__plan2d && __plan2d.active && typeof window.plan2dLoadDraft==='function'){
+              window.plan2dLoadDraft(typeof window.currentFloor==='number'? window.currentFloor:0);
+              if (typeof window.plan2dDraw==='function') window.plan2dDraw();
+            }
+          } catch(_p2dNow) {}
+        }
+      } catch(_rp2d) {}
       selectedRoomId = null;
       // Run a global dedupe pass after restore
       dedupeAllEntities();

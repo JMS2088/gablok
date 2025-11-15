@@ -825,18 +825,36 @@
         } catch(_eCC) { /* ignore */ }
       }
 
-      // Line mode: draw a single centerline ONLY for freestanding walls.
+      // Line mode: draw a clean wireframe prism for freestanding walls so height is visible.
       if (renderMode === 'line'){
         var isFromRoom = !!(ws && (ws.roomId || ws.garageId || ws[(window.__roomStripTag||'__fromRooms')]));
         if (!isFromRoom) {
-          var yMid = baseY + Math.min(h*0.5, 1.2);
-          var p0 = project3D(x0, yMid, z0), p1 = project3D(x1, yMid, z1);
-          if (!p0 || !p1) return;
+          var strokeCol = onLevel ? '#64748b' : 'rgba(148,163,184,0.6)';
+          var strokeW = onLevel ? 2.2 : 1.4;
+          // Compute base/top rectangle corners using a thin thickness to avoid visual clutter
+          var A = {x:x0+nx*hw, y:baseY,   z:z0+nz*hw};
+          var B = {x:x1+nx*hw, y:baseY,   z:z1+nz*hw};
+          var C = {x:x1-nx*hw, y:baseY,   z:z1-nz*hw};
+          var D = {x:x0-nx*hw, y:baseY,   z:z0-nz*hw};
+          var At= {x:A.x,       y:baseY+h, z:A.z};
+          var Bt= {x:B.x,       y:baseY+h, z:B.z};
+          var Ct= {x:C.x,       y:baseY+h, z:C.z};
+          var Dt= {x:D.x,       y:baseY+h, z:D.z};
+          function P(p){ return project3D(p.x,p.y,p.z); }
+          var pA=P(A), pB=P(B), pC=P(C), pD=P(D), pAt=P(At), pBt=P(Bt), pCt=P(Ct), pDt=P(Dt);
+          function seg(p,q){ if(!p||!q) return; ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y); }
           ctx.save();
-          ctx.strokeStyle = onLevel ? '#64748b' : 'rgba(148,163,184,0.6)';
-          ctx.lineWidth = onLevel ? 3 : 1.6;
-          ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+          ctx.strokeStyle = strokeCol;
+          ctx.lineWidth = strokeW;
+          ctx.beginPath();
+          // Top rectangle
+          seg(pAt, pBt); seg(pBt, pCt); seg(pCt, pDt); seg(pDt, pAt);
+          // Vertical edges at endpoints (show height)
+          seg(pA, pAt); seg(pB, pBt); seg(pC, pCt); seg(pD, pDt);
+          ctx.stroke();
           ctx.restore();
+          // Corner codes at a readable mid-height
+          var yMid = baseY + Math.min(h*0.5, 1.1);
           drawCornerCodeAt(x0, yMid, z0);
           drawCornerCodeAt(x1, yMid, z1);
         }
