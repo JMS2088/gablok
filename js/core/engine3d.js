@@ -304,7 +304,11 @@
       // Near/behind handling:
       // - Hard cull points that are sufficiently behind the camera to avoid rendering a mirrored scene (e.g., second grid floor)
       // - Clamp points very close to the near plane to a small positive depth so nearby/inside geometry stays visible
-      if (cz < -0.25) return null;           // behind camera -> discard
+      if (cz < -0.25) {
+        // When inside a room with solid walls, don't drop geometry behind; clamp to near plane
+        if (window.__cameraInsideSolid) { cz = 0.02; }
+        else { return null; }
+      }
       if (cz < 0.02) cz = 0.02;              // near plane clamp
       // Reduce perspective a little by blending cz with a reference depth (camera distance)
       var k = Math.max(0, Math.min(1, window.PERSPECTIVE_STRENGTH));
@@ -1799,6 +1803,42 @@
         if (!window.canvas || !window.ctx) { requestAnimationFrame(renderLoop); return; }
         if (typeof updateProjectionCache==='function') updateProjectionCache();
 
+        // Detect if camera is inside any room on the current floor; if so, allow close/inside wall rendering
+        try {
+          var inside = false;
+          var cam = (__proj && __proj.cam) ? __proj.cam : [0,0,0];
+          var cx = cam[0], cy = cam[1], czW = cam[2];
+          var lvlNow = (typeof window.currentFloor==='number') ? window.currentFloor : 0;
+          function pointInPolyXZ(pts, x, z){
+            var c = false; var n = (pts||[]).length; if(n<3) return false;
+            for (var i=0,j=n-1; i<n; j=i++){
+              var pi=pts[i], pj=pts[j]; if(!pi||!pj) continue;
+              var xi=pi.x||0, zi=pi.z||0, xj=pj.x||0, zj=pj.z||0;
+              var inter = ((zi>z)!==(zj>z)) && (x < (xj - xi) * (z - zi) / Math.max(1e-9, (zj - zi)) + xi);
+              if (inter) c = !c;
+            }
+            return c;
+          }
+          var rooms = Array.isArray(window.allRooms) ? window.allRooms : [];
+          for (var ri=0; ri<rooms.length && !inside; ri++){
+            var r = rooms[ri]; if(!r) continue; if ((r.level||0)!==lvlNow) continue;
+            var baseY = (r.level||0)*3.5; var h = (typeof r.height==='number')? r.height : 3.0;
+            if (cy < baseY - 0.05 || cy > baseY + h + 0.05) continue;
+            if (Array.isArray(r.footprint) && r.footprint.length>=3){
+              inside = pointInPolyXZ(r.footprint, cx, czW);
+            } else {
+              // Rectangle possibly rotated
+              var hw=(r.width||0)/2, hd=(r.depth||0)/2; if(hw<=0||hd<=0) continue;
+              var rot=((r.rotation||0)*Math.PI)/180; var cA=Math.cos(rot), sA=Math.sin(rot);
+              var dx=cx-(r.x||0), dz=czW-(r.z||0);
+              var lx =  dx*cA + dz*sA; // local x
+              var lz = -dx*sA + dz*cA; // local z
+              inside = (lx>=-hw && lx<=hw && lz>=-hd && lz<=hd);
+            }
+          }
+          window.__cameraInsideSolid = !!inside && (window.__wallRenderMode === 'solid');
+        } catch(_insideErr) { window.__cameraInsideSolid = false; }
+
         // Compute UI fade alpha based on recent camera/interaction activity
         try {
           var uiNow = now;
@@ -1859,7 +1899,16 @@
         // Overlays: snap guides, labels, measurements, height scale
         try { if (typeof drawSnapGuides==='function') drawSnapGuides(); } catch(_e1) {}
         try { if (typeof updateLabels==='function') updateLabels(); } catch(_e2) {}
-        try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_e3) {}
+        // Throttle measurement panel updates to reduce load (esp. on startup)
+        try {
+          var __now = (performance && performance.now) ? performance.now() : Date.now();
+          if (typeof window.__lastMeasurementsUpdateAt !== 'number') window.__lastMeasurementsUpdateAt = 0;
+          var __minDelta = (typeof window.__measureUpdateIntervalMs === 'number') ? window.__measureUpdateIntervalMs : 90; // ~11 fps
+          if ((__now - window.__lastMeasurementsUpdateAt) >= __minDelta) {
+            if (typeof updateMeasurements==='function') updateMeasurements();
+            window.__lastMeasurementsUpdateAt = __now;
+          }
+        } catch(_e3) {}
         try { if (typeof drawWorldHeightScale==='function') drawWorldHeightScale(); } catch(_e4) {}
   // 3D HUD compass moved to navigation compass; draw there instead of overlay
   try { if (typeof drawNavCompass==='function') drawNavCompass(); } catch(_eC) {}

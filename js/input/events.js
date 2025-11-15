@@ -922,6 +922,9 @@
         }
         mouse.lastX = e.clientX;
         mouse.lastY = e.clientY;
+        // Keep render loop active during orbit/pan for immediate feedback
+        try { if (typeof startRender === 'function') startRender(); else if (typeof renderLoop === 'function') renderLoop(); } catch(_rr){}
+        try { window._camLastMoveTime = (performance && performance.now) ? performance.now() : Date.now(); } catch(_tm){}
       }
     });
     
@@ -1088,20 +1091,29 @@
     });
     
     canvas.addEventListener('wheel', function(e) {
+      try { if (window.__trace3d) console.log('[3D] wheel@canvas', e.deltaY); } catch(_t){}
       e.preventDefault();
       camera.distance *= e.deltaY > 0 ? 1.08 : 0.92;
       // Clamp using camera bounds (engine ensures defaults exist)
       if (typeof clampCamera === 'function') clampCamera();
       else { camera.distance = Math.max(camera.minDistance||6, Math.min(camera.maxDistance||140, camera.distance)); }
-    });
+      // Ensure the renderer is active so zoom reflects immediately
+      try { if (typeof startRender === 'function') startRender(); else if (typeof renderLoop === 'function') renderLoop(); } catch(_r){}
+    }, { passive: false });
 
     // Global wheel zoom proxy so zoom works even when hovering labels/overlays
     // Guarded to avoid interfering with 2D editor or modals
     document.addEventListener('wheel', function(e){
       try {
-        // Ignore when 2D editor active or a modal/palette is open
-        if (window.__plan2d && __plan2d.active) return;
+        // Ignore when event targets 2D editor surfaces or modal UIs
         var tgt = e.target;
+        var in2D = false;
+        try {
+          if (window.__plan2d && __plan2d.active) {
+            in2D = !!(tgt && tgt.closest && (tgt.closest('#plan2d-page') || tgt.closest('#plan2d-canvas') || tgt.closest('#labels-2d')));
+          }
+        } catch(_gd) { in2D = false; }
+        if (in2D) return;
         if (tgt && (tgt.closest && (tgt.closest('#room-palette-content') || tgt.closest('.dropdown-list') || tgt.closest('#info-content')))) return;
         // Only react if event is over the 3D canvas area or labels overlay/body
         var overCanvas = !!(tgt && tgt.closest && tgt.closest('#canvas'));
@@ -1109,8 +1121,10 @@
         var overBody = (tgt === document.body || tgt === document.documentElement);
         if (!(overCanvas || overLabels || overBody)) return;
         e.preventDefault();
+        try { if (window.__trace3d) console.log('[3D] wheel@document', e.deltaY); } catch(_t2){}
         camera.distance *= e.deltaY > 0 ? 1.08 : 0.92;
         if (typeof clampCamera === 'function') clampCamera();
+        try { if (typeof startRender === 'function') startRender(); else if (typeof renderLoop === 'function') renderLoop(); } catch(_r2){}
       } catch(_w) {}
     }, { passive: false });
     
