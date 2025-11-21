@@ -101,9 +101,9 @@
   var modules = [
     { label: 'Camera core', url: 'js/core/engine/camera.js?v=20251109-1', critical: true, essential: true },
     { label: 'Placement helper', url: 'js/core/placement.js', critical: true, essential: true },
-    { label: 'Engine wall strips', url: 'js/core/engine/wallStrips.js?v=20251109-1', critical: true, essential: true },
+    { label: 'Engine wall strips', url: 'js/core/engine/wallStrips.js?v=20251121-4', critical: true, essential: true },
     { label: 'Engine components', url: 'js/core/engine/components.js?v=20251109-1', critical: true, essential: true },
-    { label: 'Core engine', url: 'js/core/engine3d.js?v=20251026-1', critical: true, essential: true },
+    { label: 'Core engine', url: 'js/core/engine3d.js?v=20251121-4', critical: true, essential: true },
     { label: 'Project mgmt', url: 'js/core/project.js?v=20251128-1', critical: true, essential: true },
     { label: 'Import/Export', url: 'js/io/importExport.js?v=20251128-1', critical: true },
     { label: 'File I/O', url: 'js/io/fileIO.js?v=20251128-1', critical: true },
@@ -145,7 +145,9 @@
   try {
     var allLabels = modules.map(function(m){ return (typeof m==='string')? m : m.label; });
     var essentialLabels = modules.filter(function(m){ return m && m.essential; }).map(function(m){ return m.label; });
-    if (typeof window.__splashExpect==='function') window.__splashExpect(allLabels);
+    if (typeof window.__splashExpect==='function') {
+      for (var i=0;i<allLabels.length;i++){ try{ window.__splashExpect(allLabels[i]); }catch(_eSE){} }
+    }
     if (typeof window.__splashSetTotal==='function') window.__splashSetTotal(allLabels.length);
     window.__bootEssentialTotal = essentialLabels.length;
     window.__bootEssentialLoaded = 0;
@@ -157,95 +159,81 @@
   function tick(label){ try{ if (typeof window.__splashTick==='function') window.__splashTick(label); } catch(e){} }
 
   (async function(){
-    // Enable interactive step mode with ?boot=step
-    var stepMode = false;
-    try { stepMode = /(^|[?&])boot=step(&|$)/.test(String(location.search||'')); } catch(e){}
-
+    // Simplified parallel loader: essentials sequential, others parallel.
     var trace = [];
+    var appStarted = false;
     var essentialDone = false;
-    var appStartedViaBoot = false;
-    for (var i=0;i<modules.length;i++){
-      var m = modules[i];
-      if (typeof m === 'string') { m = { label: m, url: m, critical: false }; }
-      var tries = 0; var maxTries = m.critical ? 2 : 1;
-      var ok = false; var errLast = null; var t0, t1;
-      while (tries < maxTries && !ok){
+    var allDone = false;
+
+    var essentials = modules.filter(function(m){ return m.essential; });
+    var others = modules.filter(function(m){ return !m.essential; });
+
+    async function loadOne(m){
+      if(typeof m === 'string') m = { label: m, url: m, critical:false };
+      var tries=0, maxTries = m.critical ? 2 : 1; var ok=false; var errLast=null; var t0,t1;
+      while(tries<maxTries && !ok){
         try {
           setMsg('Loading '+m.label+'…');
-          t0 = (performance && performance.now) ? performance.now() : Date.now();
-          await ensureWithTimeout(m.url, m.critical ? 6000 : 3000, tries+1);
-          t1 = (performance && performance.now) ? performance.now() : Date.now();
-          ok = true;
-        } catch(err){ errLast = err; tries++; }
+          t0 = (performance && performance.now)? performance.now(): Date.now();
+          await ensureWithTimeout(m.url, m.critical? 6000:3000, tries+1);
+          t1 = (performance && performance.now)? performance.now(): Date.now();
+          ok=true;
+        } catch(e){ errLast=e; tries++; }
       }
-      // Final fallback for critical modules: fetch-and-eval to bypass missing onload events
-      if (!ok && m.critical) {
-        try {
-          setMsg('Recovering '+m.label+'…');
-          t0 = (performance && performance.now) ? performance.now() : Date.now();
-          await loadByFetch(m.url);
-          t1 = (performance && performance.now) ? performance.now() : Date.now();
-          ok = true;
-        } catch(err2){ errLast = errLast || err2; }
+      if(!ok && m.critical){
+        try { setMsg('Recovering '+m.label+'…'); t0=(performance&&performance.now)?performance.now():Date.now(); await loadByFetch(m.url); t1=(performance&&performance.now)?performance.now():Date.now(); ok=true; } catch(e2){ errLast = errLast||e2; }
       }
-      var dur = (t1 && t0) ? Math.round(t1 - t0) : null;
-      trace.push({ module: m.label, url: m.url, ok: !!ok, ms: dur, attempts: tries || 1, critical: !!m.critical });
-      try { if (typeof window.__splashMark==='function') window.__splashMark(m.label, (ok? 'Loaded' : (m.optional? 'Skipped' : 'Failed')) + (dur!=null? (' in '+dur+'ms') : '')); } catch(e){}
-      if (ok) {
+      var dur = (t1&&t0)? Math.round(t1-t0): null;
+      trace.push({ module:m.label, url:m.url, ok:!!ok, ms:dur, attempts:tries||1, critical:!!m.critical });
+      if(ok){
         tick(m.label);
-        // Track overall progress & essential progress; emit events
         try {
           window.__bootAllLoaded = (window.__bootAllLoaded||0)+1;
-          window.dispatchEvent(new CustomEvent('gablok:module-progress', { detail:{ loaded: window.__bootAllLoaded, total: window.__bootAllTotal, label: m.label, ms: dur || null } }));
-          if (m.essential) {
-            window.__bootEssentialLoaded = (window.__bootEssentialLoaded||0) + 1;
-            if (window.__bootEssentialLoaded === window.__bootEssentialTotal) {
-              essentialDone = true;
-              window.dispatchEvent(new CustomEvent('gablok:essential-complete'));
-            } else {
-              window.dispatchEvent(new CustomEvent('gablok:essential-progress', { detail:{ loaded: window.__bootEssentialLoaded, total: window.__bootEssentialTotal, label: m.label } }));
-            }
+          window.dispatchEvent(new CustomEvent('gablok:module-progress', { detail:{ loaded:window.__bootAllLoaded, total:window.__bootAllTotal, label:m.label, ms:dur } }));
+          if(m.essential){
+            window.__bootEssentialLoaded = (window.__bootEssentialLoaded||0)+1;
+            if(window.__bootEssentialLoaded === window.__bootEssentialTotal){ essentialDone=true; window.dispatchEvent(new CustomEvent('gablok:essential-complete')); }
+            else window.dispatchEvent(new CustomEvent('gablok:essential-progress', { detail:{ loaded:window.__bootEssentialLoaded, total:window.__bootEssentialTotal, label:m.label } }));
           }
-        } catch(_eEss) {}
+        } catch(_eP){}
       } else {
-        try { console[(m.optional? 'warn':'error')]('[Boot] '+(m.optional? 'Optional failed':'Critical failed'), m.label, 'from', m.url, errLast); } catch(_e){}
-        // For critical failures, continue to next to allow app to try starting; splash has a hard cap auto-hide.
-        tick(m.label + (m.optional? ' (skipped)':' (failed)'));
-        try{ var s=document.getElementById('status'); if(s && !window.__debugStickyStatus){ s.style.display='block'; s.textContent='Boot issue: '+m.label+' failed'; } }catch(_se){}
-      }
-      // Progressive boot: as soon as App core is loaded, start the app (only once)
-      try {
-        if (!appStartedViaBoot && ((m.label === 'App core') || (m.url && /js\/app\.js/.test(m.url)))) {
-          window.__bootReady = true;
-          if (typeof bootResolve === 'function') bootResolve(true);
-          try { window.dispatchEvent(new CustomEvent('gablok:boot-ready')); } catch(_evt) {}
-          if (document.readyState !== 'loading' && typeof window.startApp==='function' && !window.__appStarted) {
-            window.__appStarted = true; window.startApp();
+        try { console[(m.optional?'warn':'error')]('[Boot] Failed', m.label, errLast); } catch(_eC){}
+        tick(m.label + ' (failed)');
+        try {
+          window.__bootAllLoaded = (window.__bootAllLoaded||0)+1;
+          window.dispatchEvent(new CustomEvent('gablok:module-progress', { detail:{ loaded:window.__bootAllLoaded, total:window.__bootAllTotal, label:m.label, failed:true } }));
+          if(m.essential){
+            window.__bootEssentialLoaded = (window.__bootEssentialLoaded||0)+1;
+            window.dispatchEvent(new CustomEvent('gablok:essential-progress', { detail:{ loaded:window.__bootEssentialLoaded, total:window.__bootEssentialTotal, label:m.label, failed:true } }));
+            if(window.__bootEssentialLoaded === window.__bootEssentialTotal){ essentialDone=true; window.dispatchEvent(new CustomEvent('gablok:essential-complete')); }
           }
-          appStartedViaBoot = true;
-          // If essentials not previously marked complete (App core might be last), emit completion now.
-          try {
-            if (!essentialDone && window.__bootEssentialLoaded === window.__bootEssentialTotal) {
-              essentialDone = true; window.dispatchEvent(new CustomEvent('gablok:essential-complete')); }
-          } catch(_eEDone){}
-        }
-      } catch(_pb) {}
-      if (stepMode) { try { if (typeof window.__splashWaitForContinue==='function') await window.__splashWaitForContinue(); } catch(_e){} }
+        } catch(_ePF){}
+      }
+      if(!appStarted && ((m.label==='App core') || (m.url && /js\/app\.js/.test(m.url)))){
+        appStarted = true; window.__bootReady = true; if(typeof bootResolve==='function') bootResolve(true);
+        try { window.dispatchEvent(new CustomEvent('gablok:boot-ready')); } catch(_eEvt){}
+        try { if(document.readyState!=='loading' && typeof window.startApp==='function' && !window.__appStarted){ window.__appStarted=true; window.startApp(); } } catch(_eStart){}
+      }
     }
-    try { if (console && console.table) console.table(trace); else console.log('[Boot trace]', trace); } catch(e){}
 
-    // All attempted; ensure app has started (in case App core was skipped)
-    window.__bootReady = true;
-    try { if (typeof bootResolve === 'function') bootResolve(true); } catch(e){}
-    try { window.dispatchEvent(new CustomEvent('gablok:boot-ready')); } catch(e){}
-    try { if (!appStartedViaBoot && document.readyState !== 'loading' && typeof window.startApp==='function' && !window.__appStarted) { window.__appStarted = true; window.startApp(); } } catch(e){}
-    try { if (!essentialDone && window.__bootEssentialLoaded === window.__bootEssentialTotal) { window.dispatchEvent(new CustomEvent('gablok:essential-complete')); } } catch(_eFinalEss){}
-    // Post-load diagnostics: flag slow modules (>300ms) & expose trace
+    // Load essentials sequentially
+    for(var i=0;i<essentials.length;i++){ await loadOne(essentials[i]); }
+
+    // Start app if not yet started after essentials loaded
+    if(!appStarted){ window.__bootReady = true; if(typeof bootResolve==='function') bootResolve(true); try{ window.dispatchEvent(new CustomEvent('gablok:boot-ready')); }catch(_eBR){} try{ if(document.readyState!=='loading' && typeof window.startApp==='function' && !window.__appStarted){ window.__appStarted=true; window.startApp(); } }catch(_eSA){} }
+
+    // Load others in parallel
+    await Promise.all(others.map(function(m){ return loadOne(m); }));
+
+    // Mark all done
+    if(!allDone){ allDone=true; window.dispatchEvent(new CustomEvent('gablok:all-modules-complete')); }
+
+    // Diagnostics
     try {
       window.__bootTrace = trace.slice();
       var slow = trace.filter(function(r){ return r && r.ok && typeof r.ms==='number' && r.ms>300; });
       window.__bootSlowModules = slow;
-      if (slow.length && console && console.warn) console.warn('[Boot] Slow modules:', slow.map(function(s){ return s.module+':'+s.ms+'ms'; }).join(', '));
+      if(slow.length && console && console.warn) console.warn('[Boot] Slow modules:', slow.map(function(s){ return s.module+':'+s.ms+'ms'; }).join(', '));
     } catch(_eDiag){}
   })();
   // Wire Floor Plan button (robust against early clicks before modules are ready)

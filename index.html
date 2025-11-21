@@ -680,6 +680,18 @@ document.addEventListener('DOMContentLoaded', () => {
 				} else {
 					window.__wallRenderMode = mode;
 					if (typeof window.updateStatus === 'function') window.updateStatus('Walls: ' + (mode==='solid'?'Solid 300mm':'Lines'));
+					// Force rebuild when switching to solid to ensure openings have correct defaults
+					if (mode === 'solid' && typeof window.rebuildRoomPerimeterStrips === 'function') {
+						window.rebuildRoomPerimeterStrips(window.__roomWallThickness || 0.3);
+					}
+					// Ensure windows render with blue glass when entering solid render mode
+					if (mode === 'solid') {
+						// Use a consistent saturated blue; can be customized later if needed
+						window.__windowGlassColor = 'rgba(59,130,246,0.75)';
+					} else {
+						// Clear override so non-solid mode can skip special coloring (solid branch draws glass)
+						window.__windowGlassColor = null;
+					}
 					if (typeof window.renderLoop === 'function') window.renderLoop();
 				}
 				refreshBtn();

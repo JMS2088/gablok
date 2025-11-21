@@ -135,31 +135,9 @@
       // Simplified: do not run 2D→3D applies here. Just rebuild from existing 3D state for ALL rooms/garages across floors.
       // This guarantees that pressing Render applies to ground and first floor together, without duplication or missed floors.
       if (m === 'solid') {
-        // Snapshot existing strips so we can preserve openings (windows/doors) when rebuilding perimeter strips.
-        var __prevStrips = Array.isArray(window.wallStrips) ? window.wallStrips.slice() : [];
+        // Rebuild perimeter strips with fresh opening data (don't preserve old incorrect data)
         window.__roomWallThickness = 0.3;
         if (typeof window.rebuildRoomPerimeterStrips === 'function') window.rebuildRoomPerimeterStrips(window.__roomWallThickness);
-        // Merge openings from previous matching strips if newly generated perimeter strips lack them.
-        try {
-          var prevByKey = Object.create(null);
-          function kf(v){ return Math.round((+v||0)*1000)/1000; }
-          function keyFor(x0,z0,x1,z1){ var a=kf(x0)+","+kf(z0), b=kf(x1)+","+kf(z1); return (a<b)?(a+"|"+b):(b+"|"+a); }
-          for (var pi=0; pi<__prevStrips.length; pi++){
-            var ps = __prevStrips[pi]; if(!ps) continue;
-            var k = (ps.level||0)+"#"+keyFor(ps.x0,ps.z0,ps.x1,ps.z1);
-            if (!prevByKey[k]) prevByKey[k] = [];
-            if (Array.isArray(ps.openings) && ps.openings.length) prevByKey[k] = ps.openings.slice();
-          }
-          var cur = Array.isArray(window.wallStrips)? window.wallStrips : [];
-          for (var ci=0; ci<cur.length; ci++){
-            var cs = cur[ci]; if(!cs) continue;
-            // Only augment room/garage perimeter strips (tagged) or any strip with missing openings
-            if (Array.isArray(cs.openings) && cs.openings.length>0) continue; // already has openings
-            var ck = (cs.level||0)+"#"+keyFor(cs.x0,cs.z0,cs.x1,cs.z1);
-            var reuse = prevByKey[ck];
-            if (reuse && reuse.length){ cs.openings = reuse.slice(); }
-          }
-        } catch(_eMergeOpen){ /* non-fatal */ }
       } else {
         window.__roomWallThickness = 0.0;
         if (typeof window.removeRoomPerimeterStrips === 'function') window.removeRoomPerimeterStrips();
@@ -1397,22 +1375,48 @@
       var openings = Array.isArray(ws.openings) ? ws.openings : [];
       var stripTopY = baseY + (typeof ws.height === 'number' ? ws.height : 3.0);
       var eps = 0.001;
-      var leftHoles = [];  // each: [{x,y},{x,y},{x,y},{x,y}] projected on left face
-      var rightHoles = []; // projected on right face
-      var glassRects = []; // for windows only, centered in thickness
+      // Holes for side faces (windows + doors) so only the opening rectangle is removed, leaving wall above & below.
+      var leftHoles = [];
+      var rightHoles = [];
+      // Center-plane glass quads for windows (drawn after holes so glass sits inside cutout).
+      var glassRects = [];
+      var windowFrameRects = []; // store projected glass rects for framing (windows only)
+      var doorRects = []; // door face quads (left + right merged center representation)
       for (var oi=0; oi<openings.length; oi++){
         var op = openings[oi]; if(!op) continue;
         var isDoor = (op.type==='door');
-        // REQUIREMENT: Windows must NOT cut a hole; fixed sill 0.9m, height 1.3m; doors keep existing behavior.
-        var sill = isDoor ? 0 : 0.9;
-        var oH = isDoor ? ((typeof op.heightM==='number') ? op.heightM : 2.04) : 1.3;
-        var y0 = baseY + sill;
+        var isWindow = (op.type==='window');
+        // Derive sill & height from opening data; fallback to defaults.
+        var defaultWinSill = 0.9; // meters
+        var defaultWinHeight = 1.5; // meters (updated requirement)
+        var sill = isDoor ? 0 : (typeof op.sillM==='number' ? op.sillM : defaultWinSill);
+        var oH = isDoor ? ((typeof op.heightM==='number') ? op.heightM : 2.04) : (typeof op.heightM==='number' ? op.heightM : defaultWinHeight);
+        // Debug: log opening processing
+        if (isWindow && window.__debugOpenings) {
+          console.log('[engine3d] Window opening:', {
+            type: op.type,
+            sillM: op.sillM,
+            heightM: op.heightM,
+            computedSill: sill,
+            computedHeight: oH,
+            baseY: baseY,
+            y0: baseY + sill,
+            y1: Math.min(baseY + sill + oH, stripTopY)
+          });
+        }
+        // Full-height window detection: sill==0 and height approx full strip height.
+        var fullHeightWindow = false;
+        if (isWindow) {
+          var wallH = stripTopY - baseY;
+          if (sill <= 0.02 && (oH >= wallH - 0.02 || Math.abs((sill+oH) - wallH) < 0.02)) fullHeightWindow = true;
+        }
+        var y0 = fullHeightWindow ? baseY : (baseY + sill);
         var y1 = Math.min(y0 + oH, stripTopY);
         // endpoints along the strip (fallback to full segment if not provided)
         var x0o = (op.x0!=null? op.x0 : x0), z0o = (op.z0!=null? op.z0 : z0);
         var x1o = (op.x1!=null? op.x1 : x1), z1o = (op.z1!=null? op.z1 : z1);
         if (isDoor) {
-          // Only doors punch holes through side faces
+          // Doors punch holes through side faces and get a visible overlay rectangle
           var lx0 = x0o + nx*eps, lz0 = z0o + nz*eps;
           var lx1 = x1o + nx*eps, lz1 = z1o + nz*eps;
           var lA = project3D(lx0, y0, lz0); var lB = project3D(lx1, y0, lz1);
@@ -1423,11 +1427,31 @@
           var rA = project3D(rx0, y0, rz0); var rB = project3D(rx1, y0, rz1);
           var rC = project3D(rx1, y1, rz1); var rD = project3D(rx0, y1, rz0);
           if (rA && rB && rC && rD) rightHoles.push([rA,rB,rC,rD]);
+          // Store a representative rectangle (use left face if available, else center plane)
+          if (lA && lB && lC && lD) doorRects.push([lA,lB,lC,lD]);
+          else if (rA && rB && rC && rD) doorRects.push([rA,rB,rC,rD]);
+          else {
+            var dA = project3D(x0o, y0, z0o), dB = project3D(x1o, y0, z1o), dC = project3D(x1o, y1, z1o), dD = project3D(x0o, y1, z0o);
+            if (dA && dB && dC && dD) doorRects.push([dA,dB,dC,dD]);
+          }
         } else {
-          // Window: solid wall retained, only draw centered glass rectangle
+          // Window: punch hole only from sill to sill+height (leave wall below and above) and add center glass.
+          // Use computed y0 and y1 from opening data (sill and height already set above).
           var gA = project3D(x0o, y0, z0o); var gB = project3D(x1o, y0, z1o);
           var gC = project3D(x1o, y1, z1o); var gD = project3D(x0o, y1, z0o);
-          if (gA && gB && gC && gD) glassRects.push([gA,gB,gC,gD]);
+          if (gA && gB && gC && gD) { glassRects.push([gA,gB,gC,gD]); windowFrameRects.push([gA,gB,gC,gD]); }
+          // Side face hole quads
+          var wlA = project3D(x0o + nx*eps, y0, z0o + nz*eps); var wlB = project3D(x1o + nx*eps, y0, z1o + nz*eps);
+          var wlC = project3D(x1o + nx*eps, y1, z1o + nz*eps); var wlD = project3D(x0o + nx*eps, y1, z0o + nz*eps);
+          if (wlA && wlB && wlC && wlD) leftHoles.push([wlA,wlB,wlC,wlD]);
+          var wrA = project3D(x0o - nx*eps, y0, z0o - nz*eps); var wrB = project3D(x1o - nx*eps, y0, z1o - nz*eps);
+          var wrC = project3D(x1o - nx*eps, y1, z1o - nz*eps); var wrD = project3D(x0o - nx*eps, y1, z0o - nz*eps);
+          if (wrA && wrB && wrC && wrD) rightHoles.push([wrA,wrB,wrC,wrD]);
+          // Fallback: if center glass failed due to projection clipping, synthesize from a side hole quad.
+          if (!(gA && gB && gC && gD)) {
+            var fb = (leftHoles.length && leftHoles[leftHoles.length-1]) || (rightHoles.length && rightHoles[rightHoles.length-1]) || null;
+            if (fb) { glassRects.push(fb); windowFrameRects.push(fb); }
+          }
         }
       }
       function fillQuadWithHoles(p0,p1,p2,p3, holes, fill){
@@ -1642,22 +1666,47 @@
         drawDraggableHandle(pDt, 8, '8', Dt, ws, 'Dt');
       }
       drawCornerLabel(pDt, 8, '8');
-      // Draw translucent blue glass for windows on all three planes: center, left face, right face
-      var glassFill = 'rgba(56,189,248,0.25)';
-      var glassStroke = onLevel ? 'rgba(56,189,248,0.55)' : 'rgba(148,163,184,0.7)';
+      // Draw translucent blue glass for windows (center plane only)
+      // Higher saturation blue for glass; configurable via window.__windowGlassColor
+      var glassFill = (window.__windowGlassColor) ? window.__windowGlassColor : 'rgba(59,130,246,0.75)';
+      var glassStroke = onLevel ? 'rgba(30,64,175,0.95)' : 'rgba(30,64,175,0.85)';
       function drawGlassQuad(Q){
         ctx.beginPath();
         ctx.moveTo(Q[0].x,Q[0].y); ctx.lineTo(Q[1].x,Q[1].y); ctx.lineTo(Q[2].x,Q[2].y); ctx.lineTo(Q[3].x,Q[3].y); ctx.closePath();
         ctx.fillStyle = glassFill; ctx.fill();
-        ctx.strokeStyle = glassStroke; ctx.lineWidth = onLevel ? 1.8 : 1.2; ctx.stroke();
+        ctx.strokeStyle = glassStroke; ctx.lineWidth = onLevel ? 1.6 : 1.1; ctx.stroke();
       }
-      // Center plane
-      if (glassRects.length){
-        for (var gi=0; gi<glassRects.length; gi++){ var G = glassRects[gi]; if(!G||G.length!==4) continue; drawGlassQuad(G); }
+      if (glassRects.length){ for (var gi=0; gi<glassRects.length; gi++){ var GQ = glassRects[gi]; if(!GQ||GQ.length!==4) continue; drawGlassQuad(GQ); } }
+      // Draw window frames (90° corners) as crisp border strokes around glass opening
+      if (windowFrameRects.length){
+        ctx.save();
+        ctx.lineJoin = 'miter'; ctx.miterLimit = 6;
+        for (var wf=0; wf<windowFrameRects.length; wf++){
+          var FR = windowFrameRects[wf]; if(!FR||FR.length!==4) continue;
+          // Outer wall edge stroke (subtle) to sharpen 90° junction between wall and window frame
+          ctx.beginPath(); ctx.moveTo(FR[0].x,FR[0].y); ctx.lineTo(FR[1].x,FR[1].y); ctx.lineTo(FR[2].x,FR[2].y); ctx.lineTo(FR[3].x,FR[3].y); ctx.closePath();
+          ctx.strokeStyle = onLevel ? 'rgba(71,85,105,0.55)' : 'rgba(148,163,184,0.50)';
+          ctx.lineWidth = onLevel ? 2.4 : 1.8; ctx.stroke();
+          // Inner blue frame stroke
+          ctx.beginPath(); ctx.moveTo(FR[0].x,FR[0].y); ctx.lineTo(FR[1].x,FR[1].y); ctx.lineTo(FR[2].x,FR[2].y); ctx.lineTo(FR[3].x,FR[3].y); ctx.closePath();
+          ctx.strokeStyle = onLevel ? 'rgba(30,64,175,0.95)' : 'rgba(30,64,175,0.80)';
+          ctx.lineWidth = onLevel ? 1.2 : 0.9; ctx.stroke();
+        }
+        ctx.restore();
       }
-      // Left and right wall faces
-      if (leftHoles.length){ for (var lh=0; lh<leftHoles.length; lh++){ var LQ = leftHoles[lh]; if(!LQ||LQ.length!==4) continue; drawGlassQuad(LQ); } }
-      if (rightHoles.length){ for (var rh=0; rh<rightHoles.length; rh++){ var RQ = rightHoles[rh]; if(!RQ||RQ.length!==4) continue; drawGlassQuad(RQ); } }
+      // Door visibility: draw semi-opaque rectangle in hole
+      if (doorRects.length){
+        ctx.save();
+        for (var dr=0; dr<doorRects.length; dr++){
+          var DQ = doorRects[dr]; if(!DQ||DQ.length!==4) continue;
+          ctx.beginPath(); ctx.moveTo(DQ[0].x,DQ[0].y); ctx.lineTo(DQ[1].x,DQ[1].y); ctx.lineTo(DQ[2].x,DQ[2].y); ctx.lineTo(DQ[3].x,DQ[3].y); ctx.closePath();
+          ctx.fillStyle = onLevel ? 'rgba(234,179,8,0.40)' : 'rgba(234,179,8,0.30)';
+          ctx.fill();
+          ctx.strokeStyle = onLevel ? 'rgba(234,179,8,0.80)' : 'rgba(234,179,8,0.65)';
+          ctx.lineWidth = onLevel ? 2.0 : 1.6; ctx.stroke();
+        }
+        ctx.restore();
+      }
       // Draw any door/window overlays attached to this wall strip (centerline-based)
       // In solid mode, we already cut holes and drew glass; skip legacy opening outlines for clarity.
       try {

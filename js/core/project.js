@@ -271,6 +271,11 @@
         pan.y = 0;
       } catch (e) {}
 
+      // Reset render mode to default
+      try {
+        window.__wallRenderMode = 'line';
+      } catch (e) {}
+
       // Hide any open modals
       [
         'plan2d-page',
