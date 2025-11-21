@@ -97,49 +97,58 @@
     ]).finally(function(){ if (t) clearTimeout(t); });
   }
 
-  // Single ordered list (simple, step-by-step). Keep renderers after core.
-  // Keep boot minimal: only hard requirements to render grid + a room and accept input.
+  // Unified global asset version (overrides scattered per-file versions)
+  var GLOBAL_VERSION = window.__ASSET_VERSION || '20251121-7';
+  function withV(path){
+    // Remove any existing v= or gv= param then append unified param for hard cache bust
+    try {
+      var base = path.split('?')[0];
+      return base + '?v=' + GLOBAL_VERSION;
+    } catch(_e){ return path + '?v=' + GLOBAL_VERSION; }
+  }
+  console.log('[Boot] Global asset version:', GLOBAL_VERSION);
+  // Ordered modules list (essentials first). All versioned uniformly.
   var modules = [
-    { label: 'Camera core', url: 'js/core/engine/camera.js?v=20251109-1', critical: true, essential: true },
-    { label: 'Placement helper', url: 'js/core/placement.js', critical: true, essential: true },
-    { label: 'Engine wall strips', url: 'js/core/engine/wallStrips.js?v=1763716707', critical: true, essential: true },
-    { label: 'Engine components', url: 'js/core/engine/components.js?v=1763716707', critical: true, essential: true },
-    { label: 'Core engine', url: 'js/core/engine3d.js?v=20251121-5', critical: true, essential: true },
-    { label: 'Project mgmt', url: 'js/core/project.js?v=1763718699', critical: true, essential: true },
-    { label: 'Import/Export', url: 'js/io/importExport.js?v=1763716707', critical: true },
-    { label: 'File I/O', url: 'js/io/fileIO.js?v=20251128-1', critical: true },
-    { label: 'DXF', url: 'js/io/formats/dxf.js?v=20251128-1', critical: false },
-    { label: 'DWG', url: 'js/io/formats/dwg.js?v=20251128-1', critical: false },
-    { label: 'Loader', url: 'js/boot/loader.js?v=20251026-1', critical: true, essential: true },
-    { label: 'UI labels', url: 'js/ui/labels.js?v=20251026-1', critical: true, essential: true },
-    { label: 'Room palette', url: 'js/ui/roomPalette.js?v=20251128-1', critical: false },
-    { label: 'Room renderer', url: 'js/render/drawRoom.js?v=20251026-2', critical: true, essential: true },
-    { label: 'Stairs renderer', url: 'js/render/drawStairs.js?v=20251026-1', critical: false },
-    { label: 'Pergola renderer', url: 'js/render/drawPergola.js?v=20251026-1', critical: false },
-    { label: 'Garage renderer', url: 'js/render/drawGarage.js?v=20251026-1', critical: false },
-    { label: 'Roof renderer', url: 'js/render/drawRoof.js?v=20251026-1', critical: false },
-    { label: 'Roof dropdown', url: 'js/ui/roofDropdown.js?v=20251128-1', critical: false },
-    { label: 'Pool renderer', url: 'js/render/drawPool.js?v=20251026-1', critical: false },
-    { label: 'Balcony renderer', url: 'js/render/drawBalcony.js?v=20251026-1', critical: false },
-    { label: 'Furniture renderer', url: 'js/render/drawFurniture.js?v=20251026-1', critical: false },
-    { label: 'Input events', url: 'js/input/events.js?v=1763716707', critical: true, essential: true },
-    { label: 'History', url: 'js/input/history.js?v=1763716707', critical: true, essential: true },
-    { label: 'Keyboard router', url: 'js/input/keyboard.js?v=1763716707', critical: true, essential: true },
-    { label: 'Plan apply', url: 'js/core/plan-apply.js?v=1763716707', critical: true },
-    { label: 'Plan populate', url: 'js/core/plan-populate.js?v=20251101-4', critical: true },
-    { label: 'Consistency checks', url: 'js/core/consistency.js?v=20251128-1', critical: false },
-    { label: 'Trace panel', url: 'js/ui/trace-panel.js?v=20251109-1', critical: false },
-    { label: 'Admin client', url: 'js/ui/admin.js?v=20251109-1', critical: false },
-    { label: 'Info modal', url: 'js/ui/modals.js?v=20251128-1', critical: false },
-    { label: 'Pricing modal', url: 'js/ui/pricing.js?v=20251128-1', critical: false },
-    { label: 'Plan2D geom', url: 'js/plan2d/geom2d.js?v=20251108-2', critical: false },
-    { label: 'Plan2D walls', url: 'js/plan2d/walls.js?v=20251108-2', critical: false },
-    { label: 'Plan2D snap', url: 'js/plan2d/snap.js?v=20251108-2', critical: false },
-    { label: 'Plan2D core', url: 'js/plan2d/editor-core.js?v=20251108-1', critical: false },
-    { label: 'Plan2D draw', url: 'js/plan2d/draw.js?v=20251108-1', critical: false },
-    { label: 'Plan2D editor wiring', url: 'js/plan2d/editor.js?v=20251108-1', critical: false },
-    { label: 'Plan2D WebGL', url: 'js/plan2d/webgl.js?v=20251108-1', critical: false },
-    { label: 'App core', url: 'js/app.js?v=20251026-1', critical: true, essential: true }
+    { label: 'Camera core', url: withV('js/core/engine/camera.js'), critical: true, essential: true },
+    { label: 'Placement helper', url: withV('js/core/placement.js'), critical: true, essential: true },
+    { label: 'Engine wall strips', url: withV('js/core/engine/wallStrips.js'), critical: true, essential: true },
+    { label: 'Engine components', url: withV('js/core/engine/components.js'), critical: true, essential: true },
+    { label: 'Core engine', url: withV('js/core/engine3d.js'), critical: true, essential: true },
+    { label: 'Project mgmt', url: withV('js/core/project.js'), critical: true, essential: true },
+    { label: 'Import/Export', url: withV('js/io/importExport.js'), critical: true },
+    { label: 'File I/O', url: withV('js/io/fileIO.js'), critical: true },
+    { label: 'DXF', url: withV('js/io/formats/dxf.js'), critical: false },
+    { label: 'DWG', url: withV('js/io/formats/dwg.js'), critical: false },
+    { label: 'Loader', url: withV('js/boot/loader.js'), critical: true, essential: true },
+    { label: 'UI labels', url: withV('js/ui/labels.js'), critical: true, essential: true },
+    { label: 'Room palette', url: withV('js/ui/roomPalette.js'), critical: false },
+    { label: 'Room renderer', url: withV('js/render/drawRoom.js'), critical: true, essential: true },
+    { label: 'Stairs renderer', url: withV('js/render/drawStairs.js'), critical: false },
+    { label: 'Pergola renderer', url: withV('js/render/drawPergola.js'), critical: false },
+    { label: 'Garage renderer', url: withV('js/render/drawGarage.js'), critical: false },
+    { label: 'Roof renderer', url: withV('js/render/drawRoof.js'), critical: false },
+    { label: 'Roof dropdown', url: withV('js/ui/roofDropdown.js'), critical: false },
+    { label: 'Pool renderer', url: withV('js/render/drawPool.js'), critical: false },
+    { label: 'Balcony renderer', url: withV('js/render/drawBalcony.js'), critical: false },
+    { label: 'Furniture renderer', url: withV('js/render/drawFurniture.js'), critical: false },
+    { label: 'Input events', url: withV('js/input/events.js'), critical: true, essential: true },
+    { label: 'History', url: withV('js/input/history.js'), critical: true, essential: true },
+    { label: 'Keyboard router', url: withV('js/input/keyboard.js'), critical: true, essential: true },
+    { label: 'Plan apply', url: withV('js/core/plan-apply.js'), critical: true },
+    { label: 'Plan populate', url: withV('js/core/plan-populate.js'), critical: true },
+    { label: 'Consistency checks', url: withV('js/core/consistency.js'), critical: false },
+    { label: 'Trace panel', url: withV('js/ui/trace-panel.js'), critical: false },
+    { label: 'Admin client', url: withV('js/ui/admin.js'), critical: false },
+    { label: 'Info modal', url: withV('js/ui/modals.js'), critical: false },
+    { label: 'Pricing modal', url: withV('js/ui/pricing.js'), critical: false },
+    { label: 'Plan2D geom', url: withV('js/plan2d/geom2d.js'), critical: false },
+    { label: 'Plan2D walls', url: withV('js/plan2d/walls.js'), critical: false },
+    { label: 'Plan2D snap', url: withV('js/plan2d/snap.js'), critical: false },
+    { label: 'Plan2D core', url: withV('js/plan2d/editor-core.js'), critical: false },
+    { label: 'Plan2D draw', url: withV('js/plan2d/draw.js'), critical: false },
+    { label: 'Plan2D editor wiring', url: withV('js/plan2d/editor.js'), critical: false },
+    { label: 'Plan2D WebGL', url: withV('js/plan2d/webgl.js'), critical: false },
+    { label: 'App core', url: withV('js/app.js'), critical: true, essential: true }
   ];
 
   // Build essential list (modules marked essential)
@@ -185,9 +194,10 @@
         try { setMsg('Recovering '+m.label+'…'); t0=(performance&&performance.now)?performance.now():Date.now(); await loadByFetch(m.url); t1=(performance&&performance.now)?performance.now():Date.now(); ok=true; } catch(e2){ errLast = errLast||e2; }
       }
       var dur = (t1&&t0)? Math.round(t1-t0): null;
-      trace.push({ module:m.label, url:m.url, ok:!!ok, ms:dur, attempts:tries||1, critical:!!m.critical });
+      trace.push({ module:m.label, url:m.url, ok:!!ok, ms:dur, attempts:tries||1, critical:!!m.critical, version: GLOBAL_VERSION });
       if(ok){
         tick(m.label);
+        try { console.log('[BootLoad]', m.label, 'version='+GLOBAL_VERSION, 'ms='+dur); } catch(_eLog){}
         try {
           window.__bootAllLoaded = (window.__bootAllLoaded||0)+1;
           window.dispatchEvent(new CustomEvent('gablok:module-progress', { detail:{ loaded:window.__bootAllLoaded, total:window.__bootAllTotal, label:m.label, ms:dur } }));
