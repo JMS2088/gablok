@@ -133,14 +133,9 @@
       // When user presses Render (solid), enable corner codes so endpoints are labeled on screen
       if (m === 'solid') { window.__showCornerCodes = true; }
       else { window.__showCornerCodes = false; }
-      // Set window glass color to blue when entering solid render mode
-      if (m === 'solid') {
-        window.__windowGlassColor = 'rgba(59,130,246,0.75)';
-        console.log('[setWallRenderMode] Window glass color set to blue:', window.__windowGlassColor);
-      } else {
-        window.__windowGlassColor = null;
-        console.log('[setWallRenderMode] Window glass color cleared');
-      }
+      // Force window glass color to blue in all modes (user requirement)
+      window.__windowGlassColor = 'rgba(59,130,246,0.75)';
+      console.log('[setWallRenderMode] Window glass color forced blue:', window.__windowGlassColor);
       // Simplified: do not run 2D→3D applies here. Just rebuild from existing 3D state for ALL rooms/garages across floors.
       // This guarantees that pressing Render applies to ground and first floor together, without duplication or missed floors.
       if (m === 'solid') {
@@ -1685,7 +1680,24 @@
         ctx.fillStyle = glassFill; ctx.fill();
         ctx.strokeStyle = glassStroke; ctx.lineWidth = onLevel ? 1.6 : 1.1; ctx.stroke();
       }
-      if (glassRects.length){ for (var gi=0; gi<glassRects.length; gi++){ var GQ = glassRects[gi]; if(!GQ||GQ.length!==4) continue; drawGlassQuad(GQ); } }
+      if (glassRects.length){
+        for (var gi=0; gi<glassRects.length; gi++){
+          var GQ = glassRects[gi]; if(!GQ||GQ.length!==4) continue; drawGlassQuad(GQ);
+        }
+        if (window.__debugWindowGlass){ console.log('[WindowGlass] drew', glassRects.length, 'explicit glass rects; color=', glassFill); }
+      } else if (windowFrameRects.length){
+        // Fallback: synthesize a glass quad inset from first frame rect to guarantee blue fill.
+        var FR = windowFrameRects[0];
+        if (FR && FR.length===4){
+          var synthInset = 0.12;
+          var cx = (FR[0].x+FR[1].x+FR[2].x+FR[3].x)/4;
+          var cy = (FR[0].y+FR[1].y+FR[2].y+FR[3].y)/4;
+          var G = [];
+          for (var si=0; si<4; si++){ var P=FR[si]; G.push({ x: P.x + (cx-P.x)*synthInset, y: P.y + (cy-P.y)*synthInset }); }
+          drawGlassQuad(G);
+          if (window.__debugWindowGlass){ console.warn('[WindowGlass] fallback synthetic glass drawn; color=', glassFill); }
+        }
+      }
       // Draw window frames (90° corners) as crisp border strokes around glass opening
       if (windowFrameRects.length){
         ctx.save();

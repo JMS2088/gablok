@@ -104,7 +104,7 @@
     { label: 'Placement helper', url: 'js/core/placement.js', critical: true, essential: true },
     { label: 'Engine wall strips', url: 'js/core/engine/wallStrips.js?v=1763716707', critical: true, essential: true },
     { label: 'Engine components', url: 'js/core/engine/components.js?v=1763716707', critical: true, essential: true },
-    { label: 'Core engine', url: 'js/core/engine3d.js?v=1763716707', critical: true, essential: true },
+    { label: 'Core engine', url: 'js/core/engine3d.js?v=20251121-5', critical: true, essential: true },
     { label: 'Project mgmt', url: 'js/core/project.js?v=1763718699', critical: true, essential: true },
     { label: 'Import/Export', url: 'js/io/importExport.js?v=1763716707', critical: true },
     { label: 'File I/O', url: 'js/io/fileIO.js?v=20251128-1', critical: true },

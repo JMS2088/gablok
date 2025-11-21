@@ -69,7 +69,16 @@
       }
       // Toggle render mode with R across contexts
       if (!editing && (key==='r'||key==='R')) {
-        if (typeof setWallRenderMode==='function'){ setWallRenderMode(window.__wallRenderMode==='solid'?'line':'solid'); ev.preventDefault(); ev.stopPropagation(); }
+        // Allow browser hard reload shortcuts: Ctrl+Shift+R / Cmd+Shift+R
+        if (ev.shiftKey && (ev.ctrlKey || ev.metaKey)) {
+          // Do NOT consume; let the browser perform a hard refresh.
+          return;
+        }
+        if (typeof setWallRenderMode==='function') {
+          setWallRenderMode(window.__wallRenderMode==='solid'?'line':'solid');
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
       }
     } catch(_e){}
   }

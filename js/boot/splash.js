@@ -54,15 +54,22 @@
   }
   function maybeHide(){
     if(hidden) return;
-    // Strict gating: only hide after all modules loaded AND first frame rendered.
-    // Also ensure a minimum display time to avoid flash
+    // Allow early hide once essential modules loaded + first frame OR full load complete.
+    // Maintain minimum display to avoid flash.
     var now = Date.now();
-    var minDisplayTime = 800; // Minimum 800ms display
+    var minDisplayTime = 600; // Slightly reduced for snappier feel
     var loadStartTime = window.__loadStartTime || now;
     var timeSinceStart = now - loadStartTime;
-    
-    if(loaded===total && firstFrame && timeSinceStart >= minDisplayTime){ 
-      hideSplash(); 
+    var essentialsDone = false;
+    try {
+      if (typeof window.__bootEssentialLoaded === 'number' && typeof window.__bootEssentialTotal === 'number') {
+        essentialsDone = (window.__bootEssentialLoaded >= window.__bootEssentialTotal && window.__bootEssentialTotal > 0);
+      }
+    } catch(_eChk){}
+    var fullDone = (loaded === total && total > 0);
+    if ((essentialsDone || fullDone) && firstFrame && timeSinceStart >= minDisplayTime){
+      console.log('[Splash] Hiding (essentialsDone='+essentialsDone+', fullDone='+fullDone+', firstFrame='+firstFrame+', ms='+timeSinceStart+')');
+      hideSplash();
     }
   }
 
@@ -104,6 +111,8 @@
   };
   window.__splashSetMessage = function(m){ if(msgEl) msgEl.textContent = m; };
   window.__splashFirstFrame = function(){ firstFrame = true; maybeHide(); };
+  // Listen for essential completion to attempt early hide
+  window.addEventListener('gablok:essential-complete', function(){ setTimeout(maybeHide, 50); });
   window.__splashMark = function(){ /* no-op maintained for compatibility */ };
 
   // Absolute failsafe: if still not hidden after very long (render failure), hide anyway after 15s.
