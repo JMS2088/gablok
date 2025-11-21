@@ -404,15 +404,15 @@
   }
   #measurements .measurement-label { min-width: 90px; }
   
-  #measurements .measurement-label { color: #666; font-weight: 500; }
-  #measurements .measurement-value { color: #333; font-weight: 600; }
+  #measurements .measurement-label { color: #000; font-weight: 600; }
+  #measurements .measurement-value { color: #000; font-weight: 600; }
   #measurements .measurement-input {
     /* Increased width to accommodate 4-5 digits plus spinner arrows without clipping */
     width: 90px; /* was 60px */
     min-width: 90px;
     font-family: monospace;
     font-size: 12px;
-    color: #333;
+    color: #000;
     background: #fff;
     border: 1px solid #ccc;
     border-radius: 4px;

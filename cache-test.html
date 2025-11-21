@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Cache Test - Gablok</title>
+    <style>
+        body { 
+            font-family: monospace; 
+            padding: 20px; 
+            background: #0d1117; 
+            color: #c9d1d9; 
+        }
+        .success { color: #0f0; font-weight: bold; }
+        .info { color: #58a6ff; }
+        .warning { color: #f85149; }
+        pre { background: #161b22; padding: 10px; border-radius: 6px; }
+        button { 
+            background: #238636; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 6px; 
+            cursor: pointer; 
+            margin: 5px;
+        }
+        button:hover { background: #2ea043; }
+    </style>
+</head>
+<body>
+    <h1>🔄 Gablok Cache Test</h1>
+    
+    <div class="success">✓ This page loaded successfully!</div>
+    <div class="info">Current timestamp: <span id="timestamp"></span></div>
+    <div class="info">Expected version: <strong>v1763718699</strong></div>
+    
+    <h2>Test Results:</h2>
+    <div id="results"></div>
+    
+    <h2>Actions:</h2>
+    <button onclick="testFetch()">Test Fetch JS File</button>
+    <button onclick="clearAndReload()">Clear Cache & Reload</button>
+    <button onclick="window.location.href='index.html'">Go to Main App</button>
+    
+    <h2>Instructions:</h2>
+    <pre>
+1. If you see version "v1763718699" you have the latest code
+2. In main app, check top-right corner for version badge
+3. Open DevTools Console (F12) to see version messages
+4. When clicking Render, you should see blue glass color logs
+5. Reset button now clears ALL storage including profile data
+    </pre>
+
+    <script>
+        document.getElementById('timestamp').textContent = new Date().toISOString();
+        
+        const results = document.getElementById('results');
+        
+        function log(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = msg;
+            results.appendChild(div);
+        }
+        
+        // Test if we can fetch the engine file with version
+        async function testFetch() {
+            results.innerHTML = '';
+            log('Testing fetch of engine3d.js...', 'info');
+            
+            try {
+                const response = await fetch('js/core/engine3d.js?v=1763718699');
+                const text = await response.text();
+                
+                if (text.includes('window.__windowGlassColor')) {
+                    log('✓ SUCCESS: Found window glass color code!', 'success');
+                } else {
+                    log('✗ WARNING: Glass color code NOT found - cache issue!', 'warning');
+                }
+                
+                if (text.includes('console.log(\'[setWallRenderMode]')) {
+                    log('✓ SUCCESS: Found debug console logs!', 'success');
+                } else {
+                    log('✗ WARNING: Debug logs NOT found - old version!', 'warning');
+                }
+                
+                log(`File size: ${text.length} bytes`, 'info');
+                
+            } catch (error) {
+                log('✗ ERROR: ' + error.message, 'warning');
+            }
+        }
+        
+        function clearAndReload() {
+            // Clear all storage
+            try {
+                localStorage.clear();
+                sessionStorage.clear();
+                document.cookie.split(";").forEach(c => {
+                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+                });
+                log('Cache cleared!', 'success');
+            } catch(e) {
+                log('Cache clear error: ' + e.message, 'warning');
+            }
+            
+            // Force reload with cache bypass
+            setTimeout(() => {
+                window.location.href = window.location.href.split('?')[0] + '?_=' + Date.now();
+            }, 500);
+        }
+        
+        // Auto-run test on load
+        window.addEventListener('load', () => {
+            setTimeout(testFetch, 500);
+        });
+    </script>
+</body>
+</html>

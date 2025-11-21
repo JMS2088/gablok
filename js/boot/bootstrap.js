@@ -3,6 +3,7 @@
   if (window.__bootstrapLoaded) return; window.__bootstrapLoaded = true;
   // Gate startup until boot completes
   window.__requireBoot = true;
+  window.__renderingEnabled = false; // Prevent rendering until splash ready
   var bootResolve; window.__bootPromise = new Promise(function(res){ bootResolve = res; });
 
   // Dev-friendly status: show #status during boot, hide on first render unless sticky
@@ -101,11 +102,11 @@
   var modules = [
     { label: 'Camera core', url: 'js/core/engine/camera.js?v=20251109-1', critical: true, essential: true },
     { label: 'Placement helper', url: 'js/core/placement.js', critical: true, essential: true },
-    { label: 'Engine wall strips', url: 'js/core/engine/wallStrips.js?v=20251121-4', critical: true, essential: true },
-    { label: 'Engine components', url: 'js/core/engine/components.js?v=20251109-1', critical: true, essential: true },
-    { label: 'Core engine', url: 'js/core/engine3d.js?v=20251121-4', critical: true, essential: true },
-    { label: 'Project mgmt', url: 'js/core/project.js?v=20251128-1', critical: true, essential: true },
-    { label: 'Import/Export', url: 'js/io/importExport.js?v=20251128-1', critical: true },
+    { label: 'Engine wall strips', url: 'js/core/engine/wallStrips.js?v=1763716707', critical: true, essential: true },
+    { label: 'Engine components', url: 'js/core/engine/components.js?v=1763716707', critical: true, essential: true },
+    { label: 'Core engine', url: 'js/core/engine3d.js?v=1763716707', critical: true, essential: true },
+    { label: 'Project mgmt', url: 'js/core/project.js?v=1763718699', critical: true, essential: true },
+    { label: 'Import/Export', url: 'js/io/importExport.js?v=1763716707', critical: true },
     { label: 'File I/O', url: 'js/io/fileIO.js?v=20251128-1', critical: true },
     { label: 'DXF', url: 'js/io/formats/dxf.js?v=20251128-1', critical: false },
     { label: 'DWG', url: 'js/io/formats/dwg.js?v=20251128-1', critical: false },
@@ -121,10 +122,10 @@
     { label: 'Pool renderer', url: 'js/render/drawPool.js?v=20251026-1', critical: false },
     { label: 'Balcony renderer', url: 'js/render/drawBalcony.js?v=20251026-1', critical: false },
     { label: 'Furniture renderer', url: 'js/render/drawFurniture.js?v=20251026-1', critical: false },
-    { label: 'Input events', url: 'js/input/events.js?v=20251101-6', critical: true, essential: true },
-    { label: 'History', url: 'js/input/history.js?v=20251109-1', critical: true, essential: true },
-    { label: 'Keyboard router', url: 'js/input/keyboard.js?v=20251109-1', critical: true, essential: true },
-    { label: 'Plan apply', url: 'js/core/plan-apply.js?v=20251101-7', critical: true },
+    { label: 'Input events', url: 'js/input/events.js?v=1763716707', critical: true, essential: true },
+    { label: 'History', url: 'js/input/history.js?v=1763716707', critical: true, essential: true },
+    { label: 'Keyboard router', url: 'js/input/keyboard.js?v=1763716707', critical: true, essential: true },
+    { label: 'Plan apply', url: 'js/core/plan-apply.js?v=1763716707', critical: true },
     { label: 'Plan populate', url: 'js/core/plan-populate.js?v=20251101-4', critical: true },
     { label: 'Consistency checks', url: 'js/core/consistency.js?v=20251128-1', critical: false },
     { label: 'Trace panel', url: 'js/ui/trace-panel.js?v=20251109-1', critical: false },
@@ -192,7 +193,11 @@
           window.dispatchEvent(new CustomEvent('gablok:module-progress', { detail:{ loaded:window.__bootAllLoaded, total:window.__bootAllTotal, label:m.label, ms:dur } }));
           if(m.essential){
             window.__bootEssentialLoaded = (window.__bootEssentialLoaded||0)+1;
-            if(window.__bootEssentialLoaded === window.__bootEssentialTotal){ essentialDone=true; window.dispatchEvent(new CustomEvent('gablok:essential-complete')); }
+            if(window.__bootEssentialLoaded === window.__bootEssentialTotal){ 
+              essentialDone=true; 
+              window.__renderingEnabled = true; // Enable rendering after essentials loaded
+              window.dispatchEvent(new CustomEvent('gablok:essential-complete')); 
+            }
             else window.dispatchEvent(new CustomEvent('gablok:essential-progress', { detail:{ loaded:window.__bootEssentialLoaded, total:window.__bootEssentialTotal, label:m.label } }));
           }
         } catch(_eP){}
@@ -264,7 +269,7 @@
   }, 2500);
   setTimeout(function(){
     try {
-      if (!window.__firstFrameEmitted) {
+      if (!window.__firstFrameEmitted && window.__renderingEnabled) {
         console.warn('[Watchdog] First frame not emitted after 6000ms – attempting recovery render.');
         var s = document.getElementById('status'); if (s && !window.__debugStickyStatus) s.textContent = 'Recovering…';
         if (typeof window.setupCanvas === 'function') window.setupCanvas();

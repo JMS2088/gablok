@@ -129,9 +129,18 @@
     try {
       var m = (mode==='solid') ? 'solid' : 'line';
       window.__wallRenderMode = m;
+      console.log('[setWallRenderMode] Mode changed to:', m);
       // When user presses Render (solid), enable corner codes so endpoints are labeled on screen
       if (m === 'solid') { window.__showCornerCodes = true; }
       else { window.__showCornerCodes = false; }
+      // Set window glass color to blue when entering solid render mode
+      if (m === 'solid') {
+        window.__windowGlassColor = 'rgba(59,130,246,0.75)';
+        console.log('[setWallRenderMode] Window glass color set to blue:', window.__windowGlassColor);
+      } else {
+        window.__windowGlassColor = null;
+        console.log('[setWallRenderMode] Window glass color cleared');
+      }
       // Simplified: do not run 2D→3D applies here. Just rebuild from existing 3D state for ALL rooms/garages across floors.
       // This guarantees that pressing Render applies to ground and first floor together, without duplication or missed floors.
       if (m === 'solid') {
@@ -1683,14 +1692,31 @@
         ctx.lineJoin = 'miter'; ctx.miterLimit = 6;
         for (var wf=0; wf<windowFrameRects.length; wf++){
           var FR = windowFrameRects[wf]; if(!FR||FR.length!==4) continue;
-          // Outer wall edge stroke (subtle) to sharpen 90° junction between wall and window frame
+          // Outer jamb/frame outline to sharpen junction between wall and recess
           ctx.beginPath(); ctx.moveTo(FR[0].x,FR[0].y); ctx.lineTo(FR[1].x,FR[1].y); ctx.lineTo(FR[2].x,FR[2].y); ctx.lineTo(FR[3].x,FR[3].y); ctx.closePath();
           ctx.strokeStyle = onLevel ? 'rgba(71,85,105,0.55)' : 'rgba(148,163,184,0.50)';
           ctx.lineWidth = onLevel ? 2.4 : 1.8; ctx.stroke();
-          // Inner blue frame stroke
+          // Inner colored frame (blue accent)
           ctx.beginPath(); ctx.moveTo(FR[0].x,FR[0].y); ctx.lineTo(FR[1].x,FR[1].y); ctx.lineTo(FR[2].x,FR[2].y); ctx.lineTo(FR[3].x,FR[3].y); ctx.closePath();
           ctx.strokeStyle = onLevel ? 'rgba(30,64,175,0.95)' : 'rgba(30,64,175,0.80)';
           ctx.lineWidth = onLevel ? 1.2 : 0.9; ctx.stroke();
+          // Recess illusion: inset quad darkened so glass appears set into wall thickness
+          try {
+            var insetFrac = 0.08; // purely visual; fraction toward center
+            var cxMid = (FR[0].x + FR[1].x + FR[2].x + FR[3].x) / 4;
+            var cyMid = (FR[0].y + FR[1].y + FR[2].y + FR[3].y) / 4;
+            var insetPts = [];
+            for (var ip=0; ip<4; ip++){
+              var P = FR[ip];
+              insetPts.push({ x: P.x + (cxMid - P.x)*insetFrac, y: P.y + (cyMid - P.y)*insetFrac });
+            }
+            ctx.beginPath();
+            ctx.moveTo(insetPts[0].x,insetPts[0].y); ctx.lineTo(insetPts[1].x,insetPts[1].y); ctx.lineTo(insetPts[2].x,insetPts[2].y); ctx.lineTo(insetPts[3].x,insetPts[3].y); ctx.closePath();
+            ctx.fillStyle = onLevel ? 'rgba(51,65,85,0.35)' : 'rgba(100,116,139,0.30)';
+            ctx.fill();
+            ctx.strokeStyle = onLevel ? 'rgba(51,65,85,0.55)' : 'rgba(100,116,139,0.50)';
+            ctx.lineWidth = onLevel ? 0.9 : 0.7; ctx.stroke();
+          } catch(_eInset) { /* non-fatal visual enhancement */ }
         }
         ctx.restore();
       }
@@ -2120,6 +2146,12 @@
   if (typeof window.renderLoop === 'undefined') {
     window.renderLoop = function renderLoop(){
       try {
+        // Gate rendering until essentials are loaded (prevents premature 3D draw during splash)
+        if (!window.__renderingEnabled) { 
+          requestAnimationFrame(renderLoop); 
+          return; 
+        }
+        
         // Throttle inactive frames to reduce CPU
         var now = (performance && performance.now) ? performance.now() : Date.now();
         var last = (typeof window.__perf==='object' && window.__perf && typeof window.__perf.lastFrameTime==='number') ? window.__perf.lastFrameTime : 0;

@@ -230,13 +230,41 @@
    */
   function resetAll() {
     try {
-      // Clear persisted project and 2D drafts
+      console.log('[resetAll] Starting complete reset...');
+      
+      // Clear ALL persisted data (including profile, traces, drafts)
       try {
-        localStorage.removeItem('gablok_project');
-      } catch (e) {}
-      try {
-        localStorage.removeItem('gablok_plan2dDrafts_v1');
-      } catch (e) {}
+        const keysToRemove = [
+          'gablok_project',
+          'gablok_plan2dDrafts_v1',
+          'gablok_rtTrace_v1',
+          'gablokProfile',
+          'gablokUserId'
+        ];
+        keysToRemove.forEach(function(key) {
+          try {
+            localStorage.removeItem(key);
+            console.log('[resetAll] Removed:', key);
+          } catch (e) {
+            console.warn('[resetAll] Failed to remove:', key, e);
+          }
+        });
+        
+        // Also remove any keys starting with 'gablok'
+        try {
+          const allKeys = Object.keys(localStorage);
+          allKeys.forEach(function(key) {
+            if (key.toLowerCase().indexOf('gablok') !== -1) {
+              localStorage.removeItem(key);
+              console.log('[resetAll] Removed extra key:', key);
+            }
+          });
+        } catch(e) {}
+        
+      } catch (e) {
+        console.warn('[resetAll] localStorage clear failed:', e);
+      }
+      
       // Clear in-memory 2D drafts if present
       try {
         if (typeof __plan2dDrafts !== 'undefined') {
@@ -274,6 +302,7 @@
       // Reset render mode to default
       try {
         window.__wallRenderMode = 'line';
+        window.__windowGlassColor = null;
       } catch (e) {}
 
       // Hide any open modals
@@ -284,7 +313,8 @@
         'pricing-modal',
         'room-palette-modal',
         'share-modal',
-        'info-modal'
+        'info-modal',
+        'account-modal'
       ].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.style.display = 'none';
@@ -294,9 +324,10 @@
   renderLoop && renderLoop();
   // Refresh Level menu states (re-enable '+ Stairs')
   try { if (typeof window.updateLevelMenuStates === 'function') window.updateLevelMenuStates(); } catch(_u2){}
-      updateStatus && updateStatus('Reset project');
+      updateStatus && updateStatus('Reset complete');
+      console.log('[resetAll] Reset complete');
     } catch (e) {
-      console.warn('resetAll failed', e);
+      console.error('[resetAll] Reset failed:', e);
     }
   }
 

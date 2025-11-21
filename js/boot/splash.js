@@ -2,6 +2,9 @@
 (function(){
   if(window.__simpleSplashInit) return; window.__simpleSplashInit = true;
 
+  // Track when splash started for minimum display time
+  window.__loadStartTime = Date.now();
+
   var total = 0;
   var loaded = 0;
   var firstFrame = false;
@@ -52,7 +55,15 @@
   function maybeHide(){
     if(hidden) return;
     // Strict gating: only hide after all modules loaded AND first frame rendered.
-    if(loaded===total && firstFrame){ hideSplash(); }
+    // Also ensure a minimum display time to avoid flash
+    var now = Date.now();
+    var minDisplayTime = 800; // Minimum 800ms display
+    var loadStartTime = window.__loadStartTime || now;
+    var timeSinceStart = now - loadStartTime;
+    
+    if(loaded===total && firstFrame && timeSinceStart >= minDisplayTime){ 
+      hideSplash(); 
+    }
   }
 
   // Public API (kept names for compatibility)
