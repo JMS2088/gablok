@@ -197,6 +197,14 @@
               essentialDone=true; 
               window.__renderingEnabled = true; // Enable rendering after essentials loaded
               window.dispatchEvent(new CustomEvent('gablok:essential-complete')); 
+              // Force early first frame if engine ready but renderLoop not yet kicked
+              try {
+                if (!window.__firstFrameEmitted) {
+                  if (typeof window.setupCanvas==='function') window.setupCanvas();
+                  if (typeof window.updateProjectionCache==='function') window.updateProjectionCache();
+                  if (typeof window.renderLoop==='function') window.renderLoop();
+                }
+              } catch(_eForceFF){}
             }
             else window.dispatchEvent(new CustomEvent('gablok:essential-progress', { detail:{ loaded:window.__bootEssentialLoaded, total:window.__bootEssentialTotal, label:m.label } }));
           }
@@ -225,7 +233,10 @@
     for(var i=0;i<essentials.length;i++){ await loadOne(essentials[i]); }
 
     // Start app if not yet started after essentials loaded
-    if(!appStarted){ window.__bootReady = true; if(typeof bootResolve==='function') bootResolve(true); try{ window.dispatchEvent(new CustomEvent('gablok:boot-ready')); }catch(_eBR){} try{ if(document.readyState!=='loading' && typeof window.startApp==='function' && !window.__appStarted){ window.__appStarted=true; window.startApp(); } }catch(_eSA){} }
+    if(!appStarted){ window.__bootReady = true; if(typeof bootResolve==='function') bootResolve(true); try{ window.dispatchEvent(new CustomEvent('gablok:boot-ready')); }catch(_eBR){} try{ if(document.readyState!=='loading' && typeof window.startApp==='function' && !window.__appStarted){ window.__appStarted=true; window.startApp(); } }catch(_eSA){} 
+      // Ensure a render is attempted immediately after boot-ready
+      try { if (!window.__firstFrameEmitted && typeof window.renderLoop==='function') window.renderLoop(); } catch(_eKick){}
+    }
 
     // Load others in parallel
     await Promise.all(others.map(function(m){ return loadOne(m); }));

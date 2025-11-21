@@ -115,6 +115,7 @@
   window.addEventListener('gablok:essential-complete', function(){ setTimeout(maybeHide, 50); });
   window.__splashMark = function(){ /* no-op maintained for compatibility */ };
 
-  // Absolute failsafe: if still not hidden after very long (render failure), hide anyway after 15s.
-  setTimeout(function(){ if(!hidden) hideSplash(); }, 15000);
+  // Accelerated failsafe sequence: attempt progressive hide if first frame delayed
+  setTimeout(function(){ if(!hidden) { console.warn('[Splash] 2500ms fallback check'); maybeHide(); } }, 2500);
+  setTimeout(function(){ if(!hidden) { console.warn('[Splash] 4000ms forcing hide'); hideSplash(); } }, 4000);
 })();
