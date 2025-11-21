@@ -1380,27 +1380,28 @@
       for (var oi=0; oi<openings.length; oi++){
         var op = openings[oi]; if(!op) continue;
         var isDoor = (op.type==='door');
-        var sill = isDoor ? 0 : ((typeof op.sillM==='number') ? op.sillM : 1.0);
-        var oH = (typeof op.heightM==='number') ? op.heightM : (isDoor ? 2.04 : 1.5);
+        // REQUIREMENT: Windows must NOT cut a hole; fixed sill 0.9m, height 1.3m; doors keep existing behavior.
+        var sill = isDoor ? 0 : 0.9;
+        var oH = isDoor ? ((typeof op.heightM==='number') ? op.heightM : 2.04) : 1.3;
         var y0 = baseY + sill;
         var y1 = Math.min(y0 + oH, stripTopY);
-        // endpoints along the strip
+        // endpoints along the strip (fallback to full segment if not provided)
         var x0o = (op.x0!=null? op.x0 : x0), z0o = (op.z0!=null? op.z0 : z0);
         var x1o = (op.x1!=null? op.x1 : x1), z1o = (op.z1!=null? op.z1 : z1);
-        // Left face hole (offset +eps)
-        var lx0 = x0o + nx*eps, lz0 = z0o + nz*eps;
-        var lx1 = x1o + nx*eps, lz1 = z1o + nz*eps;
-        var lA = project3D(lx0, y0, lz0); var lB = project3D(lx1, y0, lz1);
-        var lC = project3D(lx1, y1, lz1); var lD = project3D(lx0, y1, lz0);
-        if (lA && lB && lC && lD) leftHoles.push([lA,lB,lC,lD]);
-        // Right face hole (offset -eps)
-        var rx0 = x0o - nx*eps, rz0 = z0o - nz*eps;
-        var rx1 = x1o - nx*eps, rz1 = z1o - nz*eps;
-        var rA = project3D(rx0, y0, rz0); var rB = project3D(rx1, y0, rz1);
-        var rC = project3D(rx1, y1, rz1); var rD = project3D(rx0, y1, rz0);
-        if (rA && rB && rC && rD) rightHoles.push([rA,rB,rC,rD]);
-        // Glass rectangle centered (for windows only)
-        if (!isDoor){
+        if (isDoor) {
+          // Only doors punch holes through side faces
+          var lx0 = x0o + nx*eps, lz0 = z0o + nz*eps;
+          var lx1 = x1o + nx*eps, lz1 = z1o + nz*eps;
+          var lA = project3D(lx0, y0, lz0); var lB = project3D(lx1, y0, lz1);
+          var lC = project3D(lx1, y1, lz1); var lD = project3D(lx0, y1, lz0);
+          if (lA && lB && lC && lD) leftHoles.push([lA,lB,lC,lD]);
+          var rx0 = x0o - nx*eps, rz0 = z0o - nz*eps;
+          var rx1 = x1o - nx*eps, rz1 = z1o - nz*eps;
+          var rA = project3D(rx0, y0, rz0); var rB = project3D(rx1, y0, rz1);
+          var rC = project3D(rx1, y1, rz1); var rD = project3D(rx0, y1, rz0);
+          if (rA && rB && rC && rD) rightHoles.push([rA,rB,rC,rD]);
+        } else {
+          // Window: solid wall retained, only draw centered glass rectangle
           var gA = project3D(x0o, y0, z0o); var gB = project3D(x1o, y0, z1o);
           var gC = project3D(x1o, y1, z1o); var gD = project3D(x0o, y1, z0o);
           if (gA && gB && gC && gD) glassRects.push([gA,gB,gC,gD]);
@@ -1639,7 +1640,7 @@
       try {
         /* no-op: opening outlines suppressed in solid mode */
       } catch(_eOpen) {}
-      // SAFETY WIREFRAME OVERLAY — ensure long edges draw even when near-plane culls projections
+      // SAFETY WIREFRAME OVERLAY — ensure edges draw even when near-plane culls projections
       try {
         var P = (typeof window.__proj==='object' && window.__proj) || null;
         var nearEps = 0.01;
@@ -1651,8 +1652,21 @@
         function clipSegNear(a, b){ if(!a||!b) return null; var ina=a.cz>=nearEps, inb=b.cz>=nearEps; if(ina&&inb) return [a,b]; if(!ina&&!inb) return null; var t=(nearEps-a.cz)/((b.cz-a.cz)||1e-9); var I={ cx:a.cx+(b.cx-a.cx)*t, cy:a.cy+(b.cy-a.cy)*t, cz:nearEps }; return ina?[a,I]:[I,b]; }
         function strokeClippedEdge(W0, W1){ var a=toCam3(W0), b=toCam3(W1); var seg=clipSegNear(a,b); if(!seg) return false; var s0=camToScreen3(seg[0]), s1=camToScreen3(seg[1]); if(!s0||!s1) return false; ctx.save(); ctx.strokeStyle = edgeCol; ctx.lineWidth = onLevel ? 2.0 : 1.2; ctx.beginPath(); ctx.moveTo(s0.x,s0.y); ctx.lineTo(s1.x,s1.y); ctx.stroke(); ctx.restore(); return true; }
         // Only add overlay if the standard projected edge was missing (prevent double-drawing)
+        // Top face
         if (!(pAt && pBt)) { strokeClippedEdge(At, Bt); }
+        if (!(pBt && pCt)) { strokeClippedEdge(Bt, Ct); }
         if (!(pCt && pDt)) { strokeClippedEdge(Ct, Dt); }
+        if (!(pDt && pAt)) { strokeClippedEdge(Dt, At); }
+        // Bottom face
+        if (!(pA && pB)) { strokeClippedEdge({x:A.x,y:A.y,z:A.z}, {x:B.x,y:B.y,z:B.z}); }
+        if (!(pB && pC)) { strokeClippedEdge({x:B.x,y:B.y,z:B.z}, {x:C.x,y:C.y,z:C.z}); }
+        if (!(pC && pD)) { strokeClippedEdge({x:C.x,y:C.y,z:C.z}, {x:D.x,y:D.y,z:D.z}); }
+        if (!(pD && pA)) { strokeClippedEdge({x:D.x,y:D.y,z:D.z}, {x:A.x,y:A.y,z:A.z}); }
+        // Vertical edges
+        if (!(pA && pAt)) { strokeClippedEdge({x:A.x,y:A.y,z:A.z}, {x:At.x,y:At.y,z:At.z}); }
+        if (!(pB && pBt)) { strokeClippedEdge({x:B.x,y:B.y,z:B.z}, {x:Bt.x,y:Bt.y,z:Bt.z}); }
+        if (!(pC && pCt)) { strokeClippedEdge({x:C.x,y:C.y,z:C.z}, {x:Ct.x,y:Ct.y,z:Ct.z}); }
+        if (!(pD && pDt)) { strokeClippedEdge({x:D.x,y:D.y,z:D.z}, {x:Dt.x,y:Dt.y,z:Dt.z}); }
       } catch(_wf) {}
       // Restore context before exiting solid rendering branch
       ctx.restore();

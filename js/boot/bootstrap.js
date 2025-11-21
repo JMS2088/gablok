@@ -108,7 +108,7 @@
     { label: 'Project mgmt', url: 'js/core/project.js?v=20251128-1', critical: true },
     { label: 'Import/Export', url: 'js/io/importExport.js?v=20251128-1', critical: true },
     { label: 'File I/O', url: 'js/io/fileIO.js?v=20251128-1', critical: true },
-    { label: 'DXF', url: 'js/io/formats/dxf.js?v=20251128-1', critical: true },
+    { label: 'DXF', url: 'js/io/formats/dxf.js?v=20251128-1', critical: false },
     { label: 'DWG', url: 'js/io/formats/dwg.js?v=20251128-1', critical: false },
     { label: 'Loader', url: 'js/boot/loader.js?v=20251026-1', critical: true },
     { label: 'UI labels', url: 'js/ui/labels.js?v=20251026-1', critical: true },
@@ -147,8 +147,14 @@
   ];
 
   try {
-    // Prepare splash list and total (support string entries as URLs)
-    var labels = modules.map(function(m){ return (typeof m === 'string') ? m : m.label; });
+    // Prepare splash list based on essentials so the bar completes quickly
+    var essentialLabels = [
+      'Camera core','Placement helper','Engine wall strips','Engine components','Core engine',
+      'Loader','UI labels','Room renderer','History','Keyboard router','App core','js/input/events.js?v=20251101-6'
+    ];
+    var labels = modules
+      .filter(function(m){ var lbl=(typeof m==='string')? m : m.label; return essentialLabels.indexOf(lbl) !== -1; })
+      .map(function(m){ return (typeof m === 'string') ? m : m.label; });
     if (typeof window.__splashExpect==='function') window.__splashExpect(labels);
     if (typeof window.__splashSetTotal==='function') window.__splashSetTotal(labels.length);
   } catch(e){}
@@ -162,6 +168,7 @@
     try { stepMode = /(^|[?&])boot=step(&|$)/.test(String(location.search||'')); } catch(e){}
 
     var trace = [];
+    var appStartedViaBoot = false;
     for (var i=0;i<modules.length;i++){
       var m = modules[i];
       if (typeof m === 'string') { m = { label: m, url: m, critical: false }; }
@@ -195,15 +202,27 @@
         tick(m.label + (m.optional? ' (skipped)':' (failed)'));
         try{ var s=document.getElementById('status'); if(s && !window.__debugStickyStatus){ s.style.display='block'; s.textContent='Boot issue: '+m.label+' failed'; } }catch(_se){}
       }
+      // Progressive boot: as soon as App core is loaded, start the app (only once)
+      try {
+        if (!appStartedViaBoot && ((m.label === 'App core') || (m.url && /js\/app\.js/.test(m.url)))) {
+          window.__bootReady = true;
+          if (typeof bootResolve === 'function') bootResolve(true);
+          try { window.dispatchEvent(new CustomEvent('gablok:boot-ready')); } catch(_evt) {}
+          if (document.readyState !== 'loading' && typeof window.startApp==='function' && !window.__appStarted) {
+            window.__appStarted = true; window.startApp();
+          }
+          appStartedViaBoot = true;
+        }
+      } catch(_pb) {}
       if (stepMode) { try { if (typeof window.__splashWaitForContinue==='function') await window.__splashWaitForContinue(); } catch(_e){} }
     }
     try { if (console && console.table) console.table(trace); else console.log('[Boot trace]', trace); } catch(e){}
 
-    // All attempted; start app if possible
+    // All attempted; ensure app has started (in case App core was skipped)
     window.__bootReady = true;
     try { if (typeof bootResolve === 'function') bootResolve(true); } catch(e){}
     try { window.dispatchEvent(new CustomEvent('gablok:boot-ready')); } catch(e){}
-    try { if (document.readyState !== 'loading' && typeof window.startApp==='function' && !window.__appStarted) { window.__appStarted = true; window.startApp(); } } catch(e){}
+    try { if (!appStartedViaBoot && document.readyState !== 'loading' && typeof window.startApp==='function' && !window.__appStarted) { window.__appStarted = true; window.startApp(); } } catch(e){}
   })();
   // Wire Floor Plan button (robust against early clicks before modules are ready)
   (function(){
@@ -222,7 +241,7 @@
   })();
 
   // Startup watchdogs: ensure the app never silently stalls on splash
-  // Force startApp if not begun shortly after boot, and attempt recovery render/reload if first frame never appears.
+  // Force startApp if not begun shortly after boot. Avoid auto-reload loops.
   setTimeout(function(){
     try {
       if (!window.__appStarted && typeof window.startApp === 'function') {
@@ -234,14 +253,11 @@
   setTimeout(function(){
     try {
       if (!window.__firstFrameEmitted) {
-        console.warn('[Watchdog] First frame not emitted after 6000ms – attempting recovery.');
+        console.warn('[Watchdog] First frame not emitted after 6000ms – attempting recovery render.');
         var s = document.getElementById('status'); if (s && !window.__debugStickyStatus) s.textContent = 'Recovering…';
+        if (typeof window.setupCanvas === 'function') window.setupCanvas();
+        if (typeof window.updateProjectionCache === 'function') window.updateProjectionCache();
         if (typeof window.renderLoop === 'function') window.renderLoop();
-        // If canvas/context still missing, attempt a one-time reload.
-        if ((!window.canvas || !window.ctx) && !window.__watchdogReloaded) {
-          window.__watchdogReloaded = true;
-          setTimeout(function(){ try { if (!window.__firstFrameEmitted) location.reload(); } catch(_r){} }, 800);
-        }
       }
     } catch(e){ /* non-fatal */ }
   }, 6000);
