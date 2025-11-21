@@ -118,6 +118,23 @@
     window.__splashWaitForContinue = function(){ try { ensureOverlay(); var b = document.getElementById('loading-continue'); if(!b) return Promise.resolve(true); b.style.display='inline-block'; return new Promise(function(res){ __splash.continueResolve = res; }); } catch(e){ return Promise.resolve(true); } };
     window.__splashSetMessage = function(msg){ lastMsg = msg || lastMsg; setProgress(pct(), lastMsg); };
     window.__splashHide = hideOverlay;
+    // Listen for overall module progress to adjust headline when essentials done.
+    window.addEventListener('gablok:module-progress', function(ev){
+      try {
+        var d = ev.detail||{};
+        if (typeof window.__bootEssentialTotal==='number' && typeof window.__bootEssentialLoaded==='number') {
+          var essentialsPct = (window.__bootEssentialTotal>0)? Math.round((window.__bootEssentialLoaded/window.__bootEssentialTotal)*100):0;
+          // Show dual-phase message until essentials complete
+          if (window.__bootEssentialLoaded < window.__bootEssentialTotal) {
+            setProgress(Math.max(essentialsPct, pct()), 'Core '+essentialsPct+'% · '+(d.loaded||0)+'/'+(d.total||0));
+          } else {
+            // After essentials, progress reflects total modules
+            var totalPct = (d.total>0)? Math.round((d.loaded/d.total)*100):pct();
+            setProgress(totalPct, 'Modules '+totalPct+'%');
+          }
+        }
+      } catch(_eModP){}
+    });
   })();
 
   // Show overlay as early as possible
@@ -149,13 +166,26 @@
         }
         setProgress(100, 'Ready');
       }
-      // Hide when the first frame is rendered (preferred), with small safety timeout as fallback
+      // Splash hide gating: require essentials + first frame OR extended fallback.
       var hidden=false; function done(){ if(!hidden){ hidden=true; hideOverlay(); } }
-      window.addEventListener('gablok:first-render', function(){ setTimeout(done, 100); }, { once:true });
-      // Global safety: hide splash even under gated boot after a hard cap
-      // This prevents rare stalls from leaving users stuck on the splash.
-      var HARD_CAP_MS = 5000;
-      setTimeout(function(){ try { if (!window.__firstFrameEmitted) { done(); } } catch(e){ done(); } }, HARD_CAP_MS);
+      var essentialsComplete = false;
+      var firstFrame = false;
+      function tryHide(){ if(essentialsComplete && firstFrame){ setTimeout(done, 120); } }
+      window.addEventListener('gablok:essential-progress', function(ev){
+        try {
+          var d = ev.detail||{}; var pctE = (d.total>0)? Math.round((d.loaded/d.total)*100):0;
+          setProgress(pctE, 'Loading core… '+pctE+'%');
+        } catch(_eP){}
+      });
+      window.addEventListener('gablok:essential-complete', function(){
+        essentialsComplete = true;
+        setProgress(100, 'Core ready');
+        tryHide();
+      }, { once:true });
+      window.addEventListener('gablok:first-render', function(){ firstFrame = true; tryHide(); }, { once:true });
+      // Extended fallback: if essentials loaded but no frame, force recovery after 4000ms; else if neither ready after 9000ms, hide anyway.
+      setTimeout(function(){ if(essentialsComplete && !firstFrame){ setProgress(100,'Starting…'); try { if (typeof window.renderLoop==='function') window.renderLoop(); } catch(_eR){} } }, 4000);
+      setTimeout(function(){ if(!hidden){ done(); } }, 9000);
     })();
   });
 })();

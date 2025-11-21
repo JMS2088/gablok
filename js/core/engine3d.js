@@ -135,8 +135,31 @@
       // Simplified: do not run 2D→3D applies here. Just rebuild from existing 3D state for ALL rooms/garages across floors.
       // This guarantees that pressing Render applies to ground and first floor together, without duplication or missed floors.
       if (m === 'solid') {
+        // Snapshot existing strips so we can preserve openings (windows/doors) when rebuilding perimeter strips.
+        var __prevStrips = Array.isArray(window.wallStrips) ? window.wallStrips.slice() : [];
         window.__roomWallThickness = 0.3;
         if (typeof window.rebuildRoomPerimeterStrips === 'function') window.rebuildRoomPerimeterStrips(window.__roomWallThickness);
+        // Merge openings from previous matching strips if newly generated perimeter strips lack them.
+        try {
+          var prevByKey = Object.create(null);
+          function kf(v){ return Math.round((+v||0)*1000)/1000; }
+          function keyFor(x0,z0,x1,z1){ var a=kf(x0)+","+kf(z0), b=kf(x1)+","+kf(z1); return (a<b)?(a+"|"+b):(b+"|"+a); }
+          for (var pi=0; pi<__prevStrips.length; pi++){
+            var ps = __prevStrips[pi]; if(!ps) continue;
+            var k = (ps.level||0)+"#"+keyFor(ps.x0,ps.z0,ps.x1,ps.z1);
+            if (!prevByKey[k]) prevByKey[k] = [];
+            if (Array.isArray(ps.openings) && ps.openings.length) prevByKey[k] = ps.openings.slice();
+          }
+          var cur = Array.isArray(window.wallStrips)? window.wallStrips : [];
+          for (var ci=0; ci<cur.length; ci++){
+            var cs = cur[ci]; if(!cs) continue;
+            // Only augment room/garage perimeter strips (tagged) or any strip with missing openings
+            if (Array.isArray(cs.openings) && cs.openings.length>0) continue; // already has openings
+            var ck = (cs.level||0)+"#"+keyFor(cs.x0,cs.z0,cs.x1,cs.z1);
+            var reuse = prevByKey[ck];
+            if (reuse && reuse.length){ cs.openings = reuse.slice(); }
+          }
+        } catch(_eMergeOpen){ /* non-fatal */ }
       } else {
         window.__roomWallThickness = 0.0;
         if (typeof window.removeRoomPerimeterStrips === 'function') window.removeRoomPerimeterStrips();
