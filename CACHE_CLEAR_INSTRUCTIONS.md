@@ -52,7 +52,7 @@ http://localhost:8001/?nocache=1763716707
 2. Look for these messages when clicking Render:
    ```
    [setWallRenderMode] Mode changed to: solid
-   [setWallRenderMode] Window glass color set to blue: rgba(59,130,246,0.75)
+   [setWallRenderMode] Window glass color set to blue: rgba(37,99,235,0.35)
    ```
 
 3. Check Network tab - files should show:

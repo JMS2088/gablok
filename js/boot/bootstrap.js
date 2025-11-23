@@ -98,7 +98,7 @@
   }
 
   // Unified global asset version (overrides scattered per-file versions)
-  var GLOBAL_VERSION = window.__ASSET_VERSION || '20251121-7';
+  var GLOBAL_VERSION = window.__ASSET_VERSION || '20251121-9';
   function withV(path){
     // Remove any existing v= or gv= param then append unified param for hard cache bust
     try {
@@ -207,6 +207,13 @@
               essentialDone=true; 
               window.__renderingEnabled = true; // Enable rendering after essentials loaded
               window.dispatchEvent(new CustomEvent('gablok:essential-complete')); 
+              // Auto-select solid render mode once so windows/glass appear immediately
+              try {
+                if (!window.__wallRenderMode && typeof window.setWallRenderMode==='function') {
+                  window.setWallRenderMode('solid');
+                  window.__autoWallModeApplied = true;
+                }
+              } catch(_eAutoMode){}
               // Force early first frame if engine ready but renderLoop not yet kicked
               try {
                 if (!window.__firstFrameEmitted) {

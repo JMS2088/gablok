@@ -1036,7 +1036,21 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
       // Build strip representation for this level
   var sgn = (__ctx.ySign||1);
       var strips = [];
-      var __attachedOpenings = Object.create(null);
+      function buildStripRecord(wall, idx){
+        var rec = {
+          x0: (__ctx.centerX||0) + (wall.x0||0),
+          z0: (__ctx.centerZ||0) + sgn*(wall.y0||0),
+          x1: (__ctx.centerX||0) + (wall.x1||0),
+          z1: (__ctx.centerZ||0) + sgn*(wall.y1||0),
+          thickness: (wall.thickness||__plan2d.wallThicknessM||0.3),
+          height: (__plan2d.wallHeightM||3.0),
+          baseY: (targetLevel||0) * 3.5,
+          level: (targetLevel||0)
+        };
+        var ops = openingsForWall(idx);
+        if (ops.length) rec.openings = ops;
+        return rec;
+      }
       function openingsForWall(hostIdx){
         var outs = [];
         for (var ei=0; ei<elemsSrc.length; ei++){
@@ -1062,7 +1076,12 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
           var wx1 = (__ctx.centerX||0) + bx; var wz1 = (__ctx.centerZ||0) + sgn*by;
           var sill = (el.type==='window') ? ((typeof el.sillM==='number') ? el.sillM : ((__plan2d&&__plan2d.windowSillM)||1.0)) : 0;
           var hM = (typeof el.heightM==='number') ? el.heightM : ((el.type==='door') ? ((__plan2d&&__plan2d.doorHeightM)||2.04) : ((__plan2d&&__plan2d.windowHeightM)||1.5));
-          outs.push({ type: el.type, x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: (el.meta||null) });
+          var entry = { type: el.type, x0: wx0, z0: wz0, x1: wx1, z1: wz1, sillM: sill, heightM: hM, meta: (el.meta||null) };
+          if (el.type === 'window') {
+            var defaultGlass = (typeof window.__windowGlassThickness === 'number' && window.__windowGlassThickness > 0) ? window.__windowGlassThickness : 0.03;
+            entry.glassThickness = (typeof el.glassThickness === 'number' && el.glassThickness > 0) ? el.glassThickness : defaultGlass;
+          }
+          outs.push(entry);
         }
         return outs;
       }
@@ -1070,26 +1089,7 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
         var e = elemsSrc[wi]; if(!e || e.type!=='wall') continue;
         // Avoid duplicating grouped room perimeters: skip walls explicitly marked as nonroom
         if (e.wallRole === 'nonroom') continue;
-        var subs = plan2dBuildWallSubsegments(elemsSrc, wi) || [];
-        for(var si=0; si<subs.length; si++){
-          var sg = subs[si];
-          var rec = {
-            x0: (__ctx.centerX||0) + sg.ax,
-            z0: (__ctx.centerZ||0) + sgn*sg.ay,
-            x1: (__ctx.centerX||0) + sg.bx,
-            z1: (__ctx.centerZ||0) + sgn*sg.by,
-            thickness: (e.thickness||__plan2d.wallThicknessM||0.3),
-            height: (__plan2d.wallHeightM||3.0),
-            baseY: (targetLevel||0) * 3.5,
-            level: (targetLevel||0)
-          };
-          // Attach this wall's openings to the first subsegment only to avoid duplicates
-          if (!__attachedOpenings[wi]) {
-            rec.openings = openingsForWall(wi);
-            __attachedOpenings[wi] = true;
-          }
-          strips.push(rec);
-        }
+        strips.push(buildStripRecord(e, wi));
       }
   // Merge new strips with existing strips on this level and dedupe
   var keepOther = wallStrips.filter(function(ws){ return (ws.level||0)!==targetLevel; });
@@ -1097,45 +1097,39 @@ function applyPlan2DTo3D(elemsSnapshot, opts){
   // Replace per-level strips with the newly computed strips (do not merge with existing)
   // This ensures deleted 2D walls are removed from 3D instead of being preserved by merge.
   var merged = _dedupeStripsByGeom(strips);
-  // Safety: if we somehow ended up with zero strips while 2D does contain walls,
-  // rebuild strips directly from walls (ignore wallRole and intersections) so they show in 3D.
-  try {
-    var hasWalls2D = false;
-    for (var __ci=0; __ci<elemsSrc.length; __ci++){ var __ce=elemsSrc[__ci]; if(__ce && __ce.type==='wall'){ hasWalls2D=true; break; } }
-    if ((Array.isArray(merged)? merged.length:0)===0 && hasWalls2D) {
-      if (typeof console !== 'undefined' && console.warn) {
-        console.warn('[applyPlan2DTo3D] Fallback: no strips after subsegments; rebuilding from raw walls');
+  if ((!Array.isArray(merged) || merged.length===0)) {
+    try {
+      var hasWalls2D = false;
+      for (var __ci=0; __ci<elemsSrc.length; __ci++){ var __ce=elemsSrc[__ci]; if(__ce && __ce.type==='wall'){ hasWalls2D=true; break; } }
+      if (hasWalls2D) {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[applyPlan2DTo3D] Fallback: no strips built from plan segments; rebuilding from raw walls');
+        }
+        var stripsFallback = [];
+        for (var wf=0; wf<elemsSrc.length; wf++){
+          var wfe = elemsSrc[wf]; if(!wfe || wfe.type!=='wall') continue;
+          stripsFallback.push(buildStripRecord(wfe, wf));
+        }
+        merged = _dedupeStripsByGeom(stripsFallback);
+        try { window.__rtTracePush({ kind:'apply-strips-fallback', level: targetLevel, rebuilt: (Array.isArray(merged)? merged.length:0) }); } catch(_rtFB) {}
       }
-      var stripsFallback = [];
-      for (var wf=0; wf<elemsSrc.length; wf++){
-        var wfe = elemsSrc[wf]; if(!wfe || wfe.type!=='wall') continue;
-        // Map full wall endpoints (no subsegment splitting) to world
-        var recF = {
-          x0: (__ctx.centerX||0) + wfe.x0,
-          z0: (__ctx.centerZ||0) + sgn*(wfe.y0||0),
-          x1: (__ctx.centerX||0) + wfe.x1,
-          z1: (__ctx.centerZ||0) + sgn*(wfe.y1||0),
-          thickness: (wfe.thickness||__plan2d.wallThicknessM||0.3),
-          height: (__plan2d.wallHeightM||3.0),
-          baseY: (targetLevel||0) * 3.5,
-          level: (targetLevel||0)
-        };
-        // Attach this wall's openings once if present
-        try { recF.openings = openingsForWall(wf); } catch(_eOF) {}
-        stripsFallback.push(recF);
-      }
-      merged = _dedupeStripsByGeom(stripsFallback);
-      try { window.__rtTracePush({ kind:'apply-strips-fallback', level: targetLevel, rebuilt: (Array.isArray(merged)? merged.length:0) }); } catch(_rtFB) {}
-    }
-  } catch(_fb) { /* fallback best-effort */ }
+    } catch(_fb) { /* fallback best-effort */ }
+  }
   wallStrips = keepOther.concat(merged);
   // Persist strips. In nonDestructive mode (and not stripsOnly), do NOT clear current object selection.
   saveProjectSilently();
   if (!nonDestructive || stripsOnly) {
-  if (typeof window.selectObject==='function') { window.selectObject(null, { noRender:true }); }
-  else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU2) {} }
+    if (typeof window.selectObject==='function') { window.selectObject(null, { noRender:true }); }
+    else { selectedRoomId = null; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU2) {} }
   }
   selectedWallStripIndex = -1;
+  // Reassert global window glass defaults so freshly built strips render blue immediately in either mode
+  try {
+    window.__windowGlassColor = 'rgba(37,99,235,0.35)';
+    if (typeof window.__windowGlassThickness !== 'number' || window.__windowGlassThickness <= 0) {
+      window.__windowGlassThickness = 0.03;
+    }
+  } catch(_eGlassDefaults) {}
   renderLoop();
       // Fallback: in nonDestructive mode with no rooms detected, refresh openings on existing rectangular rooms
       if (nonDestructive && !stripsOnly) {

@@ -3,6 +3,15 @@
  * @description Core 3D rendering engine with orbit camera, projection, and scene management.
  */
 (function(){
+  // Ensure default window glass attributes before any render pass so openings always render as translucent blue
+  try {
+    if (typeof window.__windowGlassColor === 'undefined' || !window.__windowGlassColor) {
+      window.__windowGlassColor = 'rgba(37,99,235,0.35)';
+    }
+    if (typeof window.__windowGlassThickness !== 'number' || !(window.__windowGlassThickness > 0)) {
+      window.__windowGlassThickness = 0.03; // meters
+    }
+  } catch(_eInitGlass){}
   // ---------------------------------------------------------------------------
   // Camera defaults & orbit helpers (FIX: stabilize 3D orbit interaction)
   // ---------------------------------------------------------------------------
@@ -133,9 +142,15 @@
       // When user presses Render (solid), enable corner codes so endpoints are labeled on screen
       if (m === 'solid') { window.__showCornerCodes = true; }
       else { window.__showCornerCodes = false; }
-      // Force window glass color to blue in all modes (user requirement)
-      window.__windowGlassColor = 'rgba(59,130,246,0.75)';
-      console.log('[setWallRenderMode] Window glass color forced blue:', window.__windowGlassColor);
+      // Force window glass attributes to the design-system defaults whenever mode changes
+      window.__windowGlassColor = 'rgba(37,99,235,0.35)';
+      if (typeof window.__windowGlassThickness !== 'number' || window.__windowGlassThickness <= 0) {
+        window.__windowGlassThickness = 0.03;
+      }
+      console.log('[setWallRenderMode] Window glass defaults enforced:', {
+        color: window.__windowGlassColor,
+        thickness: window.__windowGlassThickness
+      });
       // Simplified: do not run 2D→3D applies here. Just rebuild from existing 3D state for ALL rooms/garages across floors.
       // This guarantees that pressing Render applies to ground and first floor together, without duplication or missed floors.
       if (m === 'solid') {
@@ -1378,7 +1393,8 @@
       // Build opening holes for left and right faces; also collect window glass quads (centered)
       var openings = Array.isArray(ws.openings) ? ws.openings : [];
       var stripTopY = baseY + (typeof ws.height === 'number' ? ws.height : 3.0);
-      var eps = 0.001;
+      var globalGlassThickness = (typeof window.__windowGlassThickness === 'number' && window.__windowGlassThickness > 0) ? window.__windowGlassThickness : 0.03;
+      var maxInsetForStrip = Math.max(0.001, hw - 0.001);
       // Holes for side faces (windows + doors) so only the opening rectangle is removed, leaving wall above & below.
       var leftHoles = [];
       var rightHoles = [];
@@ -1395,6 +1411,12 @@
         var defaultWinHeight = 1.5; // meters (updated requirement)
         var sill = isDoor ? 0 : (typeof op.sillM==='number' ? op.sillM : defaultWinSill);
         var oH = isDoor ? ((typeof op.heightM==='number') ? op.heightM : 2.04) : (typeof op.heightM==='number' ? op.heightM : defaultWinHeight);
+        var openingGlassThickness = globalGlassThickness;
+        if (isWindow) {
+          if (typeof op.glassThickness === 'number' && op.glassThickness > 0) openingGlassThickness = op.glassThickness;
+          else op.glassThickness = openingGlassThickness;
+        }
+        var windowInset = Math.min(Math.max(0.001, openingGlassThickness / 2), maxInsetForStrip);
         // Debug: log opening processing
         if (isWindow && window.__debugOpenings) {
           console.log('[engine3d] Window opening:', {
@@ -1405,29 +1427,35 @@
             computedHeight: oH,
             baseY: baseY,
             y0: baseY + sill,
-            y1: Math.min(baseY + sill + oH, stripTopY)
+            y1: Math.min(baseY + sill + oH, stripTopY),
+            glassThickness: openingGlassThickness
           });
         }
-        // Full-height window detection: sill==0 and height approx full strip height.
-        var fullHeightWindow = false;
+        // Enforce presence of wall segments below and above each window.
+        // If sill is extremely small (<15cm) promote to a default sill band.
+        // If window height would consume entire wall, trim to leave at least 0.25m top band.
+        var wallH = stripTopY - baseY;
+        var sillAdj = sill;
         if (isWindow) {
-          var wallH = stripTopY - baseY;
-          if (sill <= 0.02 && (oH >= wallH - 0.02 || Math.abs((sill+oH) - wallH) < 0.02)) fullHeightWindow = true;
+          if (sillAdj < 0.15) sillAdj = Math.min(0.9, Math.max(0.3, wallH * 0.3)); // adaptive but capped at 0.9m
+          if (oH > wallH - 0.30) oH = wallH - 0.30; // leave 30cm top band
+          if (oH < 0.30) oH = Math.min(1.5, wallH - 0.30); // ensure reasonable min height
         }
-        var y0 = fullHeightWindow ? baseY : (baseY + sill);
-        var y1 = Math.min(y0 + oH, stripTopY);
+        var y0 = baseY + (isWindow ? sillAdj : sill);
+        var y1 = Math.min(y0 + oH, stripTopY - (isWindow ? 0.05 : 0)); // leave tiny margin for window recess
         // endpoints along the strip (fallback to full segment if not provided)
         var x0o = (op.x0!=null? op.x0 : x0), z0o = (op.z0!=null? op.z0 : z0);
         var x1o = (op.x1!=null? op.x1 : x1), z1o = (op.z1!=null? op.z1 : z1);
         if (isDoor) {
           // Doors punch holes through side faces and get a visible overlay rectangle
-          var lx0 = x0o + nx*eps, lz0 = z0o + nz*eps;
-          var lx1 = x1o + nx*eps, lz1 = z1o + nz*eps;
+          var doorInset = Math.max(0.001, Math.min(maxInsetForStrip, globalGlassThickness));
+          var lx0 = x0o + nx*doorInset, lz0 = z0o + nz*doorInset;
+          var lx1 = x1o + nx*doorInset, lz1 = z1o + nz*doorInset;
           var lA = project3D(lx0, y0, lz0); var lB = project3D(lx1, y0, lz1);
           var lC = project3D(lx1, y1, lz1); var lD = project3D(lx0, y1, lz0);
           if (lA && lB && lC && lD) leftHoles.push([lA,lB,lC,lD]);
-          var rx0 = x0o - nx*eps, rz0 = z0o - nz*eps;
-          var rx1 = x1o - nx*eps, rz1 = z1o - nz*eps;
+          var rx0 = x0o - nx*doorInset, rz0 = z0o - nz*doorInset;
+          var rx1 = x1o - nx*doorInset, rz1 = z1o - nz*doorInset;
           var rA = project3D(rx0, y0, rz0); var rB = project3D(rx1, y0, rz1);
           var rC = project3D(rx1, y1, rz1); var rD = project3D(rx0, y1, rz0);
           if (rA && rB && rC && rD) rightHoles.push([rA,rB,rC,rD]);
@@ -1445,11 +1473,11 @@
           var gC = project3D(x1o, y1, z1o); var gD = project3D(x0o, y1, z0o);
           if (gA && gB && gC && gD) { glassRects.push([gA,gB,gC,gD]); windowFrameRects.push([gA,gB,gC,gD]); }
           // Side face hole quads
-          var wlA = project3D(x0o + nx*eps, y0, z0o + nz*eps); var wlB = project3D(x1o + nx*eps, y0, z1o + nz*eps);
-          var wlC = project3D(x1o + nx*eps, y1, z1o + nz*eps); var wlD = project3D(x0o + nx*eps, y1, z0o + nz*eps);
+          var wlA = project3D(x0o + nx*windowInset, y0, z0o + nz*windowInset); var wlB = project3D(x1o + nx*windowInset, y0, z1o + nz*windowInset);
+          var wlC = project3D(x1o + nx*windowInset, y1, z1o + nz*windowInset); var wlD = project3D(x0o + nx*windowInset, y1, z0o + nz*windowInset);
           if (wlA && wlB && wlC && wlD) leftHoles.push([wlA,wlB,wlC,wlD]);
-          var wrA = project3D(x0o - nx*eps, y0, z0o - nz*eps); var wrB = project3D(x1o - nx*eps, y0, z1o - nz*eps);
-          var wrC = project3D(x1o - nx*eps, y1, z1o - nz*eps); var wrD = project3D(x0o - nx*eps, y1, z0o - nz*eps);
+          var wrA = project3D(x0o - nx*windowInset, y0, z0o - nz*windowInset); var wrB = project3D(x1o - nx*windowInset, y0, z1o - nz*windowInset);
+          var wrC = project3D(x1o - nx*windowInset, y1, z1o - nz*windowInset); var wrD = project3D(x0o - nx*windowInset, y1, z0o - nz*windowInset);
           if (wrA && wrB && wrC && wrD) rightHoles.push([wrA,wrB,wrC,wrD]);
           // Fallback: if center glass failed due to projection clipping, synthesize from a side hole quad.
           if (!(gA && gB && gC && gD)) {
@@ -1671,9 +1699,9 @@
       }
       drawCornerLabel(pDt, 8, '8');
       // Draw translucent blue glass for windows (center plane only)
-      // Higher saturation blue for glass; configurable via window.__windowGlassColor
-      var glassFill = (window.__windowGlassColor) ? window.__windowGlassColor : 'rgba(59,130,246,0.75)';
-      var glassStroke = onLevel ? 'rgba(30,64,175,0.95)' : 'rgba(30,64,175,0.85)';
+      // Design-system translucent blue for glass; configurable via window.__windowGlassColor
+      var glassFill = (window.__windowGlassColor) ? window.__windowGlassColor : 'rgba(37,99,235,0.35)';
+      var glassStroke = onLevel ? 'rgba(29,78,216,0.80)' : 'rgba(29,78,216,0.70)';
       function drawGlassQuad(Q){
         ctx.beginPath();
         ctx.moveTo(Q[0].x,Q[0].y); ctx.lineTo(Q[1].x,Q[1].y); ctx.lineTo(Q[2].x,Q[2].y); ctx.lineTo(Q[3].x,Q[3].y); ctx.closePath();

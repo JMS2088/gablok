@@ -303,6 +303,7 @@
       try {
         window.__wallRenderMode = 'line';
         window.__windowGlassColor = null;
+        window.__windowGlassThickness = null;
       } catch (e) {}
 
       // Hide any open modals
