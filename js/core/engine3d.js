@@ -324,12 +324,18 @@
       var cx = rx*__proj.right[0] + ry*__proj.right[1] + rz*__proj.right[2];
       var cy = rx*__proj.up[0]    + ry*__proj.up[1]    + rz*__proj.up[2];
       var cz = rx*__proj.fwd[0]   + ry*__proj.fwd[1]   + rz*__proj.fwd[2];
+      var distToCam = Math.hypot(rx, ry, rz);
       // Near/behind handling:
       // - Hard cull points that are sufficiently behind the camera to avoid rendering a mirrored scene (e.g., second grid floor)
       // - Clamp points very close to the near plane to a small positive depth so nearby/inside geometry stays visible
       if (cz < -0.25) {
-        // When inside a room with solid walls, don't drop geometry behind; clamp to near plane
-        if (window.__cameraInsideSolid) { cz = 0.02; }
+        // When geometry slips just behind the camera (common while orbiting inside rooms or near freestanding walls),
+        // keep it visible by clamping shallow negatives to the near plane instead of dropping them.
+        // Allow a little more tolerance when the point is physically close to the camera so freestanding walls
+        // remain visible during tight zoom-ins (fix for "wall vanishes while zoomed inside").
+        var distClamp = Math.max(2.5, Math.min(8, (camera && camera.distance ? camera.distance * 0.35 : 4.2)));
+        var allowClamp = window.__cameraInsideSolid || window.__cameraNearWallStrip || Math.abs(cz) <= distClamp || distToCam <= distClamp;
+        if (allowClamp) { cz = 0.02; }
         else { return null; }
       }
       if (cz < 0.02) cz = 0.02;              // near plane clamp
@@ -2207,9 +2213,11 @@
         // Detect if camera is inside any room on the current floor; if so, allow close/inside wall rendering
         try {
           var inside = false;
+          var nearStrip = false;
           var cam = (__proj && __proj.cam) ? __proj.cam : [0,0,0];
           var cx = cam[0], cy = cam[1], czW = cam[2];
           var lvlNow = (typeof window.currentFloor==='number') ? window.currentFloor : 0;
+          var planCtx = (typeof __plan2d !== 'undefined' && __plan2d) ? __plan2d : null;
           function pointInPolyXZ(pts, x, z){
             var c = false; var n = (pts||[]).length; if(n<3) return false;
             for (var i=0,j=n-1; i<n; j=i++){
@@ -2237,8 +2245,38 @@
               inside = (lx>=-hw && lx<=hw && lz>=-hd && lz<=hd);
             }
           }
-          window.__cameraInsideSolid = !!inside && (window.__wallRenderMode === 'solid');
-        } catch(_insideErr) { window.__cameraInsideSolid = false; }
+          if (!inside) {
+            try {
+              var stripsCam = Array.isArray(window.wallStrips) ? window.wallStrips : [];
+              for (var si=0; si<stripsCam.length && !nearStrip; si++){
+                var wsCam = stripsCam[si]; if(!wsCam) continue; if ((wsCam.level||0)!==lvlNow) continue;
+                var baseYS = (typeof wsCam.baseY==='number') ? wsCam.baseY : ((wsCam.level||0)*3.5);
+                var hS = Math.max(0.1, (typeof wsCam.height==='number') ? wsCam.height : ((planCtx && planCtx.wallHeightM) || 3.0));
+                if (cy < baseYS - 0.10 || cy > baseYS + hS + 0.10) continue;
+                var x0s = wsCam.x0||0, z0s = wsCam.z0||0, x1s = wsCam.x1||0, z1s = wsCam.z1||0;
+                var dxs = x1s - x0s, dzs = z1s - z0s;
+                var segLenSq = dxs*dxs + dzs*dzs;
+                var tProj = 0;
+                if (segLenSq > 1e-6) {
+                  tProj = ((cx - x0s)*dxs + (czW - z0s)*dzs) / segLenSq;
+                  tProj = Math.max(0, Math.min(1, tProj));
+                }
+                var pxS = x0s + dxs * tProj;
+                var pzS = z0s + dzs * tProj;
+                var distStrip = Math.hypot(cx - pxS, czW - pzS);
+                var halfThick = Math.max(0.05, (wsCam.thickness || 0.3) * 0.5);
+                if (distStrip <= halfThick + 0.35) {
+                  nearStrip = true;
+                }
+              }
+            } catch(_stripChk) { nearStrip = false; }
+          }
+          window.__cameraNearWallStrip = !!nearStrip;
+          window.__cameraInsideSolid = (window.__wallRenderMode === 'solid') && (!!inside || !!nearStrip);
+        } catch(_insideErr) {
+          window.__cameraInsideSolid = false;
+          window.__cameraNearWallStrip = false;
+        }
 
         // Compute UI fade alpha based on recent camera/interaction activity
         try {

@@ -200,10 +200,30 @@
           }
           // Live segment to current mouse
           if(__plan2d.mouse && pts.length){
+            var lastPt = pts[pts.length-1];
             var mW = screenToWorld2D(__plan2d.mouse.x, __plan2d.mouse.y);
-            // Guide-aware snapping for live preview
-            var mS = worldToScreen2D(plan2dSnapX(mW.x), plan2dSnapY(mW.y));
-            var last = worldToScreen2D(pts[pts.length-1].x, pts[pts.length-1].y);
+            var snapX = plan2dSnapX(mW.x);
+            var snapY = plan2dSnapY(mW.y);
+            var axisLock = null;
+            if(__plan2d.shiftAxisLock){
+              axisLock = __plan2d.__chainAxisLock;
+              if(!axisLock){
+                axisLock = (Math.abs(snapX - lastPt.x) >= Math.abs(snapY - lastPt.y)) ? 'h' : 'v';
+                __plan2d.__chainAxisLock = axisLock;
+              }
+            } else {
+              if(__plan2d.__chainAxisLock) __plan2d.__chainAxisLock = null;
+            }
+            var targetX = snapX;
+            var targetY = snapY;
+            if(axisLock === 'h'){ targetY = lastPt.y; }
+            else if(axisLock === 'v'){ targetX = lastPt.x; }
+            else {
+              if(Math.abs(snapX - lastPt.x) >= Math.abs(snapY - lastPt.y)) targetY = lastPt.y;
+              else targetX = lastPt.x;
+            }
+            var mS = worldToScreen2D(targetX, targetY);
+            var last = worldToScreen2D(lastPt.x, lastPt.y);
             ctx.setLineDash([6,4]); ctx.strokeStyle = '#0ea5e9'; // sky-600
             ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(mS.x, mS.y); ctx.stroke(); ctx.setLineDash([]);
           }
@@ -319,6 +339,11 @@
           bx = hx0 + (hx1-hx0)*t1; by = hy0 + (hy1-hy0)*t1;
         }
         if(el.type==='wall'){
+          var isWallSelected = false;
+          try {
+            if (Array.isArray(__plan2d.selectedIndices) && __plan2d.selectedIndices.indexOf(i) !== -1) isWallSelected = true;
+            else if (typeof __plan2d.selectedIndex === 'number' && __plan2d.selectedIndex === i) isWallSelected = true;
+          } catch(_sel){}
           // Compute original endpoints and thickness
           var origAx = el.x0, origAy = el.y0, origBx = el.x1, origBy = el.y1;
           var wdx0 = origBx - origAx, wdy0 = origBy - origAy; var wLen0 = Math.hypot(wdx0, wdy0) || 1;
@@ -382,6 +407,7 @@
             ctx.restore();
           }
           // Convert each solid segment to world endpoints, applying flush extension only at outer ends
+          var thicknessLabelDrawn = false;
           for(var sj=0; sj<solids.length; sj++){
             var s0 = solids[sj][0], s1 = solids[sj][1];
             var sx0 = origAx + dirx * (s0 * wLen0), sy0 = origAy + diry * (s0 * wLen0);
@@ -393,6 +419,9 @@
             if(touchesEnd){   sx1 += dirx * halfW; sy1 += diry * halfW; }
             var aSeg = worldToScreen2D(sx0, sy0); var bSeg = worldToScreen2D(sx1, sy1);
             var dxs=bSeg.x-aSeg.x, dys=bSeg.y-aSeg.y; var Ls=Math.sqrt(dxs*dxs+dys*dys)||1; var nx=-dys/Ls, ny=dxs/Ls; var halfPx=(thick*__plan2d.scale)/2;
+            var midScreenX = (aSeg.x + bSeg.x) * 0.5;
+            var midScreenY = (aSeg.y + bSeg.y) * 0.5;
+            var segAngle = Math.atan2(dys, dxs);
             try { __plan2d.__frameProfile.wallSegments++; }catch(_pfws){}
             ctx.beginPath(); ctx.fillStyle='#e5e7eb'; ctx.strokeStyle='#334155'; ctx.lineWidth=__plan2d.wallStrokePx;
             ctx.moveTo(aSeg.x+nx*halfPx,aSeg.y+ny*halfPx); ctx.lineTo(bSeg.x+nx*halfPx,bSeg.y+ny*halfPx); ctx.lineTo(bSeg.x-nx*halfPx,bSeg.y-ny*halfPx); ctx.lineTo(aSeg.x-nx*halfPx,aSeg.y-ny*halfPx); ctx.closePath(); ctx.fill(); ctx.stroke();
@@ -415,8 +444,8 @@
               if(!entry){ entry = { txt: formatMeters(rounded) + ' m', w: null }; cache[rounded]=entry; try{ __plan2d.__frameProfile.measureNew++; }catch(_pfnm){} }
               else { try{ __plan2d.__frameProfile.measureHit++; }catch(_pfmh){} }
               var txt = entry.txt;
-              var midx = (aSeg.x + bSeg.x) * 0.5, midy = (aSeg.y + bSeg.y) * 0.5;
-              var angle = Math.atan2(dys, dxs);
+              var midx = midScreenX, midy = midScreenY;
+              var angle = segAngle;
               if (angle > Math.PI/2 || angle < -Math.PI/2) angle += Math.PI; // keep upright
               var pad = 6; var maxW = Math.max(10, Ls - pad*2);
               var marginY = 2; var maxH = Math.max(6, (2*halfPx) - marginY*2);
@@ -434,6 +463,56 @@
               ctx.fillStyle = '#0b1220';
               ctx.fillText(txt, 0, 0.5);
               ctx.restore();
+            })();
+            // Wall thickness callout offset from the segment to highlight 300mm width
+            (function(){
+              if(thicknessLabelDrawn) return;
+              if(!isWallSelected) return;
+              if(__plan2d.scale < 18) return;
+              if(Ls < 40) return;
+              var thicknessM = thick || __plan2d.wallThicknessM || 0.3;
+              var thicknessMm = Math.round(thicknessM * 1000);
+              if(!thicknessMm) return;
+              var label = thicknessMm + ' mm';
+              var available = Math.max(0, halfPx * 2 - 2);
+              if(available < 10) return;
+              var fontPx = Math.min(12, Math.max(6, available - 4));
+              if(fontPx < 6) return;
+              var padBox = Math.max(2, Math.min(6, (available - fontPx) / 2));
+              var boxH = fontPx + padBox * 2;
+              if(boxH > available) {
+                padBox = Math.max(2, (available - fontPx)/2);
+                boxH = fontPx + padBox*2;
+              }
+              if(boxH > available) return;
+              var maxBoxW = Math.max(18, Ls - 12);
+              ctx.save();
+              ctx.translate(midScreenX, midScreenY);
+              ctx.rotate(segAngle);
+              var fontStr = fontPx.toFixed(2).replace(/\.00$/,'') + 'px system-ui, sans-serif';
+              ctx.font = fontStr;
+              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              var tw = ctx.measureText(label).width;
+              var boxW = tw + padBox*2;
+              if(boxW > maxBoxW){
+                var scaleDown = maxBoxW / boxW;
+                if(scaleDown < 0.55){ ctx.restore(); return; }
+                fontPx *= scaleDown;
+                padBox *= scaleDown;
+                boxH *= scaleDown;
+                ctx.font = fontPx.toFixed(2).replace(/\.00$/,'') + 'px system-ui, sans-serif';
+                tw = ctx.measureText(label).width;
+                boxW = tw + padBox*2;
+              }
+              ctx.fillStyle = 'rgba(15,23,42,0.82)';
+              ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH);
+              ctx.strokeStyle = 'rgba(148,163,184,0.45)';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(-boxW/2, -boxH/2, boxW, boxH);
+              ctx.fillStyle = '#e0f2fe';
+              ctx.fillText(label, 0, 0);
+              ctx.restore();
+              thicknessLabelDrawn = true;
             })();
             // Overlay live preview keylines for pending door/window placement on this wall
             try {
@@ -551,8 +630,8 @@
                 if (scaleM >= 0.55) {
                   ctx.scale(scaleM, scaleM);
                   // Outline for contrast
-                  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(15,23,42,0.7)'; ctx.strokeText(txtM, 0, 0.5);
-                  ctx.fillStyle = '#e5e7eb';
+                  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(15,23,42,0.15)'; ctx.strokeText(txtM, 0, 0.5);
+                  ctx.fillStyle = '#111111';
                   ctx.fillText(txtM, 0, 0.5);
                   try{ __plan2d.__frameProfile.labelTexts++; }catch(_pflw){}
                 }
@@ -972,8 +1051,8 @@
                 if(scale >= 0.55){
                   ctx.scale(scale, scale);
                   // subtle outline for readability
-                  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(15,23,42,0.7)'; ctx.strokeText(txt, 0, 0.5);
-                  ctx.fillStyle = '#e5e7eb';
+                  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(15,23,42,0.15)'; ctx.strokeText(txt, 0, 0.5);
+                  ctx.fillStyle = '#111111';
                   ctx.fillText(txt, 0, 0.5);
                 }
                 ctx.restore();
@@ -1109,7 +1188,7 @@
         var lastLabelEndX = -Infinity;
         for(var iV=0;iV<(__plan2d.guidesV||[]).length;iV++){
           var xw = __plan2d.guidesV[iV]; var xs = Math.round(sx(xw)) + 0.5;
-          ox.strokeStyle = (__plan2d.selectedGuide && __plan2d.selectedGuide.dir==='v' && __plan2d.selectedGuide.index===iV) ? '#f59e0b' : 'rgba(56,189,248,0.85)';
+          ox.strokeStyle = (__plan2d.selectedGuide && __plan2d.selectedGuide.dir==='v' && __plan2d.selectedGuide.index===iV) ? '#f59e0b' : 'rgba(37,99,235,0.88)';
           ox.lineWidth = 1; ox.beginPath(); ox.moveTo(xs,0); ox.lineTo(xs,h); ox.stroke();
           // Label near top ruler: "x m" with overlap avoidance
           try {
@@ -1131,7 +1210,7 @@
         var lastLabelEndY = -Infinity;
         for(var iH=0;iH<(__plan2d.guidesH||[]).length;iH++){
           var yw = __plan2d.guidesH[iH]; var ys = Math.round(sy(yw)) + 0.5;
-          ox.strokeStyle = (__plan2d.selectedGuide && __plan2d.selectedGuide.dir==='h' && __plan2d.selectedGuide.index===iH) ? '#f59e0b' : 'rgba(56,189,248,0.85)';
+          ox.strokeStyle = (__plan2d.selectedGuide && __plan2d.selectedGuide.dir==='h' && __plan2d.selectedGuide.index===iH) ? '#f59e0b' : 'rgba(37,99,235,0.88)';
           ox.lineWidth = 1; ox.beginPath(); ox.moveTo(0,ys); ox.lineTo(w,ys); ox.stroke();
           // Label near left ruler: "y m" with overlap avoidance
           try {
@@ -1417,10 +1496,11 @@
   if (typeof window.plan2dDrawRulers !== 'function') {
     // Draw top and left rulers: adaptive ticks/labels in meters aligned to pan/zoom
     window.plan2dDrawRulers = function plan2dDrawRulers(ctxTop, ctxLeft){
-      try{
-        var c = document.getElementById('plan2d-canvas'); if(!c||!ctxTop||!ctxLeft) return;
+      try {
+        var planCanvas = document.getElementById('plan2d-canvas');
+        if (!planCanvas || !ctxTop || !ctxLeft) return;
         var dpr = window.devicePixelRatio || 1;
-        var s = Math.max(1e-6, __plan2d.scale || 50); // pixels per meter
+        var s = Math.max(1e-6, __plan2d.scale || 50); // pixels per meter on plan canvas
 
         // Reset transforms and paint white backgrounds
         ctxTop.setTransform(1,0,0,1,0,0);
@@ -1428,68 +1508,174 @@
         ctxTop.fillStyle = '#ffffff'; ctxTop.fillRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
         ctxLeft.fillStyle = '#ffffff'; ctxLeft.fillRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
 
-        // Choose a metric step such that major ticks are ~100px apart
-        function chooseStepPx(){
-          var targetPx = 100; // desired px spacing between major ticks
-          // Convert candidate world steps to px
+        var planWidth = Math.max(1, planCanvas.width || ctxTop.canvas.width);
+        var planHeight = Math.max(1, planCanvas.height || ctxLeft.canvas.height);
+        var scaleTop = ctxTop.canvas.width / planWidth;
+        var scaleLeft = ctxLeft.canvas.height / planHeight;
+
+        function planToTop(px){ return px * scaleTop; }
+        function planToLeft(py){ return py * scaleLeft; }
+
+        function chooseStepWorld(){
+          var targetPx = 100; // desired major spacing (plan pixels)
           var worldBase = targetPx / s;
           var pow = Math.pow(10, Math.floor(Math.log10(Math.max(1e-6, worldBase))));
           var steps = [1,2,5,10];
-          var bestWorld = steps[0]*pow;
-          for(var i=0;i<steps.length;i++){
-            var st = steps[i]*pow;
-            if (Math.abs(st - worldBase) < Math.abs(bestWorld - worldBase)) bestWorld = st;
+          var bestWorld = steps[0] * pow;
+          var bestDiff = Math.abs(bestWorld - worldBase);
+          for (var si = 1; si < steps.length; si++) {
+            var cand = steps[si] * pow;
+            var diff = Math.abs(cand - worldBase);
+            if (diff < bestDiff) { bestWorld = cand; bestDiff = diff; }
           }
-          return { world: bestWorld, px: bestWorld * s };
+          var minorWorld = bestWorld / 10;
+          if (!isFinite(minorWorld) || minorWorld <= 0) minorWorld = bestWorld;
+          return { majorWorld: bestWorld, minorWorld: minorWorld };
         }
-        var stepInfo = chooseStepPx();
-        var majorPx = Math.max(20, stepInfo.px);
-        var minorPx = Math.max(8, majorPx/10);
+        var stepInfo = chooseStepWorld();
+        var majorWorld = stepInfo.majorWorld;
+        var minorWorld = stepInfo.minorWorld;
+        var minorPlanPx = minorWorld * s;
+        var majorPlanPx = majorWorld * s;
 
-        // Styles: black ticks/text on white rulers
         var tickColor = '#000000';
         var textColor = '#000000';
-        var fontPx = Math.max(10, Math.round(10*dpr));
+        var fontPx = Math.max(10, Math.round(10 * dpr));
 
-        // Top ruler: x increases rightward, 0 at left edge
+        var worldLeft = screenToWorld2D(0, 0).x;
+        var worldRight = screenToWorld2D(planWidth, 0).x;
+        var worldTop = screenToWorld2D(0, 0).y;
+        var worldBottom = screenToWorld2D(0, planHeight).y;
+        var worldMinX = Math.min(worldLeft, worldRight);
+        var worldMaxX = Math.max(worldLeft, worldRight);
+        var worldMinY = Math.min(worldBottom, worldTop);
+        var worldMaxY = Math.max(worldBottom, worldTop);
+        var eps = 1e-6;
+
+        function formatRulerValue(v){
+          if (Math.abs(v) < 1e-6) v = 0;
+          if (typeof formatMeters === 'function') {
+            var txt = formatMeters(v, { decimals: 2 });
+            return txt.replace(/^-0(\.0+)?$/, '0');
+          }
+          return v.toFixed(2).replace(/^-0\.00$/, '0');
+        }
+
+        // Draw top ruler ticks
         ctxTop.save();
-        ctxTop.translate(0.5,0.5);
+        ctxTop.translate(0.5, 0.5);
         ctxTop.strokeStyle = tickColor;
         ctxTop.lineWidth = 1;
-        // Minor ticks
-        for (var x=0; x<=ctxTop.canvas.width+0.5; x+=minorPx){
-          var isMajor = (Math.abs((x/majorPx) - Math.round(x/majorPx)) < 1e-6);
-          var len = isMajor ? Math.floor(18*dpr) : Math.floor(10*dpr);
-          ctxTop.beginPath(); ctxTop.moveTo(x, ctxTop.canvas.height-1); ctxTop.lineTo(x, ctxTop.canvas.height-1-len); ctxTop.stroke();
+
+        if (minorPlanPx >= 4) {
+          var firstMinorX = Math.floor((worldMinX - eps) / minorWorld) * minorWorld;
+          var rangeMinorX = (worldMaxX - worldMinX) + minorWorld * 4;
+          var maxMinorCount = Math.min(2000, Math.ceil(rangeMinorX / Math.max(minorWorld, 1e-6)) + 4);
+          for (var mi = 0; mi < maxMinorCount; mi++) {
+            var wx = firstMinorX + mi * minorWorld;
+            if (wx > worldMaxX + minorWorld) break;
+            var ratioMajor = wx / majorWorld;
+            if (Math.abs(ratioMajor - Math.round(ratioMajor)) < 1e-5) continue;
+            var planX = worldToScreen2D(wx, 0).x;
+            var rulerX = planToTop(planX);
+            if (rulerX < -6 || rulerX > ctxTop.canvas.width + 6) continue;
+            var px = Math.round(rulerX) + 0.5;
+            var lenMinor = Math.floor(10 * dpr);
+            ctxTop.beginPath();
+            ctxTop.moveTo(px, ctxTop.canvas.height - 1);
+            ctxTop.lineTo(px, ctxTop.canvas.height - 1 - lenMinor);
+            ctxTop.stroke();
+          }
         }
-        // Major labels (meters)
+
+        var firstMajorX = Math.floor((worldMinX - eps) / majorWorld) * majorWorld;
+        var rangeMajorX = (worldMaxX - worldMinX) + majorWorld * 4;
+        var maxMajorCount = Math.min(400, Math.ceil(rangeMajorX / Math.max(majorWorld, 1e-6)) + 4);
+        for (var mx = 0; mx < maxMajorCount; mx++) {
+          var wxMajor = firstMajorX + mx * majorWorld;
+          if (wxMajor > worldMaxX + majorWorld) break;
+          var planXMajor = worldToScreen2D(wxMajor, 0).x;
+          var rulerXMajor = planToTop(planXMajor);
+          if (rulerXMajor < -6 || rulerXMajor > ctxTop.canvas.width + 6) continue;
+          var pxMajor = Math.round(rulerXMajor) + 0.5;
+          var lenMajor = Math.floor(18 * dpr);
+          ctxTop.beginPath();
+          ctxTop.moveTo(pxMajor, ctxTop.canvas.height - 1);
+          ctxTop.lineTo(pxMajor, ctxTop.canvas.height - 1 - lenMajor);
+          ctxTop.stroke();
+        }
+
         ctxTop.fillStyle = textColor;
-        ctxTop.font = fontPx+'px system-ui, sans-serif';
-        ctxTop.textAlign = 'center'; ctxTop.textBaseline = 'top';
-        for (var xL=0; xL<=ctxTop.canvas.width+0.5; xL+=majorPx){
-          var meters = (xL / s);
-          var lbl = (Math.abs(meters) < 1e-6) ? '0' : (+meters.toFixed(2)).toString().replace(/\.00$/, '');
-          ctxTop.fillText(lbl, Math.round(xL), Math.floor(2*dpr));
+        ctxTop.font = fontPx + 'px system-ui, sans-serif';
+        ctxTop.textAlign = 'center';
+        ctxTop.textBaseline = 'top';
+        for (var lx = 0; lx < maxMajorCount; lx++) {
+          var wxLabel = firstMajorX + lx * majorWorld;
+          if (wxLabel > worldMaxX + majorWorld) break;
+          var planXLabel = worldToScreen2D(wxLabel, 0).x;
+          var rulerXLabel = planToTop(planXLabel);
+          if (rulerXLabel < -6 || rulerXLabel > ctxTop.canvas.width + 6) continue;
+          var label = formatRulerValue(wxLabel);
+          ctxTop.fillText(label, Math.round(rulerXLabel), Math.floor(2 * dpr));
         }
         ctxTop.restore();
 
-        // Left ruler: y increases downward, 0 at top edge
+        // Draw left ruler ticks
         ctxLeft.save();
-        ctxLeft.translate(0.5,0.5);
+        ctxLeft.translate(0.5, 0.5);
         ctxLeft.strokeStyle = tickColor;
         ctxLeft.lineWidth = 1;
-        for (var y=0; y<=ctxLeft.canvas.height+0.5; y+=minorPx){
-          var isMajorY = (Math.abs((y/majorPx) - Math.round(y/majorPx)) < 1e-6);
-          var lenY = isMajorY ? Math.floor(18*dpr) : Math.floor(10*dpr);
-          ctxLeft.beginPath(); ctxLeft.moveTo(ctxLeft.canvas.width-1, y); ctxLeft.lineTo(ctxLeft.canvas.width-1-lenY, y); ctxLeft.stroke();
+
+        if (minorPlanPx >= 4) {
+          var firstMinorY = Math.floor((worldMinY - eps) / minorWorld) * minorWorld;
+          var rangeMinorY = (worldMaxY - worldMinY) + minorWorld * 4;
+          var maxMinorCountY = Math.min(2000, Math.ceil(rangeMinorY / Math.max(minorWorld, 1e-6)) + 4);
+          for (var miy = 0; miy < maxMinorCountY; miy++) {
+            var wy = firstMinorY + miy * minorWorld;
+            if (wy > worldMaxY + minorWorld) break;
+            var ratioMajorY = wy / majorWorld;
+            if (Math.abs(ratioMajorY - Math.round(ratioMajorY)) < 1e-5) continue;
+            var planY = worldToScreen2D(0, wy).y;
+            var rulerY = planToLeft(planY);
+            if (rulerY < -6 || rulerY > ctxLeft.canvas.height + 6) continue;
+            var py = Math.round(rulerY) + 0.5;
+            var lenMinorY = Math.floor(10 * dpr);
+            ctxLeft.beginPath();
+            ctxLeft.moveTo(ctxLeft.canvas.width - 1, py);
+            ctxLeft.lineTo(ctxLeft.canvas.width - 1 - lenMinorY, py);
+            ctxLeft.stroke();
+          }
         }
+
+        var firstMajorY = Math.floor((worldMinY - eps) / majorWorld) * majorWorld;
+        var rangeMajorY = (worldMaxY - worldMinY) + majorWorld * 4;
+        var maxMajorCountY = Math.min(400, Math.ceil(rangeMajorY / Math.max(majorWorld, 1e-6)) + 4);
+        for (var my = 0; my < maxMajorCountY; my++) {
+          var wyMajor = firstMajorY + my * majorWorld;
+          if (wyMajor > worldMaxY + majorWorld) break;
+          var planYMajor = worldToScreen2D(0, wyMajor).y;
+          var rulerYMajor = planToLeft(planYMajor);
+          if (rulerYMajor < -6 || rulerYMajor > ctxLeft.canvas.height + 6) continue;
+          var pyMajor = Math.round(rulerYMajor) + 0.5;
+          var lenMajorY = Math.floor(18 * dpr);
+          ctxLeft.beginPath();
+          ctxLeft.moveTo(ctxLeft.canvas.width - 1, pyMajor);
+          ctxLeft.lineTo(ctxLeft.canvas.width - 1 - lenMajorY, pyMajor);
+          ctxLeft.stroke();
+        }
+
         ctxLeft.fillStyle = textColor;
-        ctxLeft.font = fontPx+'px system-ui, sans-serif';
-        ctxLeft.textAlign = 'right'; ctxLeft.textBaseline = 'middle';
-        for (var yL=0; yL<=ctxLeft.canvas.height+0.5; yL+=majorPx){
-          var metersY = (yL / s);
-          var lblY = (Math.abs(metersY) < 1e-6) ? '0' : (+metersY.toFixed(2)).toString().replace(/\.00$/, '');
-          ctxLeft.fillText(lblY, ctxLeft.canvas.width - Math.floor(2*dpr), Math.round(yL));
+        ctxLeft.font = fontPx + 'px system-ui, sans-serif';
+        ctxLeft.textAlign = 'right';
+        ctxLeft.textBaseline = 'middle';
+        for (var ly = 0; ly < maxMajorCountY; ly++) {
+          var wyLabel = firstMajorY + ly * majorWorld;
+          if (wyLabel > worldMaxY + majorWorld) break;
+          var planYLabel = worldToScreen2D(0, wyLabel).y;
+          var rulerYLabel = planToLeft(planYLabel);
+          if (rulerYLabel < -6 || rulerYLabel > ctxLeft.canvas.height + 6) continue;
+          var labelY = formatRulerValue(wyLabel);
+          ctxLeft.fillText(labelY, ctxLeft.canvas.width - Math.floor(2 * dpr), Math.round(rulerYLabel));
         }
         ctxLeft.restore();
       } catch(_e) { /* non-fatal rulers */ }

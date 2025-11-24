@@ -30,7 +30,9 @@
       freezeSyncUntil:0,
       wallStrokePx:1.2,
       debug:false,
-      spacePanActive:false
+      spacePanActive:false,
+      shiftAxisLock:false,
+      __chainAxisLock:null
     };
   }
 
@@ -466,7 +468,7 @@
   __plan2d.elements.push({type:'wall',x0:ax,y0:ay,x1:bx,y1:by,thickness:__plan2d.wallThicknessM, manual:true, level:(typeof window.currentFloor==='number'? window.currentFloor:0)});
         plan2dMergeColinearWalls();
       }
-      __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false;
+      __plan2d.chainActive=false; __plan2d.chainPoints=[]; __plan2d.userDrawingActive=false; __plan2d.__chainAxisLock = null;
       plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin();
       try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_fr){}
       try{ __plan2d.freezeCenterScaleUntil = Date.now() + 600; }catch(_fz){}
@@ -480,7 +482,7 @@
   // forces a full redraw so rooms appear, and freezes view to prevent jump.
   function endWallChainSession(){
     try{
-      __plan2d.chainActive=false; __plan2d.userDrawingActive=false; __plan2d.chainPoints=[];
+      __plan2d.chainActive=false; __plan2d.userDrawingActive=false; __plan2d.chainPoints=[]; __plan2d.__chainAxisLock = null;
       plan2dAutoSnapAndJoin && plan2dAutoSnapAndJoin();
       try{ __plan2d.__incremental=false; __plan2d.dirtyRect=null; }catch(_fr){}
       try{ __plan2d.freezeCenterScaleUntil = Date.now() + 600; }catch(_fz){}
@@ -556,6 +558,39 @@
     return false;
   }
   if(typeof window.plan2dNudgeSelection!=='function') window.plan2dNudgeSelection = plan2dNudgeSelection;
+
+  function plan2dNudgeGuideByPixels(dxPx, dyPx){
+    try {
+      if(!__plan2d || !__plan2d.active) return false;
+      var guide = __plan2d.selectedGuide;
+      if(!guide) return false;
+      var scale = Math.max(1e-6, __plan2d.scale || 50);
+      var changed = false;
+      if(guide.dir === 'v'){
+        var listV = __plan2d.guidesV || [];
+        if(guide.index>=0 && guide.index<listV.length){
+          var currV = +listV[guide.index] || 0;
+          var nextV = currV + (dxPx / scale);
+          if(isFinite(nextV) && nextV !== currV){ listV[guide.index] = nextV; changed = true; }
+        }
+      } else if(guide.dir === 'h'){
+        var listH = __plan2d.guidesH || [];
+        if(guide.index>=0 && guide.index<listH.length){
+          var currH = +listH[guide.index] || 0;
+          var nextH = currH - (dyPx / scale);
+          if(isFinite(nextH) && nextH !== currH){ listH[guide.index] = nextH; changed = true; }
+        }
+      }
+      if(!changed) return false;
+      try { __plan2d.dragGuide = null; } catch(_dg){}
+      try { __plan2d.freezeCenterScaleUntil = Date.now() + 200; } catch(_fz){}
+      try { __plan2d.__incremental = false; __plan2d.dirtyRect = null; } catch(_clr){}
+      plan2dDraw();
+      plan2dEdited();
+      return true;
+    } catch(_ng) { return false; }
+  }
+  if(typeof window.plan2dNudgeGuideByPixels !== 'function') window.plan2dNudgeGuideByPixels = plan2dNudgeGuideByPixels;
 
   // Unified selection deletion entry point (used by global keyboard router)
   // Deletes, in priority order: selected guide, selected wall subsegment, selected element.
@@ -663,11 +698,11 @@
       } catch(_syncSel){}
       // Leaving Wall: clear any in-progress chain so guides don't linger
       if(prev === 'wall' && tool !== 'wall'){
-        __plan2d.chainActive = false; __plan2d.chainPoints = []; __plan2d.userDrawingActive=false;
+        __plan2d.chainActive = false; __plan2d.chainPoints = []; __plan2d.userDrawingActive=false; __plan2d.__chainAxisLock = null; __plan2d.shiftAxisLock = false;
       }
       // Entering Wall fresh: ensure clean start and show hint on first point
       if(tool === 'wall' && prev !== 'wall'){
-        __plan2d.chainActive = false; __plan2d.chainPoints = []; __plan2d.userDrawingActive=false;
+        __plan2d.chainActive = false; __plan2d.chainPoints = []; __plan2d.userDrawingActive=false; __plan2d.__chainAxisLock = null;
         __plan2d.__showWallHintNext = true; // display a small hint when the chain actually starts
       }
       plan2dCursor();
@@ -678,6 +713,8 @@
 
   // Event binding ----------------------------------------------------------
   function plan2dBind(){ var c=document.getElementById('plan2d-canvas'); if(!c) return; if(window.__plan2dResize) return; // already bound
+    __plan2d.shiftAxisLock = false;
+    __plan2d.__chainAxisLock = null;
     window.__plan2dResize = function(){
       try {
         var c=document.getElementById('plan2d-canvas');
@@ -771,11 +808,13 @@
           if(hitEnd && typeof hitEnd.index==='number'){
             var w = __plan2d.elements[hitEnd.index];
             if(w && w.type==='wall'){
+              var axis = (Math.abs(w.x1 - w.x0) >= Math.abs(w.y1 - w.y0)) ? 'h' : 'v';
               __plan2d.dragWall = {
                 index: hitEnd.index,
                 end: hitEnd.end, // 'a' or 'b'
                 other: (hitEnd.end==='a'? {x: w.x1, y: w.y1} : {x: w.x0, y: w.y0}),
-                orig: (hitEnd.end==='a'? {x: w.x0, y: w.y0} : {x: w.x1, y: w.y1})
+                orig: (hitEnd.end==='a'? {x: w.x0, y: w.y0} : {x: w.x1, y: w.y1}),
+                axis: axis
               };
               plan2dSetSelection(hitEnd.index);
               __plan2d.__didSelectOnMouseDown = true;
@@ -810,6 +849,7 @@
             }
             // Add the (potentially adjusted) endpoint for the continuing chain preview
             __plan2d.chainPoints.push({x:bx, y:by});
+            __plan2d.__chainAxisLock = null;
             // Defer auto-snap/join until chain finalize to avoid mid-chain endpoint shifts & view jumps.
             // (Final pass happens in plan2dFinalizeChain.)
           }
@@ -1051,22 +1091,24 @@
             // Previous endpoint world coords (for dirty rectangle)
             var prevX = (dw.end==='a'? w.x0 : w.x1);
             var prevY = (dw.end==='a'? w.y0 : w.y1);
-            // If Shift held, quantize direction to 45° increments
+            var axisChoice;
+            var otherX = dw.other.x, otherY = dw.other.y;
             if(ev.shiftKey){
-              var ox = dw.other.x, oy = dw.other.y;
-              var dx = nx - ox, dy = ny - oy;
-              var len = Math.hypot(dx,dy) || 0;
-              if(len > 1e-6){
-                var ang = Math.atan2(dy,dx);
-                var step = Math.PI/4; // 45°
-                var q = Math.round(ang/step)*step; // quantized angle
-                // preserve length; recompute snapped vector
-                dx = len * Math.cos(q);
-                dy = len * Math.sin(q);
-                nx = ox + dx;
-                ny = oy + dy;
+              axisChoice = dw.axis;
+              if(!axisChoice){
+                var dx0 = Math.abs((dw.orig && typeof dw.orig.x==='number' ? dw.orig.x : nx) - otherX);
+                var dy0 = Math.abs((dw.orig && typeof dw.orig.y==='number' ? dw.orig.y : ny) - otherY);
+                axisChoice = (dx0 >= dy0) ? 'h' : 'v';
+                dw.axis = axisChoice;
               }
+            } else {
+              var dxCur = Math.abs(nx - otherX);
+              var dyCur = Math.abs(ny - otherY);
+              axisChoice = (dxCur >= dyCur) ? 'h' : 'v';
+              dw.axis = axisChoice;
             }
+            if(axisChoice === 'h'){ ny = otherY; }
+            else if(axisChoice === 'v'){ nx = otherX; }
             // Grid snap ALWAYS after quantization for consistency
             nx = plan2dSnap(nx); ny = plan2dSnap(ny);
             if(dw.end==='a'){ w.x0 = nx; w.y0 = ny; } else { w.x1 = nx; w.y1 = ny; }
@@ -1198,6 +1240,7 @@
 
     // Keyboard (selection delete + chain finalize) ------------------------
   if(!window.__plan2dKeydown){ window.__plan2dKeydown=function(ev){ if(!__plan2d.active) return; 
+    if(ev.key==='Shift'){ if(!__plan2d.shiftAxisLock){ __plan2d.shiftAxisLock=true; __plan2d.__chainAxisLock=null; try{ plan2dDraw(); }catch(_sd){} } }
     // Spacebar hold => temporary pan mode (do not toggle repeatedly on auto-repeat)
     if(ev.code==='Space'){ if(!__plan2d.spacePanActive){ __plan2d.spacePanActive=true; try{ var cEl=document.getElementById('plan2d-canvas'); if(cEl) cEl.style.cursor='grab'; }catch(_){} } ev.preventDefault(); ev.stopPropagation(); }
     // Toggle performance HUD with 'P' (Shift+P toggles extended HUD)
@@ -1232,7 +1275,9 @@
 
   // Helper to toggle full-height on selected window (can be called from UI dropdown)
   try{ window.toggleSelectedWindowFullHeight = function(){ try{ if(__plan2d.selectedIndex>=0){ var sel = __plan2d.elements[__plan2d.selectedIndex]; if(sel && sel.type==='window'){ var isFull = (typeof sel.sillM==='number' && sel.sillM===0 && typeof sel.heightM==='number' && sel.heightM === (__plan2d.wallHeightM||3.0)); if(!isFull){ sel.sillM = 0; sel.heightM = (__plan2d.wallHeightM||3.0); } else { sel.sillM = (__plan2d.windowSillM||1.0); sel.heightM = (__plan2d.windowHeightM||1.5); } plan2dEdited(); plan2dDraw(); } } }catch(e){} }; }catch(_g){}
-  if(!window.__plan2dKeyup){ window.__plan2dKeyup=function(ev){ if(!__plan2d.active) return; if(ev.code==='Space'){ __plan2d.spacePanActive=false; if(__plan2d.panning){ /* end current panning gracefully */ __plan2d.panning=null; } try{ plan2dCursor && plan2dCursor(); }catch(_){} ev.preventDefault(); ev.stopPropagation(); } }; document.addEventListener('keyup', window.__plan2dKeyup, true); }
+  if(!window.__plan2dKeyup){ window.__plan2dKeyup=function(ev){ if(!__plan2d.active) return; if(ev.key==='Shift'){ if(__plan2d.shiftAxisLock){ __plan2d.shiftAxisLock=false; __plan2d.__chainAxisLock=null; try{ plan2dDraw(); }catch(_su){} } }
+    if(ev.code==='Space'){ __plan2d.spacePanActive=false; if(__plan2d.panning){ /* end current panning gracefully */ __plan2d.panning=null; } try{ plan2dCursor && plan2dCursor(); }catch(_){} ev.preventDefault(); ev.stopPropagation(); } };
+    document.addEventListener('keyup', window.__plan2dKeyup, true); }
   }
   window.plan2dBind = window.plan2dBind || plan2dBind;
 

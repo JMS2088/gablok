@@ -23,19 +23,33 @@
       // Arrow key nudging for 2D selected wall
       if (!editing && (key==='ArrowLeft'||key==='ArrowRight'||key==='ArrowUp'||key==='ArrowDown')){
         try {
-          if (window.__plan2d && __plan2d.active && typeof __plan2d.selectedIndex==='number' && __plan2d.selectedIndex>=0){
-            var els = __plan2d.elements||[]; var e = els[__plan2d.selectedIndex];
-            if (e && e.type==='wall'){
-              var base = (__plan2d.gridStep || 0.1);
-              var step = ev.shiftKey ? (base*10) : base; // 0.1m normal, 1.0m with Shift by default
-              var dx=0, dy=0;
-              if (key==='ArrowLeft') dx = -step;
-              else if (key==='ArrowRight') dx = step;
-              else if (key==='ArrowUp') dy = -step;
-              else if (key==='ArrowDown') dy = step;
-              if ((dx||dy) && typeof window.plan2dNudgeSelection==='function'){
-                var did = window.plan2dNudgeSelection(dx,dy);
-                if (did){ ev.preventDefault(); ev.stopPropagation(); return; }
+          if (window.__plan2d && __plan2d.active && __plan2d.selectedGuide && typeof window.plan2dNudgeGuideByPixels === 'function') {
+            var stepPx = ev.shiftKey ? 10 : 1;
+            var dxPx = 0, dyPx = 0;
+            if (__plan2d.selectedGuide.dir === 'v') {
+              if (key==='ArrowLeft') dxPx = -stepPx;
+              else if (key==='ArrowRight') dxPx = stepPx;
+            } else if (__plan2d.selectedGuide.dir === 'h') {
+              if (key==='ArrowUp') dyPx = -stepPx;
+              else if (key==='ArrowDown') dyPx = stepPx;
+            }
+            if ((dxPx||dyPx) && window.plan2dNudgeGuideByPixels(dxPx, dyPx)) {
+              ev.preventDefault(); ev.stopPropagation(); return;
+            }
+          }
+          if (window.__plan2d && __plan2d.active){
+            var hasSelection = (Array.isArray(__plan2d.selectedIndices) && __plan2d.selectedIndices.length>0) || (typeof __plan2d.selectedIndex==='number' && __plan2d.selectedIndex>=0);
+            if (hasSelection){
+              var scale = Math.max(1e-6, __plan2d.scale || 50);
+              var stepPxSel = ev.shiftKey ? 10 : 1;
+              var dxWorld = 0, dyWorld = 0;
+              if (key==='ArrowLeft') dxWorld = -(stepPxSel/scale);
+              else if (key==='ArrowRight') dxWorld = (stepPxSel/scale);
+              else if (key==='ArrowUp') dyWorld = (stepPxSel/scale);
+              else if (key==='ArrowDown') dyWorld = -(stepPxSel/scale);
+              if ((dxWorld||dyWorld) && typeof window.plan2dNudgeSelection==='function'){
+                var didSel = window.plan2dNudgeSelection(dxWorld, dyWorld);
+                if (didSel){ ev.preventDefault(); ev.stopPropagation(); return; }
               }
             }
           }
