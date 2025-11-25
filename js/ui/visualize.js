@@ -26,10 +26,14 @@
   var VIEW_PRESETS = [];
   var viewButtons = [];
   var skyTexture = null;
-  var REFERENCE_IMAGE_PATH = 'image-test/475.jpg';
-  var referenceTexture = null;
-  var referencePalette = null;
-  var referencePromise = null;
+  var skyGradientPalette = null;
+  var SKY_GRADIENT_PRESETS = [
+    [0xf7cfa1, 0xf5dfc6, 0xf0f5fb],
+    [0xf9c9ae, 0xf8dcc7, 0xf2f4f8],
+    [0xe5eefb, 0xeff4fb, 0xf6f8fc],
+    [0xf6d6a7, 0xf4e2c9, 0xeff4f9],
+    [0xf4d7b8, 0xefe2cf, 0xedeff6]
+  ];
   var rng = createRandomGenerator();
   var lastCanvasWidth = 0;
   var lastCanvasHeight = 0;
@@ -46,6 +50,7 @@
   })();
   var lights = [];
   var noiseTextures = Object.create(null);
+  var materialExposureCache = Object.create(null);
   var EDGE_COLORS = {
     default: 0xcbd5df,
     roof: 0xaeb4bf,
@@ -66,6 +71,15 @@
     geometry.setAttribute('uv2', geometry.attributes.uv.clone());
   }
 
+  function selectSkyPalette(){
+    if (skyGradientPalette && Array.isArray(skyGradientPalette)) return skyGradientPalette;
+    var source = (rng && typeof rng.next === 'function') ? rng.next() : Math.random();
+    var idx = Math.floor((source || 0) * SKY_GRADIENT_PRESETS.length);
+    if (!isFiniteNumber(idx) || idx < 0) idx = 0;
+    skyGradientPalette = SKY_GRADIENT_PRESETS[idx % SKY_GRADIENT_PRESETS.length] || SKY_GRADIENT_PRESETS[0];
+    return skyGradientPalette;
+  }
+
   function createSkyTexture(){
     if (skyTexture) return skyTexture;
     if (!THREE) return null;
@@ -74,18 +88,14 @@
     canvas.height = 1024;
     var ctx = canvas.getContext('2d');
     if (!ctx) return null;
-    var palette = referencePalette && Array.isArray(referencePalette.skyGradient) ? referencePalette.skyGradient : null;
+    var palette = selectSkyPalette();
     var gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    if (palette && palette.length >= 3){
-      gradient.addColorStop(0, '#' + ('000000' + palette[0].toString(16)).slice(-6));
-      gradient.addColorStop(0.45, '#' + ('000000' + palette[1].toString(16)).slice(-6));
-      gradient.addColorStop(1, '#' + ('000000' + palette[2].toString(16)).slice(-6));
-    } else {
-      gradient.addColorStop(0, '#f8c68a');
-      gradient.addColorStop(0.35, '#fbd7a6');
-      gradient.addColorStop(0.72, '#f5e5cf');
-      gradient.addColorStop(1, '#f1f4fb');
-    }
+    var topColor = palette && palette[0] != null ? palette[0] : 0xf8c68a;
+    var midColor = palette && palette[1] != null ? palette[1] : 0xf5e0c4;
+    var bottomColor = palette && palette[2] != null ? palette[2] : 0xf1f4fb;
+    gradient.addColorStop(0, '#' + ('000000' + topColor.toString(16)).slice(-6));
+    gradient.addColorStop(0.45, '#' + ('000000' + midColor.toString(16)).slice(-6));
+    gradient.addColorStop(1, '#' + ('000000' + bottomColor.toString(16)).slice(-6));
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -207,43 +217,51 @@
     };
   }
 
-    function clampColor(value){
-      return Math.max(0, Math.min(255, value));
+  function getMaterialExposureJitter(kind){
+    var key = kind || 'default';
+    if (Object.prototype.hasOwnProperty.call(materialExposureCache, key)) return materialExposureCache[key];
+    var factor = 1;
+    if (rng && typeof rng.range === 'function') {
+      factor = rng.range(0.92, 1.08);
     }
+    materialExposureCache[key] = factor;
+    return factor;
+  }
 
-    function rgbToHex(r, g, b){
-      return (clampColor(Math.round(r)) << 16) | (clampColor(Math.round(g)) << 8) | clampColor(Math.round(b));
+  function clampColor(value){
+    return Math.max(0, Math.min(255, value));
+  }
+
+  function rgbToHex(r, g, b){
+    return (clampColor(Math.round(r)) << 16) | (clampColor(Math.round(g)) << 8) | clampColor(Math.round(b));
+  }
+
+  function adjustColor(hex, exposure, tint){
+    var r = (hex >> 16) & 255;
+    var g = (hex >> 8) & 255;
+    var b = hex & 255;
+    var gain = isFiniteNumber(exposure) ? exposure : 1;
+    var tr = tint ? tint.r || 0 : 0;
+    var tg = tint ? tint.g || 0 : 0;
+    var tb = tint ? tint.b || 0 : 0;
+    return rgbToHex(r * gain + tr, g * gain + tg, b * gain + tb);
+  }
+
+  function colorLuminance(hex){
+    var r = (hex >> 16) & 255;
+    var g = (hex >> 8) & 255;
+    var b = hex & 255;
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  }
+
+  function averageLuminance(palette){
+    if (!Array.isArray(palette) || palette.length === 0) return 180;
+    var total = 0;
+    for (var i = 0; i < palette.length; i++){
+      total += colorLuminance(palette[i] || 0);
     }
-
-    function lerp(a, b, t){ return a + (b - a) * t; }
-
-    function mixColors(colorA, colorB, t){
-      var ar = (colorA >> 16) & 255;
-      var ag = (colorA >> 8) & 255;
-      var ab = colorA & 255;
-      var br = (colorB >> 16) & 255;
-      var bg = (colorB >> 8) & 255;
-      var bb = colorB & 255;
-      return rgbToHex(lerp(ar, br, t), lerp(ag, bg, t), lerp(ab, bb, t));
-    }
-
-    function adjustColor(hex, exposure, tint){
-      var r = (hex >> 16) & 255;
-      var g = (hex >> 8) & 255;
-      var b = hex & 255;
-      var gain = isFiniteNumber(exposure) ? exposure : 1;
-      var tr = tint ? tint.r || 0 : 0;
-      var tg = tint ? tint.g || 0 : 0;
-      var tb = tint ? tint.b || 0 : 0;
-      return rgbToHex(r * gain + tr, g * gain + tg, b * gain + tb);
-    }
-
-    function toHexString(color){
-      var safe = (color >>> 0) & 0xffffff;
-      var str = safe.toString(16);
-      while (str.length < 6) str = '0' + str;
-      return '#' + str;
-    }
+    return total / palette.length;
+  }
 
   function computedRoofBaseHeight(){
     try {
@@ -292,119 +310,6 @@
       loader('https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js')
     ]).then(function(){ THREE = window.THREE; fabricRef = window.fabric; });
     return libsPromise;
-  }
-
-  function extractPalette(image){
-    if (!image) return null;
-    try {
-      var canvas = document.createElement('canvas');
-      var width = Math.max(1, Math.min(256, image.naturalWidth || image.width || 256));
-      var height = Math.max(1, Math.min(256, image.naturalHeight || image.height || 256));
-      canvas.width = width;
-      canvas.height = height;
-      var ctx = canvas.getContext('2d');
-      ctx.drawImage(image, 0, 0, width, height);
-      var data = ctx.getImageData(0, 0, width, height).data;
-
-      function sampleRange(yStart, yEnd){
-        var r = 0, g = 0, b = 0, count = 0;
-        var y0 = Math.max(0, Math.floor(yStart));
-        var y1 = Math.min(height, Math.ceil(yEnd));
-        for (var y = y0; y < y1; y++){
-          for (var x = 0; x < width; x++){
-            var idx = (y * width + x) * 4;
-            var alpha = data[idx + 3] / 255;
-            if (alpha < 0.1) continue;
-            r += data[idx] * alpha;
-            g += data[idx + 1] * alpha;
-            b += data[idx + 2] * alpha;
-            count += alpha;
-          }
-        }
-        if (!count) return { r: 180, g: 190, b: 200 };
-        return { r: r / count, g: g / count, b: b / count };
-      }
-
-      var skySample = sampleRange(0, height * 0.35);
-      var midSample = sampleRange(height * 0.35, height * 0.7);
-      var groundSample = sampleRange(height * 0.7, height);
-
-      var skyHex = rgbToHex(skySample.r, skySample.g, skySample.b);
-      var midHex = rgbToHex(midSample.r, midSample.g, midSample.b);
-      var groundHex = rgbToHex(groundSample.r, groundSample.g, groundSample.b);
-
-      var skyTop = adjustColor(skyHex, 1.08, { r: 6, g: 8, b: 4 });
-      var skyMid = adjustColor(mixColors(skyHex, midHex, 0.35), 1.0, { r: 12, g: 8, b: 4 });
-      var skyBottom = adjustColor(mixColors(midHex, groundHex, 0.25), 0.95, { r: 8, g: 6, b: 2 });
-
-      var woodBase = adjustColor(mixColors(midHex, groundHex, 0.42), 0.78, { r: -6, g: -4, b: -2 });
-      var wallBase = adjustColor(mixColors(midHex, skyHex, 0.55), 1.12, { r: 5, g: 6, b: 6 });
-      var groundBase = adjustColor(groundHex, 0.96, { r: 4, g: 2, b: 2 });
-
-      var skyLuma = (0.2126 * skySample.r + 0.7152 * skySample.g + 0.0722 * skySample.b) / 255;
-      var exposure = 1.32 + (skyLuma - 0.5) * 0.35;
-
-      return {
-        skyGradient: [ skyTop, skyMid, skyBottom ],
-        woodColor: woodBase,
-        wallColor: wallBase,
-        groundColor: groundBase,
-        exposure: exposure
-      };
-    } catch(err){
-      console.warn('[Visualize] palette extraction failed', err);
-      return null;
-    }
-  }
-
-  function ensureReferenceTexture(){
-    if (referenceTexture) return Promise.resolve(referenceTexture);
-    if (referencePromise) return referencePromise;
-    if (!THREE) return Promise.resolve(null);
-    referencePromise = new Promise(function(resolve){
-      var loader = new THREE.TextureLoader();
-      loader.load(REFERENCE_IMAGE_PATH, function(tex){
-        try {
-          if (typeof tex.colorSpace !== 'undefined' && THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
-          else if (typeof tex.encoding !== 'undefined' && THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
-          tex.flipY = false;
-          tex.minFilter = THREE.LinearFilter;
-          tex.magFilter = THREE.LinearFilter;
-          tex.anisotropy = renderer && renderer.capabilities ? Math.min(renderer.capabilities.getMaxAnisotropy() || 8, 8) : 4;
-          tex.needsUpdate = true;
-        } catch(_m){}
-        referenceTexture = tex;
-        if (!referencePalette) {
-          referencePalette = extractPalette(tex.image);
-          skyTexture = null;
-        }
-        applyStagePalette();
-        resolve(referenceTexture);
-      }, undefined, function(err){
-        console.warn('[Visualize] reference texture failed to load', err);
-        resolve(null);
-      });
-    });
-    return referencePromise;
-  }
-
-  function applyReferenceBackdrop(texture, centerX, centerY, centerZ, span, bounds){
-    if (!texture || !sceneRoot || !THREE) return;
-    var image = texture.image;
-    var ratio = (image && image.width && image.height) ? (image.width / image.height) : (16/9);
-    var width = span * 6.4;
-    var height = width / ratio;
-    var backdropGeom = new THREE.PlaneGeometry(width, height, 1, 1);
-    ensureSecondaryUV(backdropGeom);
-    var backdropMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, toneMapped: false });
-    var backdrop = new THREE.Mesh(backdropGeom, backdropMat);
-    var minY = isFiniteNumber(bounds && bounds.minY) ? bounds.minY : 0;
-    var maxY = isFiniteNumber(bounds && bounds.maxY) ? bounds.maxY : (centerY + span * 0.6);
-    var midY = minY + (maxY - minY) * 0.52;
-    backdrop.position.set(centerX, midY, centerZ - span * 2.6);
-    backdrop.receiveShadow = false;
-    backdrop.castShadow = false;
-    sceneRoot.add(backdrop);
   }
 
   function ensureRenderer(){
@@ -1211,16 +1116,23 @@
     if (!stage || !wrap || !renderCanvas) return;
     var stageWidth = stage.clientWidth;
     var stageHeight = stage.clientHeight;
+    if (stageWidth <= 0 && stageHeight <= 0) {
+      wrap.style.width = '100%';
+      wrap.style.height = 'auto';
+      wrap.style.margin = 'auto';
+      return;
+    }
     var cssWidth = lastCanvasWidth;
     var cssHeight = lastCanvasHeight;
-    if (stageWidth && stageHeight) {
-      var scale = Math.min(stageWidth / lastCanvasWidth, stageHeight / lastCanvasHeight, 1);
-      if (!isFiniteNumber(scale) || scale <= 0) scale = 1;
-      cssWidth = Math.max(1, Math.round(lastCanvasWidth * scale));
-      cssHeight = Math.max(1, Math.round(lastCanvasHeight * scale));
-    }
+    var widthRatio = stageWidth > 0 ? stageWidth / lastCanvasWidth : 1;
+    var heightRatio = stageHeight > 0 ? stageHeight / lastCanvasHeight : 1;
+    var scale = Math.min(widthRatio, heightRatio, 1);
+    if (!isFiniteNumber(scale) || scale <= 0) scale = 1;
+    cssWidth = Math.max(1, Math.round(lastCanvasWidth * scale));
+    cssHeight = Math.max(1, Math.round(lastCanvasHeight * scale));
     wrap.style.width = cssWidth + 'px';
     wrap.style.height = cssHeight + 'px';
+    wrap.style.margin = 'auto';
     renderCanvas.style.width = '100%';
     renderCanvas.style.height = '100%';
     var overlay = qs(FABRIC_ID);
@@ -1233,20 +1145,6 @@
       fabricCanvas.setDimensions({ width: '100%', height: '100%' }, { cssOnly: true });
       fabricCanvas.calcOffset();
       fabricCanvas.requestRenderAll();
-    }
-  }
-
-  function applyStagePalette(){
-    var stage = qs('visualize-stage');
-    if (!stage) return;
-    if (referencePalette && Array.isArray(referencePalette.skyGradient) && referencePalette.skyGradient.length >= 3) {
-      stage.style.setProperty('--visualize-bg-0', toHexString(referencePalette.skyGradient[0]));
-      stage.style.setProperty('--visualize-bg-1', toHexString(referencePalette.skyGradient[1]));
-      stage.style.setProperty('--visualize-bg-2', toHexString(referencePalette.skyGradient[2]));
-    } else {
-      stage.style.removeProperty('--visualize-bg-0');
-      stage.style.removeProperty('--visualize-bg-1');
-      stage.style.removeProperty('--visualize-bg-2');
     }
   }
 
@@ -1358,16 +1256,9 @@
       foliage: { color: 0x5e7f4b, roughness: 0.58, metalness: 0.18, clearcoat: 0.22, clearcoatRoughness: 0.42, transmission: 0, noiseKey: 'foliage', brightness: 178, variation: 42, repeat: 3, bumpScale: 0.08, envMapIntensity: 1.8, aoMapIntensity: 0.4 }
     };
     var spec = palette[kind] || { color: 0xf2f3f5, roughness: 0.4, metalness: 0.05, clearcoat: 0.18, clearcoatRoughness: 0.35, noiseKey: 'default', brightness: 230, variation: 16, repeat: 4 };
-    if (referencePalette) {
-      if (kind === 'woodAccent' || kind === 'doorPanel' || kind === 'doorFrame') {
-        if (isFiniteNumber(referencePalette.woodColor)) spec.color = referencePalette.woodColor;
-      }
-      if (kind === 'wall' || kind === 'room' || kind === 'balcony') {
-        if (isFiniteNumber(referencePalette.wallColor)) spec.color = referencePalette.wallColor;
-      }
-      if (kind === 'groundPath' || kind === 'pergola' || kind === 'furniture') {
-        if (isFiniteNumber(referencePalette.groundColor)) spec.color = mixColors(referencePalette.groundColor, spec.color, 0.25);
-      }
+    var exposureJitter = getMaterialExposureJitter(kind);
+    if (exposureJitter !== 1) {
+      spec.color = adjustColor(spec.color, exposureJitter);
     }
     var mat = new THREE.MeshPhysicalMaterial({
       color: spec.color,
@@ -1731,18 +1622,22 @@
       var snapshot = gatherProjectSnapshot();
       var hash = computeHash(snapshot);
       if (rng && typeof rng.reseed === 'function') rng.reseed(hash);
+      materialExposureCache = Object.create(null);
+      skyTexture = null;
+      skyGradientPalette = null;
+      var skyPalette = selectSkyPalette();
       var qualitySelect = qs(QUALITY_ID);
       var multiplier = qualitySelect ? parseFloat(qualitySelect.value || '1') : 1;
       if (!isFinite(multiplier) || multiplier <= 0) multiplier = 1;
       currentQuality = multiplier;
       ensureRenderer();
-      var referenceTex = await ensureReferenceTexture();
       if (renderer && typeof renderer.toneMappingExposure === 'number') {
-        var exposureBase = (referencePalette && isFiniteNumber(referencePalette.exposure)) ? referencePalette.exposure : 1.42;
+        var lum = skyPalette && skyPalette.length ? averageLuminance(skyPalette) : 180;
+        var normalized = lum / 255;
+        var exposureBase = 1.35 + (normalized - 0.5) * 0.22;
         renderer.toneMappingExposure = exposureBase + (multiplier - 1) * 0.24;
       }
       ensureEnvironment();
-      applyStagePalette();
       disposeSceneChildren();
       var backgroundTex = createSkyTexture();
       scene.background = backgroundTex || new THREE.Color(0xf5f6f8);
@@ -1800,10 +1695,6 @@
       var groundY = buildGround(bounds, centerX, centerZ, bounds.minY, span);
       createContactShadow(centerX, centerZ, span, groundY);
       addSignatureFacade(bounds, centerX, centerY, centerZ, span);
-      if (referenceTex) {
-        applyReferenceBackdrop(referenceTex, centerX, centerY, centerZ, span, bounds);
-      }
-
       VIEW_PRESETS = buildViewPresets(centerX, centerY, centerZ, span, bounds) || [];
       if (!Array.isArray(VIEW_PRESETS) || VIEW_PRESETS.length === 0) {
         VIEW_PRESETS = buildViewPresets(centerX, centerY, centerZ, span || 8, bounds) || [];
