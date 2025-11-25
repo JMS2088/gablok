@@ -6,6 +6,13 @@ import json
 from urllib.parse import urlparse, parse_qs
 import time
 
+try:
+    from photoreal import renderer as photoreal_renderer
+    _PHOTOREAL_IMPORT_ERROR = None
+except Exception as _photoreal_err:
+    photoreal_renderer = None  # type: ignore
+    _PHOTOREAL_IMPORT_ERROR = _photoreal_err
+
 # Lightweight in-memory store for test reports
 _last_test_report = { 'msg': '', 'ts': 0 }
 # In-memory admin data: basic user registry and error log
@@ -354,6 +361,35 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             except Exception:
                 self.send_response(500)
                 self.end_headers()
+            return
+        if path == '/api/photoreal/render':
+            if not photoreal_renderer:
+                self.send_response(503)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                message = 'Photoreal renderer unavailable.'
+                if _PHOTOREAL_IMPORT_ERROR:
+                    message += f" {_PHOTOREAL_IMPORT_ERROR}"
+                self.wfile.write(json.dumps({ 'error': 'photoreal-disabled', 'message': message }).encode('utf-8'))
+                return
+            try:
+                quality = data.get('quality') if isinstance(data, dict) else None
+                try:
+                    quality_val = float(quality)
+                except Exception:
+                    quality_val = 1.0
+                payload = data if isinstance(data, dict) else {}
+                job = photoreal_renderer.create_job(payload, quality=quality_val)
+                status_code = 200 if job.get('status') != 'failed' else 502
+                self.send_response(status_code)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(job).encode('utf-8'))
+            except Exception as exc:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({ 'error': 'photoreal-render-failed', 'message': str(exc) }).encode('utf-8'))
             return
         # Fallback to default handler for other POSTs
         # Unknown POST route

@@ -660,6 +660,10 @@
   #visualize-view-grid button.active { background:#1e3a8a; color:#ffffff; border-color:rgba(30,58,138,0.85); box-shadow:0 16px 36px rgba(30,58,138,0.28); }
   #visualize-view-grid button.inactive, #visualize-view-grid button:disabled { opacity:0.4; cursor:not-allowed; box-shadow:none; transform:none; }
   .visualize-buttons { display:flex; flex-direction:column; gap:10px; }
+  .visualize-photoreal-row button { width:100%; }
+  #visualize-photoreal-status { min-height:18px; font-size:12px; color:#475569; margin:0; }
+  #visualize-photoreal-status.error { color:#b91c1c; }
+  #visualize-photoreal-status.success { color:#0f766e; }
   #visualize-controls button { width:100%; }
   .visualize-footnote { margin:0; font-size:13px; color:#475569; }
   .visualize-hint { margin:0; font-size:12px; color:#64748b; line-height:1.4; }

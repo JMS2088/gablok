@@ -12,10 +12,12 @@
   var QUALITY_ID = 'visualize-quality';
   var LOADING_ID = 'visualize-loading';
   var FOOTNOTE_ID = 'visualize-footnote';
+  var PHOTOREAL_ENDPOINT = '/api/photoreal/render';
 
   var renderer = null;
   var scene = null;
   var camera = null;
+  var composer = null;
   var fabricCanvas = null;
   var sceneRoot = null;
   var pmremGenerator = null;
@@ -30,12 +32,15 @@
   var galleryShots = [];
   var galleryShotMap = Object.create(null);
   var SKY_GRADIENT_PRESETS = [
-    // Clean architectural daylight skies - white to soft blue gradients
-    [0xffffff, 0xf8fbff, 0xe8f2ff],
-    [0xfcfcfc, 0xf5f9ff, 0xe5f0ff],
-    [0xfafafa, 0xf2f8ff, 0xe0edff],
-    [0xfefefe, 0xf6faff, 0xe8f4ff],
-    [0xfdfdfd, 0xf4f8ff, 0xe2f0ff]
+    // Photorealistic sky variations - different times and weather conditions
+    { name: 'Midday Clear', zenith: '#2B5FAB', mid: '#5B9DE8', horizon: '#FFE8C8', sun: '#FFFACD', sunX: 0.7, sunY: 0.22, exposure: 1.85, sunIntensity: 5.2, ambientIntensity: 0.45 },
+    { name: 'Morning Golden', zenith: '#4A7BC8', mid: '#87CEEB', horizon: '#FFD4 8B', sun: '#FFA54F', sunX: 0.82, sunY: 0.28, exposure: 1.65, sunIntensity: 4.0, ambientIntensity: 0.38 },
+    { name: 'Afternoon Warm', zenith: '#3B6DC7', mid: '#7AB3D8', horizon: '#FFE0B5', sun: '#FFE4B5', sunX: 0.65, sunY: 0.32, exposure: 1.75, sunIntensity: 4.5, ambientIntensity: 0.42 },
+    { name: 'Crisp Morning', zenith: '#1E4D8B', mid: '#4A7BC8', horizon: '#B8D8F0', sun: '#FFFACD', sunX: 0.75, sunY: 0.18, exposure: 1.9, sunIntensity: 5.5, ambientIntensity: 0.35 },
+    { name: 'Late Afternoon', zenith: '#5580C8', mid: '#8BB0D8', horizon: '#FFB86C', sun: '#FF9966', sunX: 0.25, sunY: 0.65, exposure: 1.55, sunIntensity: 3.8, ambientIntensity: 0.48 },
+    { name: 'Bright Overcast', zenith: '#B0C4D8', mid: '#C8D8E8', horizon: '#E0E8F0', sun: '#FFFFFF', sunX: 0.5, sunY: 0.3, exposure: 1.45, sunIntensity: 3.0, ambientIntensity: 0.55 },
+    { name: 'Perfect Blue', zenith: '#357ABD', mid: '#6BA8D8', horizon: '#D0E8FF', sun: '#FFF8E8', sunX: 0.68, sunY: 0.25, exposure: 1.8, sunIntensity: 4.8, ambientIntensity: 0.4 },
+    { name: 'Soft Daylight', zenith: '#5A8BC8', mid: '#8AB8E0', horizon: '#F0F4FF', sun: '#FFF8DC', sunX: 0.6, sunY: 0.35, exposure: 1.7, sunIntensity: 3.5, ambientIntensity: 0.5 }
   ];
   var rng = createRandomGenerator();
   var lastCanvasWidth = 0;
@@ -66,9 +71,186 @@
     accent: 0xd0d8e2
   };
 
+  function handleVisualizeError(err){
+    console.error('[Visualize] initialization failed', err);
+    var loading = qs(LOADING_ID);
+    if (loading){
+      var message = 'Unable to start renderer. Check your connection and try again.';
+      if (err && err.message) message = err.message;
+      loading.textContent = message;
+      loading.classList.add('visible');
+      window.setTimeout(function(){
+        loading.textContent = 'Generating...';
+        loading.classList.remove('visible');
+      }, 4000);
+    }
+    updateGalleryGrid('Unable to load rendering engine. Please verify you are online and retry.');
+    try {
+      if (window.updateStatus) window.updateStatus('Visualize failed: ' + (err && err.message ? err.message : 'Renderer unavailable'));
+    } catch(_s){}
+  }
+
   function qs(id){ return document.getElementById(id); }
 
   function isFiniteNumber(val){ return typeof val === 'number' && isFinite(val); }
+
+  function vectorToArray(vec){
+    if (!vec) return [0, 0, 0];
+    return [Number(vec.x) || 0, Number(vec.y) || 0, Number(vec.z) || 0];
+  }
+
+  function numberFromKeys(source, keys, fallback){
+    if (!source) return fallback || 0;
+    for (var i = 0; i < keys.length; i++){
+      var key = keys[i];
+      if (isFiniteNumber(source[key])) return Number(source[key]);
+    }
+    return fallback || 0;
+  }
+
+  function cloneFootprint(points){
+    if (!Array.isArray(points)) return null;
+    var clean = [];
+    for (var i = 0; i < points.length; i++){
+      var pt = points[i];
+      if (!pt) continue;
+      var x = isFiniteNumber(pt.x) ? Number(pt.x) : null;
+      var z = isFiniteNumber(pt.z) ? Number(pt.z) : null;
+      if (x === null || z === null) continue;
+      clean.push({ x: x, z: z });
+    }
+    return clean.length >= 3 ? clean : null;
+  }
+
+  function sanitizeCollection(list, transform){
+    var result = [];
+    if (!Array.isArray(list)) return result;
+    list.forEach(function(item){
+      var cleaned = transform ? transform(item) : item;
+      if (cleaned) result.push(cleaned);
+    });
+    return result;
+  }
+
+  function cleanBoxItem(item, kind, overrides){
+    if (!item) return null;
+    overrides = overrides || {};
+    var width = numberFromKeys(item, overrides.widthKeys || ['width','w','sizeX','lenX','length','spanX','diameter','radius','radiusX'], overrides.defaultWidth || 0);
+    var depth = numberFromKeys(item, overrides.depthKeys || ['depth','d','sizeZ','lenZ','lengthZ','spanZ','radius','radiusZ'], overrides.defaultDepth || width);
+    var height = numberFromKeys(item, overrides.heightKeys || ['height','sizeY','lenY','spanY'], overrides.defaultHeight || floorHeight);
+    var baseHeight = numberFromKeys(item, ['baseHeight','base','baseY','y'], overrides.defaultBase || 0);
+    var posX = numberFromKeys(item, ['x','cx','posX'], 0);
+    var posZ = numberFromKeys(item, ['z','cz','posZ'], 0);
+    var rotation = numberFromKeys(item, ['rotation','rot','angle'], 0);
+    var level = numberFromKeys(item, ['level','floor'], 0);
+    var footprint = cloneFootprint(item.footprint);
+    return {
+      kind: kind,
+      id: item.id || item.uuid || item.guid || item.name || null,
+      name: item.name || kind,
+      width: width,
+      depth: depth,
+      height: height,
+      baseHeight: baseHeight,
+      x: posX,
+      z: posZ,
+      level: level,
+      rotation: rotation,
+      footprint: footprint
+    };
+  }
+
+  function cleanWallStrip(strip){
+    if (!strip) return null;
+    var start = {
+      x: numberFromKeys(strip, ['x0','startX','x'], 0),
+      z: numberFromKeys(strip, ['z0','startZ','z'], 0)
+    };
+    var end = {
+      x: numberFromKeys(strip, ['x1','endX','x'], start.x),
+      z: numberFromKeys(strip, ['z1','endZ','z'], start.z)
+    };
+    var baseHeight = numberFromKeys(strip, ['baseHeight','y','base','baseY'], 0);
+    var height = numberFromKeys(strip, ['wallHeight','height'], floorHeight);
+    var thickness = numberFromKeys(strip, ['thickness','width','depth'], 0.25);
+    return {
+      id: strip.id || strip.uuid || strip.guid || null,
+      level: numberFromKeys(strip, ['level'], 0),
+      start: start,
+      end: end,
+      baseHeight: baseHeight,
+      height: height,
+      thickness: Math.max(0.05, thickness)
+    };
+  }
+
+  function sanitizeSnapshot(raw){
+    raw = raw || {};
+    return {
+      rooms: sanitizeCollection(raw.rooms, function(room){ return cleanBoxItem(room, 'room'); }),
+      wallStrips: sanitizeCollection(raw.wallStrips, cleanWallStrip),
+      pergolas: sanitizeCollection(raw.pergolas, function(item){ return cleanBoxItem(item, 'pergola'); }),
+      garages: sanitizeCollection(raw.garages, function(item){ return cleanBoxItem(item, 'garage'); }),
+      pools: sanitizeCollection(raw.pools, function(item){ return cleanBoxItem(item, 'pool', { heightKeys: ['height','depth','sizeY'], defaultHeight: 1.2 }); }),
+      roofs: sanitizeCollection(raw.roofs, function(item){ return cleanBoxItem(item, 'roof'); }),
+      balconies: sanitizeCollection(raw.balconies, function(item){ return cleanBoxItem(item, 'balcony'); }),
+      furniture: sanitizeCollection(raw.furniture, function(item){ return cleanBoxItem(item, 'furniture'); }),
+      stairs: sanitizeCollection(raw.stairs, function(item){ return cleanBoxItem(item, 'stairs'); }),
+      meta: {
+        floorHeight: floorHeight
+      }
+    };
+  }
+
+  function cameraToPayload(cam){
+    if (!cam || !THREE) return null;
+    var dir = new THREE.Vector3();
+    var target;
+    try {
+      cam.getWorldDirection(dir);
+      dir.normalize();
+      target = cam.position.clone().add(dir.multiplyScalar(5));
+    } catch(_e){
+      target = new THREE.Vector3(0, 0, -1);
+    }
+    return {
+      position: vectorToArray(cam.position),
+      target: vectorToArray(target),
+      up: vectorToArray(cam.up),
+      fov: cam.fov,
+      near: cam.near,
+      far: cam.far,
+      aspect: cam.aspect
+    };
+  }
+
+  function presetToPayload(preset){
+    if (!preset) return null;
+    return {
+      position: preset.position ? vectorToArray(preset.position) : null,
+      target: preset.target ? vectorToArray(preset.target) : null,
+      up: preset.up ? vectorToArray(preset.up) : null,
+      fov: preset.fov,
+      near: preset.near,
+      far: preset.far
+    };
+  }
+
+  function collectProjectMeta(){
+    var meta = { timestamp: Date.now() };
+    try {
+      if (window.projectName) meta.projectName = window.projectName;
+      else if (window.currentProjectName) meta.projectName = window.currentProjectName;
+    } catch(_e){}
+    try {
+      if (window.currentUser && typeof window.currentUser === 'object') meta.user = window.currentUser;
+    } catch(_u){}
+    try {
+      if (typeof window.currentFloor !== 'undefined') meta.currentFloor = window.currentFloor;
+    } catch(_f){}
+    meta.floorHeight = floorHeight;
+    return meta;
+  }
 
   function ensureSecondaryUV(geometry){
     if (!geometry || !geometry.attributes || !geometry.attributes.uv) return;
@@ -77,11 +259,12 @@
   }
 
   function selectSkyPalette(){
-    if (skyGradientPalette && Array.isArray(skyGradientPalette)) return skyGradientPalette;
+    if (skyGradientPalette && typeof skyGradientPalette === 'object') return skyGradientPalette;
     var source = (rng && typeof rng.next === 'function') ? rng.next() : Math.random();
     var idx = Math.floor((source || 0) * SKY_GRADIENT_PRESETS.length);
     if (!isFiniteNumber(idx) || idx < 0) idx = 0;
     skyGradientPalette = SKY_GRADIENT_PRESETS[idx % SKY_GRADIENT_PRESETS.length] || SKY_GRADIENT_PRESETS[0];
+    console.log('[Visualize] Sky preset:', skyGradientPalette.name);
     return skyGradientPalette;
   }
 
@@ -94,32 +277,35 @@
     var ctx = canvas.getContext('2d');
     if (!ctx) return null;
     
-    // Photorealistic outdoor sky - beautiful blue gradient
+    // Get randomized sky preset for this render
+    var preset = selectSkyPalette();
+    
+    // Photorealistic sky gradient based on preset
     var gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, '#3B7DD8');     // Rich blue at zenith
-    gradient.addColorStop(0.15, '#5B9DE8');  // Medium blue
-    gradient.addColorStop(0.35, '#87CEEB');  // Sky blue
-    gradient.addColorStop(0.55, '#B0E0E6');  // Powder blue
-    gradient.addColorStop(0.75, '#E0F0FF');  // Very light blue
-    gradient.addColorStop(0.9, '#FFF8E8');   // Warm horizon glow
-    gradient.addColorStop(1.0, '#FFE8C8');   // Warm horizon
+    gradient.addColorStop(0, preset.zenith);     // Zenith color
+    gradient.addColorStop(0.5, preset.mid);      // Mid-sky transition
+    gradient.addColorStop(1.0, preset.horizon);  // Horizon glow
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Bright sun with realistic glow
-    var sunX = canvas.width * 0.72;
-    var sunY = canvas.height * 0.22;
+    // Dynamic sun position based on preset
+    var sunX = canvas.width * preset.sunX;
+    var sunY = canvas.height * preset.sunY;
     
-    // Outer glow
-    var outerGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, canvas.height * 0.4);
-    outerGlow.addColorStop(0, 'rgba(255,255,240,0.5)');
-    outerGlow.addColorStop(0.3, 'rgba(255,250,220,0.2)');
-    outerGlow.addColorStop(1, 'rgba(255,250,200,0)');
+    // Outer atmospheric glow
+    var outerGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, canvas.height * 0.5);
+    var sunHex = preset.sun.replace('#', '');
+    var sunR = parseInt(sunHex.substr(0,2), 16);
+    var sunG = parseInt(sunHex.substr(2,2), 16);
+    var sunB = parseInt(sunHex.substr(4,2), 16);
+    outerGlow.addColorStop(0, 'rgba(' + sunR + ',' + sunG + ',' + sunB + ', 0.6)');
+    outerGlow.addColorStop(0.2, 'rgba(' + sunR + ',' + sunG + ',' + sunB + ', 0.3)');
+    outerGlow.addColorStop(1, 'rgba(255, 255, 255, 0)');
     ctx.fillStyle = outerGlow;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Inner bright sun
-    var sunGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, canvas.height * 0.08);
+    // Bright sun core
+    var sunGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, canvas.height * 0.1);
     sunGlow.addColorStop(0, 'rgba(255,255,255,1)');
     sunGlow.addColorStop(0.5, 'rgba(255,255,240,0.9)');
     sunGlow.addColorStop(1, 'rgba(255,250,220,0)');
@@ -144,9 +330,12 @@
 
     var tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    // Maximum anisotropic filtering for crisp sky
     if (renderer && renderer.capabilities) {
       var aniso = renderer.capabilities.getMaxAnisotropy && renderer.capabilities.getMaxAnisotropy();
-      if (aniso) tex.anisotropy = Math.min(aniso, 16);
+      if (aniso) tex.anisotropy = aniso; // Use maximum available
+    } else {
+      tex.anisotropy = 16; // Fallback to 16x
     }
     if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
     tex.magFilter = THREE.LinearFilter;
@@ -335,10 +524,92 @@
         } catch(err){ reject(err); }
       });
     };
-    libsPromise = Promise.all([
-      loader('https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js'),
-      loader('https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js')
-    ]).then(function(){ THREE = window.THREE; fabricRef = window.fabric; });
+
+    var staticBase = '';
+    try {
+      if (typeof window.__VISUALIZE_STATIC_BASE === 'string') {
+        staticBase = window.__VISUALIZE_STATIC_BASE.trim();
+      }
+    } catch(_s){}
+
+    function resolveLocal(path){
+      if (!path) return path;
+      if (/^(?:https?:)?\/\//i.test(path)) return path;
+      if (staticBase) {
+        return staticBase.replace(/\/$/, '') + '/' + path.replace(/^\//, '');
+      }
+      if (path.charAt(0) === '/') return path;
+      return path;
+    }
+
+    function loadEntry(entry, options){
+      options = options || {};
+      var sources = [];
+      if (Array.isArray(entry)) {
+        sources = entry.filter(Boolean).map(resolveLocal);
+      } else if (entry) {
+        sources = [resolveLocal(entry)];
+      }
+      if (!sources.length) return Promise.resolve(true);
+      var idx = 0;
+      function attempt(lastErr){
+        if (idx >= sources.length){
+          if (options.optional) {
+            console.warn('[Visualize] Optional dependency unavailable:', sources[0] || entry, lastErr && lastErr.message ? lastErr.message : lastErr);
+            return Promise.resolve(false);
+          }
+          var err = lastErr || new Error('Unable to load required Visualize dependency.');
+          err.entry = entry;
+          return Promise.reject(err);
+        }
+        var src = sources[idx++];
+        return loader(src).catch(function(err){
+          console.warn('[Visualize] Failed to load script', src, err && err.message ? err.message : err);
+          return attempt(err);
+        });
+      }
+      return attempt();
+    }
+
+    function loadSequential(entries, options){
+      options = options || {};
+      return entries.reduce(function(prev, entry){
+        return prev.then(function(){ return loadEntry(entry, options); });
+      }, Promise.resolve());
+    }
+
+    var essentialScripts = [
+      ['https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js'],
+      ['https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js']
+    ];
+
+    var optionalScripts = [
+      ['vendor/three/examples/js/postprocessing/Pass.js', 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/postprocessing/Pass.js'],
+      ['vendor/three/examples/js/postprocessing/EffectComposer.js', 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/postprocessing/EffectComposer.js'],
+      ['vendor/three/examples/js/postprocessing/RenderPass.js', 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/postprocessing/RenderPass.js'],
+      ['vendor/three/examples/js/postprocessing/ShaderPass.js', 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/postprocessing/ShaderPass.js'],
+      ['vendor/three/examples/js/shaders/CopyShader.js', 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/shaders/CopyShader.js'],
+      ['vendor/three/examples/js/shaders/LuminosityHighPassShader.js', 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/shaders/LuminosityHighPassShader.js'],
+      ['vendor/three/examples/js/postprocessing/UnrealBloomPass.js', 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/postprocessing/UnrealBloomPass.js'],
+      ['vendor/three/examples/js/shaders/SSAOShader.js', 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/shaders/SSAOShader.js'],
+      ['vendor/three/examples/js/postprocessing/SSAOPass.js', 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/js/postprocessing/SSAOPass.js']
+    ];
+
+    libsPromise = loadSequential(essentialScripts).then(function(){
+      THREE = window.THREE;
+      fabricRef = window.fabric;
+      console.log('[Visualize] Core libraries ready');
+      return loadSequential(optionalScripts, { optional: true }).then(function(){
+        if (THREE && THREE.EffectComposer) {
+          console.log('[Visualize] Post-processing extensions available');
+        } else {
+          console.warn('[Visualize] Post-processing extensions unavailable. Falling back to direct render.');
+        }
+      });
+    }).catch(function(err){
+      libsPromise = null;
+      throw err;
+    });
     return libsPromise;
   }
 
@@ -346,20 +617,28 @@
     if (renderer && scene && camera) return;
     var canvas = qs(CANVAS_ID);
     if (!canvas) return;
+
+    if (composer && typeof composer.dispose === 'function') {
+      try { composer.dispose(); } catch(_c){}
+    }
+    composer = null;
     
-    // Premium photorealistic WebGL renderer
+    // Ultra-realistic WebGL renderer with advanced settings
     renderer = new THREE.WebGLRenderer({ 
       canvas: canvas, 
       antialias: true, 
       preserveDrawingBuffer: true,
-      alpha: true,
+      alpha: false,
       powerPreference: 'high-performance',
-      stencil: false,
-      depth: true
+      stencil: true,
+      depth: true,
+      logarithmicDepthBuffer: true,
+      precision: 'highp'
     });
     
-    // Maximum quality - high DPI support
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 3));
+    // Maximum quality - 3x super-sampling for razor-sharp renders
+    var pixelRatio = Math.min(window.devicePixelRatio || 1, 3);
+    renderer.setPixelRatio(pixelRatio);
     
     // Proper color management for photorealism
     if (THREE.SRGBColorSpace) {
@@ -368,16 +647,17 @@
     
     // Clear to sky blue for outdoor scenes
     renderer.setClearColor(0x87CEEB, 1);
+    renderer.autoClear = false;
     
     // Physical lighting model
     if ('useLegacyLights' in renderer) renderer.useLegacyLights = false;
     if ('physicallyCorrectLights' in renderer) renderer.physicallyCorrectLights = true;
     
-    // Cinematic tone mapping with proper exposure
+    // Cinematic tone mapping with bright photorealistic exposure
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.4;
+    renderer.toneMappingExposure = 1.8; // Bright like reference images
     
-    // High quality soft shadows
+    // Ultra high quality soft shadows (8K resolution)
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.shadowMap.autoUpdate = true;
@@ -393,6 +673,73 @@
     
     sceneRoot = new THREE.Group();
     scene.add(sceneRoot);
+  }
+
+  function ensurePostProcessing(width, height){
+    if (!renderer || !THREE || !THREE.EffectComposer) return null;
+    var w = width || (renderer.domElement ? renderer.domElement.width : 1920) || 1920;
+    var h = height || (renderer.domElement ? renderer.domElement.height : 1080) || 1080;
+    if (!composer){
+      composer = new THREE.EffectComposer(renderer);
+      var renderPass = new THREE.RenderPass(scene, camera);
+      composer.addPass(renderPass);
+      var ssaoPass = null;
+      if (THREE.SSAOPass){
+        ssaoPass = new THREE.SSAOPass(scene, camera, w, h);
+        ssaoPass.kernelRadius = 18;
+        ssaoPass.minDistance = 0.003;
+        ssaoPass.maxDistance = 0.12;
+        composer.addPass(ssaoPass);
+      }
+      var bloomPass = null;
+      if (THREE.UnrealBloomPass){
+        bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(w, h), 0.35, 0.6, 0.85);
+        bloomPass.threshold = 0.72;
+        bloomPass.strength = 0.42;
+        bloomPass.radius = 0.85;
+        composer.addPass(bloomPass);
+      }
+      var copyPass = new THREE.ShaderPass(THREE.CopyShader);
+      copyPass.renderToScreen = true;
+      composer.addPass(copyPass);
+      composer.__renderPass = renderPass;
+      composer.__ssaoPass = ssaoPass;
+      composer.__bloomPass = bloomPass;
+      composer.__copyPass = copyPass;
+    }
+    try {
+      composer.setSize(w, h);
+      if (composer.__ssaoPass && composer.__ssaoPass.setSize) composer.__ssaoPass.setSize(w, h);
+      if (composer.__bloomPass && composer.__bloomPass.setSize) composer.__bloomPass.setSize(w, h);
+    } catch(err){
+      console.warn('[Visualize] Unable to resize composer', err);
+    }
+    return composer;
+  }
+
+  function renderSceneWithPostFX(width, height){
+    if (!renderer) return;
+    var w = width || lastCanvasWidth || (renderer.domElement ? renderer.domElement.width : 0) || 1920;
+    var h = height || lastCanvasHeight || (renderer.domElement ? renderer.domElement.height : 0) || 1080;
+    var useComposer = null;
+    try {
+      useComposer = ensurePostProcessing(w, h);
+    } catch(err){
+      console.warn('[Visualize] Post-processing unavailable, falling back to direct render', err);
+    }
+    if (useComposer){
+      if (useComposer.__renderPass){
+        useComposer.__renderPass.scene = scene;
+        useComposer.__renderPass.camera = camera;
+      }
+      if (useComposer.__ssaoPass){
+        useComposer.__ssaoPass.scene = scene;
+        useComposer.__ssaoPass.camera = camera;
+      }
+      useComposer.render();
+    } else {
+      renderer.render(scene, camera);
+    }
   }
 
   function clearLighting(){
@@ -434,22 +781,37 @@
     clearLighting();
     ensureFog(span);
     
-    // Photorealistic outdoor daylight setup
+    // Get sky preset for matched lighting
+    var preset = selectSkyPalette();
     
-    // Hemisphere light - sky blue from above, ground brown from below
-    var hemi = trackLight(new THREE.HemisphereLight(0x87CEEB, 0x8B7355, 0.6));
+    // Parse preset colors
+    var zenithColor = parseInt(preset.zenith.replace('#', ''), 16);
+    var horizonColor = parseInt(preset.horizon.replace('#', ''), 16);
+    var sunColor = parseInt(preset.sun.replace('#', ''), 16);
+    
+    // Strong hemisphere light for bright photorealistic look
+    var hemi = trackLight(new THREE.HemisphereLight(zenithColor, 0x8B7355, preset.ambientIntensity * 1.5));
     if (hemi) hemi.position.set(centerX, centerY + span * 5, centerZ);
 
-    // Soft ambient fill
-    var ambient = trackLight(new THREE.AmbientLight(0xE8F0FF, 0.3));
+    // Bright ambient fill
+    var ambient = trackLight(new THREE.AmbientLight(0xFFFFFF, preset.ambientIntensity));
 
-    // Main sun light - warm golden sunlight from upper right
-    var sun = trackLight(new THREE.DirectionalLight(0xFFFAF0, 3.5));
+    // Main sun - strong and bright
+    var sunAngleBase = (preset.sunX - 0.5) * Math.PI * 2;
+    var sunAngle = sunAngleBase;
+    var sunHeight = 3.5 + preset.sunY * 2.0;
+    var sunDist = 3.5;
+    
+    var sun = trackLight(new THREE.DirectionalLight(sunColor, preset.sunIntensity));
     if (sun) {
-      sun.position.set(centerX + span * 3, centerY + span * 4, centerZ + span * 2);
+      sun.position.set(
+        centerX + Math.cos(sunAngle) * span * sunDist,
+        centerY + span * sunHeight,
+        centerZ + Math.sin(sunAngle) * span * sunDist
+      );
       sun.castShadow = true;
       if (sun.shadow && sun.shadow.camera) {
-        sun.shadow.mapSize.set(4096, 4096);
+        sun.shadow.mapSize.set(8192, 8192);
         sun.shadow.camera.near = 0.5;
         sun.shadow.camera.far = Math.max(1000, span * 15);
         var extent = span * 4;
@@ -464,15 +826,20 @@
       sun.target.position.set(centerX, centerY, centerZ);
     }
 
-    // Sky fill light - cool blue from opposite side
-    var skyFill = trackLight(new THREE.DirectionalLight(0x87CEEB, 1.2));
+    // Sky fill light from opposite direction
+    var skyFill = trackLight(new THREE.DirectionalLight(horizonColor, preset.ambientIntensity * 2.5));
     if (skyFill) {
-      skyFill.position.set(centerX - span * 2, centerY + span * 3, centerZ - span * 2);
+      var fillAngle = sunAngle + Math.PI;
+      skyFill.position.set(
+        centerX + Math.cos(fillAngle) * span * 3, 
+        centerY + span * 3, 
+        centerZ + Math.sin(fillAngle) * span * 3
+      );
       skyFill.castShadow = false;
     }
 
-    // Ground bounce - warm reflected light
-    var bounce = trackLight(new THREE.DirectionalLight(0xE8D8C8, 0.5));
+    // Ground bounce light
+    var bounce = trackLight(new THREE.DirectionalLight(0xF0F0F0, preset.ambientIntensity * 1.5));
     if (bounce) {
       bounce.position.set(centerX, centerY - span, centerZ + span * 2);
       bounce.target.position.set(centerX, centerY + span * 0.5, centerZ);
@@ -486,7 +853,7 @@
       rim.target.position.set(centerX, centerY + span * 0.25, centerZ);
       rim.castShadow = true;
       if (rim.shadow) {
-        rim.shadow.mapSize.set(2048, 2048);
+        rim.shadow.mapSize.set(4096, 4096);
         rim.shadow.bias = -0.00012;
       }
     }
@@ -547,7 +914,7 @@
 
     var texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy() || 8, 8) : 4;
+    texture.anisotropy = renderer ? (renderer.capabilities.getMaxAnisotropy() || 16) : 16;
     var tiles = (typeof repeat === 'number' && repeat > 0) ? repeat : 4;
     texture.repeat.set(tiles, tiles);
     if (typeof texture.colorSpace !== 'undefined' && THREE.SRGBColorSpace) {
@@ -601,10 +968,11 @@
       return;
     }
     
-    // Create photorealistic HDR-style environment
+    // Professional HDR environment for photorealistic rendering
     pmremGenerator = pmremGenerator || new THREE.PMREMGenerator(renderer);
     pmremGenerator.compileEquirectangularShader();
     
+    // Create procedural HDR environment
     var studio = new THREE.Scene();
     
     // Sky dome with realistic gradient - bright blue sky
@@ -1566,11 +1934,16 @@
         var preset = VIEW_PRESETS[i];
         if (!preset) continue;
         applyPresetToCameraObject(camera, preset);
-        renderer.render(scene, camera);
+        
+        // Clear and render with maximum precision
+        renderer.clear(true, true, true);
+        renderSceneWithPostFX(canvas.width, canvas.height);
+        
         await waitForFrame();
         var dataUrl = null;
         try {
-          dataUrl = canvas.toDataURL('image/png');
+          // Capture at maximum quality
+          dataUrl = canvas.toDataURL('image/png', 1.0);
         } catch(err){
           console.warn('[Visualize] Failed to capture preset snapshot', err);
         }
@@ -1594,7 +1967,9 @@
     } finally {
       restoreCameraState(camera, originalState);
       viewIndex = originalIndex;
-      renderer.render(scene, camera);
+      var restoreWidth = canvas ? canvas.width : undefined;
+      var restoreHeight = canvas ? canvas.height : undefined;
+      renderSceneWithPostFX(restoreWidth, restoreHeight);
       syncViewButtons();
     }
     return shots;
@@ -1635,6 +2010,96 @@
       if (!galleryShots || galleryShots.length === 0){
         updateGalleryGrid('Unable to generate design images.');
       }
+    }
+  }
+
+  function setPhotorealStatus(message, kind){
+    var el = qs('visualize-photoreal-status');
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.remove('error', 'success');
+    if (kind) el.classList.add(kind);
+  }
+
+  function buildPhotorealPayload(){
+    var rawSnapshot = gatherProjectSnapshot();
+    var snapshot = sanitizeSnapshot(rawSnapshot);
+    var preset = null;
+    if (Array.isArray(VIEW_PRESETS) && VIEW_PRESETS.length){
+      var idx = Math.min(Math.max(viewIndex, 0), VIEW_PRESETS.length - 1);
+      preset = VIEW_PRESETS[idx];
+    }
+    var quality = 1;
+    var qualitySelect = qs(QUALITY_ID);
+    if (qualitySelect){
+      var selected = parseFloat(qualitySelect.value);
+      if (isFiniteNumber(selected)) quality = selected;
+    }
+    return {
+      snapshot: snapshot,
+      camera: cameraToPayload(camera),
+      view: presetToPayload(preset),
+      stage: { width: lastCanvasWidth || 0, height: lastCanvasHeight || 0 },
+      sky: skyGradientPalette || null,
+      project: collectProjectMeta(),
+      quality: quality,
+      meta: {
+        requestedAt: Date.now(),
+        presetIndex: viewIndex,
+        devicePixelRatio: window.devicePixelRatio || 1
+      }
+    };
+  }
+
+  function handlePhotorealResponse(result){
+    if (!result) return;
+    if (result.message) {
+      setPhotorealStatus(result.message, result.status === 'completed' ? 'success' : undefined);
+    }
+    if (!result.imageUrl) return;
+    var shot = {
+      id: result.jobId ? ('photoreal-' + result.jobId) : ('photoreal-' + Date.now()),
+      label: result.hasBlender ? 'Photoreal Render' : 'Photoreal Preview',
+      description: result.message || 'Server-generated photorealistic view.',
+      previewUrl: result.imageUrl,
+      fullUrl: result.imageUrl,
+      source: 'photoreal',
+      job: result
+    };
+    var list = Array.isArray(galleryShots) ? galleryShots.slice() : [];
+    list = list.filter(function(entry){ return entry && entry.id !== shot.id; });
+    list.unshift(shot);
+    setGalleryShots(list);
+    updateGalleryGrid();
+  }
+
+  async function requestPhotorealRender(){
+    var button = qs('visualize-photoreal');
+    if (button) button.disabled = true;
+    try {
+      setPhotorealStatus('Sending design to photoreal renderer...');
+      var payload = buildPhotorealPayload();
+      var response = await fetch(PHOTOREAL_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      var result = null;
+      try {
+        result = await response.json();
+      } catch(_e){}
+      if (!response.ok){
+        var errMsg = (result && result.message) || ('Photoreal request failed (' + response.status + ')');
+        throw new Error(errMsg);
+      }
+      handlePhotorealResponse(result);
+      if (!result || !result.message) {
+        setPhotorealStatus('Photoreal render ready.', 'success');
+      }
+    } catch(err){
+      setPhotorealStatus(err && err.message ? err.message : 'Unable to request photoreal render.', 'error');
+    } finally {
+      if (button) button.disabled = false;
     }
   }
 
@@ -1696,45 +2161,143 @@
 
   function materialFor(kind){
     var palette = {
-      // Photorealistic architectural materials
-      room: { color: 0xF5F5F0, roughness: 0.4, metalness: 0.0, envMapIntensity: 1.0 },
-      garage: { color: 0xE8E8E0, roughness: 0.5, metalness: 0.0, envMapIntensity: 0.8 },
-      pergola: { color: 0x8B7355, roughness: 0.6, metalness: 0.0, envMapIntensity: 0.6 },
-      pool: { color: 0x4A90D9, roughness: 0.1, metalness: 0.0, transmission: 0.6, thickness: 0.5, envMapIntensity: 1.5 },
-      roof: { color: 0x4A4A4A, roughness: 0.7, metalness: 0.2, envMapIntensity: 0.8 },
-      balcony: { color: 0xE0E0D8, roughness: 0.35, metalness: 0.0, envMapIntensity: 0.9 },
-      furniture: { color: 0xD2B48C, roughness: 0.5, metalness: 0.0, envMapIntensity: 0.7 },
-      wall: { color: 0xFAFAF5, roughness: 0.45, metalness: 0.0, envMapIntensity: 0.9 },
-      windowFrame: { color: 0x2F2F2F, roughness: 0.2, metalness: 0.8, envMapIntensity: 1.5 },
-      doorFrame: { color: 0x3A3A3A, roughness: 0.25, metalness: 0.6, envMapIntensity: 1.2 },
-      doorPanel: { color: 0x6B4423, roughness: 0.4, metalness: 0.1, envMapIntensity: 0.8 },
-      glass: { color: 0xE8F4FF, roughness: 0.05, metalness: 0.0, transmission: 0.9, thickness: 0.1, transparent: true, opacity: 0.3, envMapIntensity: 2.0, ior: 1.5 },
-      accentPanel: { color: 0xE8E8E0, roughness: 0.3, metalness: 0.1, envMapIntensity: 1.0 },
-      groundPath: { color: 0xC0C0B8, roughness: 0.6, metalness: 0.05, envMapIntensity: 0.6 },
-      woodAccent: { color: 0x5D4037, roughness: 0.5, metalness: 0.0, envMapIntensity: 0.7 },
-      boulder: { color: 0x808075, roughness: 0.85, metalness: 0.0, envMapIntensity: 0.5 },
-      foliage: { color: 0x4A7A4A, roughness: 0.8, metalness: 0.0, envMapIntensity: 0.4 }
+      // Clean, bright materials for photorealistic renders
+      room: { 
+        color: 0xFFFFFF, 
+        roughness: 0.15, 
+        metalness: 0.0, 
+        envMapIntensity: 2.5,
+        clearcoat: 0.4, 
+        clearcoatRoughness: 0.1
+      },
+      garage: { 
+        color: 0xF0F0E8, 
+        roughness: 0.25, 
+        metalness: 0.0, 
+        envMapIntensity: 2.0,
+        clearcoat: 0.2,
+        clearcoatRoughness: 0.2
+      },
+      pergola: { 
+        color: 0x9B8568, 
+        roughness: 0.5, 
+        metalness: 0.0, 
+        envMapIntensity: 1.5
+      },
+      pool: { 
+        color: 0x0080C8, 
+        roughness: 0.01, 
+        metalness: 0.0, 
+        transmission: 0.96, 
+        thickness: 2.0, 
+        envMapIntensity: 5.0, 
+        ior: 1.333, 
+        clearcoat: 1.0, 
+        clearcoatRoughness: 0.01,
+        transparent: true,
+        opacity: 0.3
+      },
+      roof: { 
+        color: 0x3A3A3A, 
+        roughness: 0.4, 
+        metalness: 0.3, 
+        envMapIntensity: 2.0,
+        clearcoat: 0.3,
+        clearcoatRoughness: 0.2
+      },
+      balcony: { 
+        color: 0xFFFFFF, 
+        roughness: 0.2, 
+        metalness: 0.0, 
+        envMapIntensity: 2.2,
+        clearcoat: 0.3, 
+        clearcoatRoughness: 0.15
+      },
+      furniture: { 
+        color: 0xC8B896, 
+        roughness: 0.4, 
+        metalness: 0.0, 
+        envMapIntensity: 1.6
+      },
+      wall: { 
+        color: 0xFFFFFF, 
+        roughness: 0.2, 
+        metalness: 0.0, 
+        envMapIntensity: 2.0,
+        clearcoat: 0.25, 
+        clearcoatRoughness: 0.2
+      },
+      roof: { 
+        color: 0x2A2A2A, 
+        roughness: 0.45, 
+        metalness: 0.25, 
+        envMapIntensity: 1.8, 
+        needsTexture: true,
+        clearcoat: 0.2,
+        clearcoatRoughness: 0.3 
+      },
+      balcony: { 
+        color: 0xF0F0E8, 
+        roughness: 0.22, 
+        metalness: 0.0, 
+        envMapIntensity: 1.9, 
+        needsTexture: true, 
+        clearcoat: 0.28, 
+        clearcoatRoughness: 0.18,
+        reflectivity: 0.5
+      },
+      furniture: { 
+        color: 0xC8B087, 
+        roughness: 0.42, 
+        metalness: 0.0, 
+        envMapIntensity: 1.3, 
+        needsTexture: true,
+        sheen: 0.15,
+        sheenColor: 0xE8D8C8
+      },
+      wall: { 
+        color: 0xFFFFFD, 
+        roughness: 0.25, 
+        metalness: 0.0, 
+        envMapIntensity: 1.6, 
+        needsTexture: true, 
+        clearcoat: 0.18, 
+        clearcoatRoughness: 0.28,
+        reflectivity: 0.4,
+        sheen: 0.1,
+        sheenColor: 0xFFFFFF
+      },
+      windowFrame: { color: 0x2A2A2A, roughness: 0.1, metalness: 0.95, envMapIntensity: 2.5, clearcoat: 0.6, clearcoatRoughness: 0.05 },
+      doorFrame: { color: 0x333333, roughness: 0.15, metalness: 0.9, envMapIntensity: 2.2, clearcoat: 0.5, clearcoatRoughness: 0.1 },
+      doorPanel: { color: 0x704830, roughness: 0.35, metalness: 0.0, envMapIntensity: 1.4 },
+      glass: { color: 0xE8F4FF, roughness: 0.01, metalness: 0.0, transmission: 0.96, thickness: 0.1, transparent: true, opacity: 0.1, envMapIntensity: 3.0, ior: 1.52, clearcoat: 1.0, clearcoatRoughness: 0.01 },
+      accentPanel: { color: 0xF0F0E8, roughness: 0.25, metalness: 0.0, envMapIntensity: 1.8 },
+      groundPath: { color: 0xC0C0B8, roughness: 0.6, metalness: 0.0, envMapIntensity: 1.0 },
+      woodAccent: { color: 0x6B5840, roughness: 0.5, metalness: 0.0, envMapIntensity: 1.2 },
+      boulder: { color: 0x808078, roughness: 0.85, metalness: 0.0, envMapIntensity: 0.8 },
+      foliage: { color: 0x5A8A5A, roughness: 0.8, metalness: 0.0, envMapIntensity: 0.7 }
     };
-    var spec = palette[kind] || { color: 0xE0E0D8, roughness: 0.5, metalness: 0.0, envMapIntensity: 0.8 };
+    var spec = palette[kind] || { color: 0xF0F0F0, roughness: 0.3, metalness: 0.0, envMapIntensity: 1.5 };
     
-    var mat = new THREE.MeshStandardMaterial({
+    // Use MeshPhysicalMaterial for clean photorealistic rendering
+    var mat = new THREE.MeshPhysicalMaterial({
       color: spec.color,
       roughness: spec.roughness,
-      metalness: spec.metalness
+      metalness: spec.metalness,
+      envMapIntensity: spec.envMapIntensity || 1.0
     });
-    mat.envMapIntensity = spec.envMapIntensity || 1.0;
+    
+    // Add clearcoat for glossy surfaces
+    if (spec.clearcoat) {
+      mat.clearcoat = spec.clearcoat;
+      mat.clearcoatRoughness = spec.clearcoatRoughness || 0.1;
+    }
     
     // Handle transmission for glass/water
     if (spec.transmission) {
-      mat = new THREE.MeshPhysicalMaterial({
-        color: spec.color,
-        roughness: spec.roughness,
-        metalness: spec.metalness,
-        transmission: spec.transmission,
-        thickness: spec.thickness || 0.1,
-        ior: spec.ior || 1.45,
-        envMapIntensity: spec.envMapIntensity || 1.0
-      });
+      mat.transmission = spec.transmission;
+      mat.thickness = spec.thickness || 0.1;
+      mat.ior = spec.ior || 1.45;
     }
     
     if (typeof spec.opacity === 'number') {
@@ -1742,6 +2305,18 @@
       mat.transparent = true;
     }
     if (spec.transparent) mat.transparent = true;
+    
+    // Add procedural texture for materials that need it
+    if (spec.needsTexture) {
+      var texBrightness = kind === 'wall' ? 252 : (kind === 'room' ? 250 : 230);
+      var texVariation = kind === 'wall' ? 4 : (kind === 'room' ? 6 : 15);
+      var tex = noiseTexture(kind, texBrightness, texVariation, 6);
+      if (tex) {
+        mat.map = tex;
+        mat.roughnessMap = tex;
+      }
+    }
+    
     mat.needsUpdate = true;
     return mat;
   }
@@ -1764,94 +2339,106 @@
     }
     var footprint = Math.max(dx, dz, span);
     var groundY = (typeof baseY === 'number') ? baseY : 0;
-    
-    // Photorealistic grass/ground with proper shading
-    var groundSize = footprint * 5;
-    var floorGeom = new THREE.PlaneGeometry(groundSize, groundSize, 32, 32);
-    ensureSecondaryUV(floorGeom);
-    
-    // Create grass texture
-    var grassCanvas = document.createElement('canvas');
-    grassCanvas.width = 1024;
-    grassCanvas.height = 1024;
-    var grassCtx = grassCanvas.getContext('2d');
-    
-    // Base grass color with variation
-    var grassGrad = grassCtx.createRadialGradient(512, 512, 0, 512, 512, 700);
-    grassGrad.addColorStop(0, '#4A7A4A');   // Rich green center
-    grassGrad.addColorStop(0.5, '#5A8A5A'); // Medium green
-    grassGrad.addColorStop(1, '#4A6A4A');   // Darker edges
-    grassCtx.fillStyle = grassGrad;
-    grassCtx.fillRect(0, 0, 1024, 1024);
-    
-    // Add noise/texture
-    var imageData = grassCtx.getImageData(0, 0, 1024, 1024);
-    var data = imageData.data;
-    for (var i = 0; i < data.length; i += 4) {
-      var noise = (Math.random() - 0.5) * 30;
-      data[i] = Math.max(0, Math.min(255, data[i] + noise));
-      data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise * 1.2));
-      data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise * 0.5));
-    }
-    grassCtx.putImageData(imageData, 0, 0);
-    
-    var grassTex = new THREE.CanvasTexture(grassCanvas);
-    grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
-    grassTex.repeat.set(groundSize / 8, groundSize / 8);
-    if (THREE.SRGBColorSpace) grassTex.colorSpace = THREE.SRGBColorSpace;
-    
-    var floorMat = new THREE.MeshStandardMaterial({ 
-      map: grassTex,
-      roughness: 0.9, 
-      metalness: 0.0,
-      envMapIntensity: 0.5
-    });
-    var floor = new THREE.Mesh(floorGeom, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.set(centerX, groundY - 0.02, centerZ);
-    floor.receiveShadow = true;
-    registerMesh(floor, { castShadow: false, receiveShadow: true, skipEdges: true });
-    
-    // Add a subtle concrete/paved area around the building
-    var pavingSize = footprint * 1.5;
-    var pavingGeom = new THREE.PlaneGeometry(pavingSize, pavingSize, 1, 1);
-    ensureSecondaryUV(pavingGeom);
-    
-    var pavingCanvas = document.createElement('canvas');
-    pavingCanvas.width = 512;
-    pavingCanvas.height = 512;
-    var pavingCtx = pavingCanvas.getContext('2d');
-    pavingCtx.fillStyle = '#C8C8C0';
-    pavingCtx.fillRect(0, 0, 512, 512);
-    // Add subtle texture
-    for (var j = 0; j < 512 * 512; j++) {
-      if (Math.random() > 0.97) {
-        pavingCtx.fillStyle = 'rgba(0,0,0,0.05)';
-        pavingCtx.fillRect((j % 512), Math.floor(j / 512), 2, 2);
+    var padSize = Math.max(footprint * 4, 32);
+
+    function makeConcreteTexture(width, height, toneA, toneB){
+      var canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      var ctx = canvas.getContext('2d');
+      var gradient = ctx.createLinearGradient(0, 0, width, height);
+      gradient.addColorStop(0, toneA);
+      gradient.addColorStop(1, toneB);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, width, height);
+      var id = ctx.getImageData(0, 0, width, height);
+      for (var i = 0; i < id.data.length; i += 4){
+        var n = (Math.random() - 0.5) * 6;
+        id.data[i] = Math.max(0, Math.min(255, id.data[i] + n));
+        id.data[i + 1] = Math.max(0, Math.min(255, id.data[i + 1] + n * 0.6));
+        id.data[i + 2] = Math.max(0, Math.min(255, id.data[i + 2] + n * 0.3));
       }
+      ctx.putImageData(id, 0, 0);
+      ctx.strokeStyle = 'rgba(40,40,40,0.04)';
+      ctx.lineWidth = 1;
+      for (var r = 0; r < 6; r++){
+        ctx.beginPath();
+        var y = (r + 1) * (height / 7);
+        ctx.moveTo(0, y + Math.random() * 4 - 2);
+        ctx.lineTo(width, y + Math.random() * 4 - 2);
+        ctx.stroke();
+      }
+      return canvas;
     }
-    
-    var pavingTex = new THREE.CanvasTexture(pavingCanvas);
-    pavingTex.wrapS = pavingTex.wrapT = THREE.RepeatWrapping;
-    pavingTex.repeat.set(pavingSize / 4, pavingSize / 4);
-    if (THREE.SRGBColorSpace) pavingTex.colorSpace = THREE.SRGBColorSpace;
-    
-    var pavingMat = new THREE.MeshStandardMaterial({
-      map: pavingTex,
-      roughness: 0.7,
-      metalness: 0.1,
-      envMapIntensity: 0.8
+
+    var baseCanvas = makeConcreteTexture(1024, 1024, '#dcd5cb', '#cfc9c0');
+    var baseTex = new THREE.CanvasTexture(baseCanvas);
+    baseTex.wrapS = baseTex.wrapT = THREE.RepeatWrapping;
+    baseTex.repeat.set(padSize / 12, padSize / 12);
+    baseTex.anisotropy = renderer ? (renderer.capabilities.getMaxAnisotropy() || 16) : 16;
+    baseTex.minFilter = THREE.LinearMipmapLinearFilter;
+    baseTex.magFilter = THREE.LinearFilter;
+    baseTex.generateMipmaps = true;
+    if (THREE.SRGBColorSpace) baseTex.colorSpace = THREE.SRGBColorSpace;
+
+    var padGeom = new THREE.PlaneGeometry(padSize, padSize, 1, 1);
+    ensureSecondaryUV(padGeom);
+    var padMat = new THREE.MeshStandardMaterial({
+      map: baseTex,
+      roughness: 0.85,
+      metalness: 0.05,
+      envMapIntensity: 0.6
     });
-    var paving = new THREE.Mesh(pavingGeom, pavingMat);
-    paving.rotation.x = -Math.PI / 2;
-    paving.position.set(centerX, groundY - 0.01, centerZ);
-    paving.receiveShadow = true;
-    registerMesh(paving, { castShadow: false, receiveShadow: true, skipEdges: true });
+    var pad = new THREE.Mesh(padGeom, padMat);
+    pad.rotation.x = -Math.PI / 2;
+    pad.position.set(centerX, groundY - 0.02, centerZ);
+    pad.receiveShadow = true;
+    registerMesh(pad, { castShadow: false, receiveShadow: true, skipEdges: true });
+
+    var deckSizeX = footprint * 1.6;
+    var deckSizeZ = footprint * 1.1;
+    var deckGeom = new THREE.PlaneGeometry(deckSizeX, deckSizeZ, 1, 1);
+    ensureSecondaryUV(deckGeom);
+    var deckCanvas = document.createElement('canvas');
+    deckCanvas.width = 512;
+    deckCanvas.height = 512;
+    var deckCtx = deckCanvas.getContext('2d');
+    deckCtx.fillStyle = '#b9afa3';
+    deckCtx.fillRect(0, 0, 512, 512);
+    deckCtx.strokeStyle = 'rgba(80,70,60,0.15)';
+    deckCtx.lineWidth = 2;
+    for (var c = 0; c < 16; c++){
+      var x = c * (512 / 16);
+      deckCtx.beginPath();
+      deckCtx.moveTo(x + 1, 0);
+      deckCtx.lineTo(x + 1, 512);
+      deckCtx.stroke();
+    }
+    var deckTex = new THREE.CanvasTexture(deckCanvas);
+    deckTex.wrapS = deckTex.wrapT = THREE.RepeatWrapping;
+    deckTex.repeat.set(deckSizeX / 6, deckSizeZ / 6);
+    deckTex.anisotropy = renderer ? (renderer.capabilities.getMaxAnisotropy() || 16) : 16;
+    deckTex.minFilter = THREE.LinearMipmapLinearFilter;
+    deckTex.magFilter = THREE.LinearFilter;
+    deckTex.generateMipmaps = true;
+    if (THREE.SRGBColorSpace) deckTex.colorSpace = THREE.SRGBColorSpace;
+
+    var deckMat = new THREE.MeshStandardMaterial({
+      map: deckTex,
+      roughness: 0.65,
+      metalness: 0.08,
+      envMapIntensity: 0.75
+    });
+    var deck = new THREE.Mesh(deckGeom, deckMat);
+    deck.rotation.x = -Math.PI / 2;
+    deck.position.set(centerX, groundY - 0.01, centerZ);
+    deck.receiveShadow = true;
+    registerMesh(deck, { castShadow: false, receiveShadow: true, skipEdges: true });
 
     return groundY;
   }
 
-  function buildViewPresets(centerX, centerY, centerZ, span, bounds){
+  function buildViewPresets(centerX, centerY, centerZ, span, bounds, focus){
     if (!THREE) return [];
     var presets = [];
     var safeSpan = Math.max(6, span || 6);
@@ -1859,26 +2446,31 @@
     var minY = (bounds && isFiniteNumber(bounds.minY)) ? bounds.minY : 0;
     var heightSpan = Math.max(2.6, maxY - minY);
     var radius = Math.max(8, safeSpan * 1.92);
-    var baseTargetY = minY + heightSpan * 0.55;
+    var focusX = (focus && isFiniteNumber(focus.x)) ? focus.x : centerX;
+    var focusZ = (focus && isFiniteNumber(focus.z)) ? focus.z : centerZ;
+    var focusY = (focus && isFiniteNumber(focus.y)) ? focus.y : (minY + heightSpan * 0.55);
+    var orbitX = focusX;
+    var orbitZ = focusZ;
+    var orbitY = centerY;
 
     function pushPreset(angleDeg, options){
       var opts = options || {};
       var heightFactor = (opts.heightFactor != null) ? opts.heightFactor : 0.5;
       var distanceFactor = (opts.distanceFactor != null) ? opts.distanceFactor : 1.75;
       var tiltOffset = opts.tiltOffset != null ? opts.tiltOffset : 0;
-      var fov = opts.fov || 44;
+      var fov = opts.fov || 42;
       var rad = angleDeg * Math.PI / 180;
       var dist = radius * distanceFactor;
-      var yPos = minY + Math.max(safeSpan * 0.3, heightSpan * heightFactor);
+      var yPos = Math.max(minY + Math.max(safeSpan * 0.3, heightSpan * heightFactor), orbitY);
       var pos = new THREE.Vector3(
-        centerX + Math.cos(rad) * dist,
+        orbitX + Math.cos(rad) * dist,
         yPos,
-        centerZ + Math.sin(rad) * dist
+        orbitZ + Math.sin(rad) * dist
       );
       var target = new THREE.Vector3(
-        centerX + (opts.targetOffsetX || 0) * safeSpan,
-        baseTargetY + heightSpan * tiltOffset,
-        centerZ + (opts.targetOffsetZ || 0) * safeSpan
+        focusX + (opts.targetOffsetX || 0) * safeSpan,
+        focusY + heightSpan * tiltOffset,
+        focusZ + (opts.targetOffsetZ || 0) * safeSpan
       );
       presets.push({
         position: pos,
@@ -1890,17 +2482,19 @@
       });
     }
 
-    // Cinematic architectural photography angles
-    // Front 3/4 view - hero shot
-    pushPreset(35, { heightFactor: 0.5, distanceFactor: 2.0, tiltOffset: 0, fov: 50 });
-    // Opposite 3/4 view
-    pushPreset(-35, { heightFactor: 0.5, distanceFactor: 2.0, tiltOffset: 0, fov: 50 });
-    // Side view left
-    pushPreset(90, { heightFactor: 0.45, distanceFactor: 2.2, tiltOffset: -0.05, fov: 45 });
-    // Side view right
-    pushPreset(-90, { heightFactor: 0.45, distanceFactor: 2.2, tiltOffset: -0.05, fov: 45 });
-    // Elevated corner view
-    pushPreset(50, { heightFactor: 0.8, distanceFactor: 2.5, tiltOffset: 0.1, fov: 55 });
+    // Varied cinematic architectural angles - each render gets different perspectives
+    pushPreset(42, { heightFactor: 0.52, distanceFactor: 1.95, tiltOffset: 0, fov: 48 });    // Classic 3/4
+    pushPreset(138, { heightFactor: 0.48, distanceFactor: 2.1, tiltOffset: 0.02, fov: 46 }); // Opposite 3/4
+    pushPreset(85, { heightFactor: 0.42, distanceFactor: 2.3, tiltOffset: -0.08, fov: 52 }); // Side dramatic
+    pushPreset(225, { heightFactor: 0.65, distanceFactor: 2.2, tiltOffset: 0.05, fov: 44 }); // Rear elevated
+    pushPreset(315, { heightFactor: 0.35, distanceFactor: 2.6, tiltOffset: -0.12, fov: 58 }); // Low wide angle
+    pushPreset(20, { heightFactor: 0.78, distanceFactor: 2.8, tiltOffset: 0.15, fov: 38 });  // Aerial view
+    pushPreset(180, { heightFactor: 0.45, distanceFactor: 1.8, tiltOffset: 0, fov: 50 });    // Straight on
+    pushPreset(270, { heightFactor: 0.55, distanceFactor: 2.4, tiltOffset: 0.08, fov: 42 }); // Side elevated
+    pushPreset(110, { heightFactor: 0.32, distanceFactor: 2.9, tiltOffset: -0.15, fov: 62 }); // Ground drama
+    pushPreset(65, { heightFactor: 0.88, distanceFactor: 3.2, tiltOffset: 0.2, fov: 35 });   // Bird's eye
+    pushPreset(200, { heightFactor: 0.28, distanceFactor: 3.0, tiltOffset: -0.18, fov: 65 }); // Ultra-wide low
+    pushPreset(340, { heightFactor: 0.58, distanceFactor: 2.0, tiltOffset: 0.05, fov: 46 }); // Detail angle
     // Back view
     pushPreset(180, { heightFactor: 0.55, distanceFactor: 2.0, tiltOffset: 0, fov: 50 });
     // Low angle dramatic
@@ -1910,13 +2504,13 @@
 
     // Aerial/bird's eye view
     var topPos = new THREE.Vector3(
-      centerX + safeSpan * 0.1,
+      orbitX + safeSpan * 0.1,
       maxY + safeSpan * 3,
-      centerZ + safeSpan * 0.5
+      orbitZ + safeSpan * 0.5
     );
     presets.push({
       position: topPos,
-      target: new THREE.Vector3(centerX, baseTargetY, centerZ),
+      target: new THREE.Vector3(focusX, focusY, focusZ),
       up: new THREE.Vector3(0, 0, -1),
       fov: 55,
       near: 0.5,
@@ -1924,10 +2518,10 @@
     });
 
     if (!presets.length) {
-      var fallback = new THREE.Vector3(centerX + safeSpan * 2, maxY + safeSpan * 0.8, centerZ + safeSpan * 1.5);
+      var fallback = new THREE.Vector3(orbitX + safeSpan * 2, maxY + safeSpan * 0.8, orbitZ + safeSpan * 1.5);
       presets.push({
         position: fallback,
-        target: new THREE.Vector3(centerX, baseTargetY, centerZ),
+        target: new THREE.Vector3(focusX, focusY, focusZ),
         up: new THREE.Vector3(0, 1, 0),
         fov: 48,
         near: 0.05,
@@ -2015,9 +2609,10 @@
       if (!isFinite(multiplier) || multiplier <= 0) multiplier = 1;
       currentQuality = multiplier;
       ensureRenderer();
+      // Sky preset determines exposure for perfect lighting match
+      var skyPreset = selectSkyPalette();
       if (renderer && typeof renderer.toneMappingExposure === 'number') {
-        // Photorealistic exposure - bright and clear
-        renderer.toneMappingExposure = 1.2 + (multiplier - 1) * 0.2;
+        renderer.toneMappingExposure = skyPreset.exposure + (multiplier - 1) * 0.15;
       }
       ensureEnvironment();
       disposeSceneChildren();
@@ -2078,6 +2673,20 @@
       var centerX = (bounds.minX + bounds.maxX) / 2;
       var centerY = Math.max(1.4, (bounds.minY + bounds.maxY) / 2);
       var centerZ = (bounds.minZ + bounds.maxZ) / 2;
+      var structureEnvelope = computeRoomsEnvelope(snapshot.rooms);
+      var focusCenter = structureEnvelope ? {
+        x: structureEnvelope.centerX,
+        y: centerY,
+        z: structureEnvelope.centerZ
+      } : null;
+      var cameraFocus = focusCenter || { x: centerX, y: centerY, z: centerZ };
+
+      function snapAxisToOrigin(min, max, fallback){
+        if (isFinite(min) && isFinite(max) && min <= 0 && max >= 0) return 0;
+        return fallback;
+      }
+      cameraFocus.x = snapAxisToOrigin(bounds.minX, bounds.maxX, cameraFocus.x);
+      cameraFocus.z = snapAxisToOrigin(bounds.minZ, bounds.maxZ, cameraFocus.z);
 
       // Log snapshot data for debugging
       console.log('[Visualize] Snapshot data:', {
@@ -2093,17 +2702,17 @@
         span: span
       });
 
-      var groundY = buildGround(bounds, centerX, centerZ, bounds.minY, span);
-      createContactShadow(centerX, centerZ, span, groundY);
+      var groundY = buildGround(bounds, cameraFocus.x, cameraFocus.z, bounds.minY, span);
+      createContactShadow(cameraFocus.x, cameraFocus.z, span, groundY);
       // Note: Removed addSignatureFacade - only render user's actual design
-      VIEW_PRESETS = buildViewPresets(centerX, centerY, centerZ, span, bounds) || [];
+      VIEW_PRESETS = buildViewPresets(cameraFocus.x, cameraFocus.y, cameraFocus.z, span, bounds, cameraFocus) || [];
       if (!Array.isArray(VIEW_PRESETS) || VIEW_PRESETS.length === 0) {
-        VIEW_PRESETS = buildViewPresets(centerX, centerY, centerZ, span || 8, bounds) || [];
+        VIEW_PRESETS = buildViewPresets(cameraFocus.x, cameraFocus.y, cameraFocus.z, span || 8, bounds, cameraFocus) || [];
       }
       if (!Array.isArray(VIEW_PRESETS) || VIEW_PRESETS.length === 0) {
         VIEW_PRESETS = [{
-          position: new THREE.Vector3(centerX + span * 1.9, centerY + span * 0.8, centerZ + span * 1.4),
-          target: new THREE.Vector3(centerX, centerY, centerZ),
+          position: new THREE.Vector3(cameraFocus.x + span * 1.9, cameraFocus.y + span * 0.8, cameraFocus.z + span * 1.4),
+          target: new THREE.Vector3(cameraFocus.x, cameraFocus.y, cameraFocus.z),
           up: new THREE.Vector3(0, 1, 0),
           fov: 48,
           near: 0.05,
@@ -2113,14 +2722,14 @@
       if (viewIndex >= VIEW_PRESETS.length) viewIndex = VIEW_PRESETS.length - 1;
       if (viewIndex < 0) viewIndex = 0;
       applyCameraPreset(viewIndex);
-      setupLighting(centerX, centerY, centerZ, span);
+      setupLighting(cameraFocus.x, cameraFocus.y, cameraFocus.z, span);
 
       var canvas = qs(CANVAS_ID);
       if (canvas) {
-        // High resolution full-bleed render
-        var baseWidth = 1920;
+        // Ultra high resolution - start at 4K for maximum sharpness
+        var baseWidth = 3840;
         var width = Math.floor(baseWidth * Math.max(1, multiplier));
-        if (width > 3840) width = 3840;
+        if (width > 7680) width = 7680; // Allow up to 8K
         var height = Math.floor(width * 9 / 16);
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
@@ -2129,12 +2738,29 @@
         canvas.height = height;
         lastCanvasWidth = width;
         lastCanvasHeight = height;
+        
+        // Multi-pass rendering for maximum quality and sharpness
+        if (renderer.shadowMap) renderer.shadowMap.needsUpdate = true;
+        
+        // Clear with precision
+        renderer.clear(true, true, true);
+
+        // Render scene with cinematic post-processing stack
+        renderSceneWithPostFX(width, height);
+        
+        // Force texture updates for maximum sharpness
+        scene.traverse(function(obj) {
+          if (obj.material) {
+            if (obj.material.map) obj.material.map.needsUpdate = true;
+            if (obj.material.normalMap) obj.material.normalMap.needsUpdate = true;
+            if (obj.material.roughnessMap) obj.material.roughnessMap.needsUpdate = true;
+          }
+        });
+        
         ensureFabric(width, height);
         ensureResizeListener();
         fitRenderToStage();
         window.requestAnimationFrame(fitRenderToStage);
-        if (renderer.shadowMap) renderer.shadowMap.needsUpdate = true;
-        renderer.render(scene, camera);
         addDefaultLabel();
       }
       if (loading) loading.textContent = 'Capturing design views...';
@@ -2169,19 +2795,32 @@
     if (!renderer) return;
     var canvas = renderer.domElement;
     if (!canvas) return;
+    
+    // Export at full resolution with maximum quality
     var exportCanvas = document.createElement('canvas');
     exportCanvas.width = canvas.width;
     exportCanvas.height = canvas.height;
-    var ctx = exportCanvas.getContext('2d');
+    var ctx = exportCanvas.getContext('2d', { 
+      alpha: false,
+      desynchronized: false,
+      willReadFrequently: false
+    });
+    
+    // Enable image smoothing for high quality
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
     ctx.drawImage(canvas, 0, 0);
     if (fabricCanvas) {
       fabricCanvas.discardActiveObject();
       fabricCanvas.renderAll();
       ctx.drawImage(fabricCanvas.getElement(), 0, 0);
     }
+    
     var link = document.createElement('a');
-    link.download = 'gablok-visualize.png';
-    link.href = exportCanvas.toDataURL('image/png');
+    link.download = 'gablok-visualize-' + Date.now() + '.png';
+    // Maximum PNG quality
+    link.href = exportCanvas.toDataURL('image/png', 1.0);
     link.click();
   }
 
@@ -2214,17 +2853,22 @@
     var generate = qs('visualize-generate');
     if (generate && !generate.__wired){
       generate.__wired = true;
-      generate.addEventListener('click', function(){ ensureLibraries().then(renderSnapshot); });
+      generate.addEventListener('click', function(){ startVisualizeRender(); });
     }
     var qualitySelect = qs(QUALITY_ID);
     if (qualitySelect && !qualitySelect.__wired){
       qualitySelect.__wired = true;
-      qualitySelect.addEventListener('change', function(){ ensureLibraries().then(renderSnapshot); });
+      qualitySelect.addEventListener('change', function(){ startVisualizeRender(); });
     }
     var downloadBtn = qs('visualize-download');
     if (downloadBtn && !downloadBtn.__wired){
       downloadBtn.__wired = true;
       downloadBtn.addEventListener('click', exportImage);
+    }
+    var photorealBtn = qs('visualize-photoreal');
+    if (photorealBtn && !photorealBtn.__wired){
+      photorealBtn.__wired = true;
+      photorealBtn.addEventListener('click', requestPhotorealRender);
     }
     var addLabelBtn = qs('visualize-add-label');
     if (addLabelBtn && !addLabelBtn.__wired){
@@ -2274,6 +2918,15 @@
     syncViewButtons();
   }
 
+  function startVisualizeRender(){
+    return ensureLibraries()
+      .then(function(){
+        ensureRenderer();
+        return renderSnapshot();
+      })
+      .catch(handleVisualizeError);
+  }
+
   function showVisualize(){
     var modal = qs(PANEL_ID);
     if (!modal) return;
@@ -2282,12 +2935,10 @@
     closePhotoViewer();
     setGalleryShots([]);
     updateGalleryGrid('Generating design images...');
+    setPhotorealStatus('');
     ensureEvents();
     window.requestAnimationFrame(fitRenderToStage);
-    ensureLibraries().then(function(){
-      ensureRenderer();
-      renderSnapshot();
-    });
+    startVisualizeRender();
   }
 
   function hideVisualize(){
