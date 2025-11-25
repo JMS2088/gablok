@@ -141,6 +141,7 @@
     { label: 'Admin client', url: withV('js/ui/admin.js'), critical: false },
     { label: 'Info modal', url: withV('js/ui/modals.js'), critical: false },
     { label: 'Pricing modal', url: withV('js/ui/pricing.js'), critical: false },
+    { label: 'Visualize panel', url: withV('js/ui/visualize.js'), critical: false },
     { label: 'Plan2D geom', url: withV('js/plan2d/geom2d.js'), critical: false },
     { label: 'Plan2D walls', url: withV('js/plan2d/walls.js'), critical: false },
     { label: 'Plan2D snap', url: withV('js/plan2d/snap.js'), critical: false },

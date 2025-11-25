@@ -3,7 +3,13 @@
 // resizeHandles, selectedRoomId, currentFloor
 
 function drawRoom(room) {
+  var __prevProjectClamp = window.__project3DClampOverride;
+  var __appliedProjectClamp = false;
   try {
+    if (!__prevProjectClamp && (window.__cameraNearWallStrip || window.__cameraInsideSolid)) {
+      window.__project3DClampOverride = { forceClamp: true, minDepth: 0.016, minProjectedDepth: 0.42 };
+      __appliedProjectClamp = true;
+    }
   // Preserve incoming canvas state so stroke styles/alphas don't leak or get clobbered
   if (ctx && typeof ctx.save === 'function') ctx.save();
   // Ensure a predictable baseline for stroke rendering regardless of prior modules
@@ -100,10 +106,13 @@ function drawRoom(room) {
   var lineMode = (window.__wallRenderMode !== 'solid');
   // Updated policy (20251111): Always draw the perimeter outline for the room so users
   // have stable visual feedback while dragging/resizing in BOTH render modes.
-  // We still suppress the filled floor in solid mode to avoid the duplicate "ghost" planar fill.
-  // (Previous logic suppressed wires entirely in solid mode which made outlines vanish.)
-  var suppressFloorFill = !!solidMode; // keep floor fill suppression in solid mode
+  // Floor fill now remains enabled in solid mode so enclosed rooms never appear hollow.
+  var suppressFloorFill = false;
   var suppressWire = false; // NEVER suppress the base outline; vertical/top edges still gated below by mode
+  function floorFillColor(isCurrent, isSelected){
+    if (isSelected) return isCurrent ? 'rgba(59,130,246,0.36)' : 'rgba(59,130,246,0.28)';
+    return isCurrent ? 'rgba(147,197,253,0.24)' : 'rgba(191,219,254,0.16)';
+  }
     // Helpers: near-plane clipping in camera space to keep floors/outlines visible without bending
     var kBlend = Math.max(0, Math.min(1, (typeof window.PERSPECTIVE_STRENGTH==='number'? window.PERSPECTIVE_STRENGTH:0.88)));
     var refZ = Math.max(0.5, (camera && camera.distance) || 12);
@@ -269,13 +278,7 @@ function drawRoom(room) {
           for (var bi=1; bi<baseClip.length; bi++){ var sb = camToScreen(baseClip[bi]); if(sb){ ctx.lineTo(sb.x, sb.y); } }
           ctx.closePath();
           // choose fill like below (currentLevel/selected already set)
-          if (currentLevel) {
-            ctx.fillStyle = selected ? 'rgba(0,122,204,0.18)' : 'rgba(120,120,120,0.10)';
-          } else if (selected && room.level !== currentFloor) {
-            ctx.fillStyle = 'rgba(0,122,204,0.18)';
-          } else {
-            ctx.fillStyle = 'rgba(180,180,180,0.10)';
-          }
+          ctx.fillStyle = floorFillColor(currentLevel, selected);
           ctx.fill();
         }
         // outline (skip only while actively dragging in solid mode)
@@ -322,13 +325,7 @@ function drawRoom(room) {
       var baseClip = clipPolyNear(baseCam);
       if (baseClip.length >= 3){
         if (!suppressFloorFill) {
-          if (currentLevel) {
-            ctx.fillStyle = selected ? 'rgba(0,122,204,0.18)' : 'rgba(120,120,120,0.10)';
-          } else if (selected && room.level !== currentFloor) {
-            ctx.fillStyle = 'rgba(0,122,204,0.18)';
-          } else {
-            ctx.fillStyle = 'rgba(180,180,180,0.10)';
-          }
+          ctx.fillStyle = floorFillColor(currentLevel, selected);
           ctx.beginPath(); var b0 = camToScreen(baseClip[0]); if(b0){ ctx.moveTo(b0.x, b0.y); }
           for (var bi=1; bi<baseClip.length; bi++){ var sb = camToScreen(baseClip[bi]); if(sb){ ctx.lineTo(sb.x, sb.y); } }
           ctx.closePath();
@@ -387,7 +384,7 @@ function drawRoom(room) {
     // NOTE: Temporarily suppressed in solid wall render mode to diagnose persistent "ghost" outline layer.
     // If the phantom perimeter disappears with this suppression, the openings overlay was the duplicate source.
     try {
-      if (!solidMode && Array.isArray(room.openings) && room.openings.length) {
+      if (Array.isArray(room.openings) && room.openings.length) {
         var hw2 = room.width / 2; var hd2 = room.depth / 2;
         var yBase = roomFloorY; // floor level
         // Precompute the room's top Y to clamp full-height openings safely
@@ -462,6 +459,11 @@ function drawRoom(room) {
       }
     } catch(e) { /* non-fatal openings overlay */ }
   } catch (e) {}
+  finally {
+    if (__appliedProjectClamp) {
+      window.__project3DClampOverride = __prevProjectClamp;
+    }
+  }
 }
 
 // Resize handles for rooms (X and Z directions).

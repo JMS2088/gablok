@@ -101,6 +101,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 			<div class="dropdown-item separator" aria-hidden="true"></div>
 			<div class="dropdown-title">Project</div>
 			<div class="dropdown-item" data-action="price">Price</div>
+			<div class="dropdown-item" data-action="visualize">Visualize (High-End Render)</div>
 			<div class="dropdown-item separator" aria-hidden="true"></div>
 			<div class="dropdown-title">Export</div>
 			<div class="dropdown-item" data-action="obj">⬇ 3D - OBJ</div>
@@ -329,6 +330,41 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 		</div>
 	</div>
   
+</div>
+
+<!-- Visualize Modal -->
+<div id="visualize-modal" role="dialog" aria-modal="true" aria-labelledby="visualize-title">
+	<div id="visualize-backdrop"></div>
+	<div id="visualize-content">
+		<div class="visualize-header">
+			<strong id="visualize-title">Visualize · High-End Render</strong>
+			<button id="visualize-close" class="secondary" title="Close">✕</button>
+		</div>
+		<div class="visualize-body">
+			<div id="visualize-stage">
+				<canvas id="visualize-render-canvas"></canvas>
+				<canvas id="visualize-annotations"></canvas>
+				<div id="visualize-loading">Generating…</div>
+			</div>
+			<div id="visualize-controls">
+				<div class="visualize-control-row">
+					<label for="visualize-quality">Quality</label>
+					<select id="visualize-quality">
+						<option value="1">Standard (1.0×)</option>
+						<option value="1.5">High (1.5×)</option>
+						<option value="2">Ultra (2.0×)</option>
+					</select>
+				</div>
+				<div class="visualize-buttons">
+					<button id="visualize-generate">Generate Render</button>
+					<button id="visualize-add-label" class="secondary">Add Label</button>
+					<button id="visualize-download" class="secondary">Download PNG</button>
+				</div>
+				<p id="visualize-footnote" class="visualize-footnote"></p>
+				<p class="visualize-hint">Tip: drag notes on the overlay canvas before exporting.</p>
+			</div>
+		</div>
+	</div>
 </div>
 
 <!-- Account Modal (full-screen splash with left nav) -->

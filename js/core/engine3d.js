@@ -119,6 +119,13 @@
   // Shared interior-corner snap map: ensures adjacent strips use the exact same
   // world coordinate at concave interior corners, eliminating gaps.
   if (typeof window.__intCornerSnap === 'undefined') window.__intCornerSnap = {};
+  if (typeof window.__project3DClampOverride === 'undefined') window.__project3DClampOverride = null;
+  if (typeof window.__project3DBaseClamp === 'undefined') {
+    window.__project3DBaseClamp = {
+      minDepth: 0.04,
+      minProjectedDepth: 0.55
+    };
+  }
   // Track the set of perimeter edge keys used by the last rebuild so we can
   // remove any previously generated perimeter strips even if they don't match
   // the current footprint (prevents "ghost" solids at old positions during drags).
@@ -318,31 +325,56 @@
     };
   }
   if (typeof window.project3D === 'undefined') {
-    window.project3D = function project3D(x,y,z){
+    window.project3D = function project3D(x,y,z, opts){
       if (!canvas) return null;
+      var effectiveOpts = opts;
+      if (!effectiveOpts && window.__project3DClampOverride) {
+        effectiveOpts = window.__project3DClampOverride;
+      }
+      if (!effectiveOpts && window.__project3DBaseClamp) {
+        effectiveOpts = window.__project3DBaseClamp;
+      }
+      effectiveOpts = effectiveOpts || {};
       var rx = x - __proj.cam[0], ry = y - __proj.cam[1], rz = z - __proj.cam[2];
       var cx = rx*__proj.right[0] + ry*__proj.right[1] + rz*__proj.right[2];
       var cy = rx*__proj.up[0]    + ry*__proj.up[1]    + rz*__proj.up[2];
       var cz = rx*__proj.fwd[0]   + ry*__proj.fwd[1]   + rz*__proj.fwd[2];
       var distToCam = Math.hypot(rx, ry, rz);
+      var distToTarget = null;
+      try {
+        var tx = (camera && typeof camera.targetX==='number') ? camera.targetX : 0;
+        var ty = (camera && typeof camera.targetY==='number') ? camera.targetY : 0;
+        var tz = (camera && typeof camera.targetZ==='number') ? camera.targetZ : 0;
+        distToTarget = Math.hypot(x - tx, y - ty, z - tz);
+      } catch(_eDistTarget) { distToTarget = null; }
+      var minDepth = (typeof effectiveOpts.minDepth === 'number' && effectiveOpts.minDepth > 0) ? effectiveOpts.minDepth : 0.02;
+      var minProjDepthOverride = (typeof effectiveOpts.minProjectedDepth === 'number' && effectiveOpts.minProjectedDepth > 0) ? effectiveOpts.minProjectedDepth : null;
       // Near/behind handling:
       // - Hard cull points that are sufficiently behind the camera to avoid rendering a mirrored scene (e.g., second grid floor)
       // - Clamp points very close to the near plane to a small positive depth so nearby/inside geometry stays visible
+      var camDist = (camera && camera.distance) ? camera.distance : 12;
+      var distClamp = Math.max(2.5, Math.min(24, camDist * 1.25));
+      var targetClamp = Math.max(2.2, camDist * 0.75);
+      var allowClamp = !!effectiveOpts.forceClamp || window.__cameraInsideSolid || window.__cameraNearWallStrip || Math.abs(cz) <= distClamp || distToCam <= distClamp || (distToTarget!=null && distToTarget <= targetClamp);
       if (cz < -0.25) {
-        // When geometry slips just behind the camera (common while orbiting inside rooms or near freestanding walls),
-        // keep it visible by clamping shallow negatives to the near plane instead of dropping them.
-        // Allow a little more tolerance when the point is physically close to the camera so freestanding walls
-        // remain visible during tight zoom-ins (fix for "wall vanishes while zoomed inside").
-        var distClamp = Math.max(2.5, Math.min(8, (camera && camera.distance ? camera.distance * 0.35 : 4.2)));
-        var allowClamp = window.__cameraInsideSolid || window.__cameraNearWallStrip || Math.abs(cz) <= distClamp || distToCam <= distClamp;
-        if (allowClamp) { cz = 0.02; }
-        else { return null; }
+        allowClamp = true;
       }
-      if (cz < 0.02) cz = 0.02;              // near plane clamp
+      if (cz < minDepth) {
+        var clampDepth = minDepth;
+        var scaleFactor = clampDepth / Math.max(clampDepth, Math.abs(cz));
+        if (scaleFactor < 1) {
+          cx *= scaleFactor;
+          cy *= scaleFactor;
+        }
+        cz = clampDepth;
+      }
       // Reduce perspective a little by blending cz with a reference depth (camera distance)
       var k = Math.max(0, Math.min(1, window.PERSPECTIVE_STRENGTH));
       var refZ = Math.max(0.5, camera.distance || 12);
       var czEff = cz * k + refZ * (1 - k);
+      var minProjDefault = Math.max(0.32, refZ * 0.06);
+      var minProjDepth = (minProjDepthOverride != null) ? minProjDepthOverride : minProjDefault;
+      if (czEff < minProjDepth) czEff = minProjDepth;
       var s = __proj.scale / czEff;
       var sx = (canvas.width/2) + (cx * s) + pan.x;
       var sy = (canvas.height/2) - (cy * s) + pan.y;
@@ -753,9 +785,265 @@
       return (bestIdx>-1 && bestD2 <= (thresh*thresh)) ? bestIdx : -1;
     } catch(e){ return -1; }
   };
+  if (typeof window.drawFreestandingWallFloors === 'undefined') window.drawFreestandingWallFloors = function(){
+    try {
+      if (!ctx || !canvas) return;
+      var strips = Array.isArray(window.wallStrips) ? window.wallStrips : [];
+      if (!strips.length) return;
+      var proj = (typeof window.__proj==='object') ? window.__proj : null;
+      if (!proj || !Array.isArray(proj.cam) || proj.cam.length < 3) return;
+      var tag = window.__roomStripTag || '__fromRooms';
+      var selectedIdx = (typeof window.selectedWallStripIndex === 'number') ? window.selectedWallStripIndex : -1;
+      var currentLevel = (typeof window.currentFloor === 'number') ? window.currentFloor : 0;
+      function pointKey(level,x,z){ return level+'|'+Math.round((+x||0)*1000)+'|'+Math.round((+z||0)*1000); }
+      var perLevel = Object.create(null);
+      for (var si=0; si<strips.length; si++){
+        var ws = strips[si];
+        if (!ws) continue;
+        var fromRoom = !!(ws[tag] || ws.roomId || ws.garageId);
+        if (fromRoom) continue;
+        var level = (typeof ws.level === 'number') ? ws.level : 0;
+        var container = perLevel[level];
+        if (!container) {
+          container = { edges: [], adjacency: Object.create(null), points: Object.create(null) };
+          perLevel[level] = container;
+        }
+        var edge = {
+          index: si,
+          level: level,
+          x0: ws.x0||0,
+          z0: ws.z0||0,
+          x1: ws.x1||0,
+          z1: ws.z1||0,
+          baseY: (typeof ws.baseY === 'number') ? ws.baseY : (level*3.5)
+        };
+        edge.startKey = pointKey(level, edge.x0, edge.z0);
+        edge.endKey = pointKey(level, edge.x1, edge.z1);
+        edge.startPt = { x: edge.x0, z: edge.z0 };
+        edge.endPt = { x: edge.x1, z: edge.z1 };
+        container.edges.push(edge);
+        if (!container.adjacency[edge.startKey]) container.adjacency[edge.startKey] = [];
+        if (!container.adjacency[edge.endKey]) container.adjacency[edge.endKey] = [];
+        container.adjacency[edge.startKey].push(edge);
+        container.adjacency[edge.endKey].push(edge);
+        if (!container.points[edge.startKey]) container.points[edge.startKey] = edge.startPt;
+        if (!container.points[edge.endKey]) container.points[edge.endKey] = edge.endPt;
+      }
+      var levels = Object.keys(perLevel);
+      if (!levels.length) return;
+      var panState = (typeof window.pan === 'object' && window.pan) ? window.pan : { x:0, y:0 };
+      var kBlend = Math.max(0, Math.min(1, (typeof window.PERSPECTIVE_STRENGTH === 'number') ? window.PERSPECTIVE_STRENGTH : 0.88));
+      var refZ = Math.max(0.5, (window.camera && typeof window.camera.distance === 'number') ? window.camera.distance : 12);
+      var scalePx = proj.scale || 600;
+      var nearEps = 0.01;
+      function toCam(point, y){
+        var rx = point.x - proj.cam[0], ry = y - proj.cam[1], rz = point.z - proj.cam[2];
+        return {
+          cx: rx*proj.right[0] + ry*proj.right[1] + rz*proj.right[2],
+          cy: rx*proj.up[0]    + ry*proj.up[1]    + rz*proj.up[2],
+          cz: rx*proj.fwd[0]   + ry*proj.fwd[1]   + rz*proj.fwd[2]
+        };
+      }
+      function camToScreen(v){
+        if (!v) return null;
+        var czEff = v.cz * kBlend + refZ * (1 - kBlend);
+        var s = scalePx / czEff;
+        return {
+          x: (canvas.width/2) + (v.cx * s) + panState.x,
+          y: (canvas.height/2) - (v.cy * s) + panState.y
+        };
+      }
+      function clipPolyNear(camPts){
+        var out = [];
+        if (!camPts || camPts.length === 0) return out;
+        var prev = camPts[camPts.length - 1];
+        var prevIn = prev.cz >= nearEps;
+        for (var i=0; i<camPts.length; i++){
+          var cur = camPts[i];
+          var curIn = cur.cz >= nearEps;
+          if (curIn){
+            if (!prevIn){
+              var tEnter = (nearEps - prev.cz)/((cur.cz - prev.cz)||1e-9);
+              out.push({
+                cx: prev.cx + (cur.cx - prev.cx)*tEnter,
+                cy: prev.cy + (cur.cy - prev.cy)*tEnter,
+                cz: nearEps
+              });
+            }
+            out.push(cur);
+          } else if (prevIn){
+            var tExit = (nearEps - prev.cz)/((cur.cz - prev.cz)||1e-9);
+            out.push({
+              cx: prev.cx + (cur.cx - prev.cx)*tExit,
+              cy: prev.cy + (cur.cy - prev.cy)*tExit,
+              cz: nearEps
+            });
+          }
+          prev = cur;
+          prevIn = curIn;
+        }
+        return out;
+      }
+      function samePt(a,b){ return !!a && !!b && Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.z - b.z) < 1e-6; }
+      function buildLoopsForLevel(container){
+        var loops = [];
+        var visited = Object.create(null);
+        for (var ei=0; ei<container.edges.length; ei++){
+          var edge = container.edges[ei];
+          if (visited[edge.index]) continue;
+          var stack = [edge];
+          var compEdges = [];
+          var compPoints = Object.create(null);
+          while (stack.length){
+            var cur = stack.pop();
+            if (visited[cur.index]) continue;
+            visited[cur.index] = true;
+            compEdges.push(cur);
+            compPoints[cur.startKey] = container.points[cur.startKey];
+            compPoints[cur.endKey] = container.points[cur.endKey];
+            var neighKeys = [cur.startKey, cur.endKey];
+            for (var nk=0; nk<neighKeys.length; nk++){
+              var list = container.adjacency[neighKeys[nk]] || [];
+              for (var li=0; li<list.length; li++){
+                var nb = list[li];
+                if (!visited[nb.index]) stack.push(nb);
+              }
+            }
+          }
+          if (compEdges.length < 3) continue;
+          var degree = Object.create(null);
+          for (var ce=0; ce<compEdges.length; ce++){
+            var e = compEdges[ce];
+            degree[e.startKey] = (degree[e.startKey]||0) + 1;
+            degree[e.endKey] = (degree[e.endKey]||0) + 1;
+          }
+          var compKeys = Object.keys(compPoints);
+          if (compKeys.length < 3) continue;
+          var allDegreeTwo = true;
+          for (var dk=0; dk<compKeys.length; dk++){
+            if (degree[compKeys[dk]] !== 2){ allDegreeTwo = false; break; }
+          }
+          if (!allDegreeTwo) continue;
+          var compAdj = Object.create(null);
+          for (var adjIdx=0; adjIdx<compEdges.length; adjIdx++){
+            var ceEdge = compEdges[adjIdx];
+            if (!compAdj[ceEdge.startKey]) compAdj[ceEdge.startKey] = [];
+            if (!compAdj[ceEdge.endKey]) compAdj[ceEdge.endKey] = [];
+            compAdj[ceEdge.startKey].push({ edge: ceEdge, forward: true });
+            compAdj[ceEdge.endKey].push({ edge: ceEdge, forward: false });
+          }
+          var ordered = [];
+          var usedEdge = Object.create(null);
+          var startEdge = compEdges[0];
+          var startKey = startEdge.startKey;
+          var forward = true;
+          var current = startEdge;
+          var safety = compEdges.length * 2 + 4;
+          while (safety-- > 0){
+            if (usedEdge[current.index]) break;
+            usedEdge[current.index] = true;
+            var startPoint = forward ? current.startPt : current.endPt;
+            if (!ordered.length || !samePt(ordered[ordered.length-1], startPoint)) {
+              ordered.push(startPoint);
+            }
+            var nextKey = forward ? current.endKey : current.startKey;
+            if (nextKey === startKey) {
+              break;
+            }
+            var candidates = compAdj[nextKey] || [];
+            var nextEdge = null;
+            var nextForward = true;
+            for (var ci=0; ci<candidates.length; ci++){
+              var candidate = candidates[ci];
+              if (usedEdge[candidate.edge.index]) continue;
+              nextEdge = candidate.edge;
+              nextForward = candidate.forward;
+              break;
+            }
+            if (!nextEdge) {
+              ordered.length = 0;
+              break;
+            }
+            current = nextEdge;
+            forward = nextForward;
+          }
+          if (ordered.length >= 3) {
+            loops.push({
+              points: ordered,
+              edges: compEdges,
+              baseY: compEdges[0].baseY,
+              level: compEdges[0].level
+            });
+          }
+        }
+        return loops;
+      }
+      var allLoops = [];
+      for (var li=0; li<levels.length; li++){
+        var lvlKey = levels[li];
+        var data = perLevel[lvlKey];
+        var lvlLoops = buildLoopsForLevel(data);
+        if (lvlLoops && lvlLoops.length) {
+          Array.prototype.push.apply(allLoops, lvlLoops);
+        }
+      }
+      if (!allLoops.length) return;
+      ctx.save();
+      try {
+        ctx.globalCompositeOperation = 'source-over';
+        for (var lp=0; lp<allLoops.length; lp++){
+          var loop = allLoops[lp];
+          var camPoly = [];
+          for (var ptIdx=0; ptIdx<loop.points.length; ptIdx++){
+            camPoly.push(toCam(loop.points[ptIdx], loop.baseY));
+          }
+          var clipped = clipPolyNear(camPoly);
+          if (clipped.length < 3) continue;
+          var screenPts = [];
+          for (var sp=0; sp<clipped.length; sp++){
+            var scr = camToScreen(clipped[sp]);
+            if (scr) screenPts.push(scr);
+          }
+          if (screenPts.length < 3) continue;
+          ctx.beginPath();
+          ctx.moveTo(screenPts[0].x, screenPts[0].y);
+          for (var sp2=1; sp2<screenPts.length; sp2++){
+            ctx.lineTo(screenPts[sp2].x, screenPts[sp2].y);
+          }
+          ctx.closePath();
+          var onLevel = (loop.level === currentLevel);
+          var hasSelected = false;
+          for (var se=0; se<loop.edges.length && !hasSelected; se++){
+            if (loop.edges[se].index === selectedIdx) hasSelected = true;
+          }
+          if (hasSelected) {
+            ctx.fillStyle = onLevel ? 'rgba(59,130,246,0.36)' : 'rgba(59,130,246,0.28)';
+          } else if (onLevel) {
+            ctx.fillStyle = 'rgba(147,197,253,0.24)';
+          } else {
+            ctx.fillStyle = 'rgba(191,219,254,0.16)';
+          }
+          ctx.fill();
+        }
+      } finally {
+        ctx.restore();
+      }
+    } catch(_eFreeFloor) {
+      /* non-fatal */
+    }
+  };
   if (typeof window.drawWallStrip === 'undefined') window.drawWallStrip = function(ws){
+    var __prevProjectClamp = window.__project3DClampOverride;
+    var __overrideClamp = false;
     try {
       if (!ws) return;
+      var __stripTag = window.__roomStripTag || '__fromRooms';
+      var __isRoomDerived = !!(ws && (ws.roomId || ws.garageId || ws[__stripTag]));
+      var __needClampBoost = !__isRoomDerived || window.__cameraInsideSolid || window.__cameraNearWallStrip;
+      if (__needClampBoost) {
+        window.__project3DClampOverride = { forceClamp: true, minDepth: 0.016, minProjectedDepth: 0.42 };
+        __overrideClamp = true;
+      }
       // Build (or reuse) a perimeter edge hash and corner caches once per frame.
       try {
         if (!window.__perimeterEdgeKeyHash) window.__perimeterEdgeKeyHash = null;
@@ -1816,6 +2104,11 @@
       ctx.restore();
       return;
     } catch(eSolid) { /* non-fatal */ }
+    finally {
+      if (__overrideClamp) {
+        window.__project3DClampOverride = __prevProjectClamp;
+      }
+    }
   };
   // Build unique, readable codes for each unique corner (endpoint) on the current floor
   if (typeof window.computeCornerCodes === 'undefined') {
@@ -2313,6 +2606,7 @@
           if (window.__showCornerCodes && typeof window.computeCornerCodes==='function') { window.computeCornerCodes(); }
           // Ensure exterior miter snaps are ready before the very first draw in this frame
           try { if (typeof window.computeExteriorCornerSnaps==='function') window.computeExteriorCornerSnaps(); } catch(_eSnapPre) {}
+          try { if (typeof drawFreestandingWallFloors === 'function') drawFreestandingWallFloors(); } catch(_eFloor) {}
           var __ws = window.wallStrips || [];
           for (var __wsi=0; __wsi<__ws.length; __wsi++){
             try { if (typeof drawWallStrip==='function') drawWallStrip(__ws[__wsi]); } catch(__eWs) {}
