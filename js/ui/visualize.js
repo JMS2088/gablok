@@ -23,7 +23,15 @@
   var currentQuality = 1;
   var lastHash = null;
 
-  var floorHeight = 3.2;
+  var floorHeight = (function(){
+    var defaultHeight = 3.5;
+    try {
+      if (window && typeof window.__floorHeight === 'number' && isFinite(window.__floorHeight)) {
+        return window.__floorHeight;
+      }
+    } catch(_e){}
+    return defaultHeight;
+  })();
   var lights = [];
   var noiseTextures = Object.create(null);
   var EDGE_COLORS = {
@@ -34,6 +42,8 @@
   };
 
   function qs(id){ return document.getElementById(id); }
+
+  function isFiniteNumber(val){ return typeof val === 'number' && isFinite(val); }
 
   function ensureLibraries(){
     if (window.THREE && window.fabric) return Promise.resolve();
@@ -301,6 +311,8 @@
   }
 
   function boxFromDimensions(item){
+    var hasBaseHeight = isFiniteNumber(item.baseHeight);
+    var base = hasBaseHeight ? item.baseHeight : (isFiniteNumber(item.y) ? item.y : 0);
     return {
       cx: (item.x || 0),
       cy: (item.y || 0),
@@ -309,15 +321,127 @@
       depth: Math.max(0.1, item.depth || 0),
       height: Math.max(0.5, item.height || 2.6),
       level: item.level || 0,
-      baseY: (typeof item.y === 'number') ? item.y : 0,
+      baseY: base,
+      baseIsAbsolute: hasBaseHeight,
       rotation: (item.rotation || 0) * Math.PI / 180
     };
+  }
+
+  function computeRoomsEnvelope(rooms){
+    if (!Array.isArray(rooms) || rooms.length === 0) return null;
+    var minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    var topByLevel = Object.create(null);
+    var maxTop = -Infinity;
+
+    rooms.forEach(function(room){
+      if (!room) return;
+      var lvl = room.level || 0;
+      var base = isFiniteNumber(room.baseHeight) ? room.baseHeight : (isFiniteNumber(room.y) ? room.y : (lvl * floorHeight));
+      var roomHeight = Math.max(0.1, isFiniteNumber(room.height) ? room.height : 3.0);
+      var top = base + roomHeight;
+      if (!isFiniteNumber(top)) top = base + 3.0;
+      if (!isFiniteNumber(topByLevel[lvl]) || top > topByLevel[lvl]) topByLevel[lvl] = top;
+      if (top > maxTop) maxTop = top;
+
+      var pts = [];
+      if (Array.isArray(room.footprint) && room.footprint.length >= 3) {
+        for (var i=0;i<room.footprint.length;i++){
+          var p = room.footprint[i];
+          if (!p) continue;
+          pts.push({ x: isFiniteNumber(p.x) ? p.x : 0, z: isFiniteNumber(p.z) ? p.z : 0 });
+        }
+      }
+      if (pts.length === 0) {
+        var cx = isFiniteNumber(room.x) ? room.x : 0;
+        var cz = isFiniteNumber(room.z) ? room.z : 0;
+        var hw = Math.max(0, (isFiniteNumber(room.width) ? room.width : 0) / 2);
+        var hd = Math.max(0, (isFiniteNumber(room.depth) ? room.depth : 0) / 2);
+        var rot = (room.rotation || 0) * Math.PI / 180;
+        var cos = Math.cos(rot);
+        var sin = Math.sin(rot);
+        var offsets = [
+          { dx: hw,  dz: hd },
+          { dx: hw,  dz: -hd },
+          { dx: -hw, dz: -hd },
+          { dx: -hw, dz: hd }
+        ];
+        offsets.forEach(function(off){
+          var dx = off.dx, dz = off.dz;
+          pts.push({
+            x: cx + (cos * dx) - (sin * dz),
+            z: cz + (sin * dx) + (cos * dz)
+          });
+        });
+      }
+      pts.forEach(function(pt){
+        if (!pt) return;
+        if (pt.x < minX) minX = pt.x;
+        if (pt.x > maxX) maxX = pt.x;
+        if (pt.z < minZ) minZ = pt.z;
+        if (pt.z > maxZ) maxZ = pt.z;
+      });
+    });
+
+    if (!isFinite(minX) || !isFinite(maxX) || !isFinite(minZ) || !isFinite(maxZ)) return null;
+    if (!isFiniteNumber(maxTop)) maxTop = 3.0;
+    var margin = 0.2;
+    minX -= margin; maxX += margin;
+    minZ -= margin; maxZ += margin;
+
+    return {
+      minX: minX,
+      maxX: maxX,
+      minZ: minZ,
+      maxZ: maxZ,
+      width: Math.max(0.5, maxX - minX),
+      depth: Math.max(0.5, maxZ - minZ),
+      centerX: (minX + maxX) / 2,
+      centerZ: (minZ + maxZ) / 2,
+      topByLevel: topByLevel,
+      maxTop: maxTop
+    };
+  }
+
+  function deriveRoofBox(roof, envelope){
+    var box = boxFromDimensions(roof || {});
+    box.height = Math.max(1.0, (roof && roof.height) || 1.2);
+
+    if (envelope) {
+      if (!roof || roof.autoFit !== false) {
+        box.cx = envelope.centerX;
+        box.cz = envelope.centerZ;
+        box.width = envelope.width;
+        box.depth = envelope.depth;
+      }
+      if (!roof || roof.autoBase !== false) {
+        var lvl = roof ? (roof.level || 0) : 0;
+        var hasLevelTop = Object.prototype.hasOwnProperty.call(envelope.topByLevel, lvl);
+        var candidate = hasLevelTop ? envelope.topByLevel[lvl] : envelope.maxTop;
+        if (isFiniteNumber(candidate)) {
+          box.baseY = candidate;
+          box.baseIsAbsolute = true;
+        }
+      }
+    }
+
+    if (!box.baseIsAbsolute && roof && isFiniteNumber(roof.baseHeight)) {
+      box.baseY = roof.baseHeight;
+      box.baseIsAbsolute = true;
+    }
+
+    return box;
+  }
+
+  function baseElevation(box){
+    if (!box) return 0;
+    if (box.baseIsAbsolute) return box.baseY || 0;
+    return (box.level || 0) * floorHeight + (box.baseY || 0);
   }
 
   function includeBounds(bounds, box){
     var halfW = box.width / 2;
     var halfD = box.depth / 2;
-    var yBase = (box.level || 0) * floorHeight + (box.baseY || 0);
+    var yBase = baseElevation(box);
     var centerY = yBase + (box.height / 2);
     bounds.minX = Math.min(bounds.minX, box.cx - halfW);
     bounds.maxX = Math.max(bounds.maxX, box.cx + halfW);
@@ -330,7 +454,7 @@
   function buildMesh(box, material){
     var geometry = new THREE.BoxGeometry(box.width, box.height, box.depth);
     var mesh = new THREE.Mesh(geometry, material);
-    var yBase = (box.level || 0) * floorHeight + (box.baseY || 0);
+    var yBase = baseElevation(box);
     mesh.position.set(box.cx, yBase + (box.height / 2), box.cz);
     if (box.rotation) mesh.rotation.y = box.rotation;
     return mesh;
@@ -404,6 +528,7 @@
 
   function gatherBoxes(snapshot){
     var boxes = [];
+    var envelope = computeRoomsEnvelope(snapshot.rooms);
     snapshot.rooms.forEach(function(room){
       if (!room) return;
       var box = boxFromDimensions(room);
@@ -430,8 +555,7 @@
     });
     snapshot.roofs.forEach(function(roof){
       if (!roof) return;
-      var box = boxFromDimensions(roof);
-      box.height = Math.max(1.0, roof.height || 1.2);
+      var box = deriveRoofBox(roof, envelope);
       boxes.push({ box: box, kind: 'roof' });
     });
     snapshot.balconies.forEach(function(balcony){
@@ -488,7 +612,7 @@
     if (!entry || entry.kind !== 'room') return;
     var box = entry.box;
     if (!box || box.height < 0.8) return;
-    var baseY = (box.level || 0) * floorHeight + (box.baseY || 0);
+    var baseY = baseElevation(box);
     var trimHeight = Math.min(0.35, Math.max(0.08, box.height * 0.14));
     var trimGeom = new THREE.BoxGeometry(box.width * 1.025, trimHeight, box.depth * 1.025);
     var trimMat = new THREE.MeshPhysicalMaterial({
