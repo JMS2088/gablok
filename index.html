@@ -346,7 +346,14 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 					<canvas id="visualize-render-canvas"></canvas>
 					<canvas id="visualize-annotations"></canvas>
 				</div>
-				<div id="visualize-loading">Generating…</div>
+				<div id="visualize-loading">Generating...</div>
+				<div id="visualize-photo-viewer">
+					<div class="visualize-photo-frame">
+						<button id="visualize-photo-close" class="secondary" type="button" title="Close photo">✕</button>
+						<img id="visualize-photo-image" alt="Visualize design preview" />
+						<p id="visualize-photo-caption"></p>
+					</div>
+				</div>
 			</div>
 			<div id="visualize-controls">
 				<div class="visualize-control-row">
@@ -377,6 +384,13 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 					<button id="visualize-add-label" class="secondary">Add Label</button>
 					<button id="visualize-download" class="secondary">Download PNG</button>
 				</div>
+				<div class="visualize-control-row visualize-gallery-row">
+					<span class="visualize-subtitle">Your Design Views</span>
+					<div id="visualize-gallery" class="visualize-gallery-grid">
+						<div class="visualize-gallery-empty">Generate a render to populate design views.</div>
+					</div>
+				</div>
+
 				<p id="visualize-footnote" class="visualize-footnote"></p>
 				<p class="visualize-hint">Tip: drag notes on the overlay canvas before exporting.</p>
 			</div>

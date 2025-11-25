@@ -27,17 +27,21 @@
   var viewButtons = [];
   var skyTexture = null;
   var skyGradientPalette = null;
+  var galleryShots = [];
+  var galleryShotMap = Object.create(null);
   var SKY_GRADIENT_PRESETS = [
-    [0xf7cfa1, 0xf5dfc6, 0xf0f5fb],
-    [0xf9c9ae, 0xf8dcc7, 0xf2f4f8],
-    [0xe5eefb, 0xeff4fb, 0xf6f8fc],
-    [0xf6d6a7, 0xf4e2c9, 0xeff4f9],
-    [0xf4d7b8, 0xefe2cf, 0xedeff6]
+    // Clean architectural daylight skies - white to soft blue gradients
+    [0xffffff, 0xf8fbff, 0xe8f2ff],
+    [0xfcfcfc, 0xf5f9ff, 0xe5f0ff],
+    [0xfafafa, 0xf2f8ff, 0xe0edff],
+    [0xfefefe, 0xf6faff, 0xe8f4ff],
+    [0xfdfdfd, 0xf4f8ff, 0xe2f0ff]
   ];
   var rng = createRandomGenerator();
   var lastCanvasWidth = 0;
   var lastCanvasHeight = 0;
   var resizeHooked = false;
+  var resizeObserver = null;
 
   var floorHeight = (function(){
     var defaultHeight = 3.5;
@@ -52,13 +56,14 @@
   var noiseTextures = Object.create(null);
   var materialExposureCache = Object.create(null);
   var EDGE_COLORS = {
-    default: 0xcbd5df,
-    roof: 0xaeb4bf,
-    wall: 0xbcc3cd,
-    podium: 0xbfc6d2,
-    frame: 0x90a4bd,
-    glass: 0xd2e3ff,
-    accent: 0xb8c2d3
+    // Subtle edge definition for clean architectural look
+    default: 0xe0e5eb,
+    roof: 0xc5cad2,
+    wall: 0xd8dde5,
+    podium: 0xdce0e8,
+    frame: 0xb0bcd0,
+    glass: 0xe5f0ff,
+    accent: 0xd0d8e2
   };
 
   function qs(id){ return document.getElementById(id); }
@@ -88,40 +93,65 @@
     canvas.height = 1024;
     var ctx = canvas.getContext('2d');
     if (!ctx) return null;
-    var palette = selectSkyPalette();
+    
+    // Photorealistic outdoor sky - beautiful blue gradient
     var gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    var topColor = palette && palette[0] != null ? palette[0] : 0xf8c68a;
-    var midColor = palette && palette[1] != null ? palette[1] : 0xf5e0c4;
-    var bottomColor = palette && palette[2] != null ? palette[2] : 0xf1f4fb;
-    gradient.addColorStop(0, '#' + ('000000' + topColor.toString(16)).slice(-6));
-    gradient.addColorStop(0.45, '#' + ('000000' + midColor.toString(16)).slice(-6));
-    gradient.addColorStop(1, '#' + ('000000' + bottomColor.toString(16)).slice(-6));
+    gradient.addColorStop(0, '#3B7DD8');     // Rich blue at zenith
+    gradient.addColorStop(0.15, '#5B9DE8');  // Medium blue
+    gradient.addColorStop(0.35, '#87CEEB');  // Sky blue
+    gradient.addColorStop(0.55, '#B0E0E6');  // Powder blue
+    gradient.addColorStop(0.75, '#E0F0FF');  // Very light blue
+    gradient.addColorStop(0.9, '#FFF8E8');   // Warm horizon glow
+    gradient.addColorStop(1.0, '#FFE8C8');   // Warm horizon
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    var sunRadius = canvas.height * 0.28;
-    var sunX = canvas.width * 0.68;
-    var sunY = canvas.height * 0.36;
-    var sunGrad = ctx.createRadialGradient(sunX, sunY, sunRadius * 0.08, sunX, sunY, sunRadius);
-    sunGrad.addColorStop(0, 'rgba(255,233,196,0.95)');
-    sunGrad.addColorStop(0.45, 'rgba(255,208,150,0.55)');
-    sunGrad.addColorStop(1, 'rgba(255,194,120,0)');
-    ctx.fillStyle = sunGrad;
+    // Bright sun with realistic glow
+    var sunX = canvas.width * 0.72;
+    var sunY = canvas.height * 0.22;
+    
+    // Outer glow
+    var outerGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, canvas.height * 0.4);
+    outerGlow.addColorStop(0, 'rgba(255,255,240,0.5)');
+    outerGlow.addColorStop(0.3, 'rgba(255,250,220,0.2)');
+    outerGlow.addColorStop(1, 'rgba(255,250,200,0)');
+    ctx.fillStyle = outerGlow;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Inner bright sun
+    var sunGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, canvas.height * 0.08);
+    sunGlow.addColorStop(0, 'rgba(255,255,255,1)');
+    sunGlow.addColorStop(0.5, 'rgba(255,255,240,0.9)');
+    sunGlow.addColorStop(1, 'rgba(255,250,220,0)');
+    ctx.fillStyle = sunGlow;
     ctx.beginPath();
-    ctx.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
+    ctx.arc(sunX, sunY, canvas.height * 0.15, 0, Math.PI * 2);
     ctx.fill();
+    
+    // Subtle cloud wisps
+    ctx.globalAlpha = 0.15;
+    for (var i = 0; i < 8; i++) {
+      var cloudX = canvas.width * (0.1 + Math.random() * 0.8);
+      var cloudY = canvas.height * (0.1 + Math.random() * 0.4);
+      var cloudW = canvas.width * (0.1 + Math.random() * 0.2);
+      var cloudH = canvas.height * (0.02 + Math.random() * 0.04);
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.ellipse(cloudX, cloudY, cloudW, cloudH, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
 
     var tex = new THREE.CanvasTexture(canvas);
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
     if (renderer && renderer.capabilities) {
       var aniso = renderer.capabilities.getMaxAnisotropy && renderer.capabilities.getMaxAnisotropy();
-      if (aniso) tex.anisotropy = Math.min(aniso, 8);
+      if (aniso) tex.anisotropy = Math.min(aniso, 16);
     }
-    if (typeof tex.colorSpace !== 'undefined' && THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
-    else if (typeof tex.encoding !== 'undefined' && THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
     tex.magFilter = THREE.LinearFilter;
-    tex.minFilter = THREE.LinearFilter;
-    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    tex.generateMipmaps = true;
     tex.needsUpdate = true;
     skyTexture = tex;
     return tex;
@@ -316,35 +346,51 @@
     if (renderer && scene && camera) return;
     var canvas = qs(CANVAS_ID);
     if (!canvas) return;
-    renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, preserveDrawingBuffer: true });
-    if (renderer.setPixelRatio && window.devicePixelRatio) {
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.25));
-    }
-    if (typeof renderer.outputColorSpace !== 'undefined' && THREE.SRGBColorSpace) {
+    
+    // Premium photorealistic WebGL renderer
+    renderer = new THREE.WebGLRenderer({ 
+      canvas: canvas, 
+      antialias: true, 
+      preserveDrawingBuffer: true,
+      alpha: true,
+      powerPreference: 'high-performance',
+      stencil: false,
+      depth: true
+    });
+    
+    // Maximum quality - high DPI support
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 3));
+    
+    // Proper color management for photorealism
+    if (THREE.SRGBColorSpace) {
       renderer.outputColorSpace = THREE.SRGBColorSpace;
-    } else if (typeof renderer.outputEncoding !== 'undefined' && THREE.sRGBEncoding) {
-      renderer.outputEncoding = THREE.sRGBEncoding;
     }
-    if (typeof renderer.setClearColor === 'function') renderer.setClearColor(0xffffff, 0);
+    
+    // Clear to sky blue for outdoor scenes
+    renderer.setClearColor(0x87CEEB, 1);
+    
+    // Physical lighting model
+    if ('useLegacyLights' in renderer) renderer.useLegacyLights = false;
     if ('physicallyCorrectLights' in renderer) renderer.physicallyCorrectLights = true;
-    if ('toneMapping' in renderer && THREE.ACESFilmicToneMapping) renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    if ('toneMappingExposure' in renderer) renderer.toneMappingExposure = 1.32;
-    if (renderer.shadowMap) {
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = (THREE.PCFSoftShadowMap || renderer.shadowMap.type);
-      renderer.shadowMap.autoUpdate = true;
-    }
+    
+    // Cinematic tone mapping with proper exposure
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.4;
+    
+    // High quality soft shadows
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.autoUpdate = true;
+    
     if (THREE.ColorManagement) THREE.ColorManagement.enabled = true;
+    
+    // Scene setup
     scene = new THREE.Scene();
-    var bg = createSkyTexture();
-    if (bg) {
-      if (THREE && THREE.EquirectangularReflectionMapping) bg.mapping = THREE.EquirectangularReflectionMapping;
-      scene.background = bg;
-    } else {
-      scene.background = new THREE.Color(0xf6f7fb);
-    }
-    camera = new THREE.PerspectiveCamera(48, 16/9, 0.05, 1200);
+    
+    // Camera - professional architectural lens (24mm equivalent)
+    camera = new THREE.PerspectiveCamera(50, 16/9, 0.1, 2000);
     camera.up.set(0, 1, 0);
+    
     sceneRoot = new THREE.Group();
     scene.add(sceneRoot);
   }
@@ -377,68 +423,78 @@
 
   function ensureFog(span){
     if (!scene) return;
-    var near = Math.max(70, span * 2.8);
-    var far = Math.max(360, span * 12.5);
-    scene.fog = new THREE.Fog(0xf6ddbd, near, far);
+    // Atmospheric perspective - subtle blue haze for depth
+    var near = Math.max(50, span * 2);
+    var far = Math.max(400, span * 12);
+    scene.fog = new THREE.Fog(0xC8E0F8, near, far);
   }
 
   function setupLighting(centerX, centerY, centerZ, span){
     if (!scene) return;
     clearLighting();
     ensureFog(span);
-    var hemi = trackLight(new THREE.HemisphereLight(0xfff2d2, 0xf3d3a4, 0.78));
-    if (hemi) hemi.position.set(centerX, centerY + span * 2.6, centerZ);
+    
+    // Photorealistic outdoor daylight setup
+    
+    // Hemisphere light - sky blue from above, ground brown from below
+    var hemi = trackLight(new THREE.HemisphereLight(0x87CEEB, 0x8B7355, 0.6));
+    if (hemi) hemi.position.set(centerX, centerY + span * 5, centerZ);
 
-    var ambient = trackLight(new THREE.AmbientLight(0xffffff, 0.18));
-    if (ambient) ambient.castShadow = false;
+    // Soft ambient fill
+    var ambient = trackLight(new THREE.AmbientLight(0xE8F0FF, 0.3));
 
-    var sun = trackLight(new THREE.DirectionalLight(0xffb777, 1.85));
+    // Main sun light - warm golden sunlight from upper right
+    var sun = trackLight(new THREE.DirectionalLight(0xFFFAF0, 3.5));
     if (sun) {
-      sun.position.set(centerX + span * 2.4, centerY + span * 1.35, centerZ + span * 2.6);
+      sun.position.set(centerX + span * 3, centerY + span * 4, centerZ + span * 2);
       sun.castShadow = true;
       if (sun.shadow && sun.shadow.camera) {
         sun.shadow.mapSize.set(4096, 4096);
-        sun.shadow.camera.near = 0.35;
-        sun.shadow.camera.far = Math.max(600, span * 8.5);
-        var extent = span * 2.6;
+        sun.shadow.camera.near = 0.5;
+        sun.shadow.camera.far = Math.max(1000, span * 15);
+        var extent = span * 4;
         sun.shadow.camera.left = -extent;
         sun.shadow.camera.right = extent;
         sun.shadow.camera.top = extent;
         sun.shadow.camera.bottom = -extent;
-        sun.shadow.bias = -0.00016;
-        sun.shadow.normalBias = 0.0075;
-        sun.shadow.radius = 3.2;
+        sun.shadow.bias = -0.0001;
+        sun.shadow.normalBias = 0.02;
+        sun.shadow.radius = 4;
       }
-      sun.target.position.set(centerX, centerY + span * 0.12, centerZ - span * 0.08);
+      sun.target.position.set(centerX, centerY, centerZ);
     }
 
-    var fill = trackLight(new THREE.DirectionalLight(0xcde3ff, 0.46));
-    if (fill) {
-      fill.position.set(centerX - span * 1.5, centerY + span * 1.2, centerZ - span * 1.9);
-      fill.castShadow = false;
+    // Sky fill light - cool blue from opposite side
+    var skyFill = trackLight(new THREE.DirectionalLight(0x87CEEB, 1.2));
+    if (skyFill) {
+      skyFill.position.set(centerX - span * 2, centerY + span * 3, centerZ - span * 2);
+      skyFill.castShadow = false;
     }
 
-    var bounce = trackLight(new THREE.DirectionalLight(0xffcaa0, 0.34));
+    // Ground bounce - warm reflected light
+    var bounce = trackLight(new THREE.DirectionalLight(0xE8D8C8, 0.5));
     if (bounce) {
-      bounce.position.set(centerX - span * 0.8, centerY + span * 0.6, centerZ + span * 2.2);
-      bounce.target.position.set(centerX, centerY + span * 0.18, centerZ);
+      bounce.position.set(centerX, centerY - span, centerZ + span * 2);
+      bounce.target.position.set(centerX, centerY + span * 0.5, centerZ);
       bounce.castShadow = false;
     }
 
-    var rim = trackLight(new THREE.SpotLight(0xffefd9, 0.54, span * 9.5, Math.PI / 5.4, 0.42, 1.2));
+    // Rim/back light for edge definition
+    var rim = trackLight(new THREE.SpotLight(0xFFFFFF, 1.5, span * 15, Math.PI / 5, 0.5, 1.5));
     if (rim) {
-      rim.position.set(centerX - span * 0.42, centerY + span * 3.2, centerZ - span * 1.4);
-      rim.target.position.set(centerX, centerY + span * 0.35, centerZ);
+      rim.position.set(centerX - span * 0.35, centerY + span * 4.0, centerZ - span * 1.2);
+      rim.target.position.set(centerX, centerY + span * 0.25, centerZ);
       rim.castShadow = true;
       if (rim.shadow) {
-        rim.shadow.mapSize.set(1820, 1820);
-        rim.shadow.bias = -0.00021;
+        rim.shadow.mapSize.set(2048, 2048);
+        rim.shadow.bias = -0.00012;
       }
     }
 
-    var porch = trackLight(new THREE.PointLight(0xffc48d, 0.28, Math.max(12, span * 3.8)));
+    // Soft porch fill
+    var porch = trackLight(new THREE.PointLight(0xffffff, 0.35, Math.max(15, span * 4.5)));
     if (porch) {
-      porch.position.set(centerX + span * 0.22, centerY + span * 0.42, centerZ + span * 0.88);
+      porch.position.set(centerX + span * 0.2, centerY + span * 0.35, centerZ + span * 0.75);
       porch.castShadow = false;
     }
   }
@@ -544,46 +600,86 @@
       scene.environment = envRT.texture;
       return;
     }
+    
+    // Create photorealistic HDR-style environment
     pmremGenerator = pmremGenerator || new THREE.PMREMGenerator(renderer);
     pmremGenerator.compileEquirectangularShader();
+    
     var studio = new THREE.Scene();
-    var dome = new THREE.Mesh(new THREE.SphereGeometry(60, 64, 32), new THREE.MeshBasicMaterial({ color: 0xfff4e1, side: THREE.BackSide }));
+    
+    // Sky dome with realistic gradient - bright blue sky
+    var skyCanvas = document.createElement('canvas');
+    skyCanvas.width = 1024;
+    skyCanvas.height = 512;
+    var skyCtx = skyCanvas.getContext('2d');
+    var skyGrad = skyCtx.createLinearGradient(0, 0, 0, 512);
+    skyGrad.addColorStop(0, '#4A90D9');      // Deep blue at top
+    skyGrad.addColorStop(0.3, '#87CEEB');    // Sky blue
+    skyGrad.addColorStop(0.6, '#B0E0E6');    // Powder blue
+    skyGrad.addColorStop(0.85, '#E6F3FF');   // Very light blue near horizon
+    skyGrad.addColorStop(1.0, '#FFF8DC');    // Warm cream at horizon
+    skyCtx.fillStyle = skyGrad;
+    skyCtx.fillRect(0, 0, 1024, 512);
+    
+    // Add sun glow
+    var sunGrad = skyCtx.createRadialGradient(750, 100, 0, 750, 100, 150);
+    sunGrad.addColorStop(0, 'rgba(255,255,240,1)');
+    sunGrad.addColorStop(0.1, 'rgba(255,250,220,0.9)');
+    sunGrad.addColorStop(0.4, 'rgba(255,240,200,0.3)');
+    sunGrad.addColorStop(1, 'rgba(255,240,200,0)');
+    skyCtx.fillStyle = sunGrad;
+    skyCtx.fillRect(0, 0, 1024, 512);
+    
+    var skyTex = new THREE.CanvasTexture(skyCanvas);
+    skyTex.mapping = THREE.EquirectangularReflectionMapping;
+    
+    var domeMat = new THREE.MeshBasicMaterial({ 
+      map: skyTex,
+      side: THREE.BackSide 
+    });
+    var dome = new THREE.Mesh(new THREE.SphereGeometry(500, 64, 32), domeMat);
     studio.add(dome);
 
-    var floor = new THREE.Mesh(new THREE.CircleGeometry(45, 64), new THREE.MeshStandardMaterial({ color: 0xf6e6d2, roughness: 0.38, metalness: 0.16 }));
+    // Ground plane for reflections - warm concrete/grass tint
+    var groundCanvas = document.createElement('canvas');
+    groundCanvas.width = 512;
+    groundCanvas.height = 512;
+    var groundCtx = groundCanvas.getContext('2d');
+    var groundGrad = groundCtx.createRadialGradient(256, 256, 0, 256, 256, 400);
+    groundGrad.addColorStop(0, '#90A090');   // Greenish center (grass)
+    groundGrad.addColorStop(0.5, '#A0A090'); // Transition
+    groundGrad.addColorStop(1, '#B0A898');   // Warm edge
+    groundCtx.fillStyle = groundGrad;
+    groundCtx.fillRect(0, 0, 512, 512);
+    
+    var groundTex = new THREE.CanvasTexture(groundCanvas);
+    var floorMat = new THREE.MeshBasicMaterial({ map: groundTex });
+    var floor = new THREE.Mesh(new THREE.CircleGeometry(400, 64), floorMat);
     floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -1;
     studio.add(floor);
 
-    var wallPanel = new THREE.Mesh(new THREE.BoxGeometry(38, 24, 2), new THREE.MeshStandardMaterial({ color: 0xf3e5d6, roughness: 0.35, metalness: 0.22, emissive: new THREE.Color(0xf5d3a6), emissiveIntensity: 0.18 }));
-    wallPanel.position.set(-10, 6, -30);
-    studio.add(wallPanel);
-
-    var coolPanel = new THREE.Mesh(new THREE.BoxGeometry(28, 22, 1.8), new THREE.MeshStandardMaterial({ color: 0xdfe7f5, roughness: 0.42, metalness: 0.28 }));
-    coolPanel.position.set(24, 4, 26);
-    coolPanel.rotation.y = Math.PI / 4;
-    studio.add(coolPanel);
-
-    var pillar = new THREE.Mesh(new THREE.CylinderGeometry(4, 4.6, 30, 32), new THREE.MeshStandardMaterial({ color: 0xdadfe4, roughness: 0.38, metalness: 0.24 }));
-    pillar.position.set(-18, 0, 14);
-    studio.add(pillar);
-
-    var pillar2 = pillar.clone();
-    pillar2.position.set(18, -2, -18);
-    studio.add(pillar2);
-
+    // Sun light emitter (very bright, warm)
     function addEmitter(width, height, position, rotation, colorHex, intensity){
-      var mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || 0xffffff).multiplyScalar(intensity || 1.2) });
+      var color = new THREE.Color(colorHex || 0xffffff);
+      color.multiplyScalar(intensity || 1);
+      var mat = new THREE.MeshBasicMaterial({ color: color });
       var plane = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
       plane.position.copy(position);
       if (rotation) plane.rotation.set(rotation.x || 0, rotation.y || 0, rotation.z || 0);
       studio.add(plane);
     }
 
-    addEmitter(28, 18, new THREE.Vector3(-32, 18, 6), { y: Math.PI / 2.2 }, 0xffffff, 4.8);
-    addEmitter(18, 12, new THREE.Vector3(24, 12, -28), { y: -Math.PI / 2.4 }, 0xf7f0df, 3.6);
-    addEmitter(16, 10, new THREE.Vector3(6, 20, 30), { x: -Math.PI / 12 }, 0xcbe2ff, 2.4);
+    // Bright sun (key light)
+    addEmitter(80, 80, new THREE.Vector3(200, 150, 100), { x: -0.5, y: -0.3 }, 0xFFFAF0, 8.0);
+    
+    // Sky fill (large soft)
+    addEmitter(200, 150, new THREE.Vector3(0, 200, 0), { x: Math.PI/2 }, 0x87CEEB, 2.0);
+    
+    // Ground bounce (warm)
+    addEmitter(300, 300, new THREE.Vector3(0, -50, 0), { x: -Math.PI/2 }, 0xE8DCC8, 0.8);
 
-    envRT = pmremGenerator.fromScene(studio, 0.05);
+    envRT = pmremGenerator.fromScene(studio, 0.02);
     scene.environment = envRT.texture;
   }
 
@@ -636,7 +732,7 @@
 
   function gatherProjectSnapshot(){
     try {
-      return {
+      var snapshot = {
         rooms: Array.isArray(window.allRooms) ? window.allRooms.slice() : [],
         wallStrips: Array.isArray(window.wallStrips) ? window.wallStrips.slice() : [],
         pergolas: Array.isArray(window.pergolaComponents) ? window.pergolaComponents.slice() : [],
@@ -644,23 +740,59 @@
         pools: Array.isArray(window.poolComponents) ? window.poolComponents.slice() : [],
         roofs: Array.isArray(window.roofComponents) ? window.roofComponents.slice() : [],
         balconies: Array.isArray(window.balconyComponents) ? window.balconyComponents.slice() : [],
-        furniture: Array.isArray(window.furnitureItems) ? window.furnitureItems.slice() : []
+        furniture: Array.isArray(window.furnitureItems) ? window.furnitureItems.slice() : [],
+        stairs: Array.isArray(window.stairsComponents) ? window.stairsComponents.slice() : []
       };
+      console.log('[Visualize] gatherProjectSnapshot:', {
+        rooms: snapshot.rooms.length,
+        wallStrips: snapshot.wallStrips.length,
+        pergolas: snapshot.pergolas.length,
+        garages: snapshot.garages.length,
+        pools: snapshot.pools.length,
+        roofs: snapshot.roofs.length,
+        balconies: snapshot.balconies.length,
+        furniture: snapshot.furniture.length,
+        stairs: snapshot.stairs.length,
+        sampleRoom: snapshot.rooms[0] || null
+      });
+      return snapshot;
     } catch(err){
       console.warn('[Visualize] Failed to gather snapshot', err);
-      return { rooms: [], wallStrips: [] };
+      return { rooms: [], wallStrips: [], pergolas: [], garages: [], pools: [], roofs: [], balconies: [], furniture: [], stairs: [] };
     }
   }
 
   function boxFromDimensions(item){
     var hasBaseHeight = isFiniteNumber(item.baseHeight);
     var base = hasBaseHeight ? item.baseHeight : (isFiniteNumber(item.y) ? item.y : 0);
+    var centerX = (item.x || 0);
+    var centerZ = (item.z || 0);
+    var width = Math.max(0.1, item.width || 0);
+    var depth = Math.max(0.1, item.depth || 0);
+    if (Array.isArray(item.footprint) && item.footprint.length >= 3) {
+      var minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      item.footprint.forEach(function(pt){
+        if (!pt) return;
+        var px = isFiniteNumber(pt.x) ? pt.x : 0;
+        var pz = isFiniteNumber(pt.z) ? pt.z : 0;
+        if (px < minX) minX = px;
+        if (px > maxX) maxX = px;
+        if (pz < minZ) minZ = pz;
+        if (pz > maxZ) maxZ = pz;
+      });
+      if (isFinite(minX) && isFinite(maxX) && isFinite(minZ) && isFinite(maxZ)) {
+        centerX = (minX + maxX) / 2;
+        centerZ = (minZ + maxZ) / 2;
+        width = Math.max(0.1, maxX - minX);
+        depth = Math.max(0.1, maxZ - minZ);
+      }
+    }
     return {
-      cx: (item.x || 0),
+      cx: centerX,
       cy: (item.y || 0),
-      cz: (item.z || 0),
-      width: Math.max(0.1, item.width || 0),
-      depth: Math.max(0.1, item.depth || 0),
+      cz: centerZ,
+      width: width,
+      depth: depth,
       height: Math.max(0.5, item.height || 2.6),
       level: item.level || 0,
       baseY: base,
@@ -814,6 +946,105 @@
     var yBase = baseElevation(box);
     mesh.position.set(box.cx, yBase + (box.height / 2), box.cz);
     if (box.rotation) mesh.rotation.y = box.rotation;
+    return mesh;
+  }
+
+  function roomFootprintCenter(points){
+    var cx = 0;
+    var cz = 0;
+    var count = 0;
+    for (var i = 0; i < points.length; i++){
+      var pt = points[i];
+      if (!pt) continue;
+      var px = isFiniteNumber(pt.x) ? pt.x : 0;
+      var pz = isFiniteNumber(pt.z) ? pt.z : 0;
+      cx += px;
+      cz += pz;
+      count++;
+    }
+    if (!count) return { x: 0, z: 0 };
+    return { x: cx / count, z: cz / count };
+  }
+
+  function ensureCounterClockwise(points){
+    var area = 0;
+    for (var i = 0; i < points.length; i++){
+      var current = points[i];
+      var next = points[(i + 1) % points.length];
+      var x1 = isFiniteNumber(current && current.x) ? current.x : 0;
+      var z1 = isFiniteNumber(current && current.z) ? current.z : 0;
+      var x2 = isFiniteNumber(next && next.x) ? next.x : 0;
+      var z2 = isFiniteNumber(next && next.z) ? next.z : 0;
+      area += (x1 * z2) - (x2 * z1);
+    }
+    if (area < 0) return points.slice().reverse();
+    return points.slice();
+  }
+
+  function buildHoleShape(loop, center){
+    if (!Array.isArray(loop) || loop.length < 3) return null;
+    var normalized = ensureCounterClockwise(loop).reverse();
+    var hole = new THREE.Path();
+    for (var i = 0; i < normalized.length; i++){
+      var pt = normalized[i];
+      var hx = (isFiniteNumber(pt && pt.x) ? pt.x : 0) - center.x;
+      var hz = (isFiniteNumber(pt && pt.z) ? pt.z : 0) - center.z;
+      if (i === 0) hole.moveTo(hx, hz);
+      else hole.lineTo(hx, hz);
+    }
+    hole.closePath();
+    return hole;
+  }
+
+  function buildRoomMeshFromRoom(room, material){
+    var baseHeight = isFiniteNumber(room.baseHeight) ? room.baseHeight : (isFiniteNumber(room.y) ? room.y : ((room.level || 0) * floorHeight));
+    var targetHeight = Math.max(2.2, isFiniteNumber(room.height) ? room.height : 2.8);
+    
+    // Get footprint - either from explicit footprint array or derive from x/z/width/depth
+    var footprint = null;
+    if (Array.isArray(room.footprint) && room.footprint.length >= 3) {
+      footprint = room.footprint;
+    } else if (isFiniteNumber(room.width) && isFiniteNumber(room.depth) && room.width > 0 && room.depth > 0) {
+      // Create rectangular footprint from center, width, depth, and rotation
+      var cx = isFiniteNumber(room.x) ? room.x : 0;
+      var cz = isFiniteNumber(room.z) ? room.z : 0;
+      var hw = room.width / 2;
+      var hd = room.depth / 2;
+      var rot = ((room.rotation || 0) * Math.PI / 180);
+      var cosR = Math.cos(rot);
+      var sinR = Math.sin(rot);
+      footprint = [
+        { x: cx + (cosR * hw - sinR * hd), z: cz + (sinR * hw + cosR * hd) },
+        { x: cx + (cosR * hw - sinR * (-hd)), z: cz + (sinR * hw + cosR * (-hd)) },
+        { x: cx + (cosR * (-hw) - sinR * (-hd)), z: cz + (sinR * (-hw) + cosR * (-hd)) },
+        { x: cx + (cosR * (-hw) - sinR * hd), z: cz + (sinR * (-hw) + cosR * hd) }
+      ];
+    }
+    
+    if (!footprint || footprint.length < 3) return null;
+    
+    footprint = ensureCounterClockwise(footprint);
+    var center = roomFootprintCenter(footprint);
+    var shape = new THREE.Shape();
+    footprint.forEach(function(pt, idx){
+      var sx = (isFiniteNumber(pt && pt.x) ? pt.x : 0) - center.x;
+      var sz = (isFiniteNumber(pt && pt.z) ? pt.z : 0) - center.z;
+      if (idx === 0) shape.moveTo(sx, sz);
+      else shape.lineTo(sx, sz);
+    });
+    shape.closePath();
+    if (Array.isArray(room.holes)) {
+      room.holes.forEach(function(loop){
+        var holePath = buildHoleShape(loop, center);
+        if (holePath) shape.holes.push(holePath);
+      });
+    }
+    var extrude = new THREE.ExtrudeGeometry(shape, { depth: targetHeight, bevelEnabled: false });
+    extrude.rotateX(-Math.PI / 2);
+    extrude.translate(0, baseHeight, 0);
+    ensureSecondaryUV(extrude);
+    var mesh = new THREE.Mesh(extrude, material);
+    mesh.position.set(center.x, 0, center.z);
     return mesh;
   }
 
@@ -1101,11 +1332,21 @@
   }
 
   function ensureResizeListener(){
-    if (resizeHooked) return;
-    resizeHooked = true;
-    window.addEventListener('resize', function(){
-      window.requestAnimationFrame(fitRenderToStage);
-    });
+    if (!resizeHooked) {
+      resizeHooked = true;
+      window.addEventListener('resize', function(){
+        window.requestAnimationFrame(fitRenderToStage);
+      });
+    }
+    if (!resizeObserver && typeof ResizeObserver !== 'undefined') {
+      var stage = qs('visualize-stage');
+      if (stage) {
+        resizeObserver = new ResizeObserver(function(){
+          window.requestAnimationFrame(fitRenderToStage);
+        });
+        try { resizeObserver.observe(stage); } catch(_e){}
+      }
+    }
   }
 
   function fitRenderToStage(){
@@ -1178,7 +1419,7 @@
 
   function addDefaultLabel(){
     if (!fabricCanvas || fabricCanvas.getObjects().length > 0) return;
-    var label = new fabric.IText('Double-click to edit notes…', {
+    var label = new fabric.IText('Double-click to edit notes...', {
       left: 24,
       top: 24,
       fontSize: 28,
@@ -1188,6 +1429,215 @@
     fabricCanvas.add(label);
   }
 
+  function setGalleryShots(shots){
+    galleryShots = Array.isArray(shots) ? shots.slice() : [];
+    galleryShotMap = Object.create(null);
+    for (var i = 0; i < galleryShots.length; i++){
+      var shot = galleryShots[i] || {};
+      var id = shot.id != null ? String(shot.id) : 'shot-' + i;
+      shot.id = id;
+      if (!shot.previewUrl && shot.dataUrl) shot.previewUrl = shot.dataUrl;
+      if (!shot.fullUrl && shot.dataUrl) shot.fullUrl = shot.dataUrl;
+      galleryShotMap[id] = shot;
+    }
+  }
+
+  function updateGalleryGrid(message){
+    var container = qs('visualize-gallery');
+    if (!container) return;
+    container.innerHTML = '';
+    if (message){
+      var msgEl = document.createElement('div');
+      msgEl.className = 'visualize-gallery-empty';
+      msgEl.textContent = message;
+      container.appendChild(msgEl);
+      return;
+    }
+    if (!galleryShots || galleryShots.length === 0){
+      var empty = document.createElement('div');
+      empty.className = 'visualize-gallery-empty';
+      empty.textContent = 'Generate a render to populate design views.';
+      container.appendChild(empty);
+      return;
+    }
+    galleryShots.forEach(function(shot){
+      if (!shot) return;
+      var preview = shot.previewUrl || shot.fullUrl;
+      if (!preview) return;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'visualize-gallery-thumb';
+      btn.setAttribute('data-gallery-id', shot.id);
+      btn.style.backgroundImage = 'url(' + preview + ')';
+      var label = document.createElement('span');
+      label.textContent = shot.label || 'View';
+      btn.appendChild(label);
+      container.appendChild(btn);
+    });
+  }
+
+  function openPhotoViewerById(id){
+    var shot = galleryShotMap && galleryShotMap[id];
+    if (!shot) return;
+    var viewer = qs('visualize-photo-viewer');
+    var image = qs('visualize-photo-image');
+    var caption = qs('visualize-photo-caption');
+    if (!viewer || !image) return;
+    var src = shot.fullUrl || shot.previewUrl;
+    if (!src) return;
+    image.src = src;
+    image.alt = shot.alt || shot.label || 'Design preview';
+    if (caption) caption.textContent = shot.description || shot.label || '';
+    viewer.classList.add('visible');
+    viewer.setAttribute('data-active-id', shot.id);
+  }
+
+  function closePhotoViewer(){
+    var viewer = qs('visualize-photo-viewer');
+    if (!viewer) return;
+    viewer.classList.remove('visible');
+    viewer.removeAttribute('data-active-id');
+    var image = qs('visualize-photo-image');
+    if (image) {
+      try { image.removeAttribute('src'); } catch(_e){}
+      image.alt = 'Visualize design preview';
+    }
+    var caption = qs('visualize-photo-caption');
+    if (caption) caption.textContent = '';
+  }
+
+  function describePreset(index){
+    var titles = ['Front Left', 'Front Right', 'Side Left', 'Side Right', 'Rear Left', 'Rear Right', 'Elevated', 'Top', 'Isometric', 'Alt'];
+    return titles[index] || ('View ' + (index + 1));
+  }
+
+  function waitForFrame(){
+    return new Promise(function(resolve){ window.requestAnimationFrame(resolve); });
+  }
+
+  function saveCameraState(cam){
+    if (!cam) return null;
+    return {
+      position: cam.position.clone(),
+      quaternion: cam.quaternion.clone(),
+      up: cam.up.clone(),
+      fov: cam.fov,
+      near: cam.near,
+      far: cam.far
+    };
+  }
+
+  function restoreCameraState(cam, state){
+    if (!cam || !state) return;
+    if (state.position) cam.position.copy(state.position);
+    if (state.quaternion) cam.quaternion.copy(state.quaternion);
+    if (state.up) cam.up.copy(state.up);
+    if (isFiniteNumber(state.fov)) cam.fov = state.fov;
+    if (isFiniteNumber(state.near)) cam.near = state.near;
+    if (isFiniteNumber(state.far)) cam.far = state.far;
+    cam.updateProjectionMatrix();
+  }
+
+  function applyPresetToCameraObject(cam, preset){
+    if (!cam || !preset) return;
+    if (preset.position) cam.position.copy(preset.position);
+    if (preset.up) cam.up.copy(preset.up);
+    if (isFiniteNumber(preset.fov)) cam.fov = preset.fov;
+    if (isFiniteNumber(preset.near)) cam.near = preset.near;
+    if (isFiniteNumber(preset.far)) cam.far = preset.far;
+    var target = preset.target || new THREE.Vector3(0, 0, 0);
+    cam.lookAt(target);
+    cam.updateProjectionMatrix();
+  }
+
+  async function generateViewSnapshots(options){
+    if (!renderer || !scene || !camera) return [];
+    if (!Array.isArray(VIEW_PRESETS) || VIEW_PRESETS.length === 0) return [];
+    var maxShots = options && isFiniteNumber(options.maxShots) ? Math.max(0, Math.floor(options.maxShots)) : 4;
+    if (maxShots <= 0) return [];
+    var canvas = renderer.domElement;
+    if (!canvas) return [];
+    var shots = [];
+    var originalState = saveCameraState(camera);
+    var originalIndex = viewIndex;
+    try {
+      var count = Math.min(maxShots, VIEW_PRESETS.length);
+      for (var i = 0; i < count; i++){
+        var preset = VIEW_PRESETS[i];
+        if (!preset) continue;
+        applyPresetToCameraObject(camera, preset);
+        renderer.render(scene, camera);
+        await waitForFrame();
+        var dataUrl = null;
+        try {
+          dataUrl = canvas.toDataURL('image/png');
+        } catch(err){
+          console.warn('[Visualize] Failed to capture preset snapshot', err);
+        }
+        if (dataUrl){
+          var desc = 'Camera preset ' + (i + 1);
+          if (preset && preset.target) {
+            var t = preset.target;
+            desc = desc + ' - Focus (' + t.x.toFixed(1) + ', ' + t.y.toFixed(1) + ', ' + t.z.toFixed(1) + ')';
+          }
+          shots.push({
+            id: 'preset-' + (i + 1),
+            label: describePreset(i),
+            description: desc,
+            previewUrl: dataUrl,
+            fullUrl: dataUrl,
+            source: 'preset',
+            presetIndex: i
+          });
+        }
+      }
+    } finally {
+      restoreCameraState(camera, originalState);
+      viewIndex = originalIndex;
+      renderer.render(scene, camera);
+      syncViewButtons();
+    }
+    return shots;
+  }
+
+  function captureLiveCanvasShot(){
+    try {
+      var baseCanvas = document.getElementById('canvas');
+      if (!baseCanvas || typeof baseCanvas.toDataURL !== 'function') return null;
+      if (baseCanvas.width === 0 || baseCanvas.height === 0) return null;
+      var dataUrl = baseCanvas.toDataURL('image/png');
+      if (!dataUrl || dataUrl.length < 32) return null;
+      return {
+        id: 'live-3d',
+        label: 'Live 3D View',
+        description: 'Snapshot captured from the active 3D workspace.',
+        previewUrl: dataUrl,
+        fullUrl: dataUrl,
+        source: 'live'
+      };
+    } catch(err){
+      console.warn('[Visualize] Live canvas capture failed', err);
+      return null;
+    }
+  }
+  async function populateDesignGallery(context){
+    var loadingEl = context && context.loadingEl;
+    try {
+      if (loadingEl) loadingEl.textContent = 'Capturing design views...';
+      var shots = await generateViewSnapshots({ maxShots: 4 });
+      if (loadingEl) loadingEl.textContent = 'Preparing gallery...';
+      var liveShot = captureLiveCanvasShot();
+      if (liveShot) shots.unshift(liveShot);
+      setGalleryShots(shots);
+      updateGalleryGrid();
+    } catch(err){
+      console.warn('[Visualize] Failed to populate design gallery', err);
+      if (!galleryShots || galleryShots.length === 0){
+        updateGalleryGrid('Unable to generate design images.');
+      }
+    }
+  }
+
   function gatherBoxes(snapshot){
     var boxes = [];
     var envelope = computeRoomsEnvelope(snapshot.rooms);
@@ -1195,7 +1645,7 @@
       if (!room) return;
       var box = boxFromDimensions(room);
       box.height = Math.max(2.2, room.height || 2.8);
-      boxes.push({ box: box, kind: 'room' });
+      boxes.push({ box: box, kind: 'room', room: room });
     });
     snapshot.pergolas.forEach(function(pergola){
       if (!pergola) return;
@@ -1232,162 +1682,78 @@
       box.height = Math.max(0.4, item.height || 1.0);
       boxes.push({ box: box, kind: 'furniture' });
     });
+    // Add stairs if present
+    if (Array.isArray(snapshot.stairs)) {
+      snapshot.stairs.forEach(function(stair){
+        if (!stair) return;
+        var box = boxFromDimensions(stair);
+        box.height = Math.max(2.8, stair.height || 3.0);
+        boxes.push({ box: box, kind: 'room' }); // Render stairs as room-like structure
+      });
+    }
     return boxes;
   }
 
   function materialFor(kind){
     var palette = {
-      room: { color: 0xf4efe8, roughness: 0.28, metalness: 0.06, clearcoat: 0.55, clearcoatRoughness: 0.18, sheen: 0.45, sheenColor: 0xfdf6ed, sheenRoughness: 0.72, noiseKey: 'room', brightness: 236, variation: 18, repeat: 3.5, bumpScale: 0.045, envMapIntensity: 1.4 },
-      garage: { color: 0xdde2e8, roughness: 0.42, metalness: 0.08, clearcoat: 0.18, clearcoatRoughness: 0.38, noiseKey: 'garage', brightness: 222, variation: 22, repeat: 4.5, bumpScale: 0.06, envMapIntensity: 1.2 },
-      pergola: { color: 0xd8c6b4, roughness: 0.32, metalness: 0.04, clearcoat: 0.46, clearcoatRoughness: 0.14, noiseKey: 'pergola', brightness: 220, variation: 26, repeat: 2.8, bumpScale: 0.08, envMapIntensity: 1.15 },
-      pool: { color: 0xc9d8e8, roughness: 0.1, metalness: 0.04, clearcoat: 0.72, clearcoatRoughness: 0.04, transmission: 0.86, thickness: 0.75, attenuationDistance: 3.2, attenuationColor: 0xc8ddf6, opacity: 1, noiseKey: 'pool', brightness: 240, variation: 8, repeat: 3.5, bumpScale: 0.035, envMapIntensity: 1.6 },
-      roof: { color: 0x4b4f56, roughness: 0.52, metalness: 0.18, clearcoat: 0.12, clearcoatRoughness: 0.5, noiseKey: 'roof', brightness: 210, variation: 32, repeat: 5.5, bumpScale: 0.12, envMapIntensity: 1.1 },
-      balcony: { color: 0xe8dfd2, roughness: 0.36, metalness: 0.07, clearcoat: 0.24, clearcoatRoughness: 0.3, sheen: 0.25, sheenColor: 0xf3eade, sheenRoughness: 0.6, noiseKey: 'balcony', brightness: 232, variation: 18, repeat: 3.8, bumpScale: 0.05, envMapIntensity: 1.35 },
-      furniture: { color: 0xe0d4c5, roughness: 0.48, metalness: 0.08, clearcoat: 0.22, clearcoatRoughness: 0.42, sheen: 0.3, sheenColor: 0xf7ede2, sheenRoughness: 0.68, noiseKey: 'furn', brightness: 224, variation: 26, repeat: 4.2, bumpScale: 0.06, envMapIntensity: 1.28 },
-      wall: { color: 0xe6eaef, roughness: 0.38, metalness: 0.05, clearcoat: 0.28, clearcoatRoughness: 0.32, noiseKey: 'wall', brightness: 228, variation: 24, repeat: 5.2, bumpScale: 0.055, envMapIntensity: 1.25 },
-      windowFrame: { color: 0xdbe2ec, roughness: 0.24, metalness: 0.58, clearcoat: 0.92, clearcoatRoughness: 0.22, specularIntensity: 0.92, specularColor: 0xf8fbff, noiseKey: 'window-frame', brightness: 236, variation: 12, repeat: 6, bumpScale: 0.018, envMapIntensity: 2.6 },
-      doorFrame: { color: 0xe4d3c0, roughness: 0.26, metalness: 0.42, clearcoat: 0.68, clearcoatRoughness: 0.28, specularIntensity: 0.78, specularColor: 0xf6ede4, noiseKey: 'door-frame', brightness: 230, variation: 18, repeat: 4.5, bumpScale: 0.02, envMapIntensity: 2.1 },
-      doorPanel: { color: 0xcaa585, roughness: 0.38, metalness: 0.18, clearcoat: 0.42, clearcoatRoughness: 0.28, sheen: 0.24, sheenColor: 0xfbf3eb, sheenRoughness: 0.62, specularIntensity: 0.62, specularColor: 0xf2e5db, noiseKey: 'door-panel', brightness: 224, variation: 28, repeat: 3.4, bumpScale: 0.045, envMapIntensity: 1.4 },
-      glass: { color: 0xf6fbff, roughness: 0.04, metalness: 0.02, clearcoat: 0.12, clearcoatRoughness: 0.05, transmission: 0.98, thickness: 0.5, attenuationDistance: 14, attenuationColor: 0xdbe7ff, opacity: 0.95, envMapIntensity: 1.9, useNoiseMap: false, transparent: true, depthWrite: false, doubleSide: true, specularIntensity: 0.96, specularColor: 0xf1f5ff, ior: 1.52 },
-      accentPanel: { color: 0xf0ede5, roughness: 0.32, metalness: 0.22, clearcoat: 0.48, clearcoatRoughness: 0.16, specularIntensity: 0.74, specularColor: 0xf9f6f0, sheen: 0.18, sheenColor: 0xf4ede2, sheenRoughness: 0.58, noiseKey: 'accent-panel', brightness: 232, variation: 18, repeat: 3.5, bumpScale: 0.035, envMapIntensity: 1.75 },
-      groundPath: { color: 0xd7dae0, roughness: 0.28, metalness: 0.24, clearcoat: 0.22, clearcoatRoughness: 0.28, specularIntensity: 0.68, specularColor: 0xf1f4f8, noiseKey: 'ground-path', brightness: 230, variation: 16, repeat: 8, bumpScale: 0.03, envMapIntensity: 1.65 },
-      woodAccent: { color: 0x3d2a20, roughness: 0.42, metalness: 0.32, clearcoat: 0.68, clearcoatRoughness: 0.32, sheen: 0.35, sheenColor: 0xf0d7c0, sheenRoughness: 0.55, specularIntensity: 0.82, specularColor: 0xf6e4d2, noiseKey: 'wood-accent', brightness: 196, variation: 34, repeat: 5.4, bumpScale: 0.06, envMapIntensity: 2.4 },
-      boulder: { color: 0x6f6761, roughness: 0.94, metalness: 0.12, clearcoat: 0.05, clearcoatRoughness: 0.78, noiseKey: 'boulder', brightness: 190, variation: 36, repeat: 2.6, bumpScale: 0.12, envMapIntensity: 0.9, aoMapIntensity: 0.9 },
-      foliage: { color: 0x5e7f4b, roughness: 0.58, metalness: 0.18, clearcoat: 0.22, clearcoatRoughness: 0.42, transmission: 0, noiseKey: 'foliage', brightness: 178, variation: 42, repeat: 3, bumpScale: 0.08, envMapIntensity: 1.8, aoMapIntensity: 0.4 }
+      // Photorealistic architectural materials
+      room: { color: 0xF5F5F0, roughness: 0.4, metalness: 0.0, envMapIntensity: 1.0 },
+      garage: { color: 0xE8E8E0, roughness: 0.5, metalness: 0.0, envMapIntensity: 0.8 },
+      pergola: { color: 0x8B7355, roughness: 0.6, metalness: 0.0, envMapIntensity: 0.6 },
+      pool: { color: 0x4A90D9, roughness: 0.1, metalness: 0.0, transmission: 0.6, thickness: 0.5, envMapIntensity: 1.5 },
+      roof: { color: 0x4A4A4A, roughness: 0.7, metalness: 0.2, envMapIntensity: 0.8 },
+      balcony: { color: 0xE0E0D8, roughness: 0.35, metalness: 0.0, envMapIntensity: 0.9 },
+      furniture: { color: 0xD2B48C, roughness: 0.5, metalness: 0.0, envMapIntensity: 0.7 },
+      wall: { color: 0xFAFAF5, roughness: 0.45, metalness: 0.0, envMapIntensity: 0.9 },
+      windowFrame: { color: 0x2F2F2F, roughness: 0.2, metalness: 0.8, envMapIntensity: 1.5 },
+      doorFrame: { color: 0x3A3A3A, roughness: 0.25, metalness: 0.6, envMapIntensity: 1.2 },
+      doorPanel: { color: 0x6B4423, roughness: 0.4, metalness: 0.1, envMapIntensity: 0.8 },
+      glass: { color: 0xE8F4FF, roughness: 0.05, metalness: 0.0, transmission: 0.9, thickness: 0.1, transparent: true, opacity: 0.3, envMapIntensity: 2.0, ior: 1.5 },
+      accentPanel: { color: 0xE8E8E0, roughness: 0.3, metalness: 0.1, envMapIntensity: 1.0 },
+      groundPath: { color: 0xC0C0B8, roughness: 0.6, metalness: 0.05, envMapIntensity: 0.6 },
+      woodAccent: { color: 0x5D4037, roughness: 0.5, metalness: 0.0, envMapIntensity: 0.7 },
+      boulder: { color: 0x808075, roughness: 0.85, metalness: 0.0, envMapIntensity: 0.5 },
+      foliage: { color: 0x4A7A4A, roughness: 0.8, metalness: 0.0, envMapIntensity: 0.4 }
     };
-    var spec = palette[kind] || { color: 0xf2f3f5, roughness: 0.4, metalness: 0.05, clearcoat: 0.18, clearcoatRoughness: 0.35, noiseKey: 'default', brightness: 230, variation: 16, repeat: 4 };
-    var exposureJitter = getMaterialExposureJitter(kind);
-    if (exposureJitter !== 1) {
-      spec.color = adjustColor(spec.color, exposureJitter);
-    }
-    var mat = new THREE.MeshPhysicalMaterial({
+    var spec = palette[kind] || { color: 0xE0E0D8, roughness: 0.5, metalness: 0.0, envMapIntensity: 0.8 };
+    
+    var mat = new THREE.MeshStandardMaterial({
       color: spec.color,
       roughness: spec.roughness,
-      metalness: spec.metalness,
-      clearcoat: spec.clearcoat || 0,
-      clearcoatRoughness: spec.clearcoatRoughness || 0,
-      transmission: spec.transmission || 0,
-      thickness: spec.thickness || 0.1,
-      attenuationDistance: spec.attenuationDistance || 0,
-      attenuationColor: new THREE.Color(spec.attenuationColor || 0xffffff),
-      reflectivity: spec.reflectivity != null ? spec.reflectivity : 0.5,
-      ior: spec.ior || 1.45
+      metalness: spec.metalness
     });
-    mat.envMapIntensity = spec.envMapIntensity || 1.2;
+    mat.envMapIntensity = spec.envMapIntensity || 1.0;
+    
+    // Handle transmission for glass/water
+    if (spec.transmission) {
+      mat = new THREE.MeshPhysicalMaterial({
+        color: spec.color,
+        roughness: spec.roughness,
+        metalness: spec.metalness,
+        transmission: spec.transmission,
+        thickness: spec.thickness || 0.1,
+        ior: spec.ior || 1.45,
+        envMapIntensity: spec.envMapIntensity || 1.0
+      });
+    }
+    
     if (typeof spec.opacity === 'number') {
       mat.opacity = spec.opacity;
-      mat.transparent = spec.transparent === true || spec.opacity < 1 || (spec.transmission && spec.transmission > 0);
+      mat.transparent = true;
     }
-    if (spec.depthWrite === false) mat.depthWrite = false;
-    mat.side = spec.doubleSide ? THREE.DoubleSide : ((kind === 'pergola' || kind === 'roof') ? THREE.DoubleSide : THREE.FrontSide);
-    if (typeof spec.specularIntensity === 'number') mat.specularIntensity = spec.specularIntensity;
-    if (typeof spec.specularColor !== 'undefined') mat.specularColor = new THREE.Color(spec.specularColor);
-    if (spec.useNoiseMap !== false) {
-      var tex = noiseTexture(spec.noiseKey || kind, spec.brightness, spec.variation, spec.repeat);
-      mat.map = tex;
-      mat.roughnessMap = tex;
-      mat.bumpMap = tex;
-      mat.aoMap = tex;
-      mat.aoMapIntensity = spec.aoMapIntensity != null ? spec.aoMapIntensity : 0.6;
-      mat.bumpScale = spec.bumpScale || 0.04;
-    } else {
-      mat.bumpScale = spec.bumpScale || 0;
-    }
-    if (spec.sheen) {
-      mat.sheen = spec.sheen;
-      mat.sheenColor = new THREE.Color(spec.sheenColor || 0xffffff);
-      mat.sheenRoughness = spec.sheenRoughness != null ? spec.sheenRoughness : 0.6;
-    }
+    if (spec.transparent) mat.transparent = true;
     mat.needsUpdate = true;
     return mat;
   }
 
   function addArchitecturalAccents(entry){
-    if (!entry || entry.kind !== 'room') return;
-    var box = entry.box;
-    if (!box || box.height < 0.8) return;
-    var baseY = baseElevation(box);
-    var trimHeight = Math.min(0.35, Math.max(0.08, box.height * 0.14));
-    var trimGeom = new THREE.BoxGeometry(box.width * 1.025, trimHeight, box.depth * 1.025);
-    ensureSecondaryUV(trimGeom);
-    var trimMat = new THREE.MeshPhysicalMaterial({
-      color: 0xffffff,
-      roughness: 0.18,
-      metalness: 0.05,
-      clearcoat: 0.6,
-      clearcoatRoughness: 0.12,
-      envMapIntensity: 1.45,
-      map: noiseTexture('room-trim', 244, 12, 4)
-    });
-    var trim = new THREE.Mesh(trimGeom, trimMat);
-    trim.position.set(box.cx, baseY + box.height - (trimHeight / 2), box.cz);
-    registerMesh(trim, { edgeColor: EDGE_COLORS.default, castShadow: false });
-
-    var socleHeight = Math.min(0.25, Math.max(0.05, box.height * 0.07));
-    var socleGeom = new THREE.BoxGeometry(box.width * 1.05, socleHeight, box.depth * 1.05);
-    ensureSecondaryUV(socleGeom);
-    var socleMat = new THREE.MeshPhysicalMaterial({
-      color: 0xe1e5eb,
-      roughness: 0.58,
-      metalness: 0.04,
-      clearcoat: 0.18,
-      clearcoatRoughness: 0.4,
-      envMapIntensity: 1.1,
-      map: noiseTexture('room-base', 220, 20, 5)
-    });
-    var socle = new THREE.Mesh(socleGeom, socleMat);
-    socle.position.set(box.cx, baseY + (socleHeight / 2), box.cz);
-    registerMesh(socle, { edgeColor: EDGE_COLORS.default, castShadow: true });
+    // Skip accents - keep it clean for now
+    return;
   }
 
   function addSignatureFacade(bounds, centerX, centerY, centerZ, span){
-    if (!bounds || !THREE) return;
-    var baseY = isFiniteNumber(bounds.minY) ? bounds.minY : 0;
-    var height = Math.max(3.2, (bounds.maxY - baseY) * 0.88);
-    var width = Math.max(6, (bounds.maxX - bounds.minX) * 0.78);
-    var offsetZ = Math.max(0.32, span * 0.18);
-    var frontZ = bounds.maxZ + offsetZ;
-    var frameDepth = Math.max(0.14, span * 0.035);
-
-    var frameGeom = new THREE.BoxGeometry(width + frameDepth * 0.55, height + frameDepth * 0.38, frameDepth);
-    ensureSecondaryUV(frameGeom);
-    var frame = new THREE.Mesh(frameGeom, materialFor('woodAccent'));
-    frame.position.set(centerX, baseY + height * 0.52, frontZ);
-    frame.castShadow = true;
-    registerMesh(frame, { edgeColor: EDGE_COLORS.accent, receiveShadow: true });
-
-    var glassGeom = new THREE.PlaneGeometry(width * 0.94, height * 0.9);
-    var glass = new THREE.Mesh(glassGeom, materialFor('glass'));
-    glass.position.set(centerX, baseY + height * 0.5, frontZ - frameDepth * 0.42);
-    glass.castShadow = false;
-    glass.renderOrder = 2.5;
-    registerMesh(glass, { skipEdges: true, edgeColor: EDGE_COLORS.glass, receiveShadow: true });
-
-    var canopyGeom = new THREE.BoxGeometry(width * 1.05, frameDepth * 0.55, frameDepth * 2.6);
-    ensureSecondaryUV(canopyGeom);
-    var canopy = new THREE.Mesh(canopyGeom, materialFor('accentPanel'));
-    canopy.position.set(centerX, baseY + height + frameDepth * 0.4, frontZ - frameDepth * 0.6);
-    canopy.castShadow = true;
-    registerMesh(canopy, { edgeColor: EDGE_COLORS.accent, receiveShadow: true });
-
-    var slatCount = 6;
-    var slatSpacing = width / slatCount;
-    var slatMat = materialFor('woodAccent');
-    for (var i = 0; i < slatCount; i++){
-      var slatGeom = new THREE.BoxGeometry(Math.max(0.12, slatSpacing * 0.12), height + frameDepth * 0.42, frameDepth * 0.38);
-      ensureSecondaryUV(slatGeom);
-      var slat = new THREE.Mesh(slatGeom, slatMat);
-      var offset = -width / 2 + slatSpacing * (i + 0.5);
-      slat.position.set(centerX + offset, baseY + height * 0.5, frontZ + frameDepth * 0.12);
-      slat.castShadow = true;
-      registerMesh(slat, { edgeColor: EDGE_COLORS.accent, receiveShadow: true });
-    }
-
-    var plinthGeom = new THREE.BoxGeometry(width * 0.92, frameDepth * 0.4, frameDepth * 1.6);
-    ensureSecondaryUV(plinthGeom);
-    var plinth = new THREE.Mesh(plinthGeom, materialFor('groundPath'));
-    plinth.position.set(centerX, baseY + frameDepth * 0.2, frontZ - frameDepth * 0.4);
-    registerMesh(plinth, { edgeColor: EDGE_COLORS.accent, receiveShadow: false, castShadow: false });
+    // Skip facade - render only user's design
+    return;
   }
 
   function buildGround(bounds, centerX, centerZ, baseY, span){
@@ -1397,84 +1763,90 @@
       dx = dz = 12;
     }
     var footprint = Math.max(dx, dz, span);
-    var podiumHeight = Math.max(0.08, footprint * 0.015);
-    var baseGeom = new THREE.BoxGeometry(footprint * 1.65, podiumHeight, footprint * 1.5);
-    ensureSecondaryUV(baseGeom);
-    var baseMat = new THREE.MeshPhysicalMaterial({ color: 0xe2e6ec, roughness: 0.85, metalness: 0.02, clearcoat: 0.08, clearcoatRoughness: 0.6, map: noiseTexture('ground-base', 224, 18, 2.5) });
-    var base = new THREE.Mesh(baseGeom, baseMat);
     var groundY = (typeof baseY === 'number') ? baseY : 0;
-    base.position.set(centerX, groundY - (podiumHeight / 2), centerZ);
-    registerMesh(base, { edgeColor: EDGE_COLORS.podium, castShadow: false });
-
-    var deckGeom = new THREE.BoxGeometry(footprint * 1.35, podiumHeight * 0.55, footprint * 1.25);
-    ensureSecondaryUV(deckGeom);
-    var deckMat = new THREE.MeshPhysicalMaterial({ color: 0xf5f6f8, roughness: 0.62, metalness: 0.04, clearcoat: 0.12, clearcoatRoughness: 0.25, map: noiseTexture('ground-deck', 236, 10, 3) });
-    var deck = new THREE.Mesh(deckGeom, deckMat);
-    deck.position.set(centerX, groundY + podiumHeight * 0.12, centerZ);
-    registerMesh(deck, { edgeColor: EDGE_COLORS.default, castShadow: false });
-
-    var pathGeom = new THREE.BoxGeometry(footprint * 0.82, podiumHeight * 0.32, footprint * 0.26);
-    ensureSecondaryUV(pathGeom);
-    var path = new THREE.Mesh(pathGeom, materialFor('groundPath'));
-    path.position.set(centerX, groundY + podiumHeight * 0.28, centerZ + footprint * 0.38);
-    registerMesh(path, { edgeColor: EDGE_COLORS.accent, castShadow: false });
-
-    var paverMat = materialFor('groundPath');
-    var paverCount = 4;
-    for (var i = 0; i < paverCount; i++){
-      var stepGeom = new THREE.BoxGeometry(footprint * 0.26, podiumHeight * 0.24, footprint * 0.08);
-      ensureSecondaryUV(stepGeom);
-      var step = new THREE.Mesh(stepGeom, paverMat);
-      var forward = footprint * 0.55 + i * footprint * 0.12;
-      step.position.set(centerX, groundY + podiumHeight * 0.38, centerZ + forward);
-      registerMesh(step, { edgeColor: EDGE_COLORS.accent, castShadow: false });
-    }
-
-    var boulderConfigs = [
-      { offsetX: -0.42, offsetZ: 0.24, scale: 0.11 },
-      { offsetX: 0.35, offsetZ: 0.18, scale: 0.08 },
-      { offsetX: -0.18, offsetZ: -0.42, scale: 0.06 }
-    ];
-
-    boulderConfigs.forEach(function(cfg){
-      var radius = Math.max(0.35, span * cfg.scale);
-      var detail = 2 + Math.floor(rng.range(0, 3));
-      var boulder = createBoulder(radius, detail, 'boulder');
-      if (!boulder) return;
-      boulder.position.set(
-        centerX + footprint * cfg.offsetX,
-        groundY + podiumHeight * 0.42 + radius * 0.35,
-        centerZ + footprint * cfg.offsetZ
-      );
-      boulder.rotation.y = rng.range(0, Math.PI * 2);
-      registerMesh(boulder, { skipEdges: true, edgeColor: EDGE_COLORS.accent, castShadow: true });
-    });
-
-    var tuftConfigs = [
-      { offsetX: -0.26, offsetZ: 0.32, radius: 0.28, height: 0.9 },
-      { offsetX: 0.28, offsetZ: 0.28, radius: 0.24, height: 0.8 },
-      { offsetX: 0.04, offsetZ: -0.36, radius: 0.22, height: 0.7 }
-    ];
-
-    tuftConfigs.forEach(function(cfg){
-      var tuft = createGrassTuft(Math.max(0.12, span * cfg.radius * 0.12), Math.max(0.4, span * cfg.height * 0.12));
-      if (!tuft) return;
-      tuft.position.set(
-        centerX + footprint * cfg.offsetX,
-        groundY + podiumHeight * 0.32,
-        centerZ + footprint * cfg.offsetZ
-      );
-      tuft.rotation.y = rng.range(0, Math.PI * 2);
-      registerMesh(tuft, { skipEdges: true, castShadow: false, receiveShadow: true });
-    });
-
-    var floorGeom = new THREE.PlaneGeometry(footprint * 2.2, footprint * 2.2, 1, 1);
+    
+    // Photorealistic grass/ground with proper shading
+    var groundSize = footprint * 5;
+    var floorGeom = new THREE.PlaneGeometry(groundSize, groundSize, 32, 32);
     ensureSecondaryUV(floorGeom);
-    var floorMat = new THREE.MeshPhysicalMaterial({ color: 0xf4f5f7, roughness: 0.95, metalness: 0.0, map: noiseTexture('ground-plane', 240, 6, 4) });
+    
+    // Create grass texture
+    var grassCanvas = document.createElement('canvas');
+    grassCanvas.width = 1024;
+    grassCanvas.height = 1024;
+    var grassCtx = grassCanvas.getContext('2d');
+    
+    // Base grass color with variation
+    var grassGrad = grassCtx.createRadialGradient(512, 512, 0, 512, 512, 700);
+    grassGrad.addColorStop(0, '#4A7A4A');   // Rich green center
+    grassGrad.addColorStop(0.5, '#5A8A5A'); // Medium green
+    grassGrad.addColorStop(1, '#4A6A4A');   // Darker edges
+    grassCtx.fillStyle = grassGrad;
+    grassCtx.fillRect(0, 0, 1024, 1024);
+    
+    // Add noise/texture
+    var imageData = grassCtx.getImageData(0, 0, 1024, 1024);
+    var data = imageData.data;
+    for (var i = 0; i < data.length; i += 4) {
+      var noise = (Math.random() - 0.5) * 30;
+      data[i] = Math.max(0, Math.min(255, data[i] + noise));
+      data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise * 1.2));
+      data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise * 0.5));
+    }
+    grassCtx.putImageData(imageData, 0, 0);
+    
+    var grassTex = new THREE.CanvasTexture(grassCanvas);
+    grassTex.wrapS = grassTex.wrapT = THREE.RepeatWrapping;
+    grassTex.repeat.set(groundSize / 8, groundSize / 8);
+    if (THREE.SRGBColorSpace) grassTex.colorSpace = THREE.SRGBColorSpace;
+    
+    var floorMat = new THREE.MeshStandardMaterial({ 
+      map: grassTex,
+      roughness: 0.9, 
+      metalness: 0.0,
+      envMapIntensity: 0.5
+    });
     var floor = new THREE.Mesh(floorGeom, floorMat);
     floor.rotation.x = -Math.PI / 2;
-    floor.position.set(centerX, groundY - 0.002, centerZ);
-    registerMesh(floor, { castShadow: false, receiveShadow: false, skipEdges: true });
+    floor.position.set(centerX, groundY - 0.02, centerZ);
+    floor.receiveShadow = true;
+    registerMesh(floor, { castShadow: false, receiveShadow: true, skipEdges: true });
+    
+    // Add a subtle concrete/paved area around the building
+    var pavingSize = footprint * 1.5;
+    var pavingGeom = new THREE.PlaneGeometry(pavingSize, pavingSize, 1, 1);
+    ensureSecondaryUV(pavingGeom);
+    
+    var pavingCanvas = document.createElement('canvas');
+    pavingCanvas.width = 512;
+    pavingCanvas.height = 512;
+    var pavingCtx = pavingCanvas.getContext('2d');
+    pavingCtx.fillStyle = '#C8C8C0';
+    pavingCtx.fillRect(0, 0, 512, 512);
+    // Add subtle texture
+    for (var j = 0; j < 512 * 512; j++) {
+      if (Math.random() > 0.97) {
+        pavingCtx.fillStyle = 'rgba(0,0,0,0.05)';
+        pavingCtx.fillRect((j % 512), Math.floor(j / 512), 2, 2);
+      }
+    }
+    
+    var pavingTex = new THREE.CanvasTexture(pavingCanvas);
+    pavingTex.wrapS = pavingTex.wrapT = THREE.RepeatWrapping;
+    pavingTex.repeat.set(pavingSize / 4, pavingSize / 4);
+    if (THREE.SRGBColorSpace) pavingTex.colorSpace = THREE.SRGBColorSpace;
+    
+    var pavingMat = new THREE.MeshStandardMaterial({
+      map: pavingTex,
+      roughness: 0.7,
+      metalness: 0.1,
+      envMapIntensity: 0.8
+    });
+    var paving = new THREE.Mesh(pavingGeom, pavingMat);
+    paving.rotation.x = -Math.PI / 2;
+    paving.position.set(centerX, groundY - 0.01, centerZ);
+    paving.receiveShadow = true;
+    registerMesh(paving, { castShadow: false, receiveShadow: true, skipEdges: true });
 
     return groundY;
   }
@@ -1497,7 +1869,7 @@
       var fov = opts.fov || 44;
       var rad = angleDeg * Math.PI / 180;
       var dist = radius * distanceFactor;
-      var yPos = minY + Math.max(safeSpan * 0.2, heightSpan * heightFactor);
+      var yPos = minY + Math.max(safeSpan * 0.3, heightSpan * heightFactor);
       var pos = new THREE.Vector3(
         centerX + Math.cos(rad) * dist,
         yPos,
@@ -1513,37 +1885,46 @@
         target: target,
         up: opts.up ? opts.up.clone() : new THREE.Vector3(0, 1, 0),
         fov: fov,
-        near: 0.05,
-        far: Math.max(600, dist * 6.5)
+        near: 0.1,
+        far: Math.max(1000, dist * 8)
       });
     }
 
-    pushPreset(20, { heightFactor: 0.28, distanceFactor: 1.48, tiltOffset: -0.06, fov: 40 });
-    pushPreset(-18, { heightFactor: 0.3, distanceFactor: 1.5, tiltOffset: -0.05, fov: 40 });
-    pushPreset(38, { heightFactor: 0.46, distanceFactor: 1.72, tiltOffset: 0.03, fov: 44 });
-    pushPreset(-36, { heightFactor: 0.46, distanceFactor: 1.72, tiltOffset: 0.03, fov: 44 });
-    pushPreset(70, { heightFactor: 0.6, distanceFactor: 1.86, tiltOffset: 0.05, fov: 46 });
-    pushPreset(-68, { heightFactor: 0.6, distanceFactor: 1.86, tiltOffset: 0.05, fov: 46 });
-    pushPreset(110, { heightFactor: 0.7, distanceFactor: 2.05, tiltOffset: 0.08, fov: 48 });
-    pushPreset(-108, { heightFactor: 0.7, distanceFactor: 2.05, tiltOffset: 0.08, fov: 48 });
-    pushPreset(150, { heightFactor: 0.6, distanceFactor: 1.92, tiltOffset: 0.04, fov: 50 });
+    // Cinematic architectural photography angles
+    // Front 3/4 view - hero shot
+    pushPreset(35, { heightFactor: 0.5, distanceFactor: 2.0, tiltOffset: 0, fov: 50 });
+    // Opposite 3/4 view
+    pushPreset(-35, { heightFactor: 0.5, distanceFactor: 2.0, tiltOffset: 0, fov: 50 });
+    // Side view left
+    pushPreset(90, { heightFactor: 0.45, distanceFactor: 2.2, tiltOffset: -0.05, fov: 45 });
+    // Side view right
+    pushPreset(-90, { heightFactor: 0.45, distanceFactor: 2.2, tiltOffset: -0.05, fov: 45 });
+    // Elevated corner view
+    pushPreset(50, { heightFactor: 0.8, distanceFactor: 2.5, tiltOffset: 0.1, fov: 55 });
+    // Back view
+    pushPreset(180, { heightFactor: 0.55, distanceFactor: 2.0, tiltOffset: 0, fov: 50 });
+    // Low angle dramatic
+    pushPreset(25, { heightFactor: 0.25, distanceFactor: 1.8, tiltOffset: -0.1, fov: 60 });
+    // Wide establishing shot
+    pushPreset(45, { heightFactor: 0.7, distanceFactor: 3.0, tiltOffset: 0.05, fov: 65 });
 
+    // Aerial/bird's eye view
     var topPos = new THREE.Vector3(
-      centerX + safeSpan * 0.04,
-      maxY + safeSpan * 4.2,
-      centerZ + safeSpan * 0.04
+      centerX + safeSpan * 0.1,
+      maxY + safeSpan * 3,
+      centerZ + safeSpan * 0.5
     );
     presets.push({
       position: topPos,
       target: new THREE.Vector3(centerX, baseTargetY, centerZ),
       up: new THREE.Vector3(0, 0, -1),
-      fov: 52,
+      fov: 55,
       near: 0.5,
-      far: Math.max(800, safeSpan * 12)
+      far: Math.max(1000, safeSpan * 15)
     });
 
     if (!presets.length) {
-      var fallback = new THREE.Vector3(centerX + safeSpan * 1.9, maxY + safeSpan * 0.8, centerZ + safeSpan * 1.4);
+      var fallback = new THREE.Vector3(centerX + safeSpan * 2, maxY + safeSpan * 0.8, centerZ + safeSpan * 1.5);
       presets.push({
         position: fallback,
         target: new THREE.Vector3(centerX, baseTargetY, centerZ),
@@ -1617,7 +1998,11 @@
 
   async function renderSnapshot(){
     var loading = qs(LOADING_ID);
-    if (loading) loading.classList.add('visible');
+    var shouldHideLoading = true;
+    if (loading) {
+      loading.textContent = 'Generating...';
+      loading.classList.add('visible');
+    }
     try {
       var snapshot = gatherProjectSnapshot();
       var hash = computeHash(snapshot);
@@ -1625,22 +2010,21 @@
       materialExposureCache = Object.create(null);
       skyTexture = null;
       skyGradientPalette = null;
-      var skyPalette = selectSkyPalette();
       var qualitySelect = qs(QUALITY_ID);
       var multiplier = qualitySelect ? parseFloat(qualitySelect.value || '1') : 1;
       if (!isFinite(multiplier) || multiplier <= 0) multiplier = 1;
       currentQuality = multiplier;
       ensureRenderer();
       if (renderer && typeof renderer.toneMappingExposure === 'number') {
-        var lum = skyPalette && skyPalette.length ? averageLuminance(skyPalette) : 180;
-        var normalized = lum / 255;
-        var exposureBase = 1.35 + (normalized - 0.5) * 0.22;
-        renderer.toneMappingExposure = exposureBase + (multiplier - 1) * 0.24;
+        // Photorealistic exposure - bright and clear
+        renderer.toneMappingExposure = 1.2 + (multiplier - 1) * 0.2;
       }
       ensureEnvironment();
       disposeSceneChildren();
+      
+      // Set sky as background - beautiful blue sky
       var backgroundTex = createSkyTexture();
-      scene.background = backgroundTex || new THREE.Color(0xf5f6f8);
+      scene.background = backgroundTex;
 
       var bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity };
       var boxes = gatherBoxes(snapshot);
@@ -1673,16 +2057,19 @@
 
       boxes.forEach(function(entry){
         var mat = materialFor(entry.kind);
-        var mesh = buildMesh(entry.box, mat);
+        var mesh = null;
+        if (entry.kind === 'room' && entry.room) {
+          mesh = buildRoomMeshFromRoom(entry.room, mat);
+        }
+        if (!mesh) {
+          mesh = buildMesh(entry.box, mat);
+        }
         registerMesh(mesh, { edgeColor: (entry.kind === 'roof' ? EDGE_COLORS.roof : EDGE_COLORS.default) });
         if (entry.kind === 'room') addArchitecturalAccents(entry);
       });
 
       if (!isFinite(bounds.minX)) {
-        bounds = { minX: -3, maxX: 3, minZ: -3, maxZ: 3, minY: 0, maxY: 3 };
-        var placeholder = new THREE.Mesh(new THREE.BoxGeometry(4, 2.6, 4), materialFor('room'));
-        placeholder.position.y = 1.3;
-        registerMesh(placeholder, { edgeColor: EDGE_COLORS.default });
+        throw new Error('Nothing to visualize yet. Add rooms or structures first.');
       }
 
       var spanX = bounds.maxX - bounds.minX;
@@ -1692,9 +2079,23 @@
       var centerY = Math.max(1.4, (bounds.minY + bounds.maxY) / 2);
       var centerZ = (bounds.minZ + bounds.maxZ) / 2;
 
+      // Log snapshot data for debugging
+      console.log('[Visualize] Snapshot data:', {
+        rooms: snapshot.rooms.length,
+        wallStrips: snapshot.wallStrips.length,
+        pools: snapshot.pools.length,
+        roofs: snapshot.roofs.length,
+        pergolas: snapshot.pergolas.length,
+        garages: snapshot.garages.length,
+        balconies: snapshot.balconies.length,
+        furniture: snapshot.furniture.length,
+        bounds: bounds,
+        span: span
+      });
+
       var groundY = buildGround(bounds, centerX, centerZ, bounds.minY, span);
       createContactShadow(centerX, centerZ, span, groundY);
-      addSignatureFacade(bounds, centerX, centerY, centerZ, span);
+      // Note: Removed addSignatureFacade - only render user's actual design
       VIEW_PRESETS = buildViewPresets(centerX, centerY, centerZ, span, bounds) || [];
       if (!Array.isArray(VIEW_PRESETS) || VIEW_PRESETS.length === 0) {
         VIEW_PRESETS = buildViewPresets(centerX, centerY, centerZ, span || 8, bounds) || [];
@@ -1716,11 +2117,13 @@
 
       var canvas = qs(CANVAS_ID);
       if (canvas) {
-        var baseWidth = 2500;
-        var width = Math.floor(baseWidth * multiplier);
-        if (width > 2800) width = 2800;
+        // High resolution full-bleed render
+        var baseWidth = 1920;
+        var width = Math.floor(baseWidth * Math.max(1, multiplier));
+        if (width > 3840) width = 3840;
         var height = Math.floor(width * 9 / 16);
         camera.aspect = width / height;
+        camera.updateProjectionMatrix();
         renderer.setSize(width, height, false);
         canvas.width = width;
         canvas.height = height;
@@ -1734,14 +2137,31 @@
         renderer.render(scene, camera);
         addDefaultLabel();
       }
+      if (loading) loading.textContent = 'Capturing design views...';
+      await populateDesignGallery({ loadingEl: loading });
       lastHash = hash;
       var footnote = qs(FOOTNOTE_ID);
       if (footnote) footnote.textContent = formatFootnote(bounds);
     } catch(err){
       console.error('[Visualize] render failed', err);
+      shouldHideLoading = false;
+      if (loading) {
+        var message = err && err.message ? err.message : 'Render failed';
+        loading.textContent = message;
+        loading.classList.add('visible');
+        window.setTimeout(function(){
+          if (!loading) return;
+          loading.textContent = 'Generating...';
+          loading.classList.remove('visible');
+        }, 2400);
+      }
+      updateGalleryGrid(err && err.message ? err.message : 'Unable to generate design images.');
       try { if (window.updateStatus) window.updateStatus('Visualize failed: ' + err.message); } catch(_s){}
     } finally {
-      if (loading) loading.classList.remove('visible');
+      if (shouldHideLoading && loading) {
+        loading.textContent = 'Generating...';
+        loading.classList.remove('visible');
+      }
     }
   }
 
@@ -1811,10 +2231,41 @@
       addLabelBtn.__wired = true;
       addLabelBtn.addEventListener('click', onAddLabel);
     }
+    var gallery = qs('visualize-gallery');
+    if (gallery && !gallery.__wired){
+      gallery.__wired = true;
+      gallery.addEventListener('click', function(ev){
+        var target = ev.target;
+        if (!target) return;
+        var btn = target.closest('button[data-gallery-id]');
+        if (!btn) return;
+        var id = btn.getAttribute('data-gallery-id');
+        if (!id) return;
+        openPhotoViewerById(id);
+      });
+    }
+    var photoClose = qs('visualize-photo-close');
+    if (photoClose && !photoClose.__wired){
+      photoClose.__wired = true;
+      photoClose.addEventListener('click', function(){ closePhotoViewer(); });
+    }
+    var photoViewer = qs('visualize-photo-viewer');
+    if (photoViewer && !photoViewer.__wired){
+      photoViewer.__wired = true;
+      photoViewer.addEventListener('click', function(ev){
+        if (ev.target === photoViewer) closePhotoViewer();
+      });
+    }
     if (!window.__visualizeEscWired) {
       window.__visualizeEscWired = true;
       document.addEventListener('keydown', function(ev){
         if (ev.key === 'Escape') {
+          var viewer = qs('visualize-photo-viewer');
+          if (viewer && viewer.classList.contains('visible')) {
+            closePhotoViewer();
+            ev.preventDefault();
+            return;
+          }
           var modal = qs(PANEL_ID);
           if (modal && modal.classList.contains('visible')) hideVisualize();
         }
@@ -1828,6 +2279,9 @@
     if (!modal) return;
     viewIndex = 0;
     modal.classList.add('visible');
+    closePhotoViewer();
+    setGalleryShots([]);
+    updateGalleryGrid('Generating design images...');
     ensureEvents();
     window.requestAnimationFrame(fitRenderToStage);
     ensureLibraries().then(function(){
@@ -1839,6 +2293,7 @@
   function hideVisualize(){
     var modal = qs(PANEL_ID);
     if (modal) modal.classList.remove('visible');
+    closePhotoViewer();
     if (fabricCanvas) {
       fabricCanvas.discardActiveObject();
       fabricCanvas.requestRenderAll();
