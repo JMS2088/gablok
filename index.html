@@ -342,8 +342,10 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 		</div>
 		<div class="visualize-body">
 			<div id="visualize-stage">
-				<canvas id="visualize-render-canvas"></canvas>
-				<canvas id="visualize-annotations"></canvas>
+				<div id="visualize-canvas-wrap">
+					<canvas id="visualize-render-canvas"></canvas>
+					<canvas id="visualize-annotations"></canvas>
+				</div>
 				<div id="visualize-loading">Generating…</div>
 			</div>
 			<div id="visualize-controls">
@@ -354,6 +356,21 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 						<option value="1.5">High (1.5×)</option>
 						<option value="2">Ultra (2.0×)</option>
 					</select>
+				</div>
+				<div class="visualize-control-row">
+					<span class="visualize-subtitle">Camera Views</span>
+					<div id="visualize-view-grid">
+						<button type="button" data-view-index="0">1</button>
+						<button type="button" data-view-index="1">2</button>
+						<button type="button" data-view-index="2">3</button>
+						<button type="button" data-view-index="3">4</button>
+						<button type="button" data-view-index="4">5</button>
+						<button type="button" data-view-index="5">6</button>
+						<button type="button" data-view-index="6">7</button>
+						<button type="button" data-view-index="7">8</button>
+						<button type="button" data-view-index="8">9</button>
+						<button type="button" data-view-index="9">10</button>
+					</div>
 				</div>
 				<div class="visualize-buttons">
 					<button id="visualize-generate">Generate Render</button>

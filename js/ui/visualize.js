@@ -22,6 +22,18 @@
   var envRT = null;
   var currentQuality = 1;
   var lastHash = null;
+  var viewIndex = 0;
+  var VIEW_PRESETS = [];
+  var viewButtons = [];
+  var skyTexture = null;
+  var REFERENCE_IMAGE_PATH = 'image-test/475.jpg';
+  var referenceTexture = null;
+  var referencePalette = null;
+  var referencePromise = null;
+  var rng = createRandomGenerator();
+  var lastCanvasWidth = 0;
+  var lastCanvasHeight = 0;
+  var resizeHooked = false;
 
   var floorHeight = (function(){
     var defaultHeight = 3.5;
@@ -38,12 +50,200 @@
     default: 0xcbd5df,
     roof: 0xaeb4bf,
     wall: 0xbcc3cd,
-    podium: 0xbfc6d2
+    podium: 0xbfc6d2,
+    frame: 0x90a4bd,
+    glass: 0xd2e3ff,
+    accent: 0xb8c2d3
   };
 
   function qs(id){ return document.getElementById(id); }
 
   function isFiniteNumber(val){ return typeof val === 'number' && isFinite(val); }
+
+  function ensureSecondaryUV(geometry){
+    if (!geometry || !geometry.attributes || !geometry.attributes.uv) return;
+    if (geometry.attributes.uv2) return;
+    geometry.setAttribute('uv2', geometry.attributes.uv.clone());
+  }
+
+  function createSkyTexture(){
+    if (skyTexture) return skyTexture;
+    if (!THREE) return null;
+    var canvas = document.createElement('canvas');
+    canvas.width = 2048;
+    canvas.height = 1024;
+    var ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    var palette = referencePalette && Array.isArray(referencePalette.skyGradient) ? referencePalette.skyGradient : null;
+    var gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    if (palette && palette.length >= 3){
+      gradient.addColorStop(0, '#' + ('000000' + palette[0].toString(16)).slice(-6));
+      gradient.addColorStop(0.45, '#' + ('000000' + palette[1].toString(16)).slice(-6));
+      gradient.addColorStop(1, '#' + ('000000' + palette[2].toString(16)).slice(-6));
+    } else {
+      gradient.addColorStop(0, '#f8c68a');
+      gradient.addColorStop(0.35, '#fbd7a6');
+      gradient.addColorStop(0.72, '#f5e5cf');
+      gradient.addColorStop(1, '#f1f4fb');
+    }
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    var sunRadius = canvas.height * 0.28;
+    var sunX = canvas.width * 0.68;
+    var sunY = canvas.height * 0.36;
+    var sunGrad = ctx.createRadialGradient(sunX, sunY, sunRadius * 0.08, sunX, sunY, sunRadius);
+    sunGrad.addColorStop(0, 'rgba(255,233,196,0.95)');
+    sunGrad.addColorStop(0.45, 'rgba(255,208,150,0.55)');
+    sunGrad.addColorStop(1, 'rgba(255,194,120,0)');
+    ctx.fillStyle = sunGrad;
+    ctx.beginPath();
+    ctx.arc(sunX, sunY, sunRadius, 0, Math.PI * 2);
+    ctx.fill();
+
+    var tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    if (renderer && renderer.capabilities) {
+      var aniso = renderer.capabilities.getMaxAnisotropy && renderer.capabilities.getMaxAnisotropy();
+      if (aniso) tex.anisotropy = Math.min(aniso, 8);
+    }
+    if (typeof tex.colorSpace !== 'undefined' && THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+    else if (typeof tex.encoding !== 'undefined' && THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearFilter;
+    tex.generateMipmaps = false;
+    tex.needsUpdate = true;
+    skyTexture = tex;
+    return tex;
+  }
+
+  function distortVertices(geometry, strength, randomnessFn){
+    if (!geometry || !geometry.attributes || !geometry.attributes.position) return;
+    var position = geometry.attributes.position;
+    var arr = position.array;
+    var random = randomnessFn || function(){ return Math.random(); };
+    var max = strength || 0.15;
+    for (var i = 0; i < arr.length; i += 3){
+      var offset = (random() * 2 - 1) * max;
+      arr[i] += offset * 0.6;
+      arr[i + 1] += offset;
+      arr[i + 2] += offset * 0.6;
+    }
+    position.needsUpdate = true;
+    if (geometry.computeVertexNormals) geometry.computeVertexNormals();
+  }
+
+  function createBoulder(radius, detail, colorKey){
+    if (!THREE) return null;
+    var geom = new THREE.IcosahedronGeometry(radius || 0.5, detail || 2);
+    distortVertices(geom, (radius || 0.5) * 0.35, function(){ return rng.next(); });
+    ensureSecondaryUV(geom);
+    var mat = materialFor(colorKey || 'boulder');
+    var mesh = new THREE.Mesh(geom, mat);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    return mesh;
+  }
+
+  function createGrassTuft(radius, height){
+    if (!THREE) return null;
+    var bladeCount = 6;
+    var group = new THREE.Group();
+    var mat = materialFor('foliage');
+    for (var i = 0; i < bladeCount; i++){
+      var bladeHeight = height * (0.7 + rng.range(0, 0.6));
+      var bladeGeom = new THREE.CylinderGeometry(0.01, 0.06, bladeHeight, 6, 1, true);
+      ensureSecondaryUV(bladeGeom);
+      var blade = new THREE.Mesh(bladeGeom, mat);
+      blade.position.y = bladeHeight / 2;
+      blade.rotation.y = rng.range(0, Math.PI * 2);
+      blade.geometry.computeVertexNormals();
+      blade.castShadow = false;
+      blade.receiveShadow = true;
+      group.add(blade);
+    }
+    var baseGeom = new THREE.CylinderGeometry(radius * 0.6, radius, radius * 0.25, 8, 1);
+    ensureSecondaryUV(baseGeom);
+    var baseMat = materialFor('groundPath');
+    var base = new THREE.Mesh(baseGeom, baseMat);
+    group.add(base);
+    group.traverse(function(obj){
+      if (obj && obj.isMesh){
+        obj.castShadow = false;
+        obj.receiveShadow = true;
+      }
+    });
+    return group;
+  }
+
+  function createRandomGenerator(){
+    var seed = 1;
+    function mulberry32(a){
+      return function(){
+        var t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+    var randomFn = mulberry32(seed);
+    return {
+      reseed: function(str){
+        if (!str) str = String(Date.now());
+        var hash = 0;
+        for (var i = 0; i < str.length; i++){
+          hash = Math.imul(31, hash) + str.charCodeAt(i) | 0;
+        }
+        if (hash === 0) hash = 1;
+        seed = hash >>> 0;
+        randomFn = mulberry32(seed);
+      },
+      next: function(){ return randomFn(); },
+      range: function(min, max){
+        if (!isFiniteNumber(min)) min = 0;
+        if (!isFiniteNumber(max)) max = 1;
+        return min + (max - min) * randomFn();
+      }
+    };
+  }
+
+    function clampColor(value){
+      return Math.max(0, Math.min(255, value));
+    }
+
+    function rgbToHex(r, g, b){
+      return (clampColor(Math.round(r)) << 16) | (clampColor(Math.round(g)) << 8) | clampColor(Math.round(b));
+    }
+
+    function lerp(a, b, t){ return a + (b - a) * t; }
+
+    function mixColors(colorA, colorB, t){
+      var ar = (colorA >> 16) & 255;
+      var ag = (colorA >> 8) & 255;
+      var ab = colorA & 255;
+      var br = (colorB >> 16) & 255;
+      var bg = (colorB >> 8) & 255;
+      var bb = colorB & 255;
+      return rgbToHex(lerp(ar, br, t), lerp(ag, bg, t), lerp(ab, bb, t));
+    }
+
+    function adjustColor(hex, exposure, tint){
+      var r = (hex >> 16) & 255;
+      var g = (hex >> 8) & 255;
+      var b = hex & 255;
+      var gain = isFiniteNumber(exposure) ? exposure : 1;
+      var tr = tint ? tint.r || 0 : 0;
+      var tg = tint ? tint.g || 0 : 0;
+      var tb = tint ? tint.b || 0 : 0;
+      return rgbToHex(r * gain + tr, g * gain + tg, b * gain + tb);
+    }
+
+    function toHexString(color){
+      var safe = (color >>> 0) & 0xffffff;
+      var str = safe.toString(16);
+      while (str.length < 6) str = '0' + str;
+      return '#' + str;
+    }
 
   function computedRoofBaseHeight(){
     try {
@@ -94,20 +294,136 @@
     return libsPromise;
   }
 
+  function extractPalette(image){
+    if (!image) return null;
+    try {
+      var canvas = document.createElement('canvas');
+      var width = Math.max(1, Math.min(256, image.naturalWidth || image.width || 256));
+      var height = Math.max(1, Math.min(256, image.naturalHeight || image.height || 256));
+      canvas.width = width;
+      canvas.height = height;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0, width, height);
+      var data = ctx.getImageData(0, 0, width, height).data;
+
+      function sampleRange(yStart, yEnd){
+        var r = 0, g = 0, b = 0, count = 0;
+        var y0 = Math.max(0, Math.floor(yStart));
+        var y1 = Math.min(height, Math.ceil(yEnd));
+        for (var y = y0; y < y1; y++){
+          for (var x = 0; x < width; x++){
+            var idx = (y * width + x) * 4;
+            var alpha = data[idx + 3] / 255;
+            if (alpha < 0.1) continue;
+            r += data[idx] * alpha;
+            g += data[idx + 1] * alpha;
+            b += data[idx + 2] * alpha;
+            count += alpha;
+          }
+        }
+        if (!count) return { r: 180, g: 190, b: 200 };
+        return { r: r / count, g: g / count, b: b / count };
+      }
+
+      var skySample = sampleRange(0, height * 0.35);
+      var midSample = sampleRange(height * 0.35, height * 0.7);
+      var groundSample = sampleRange(height * 0.7, height);
+
+      var skyHex = rgbToHex(skySample.r, skySample.g, skySample.b);
+      var midHex = rgbToHex(midSample.r, midSample.g, midSample.b);
+      var groundHex = rgbToHex(groundSample.r, groundSample.g, groundSample.b);
+
+      var skyTop = adjustColor(skyHex, 1.08, { r: 6, g: 8, b: 4 });
+      var skyMid = adjustColor(mixColors(skyHex, midHex, 0.35), 1.0, { r: 12, g: 8, b: 4 });
+      var skyBottom = adjustColor(mixColors(midHex, groundHex, 0.25), 0.95, { r: 8, g: 6, b: 2 });
+
+      var woodBase = adjustColor(mixColors(midHex, groundHex, 0.42), 0.78, { r: -6, g: -4, b: -2 });
+      var wallBase = adjustColor(mixColors(midHex, skyHex, 0.55), 1.12, { r: 5, g: 6, b: 6 });
+      var groundBase = adjustColor(groundHex, 0.96, { r: 4, g: 2, b: 2 });
+
+      var skyLuma = (0.2126 * skySample.r + 0.7152 * skySample.g + 0.0722 * skySample.b) / 255;
+      var exposure = 1.32 + (skyLuma - 0.5) * 0.35;
+
+      return {
+        skyGradient: [ skyTop, skyMid, skyBottom ],
+        woodColor: woodBase,
+        wallColor: wallBase,
+        groundColor: groundBase,
+        exposure: exposure
+      };
+    } catch(err){
+      console.warn('[Visualize] palette extraction failed', err);
+      return null;
+    }
+  }
+
+  function ensureReferenceTexture(){
+    if (referenceTexture) return Promise.resolve(referenceTexture);
+    if (referencePromise) return referencePromise;
+    if (!THREE) return Promise.resolve(null);
+    referencePromise = new Promise(function(resolve){
+      var loader = new THREE.TextureLoader();
+      loader.load(REFERENCE_IMAGE_PATH, function(tex){
+        try {
+          if (typeof tex.colorSpace !== 'undefined' && THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
+          else if (typeof tex.encoding !== 'undefined' && THREE.sRGBEncoding) tex.encoding = THREE.sRGBEncoding;
+          tex.flipY = false;
+          tex.minFilter = THREE.LinearFilter;
+          tex.magFilter = THREE.LinearFilter;
+          tex.anisotropy = renderer && renderer.capabilities ? Math.min(renderer.capabilities.getMaxAnisotropy() || 8, 8) : 4;
+          tex.needsUpdate = true;
+        } catch(_m){}
+        referenceTexture = tex;
+        if (!referencePalette) {
+          referencePalette = extractPalette(tex.image);
+          skyTexture = null;
+        }
+        applyStagePalette();
+        resolve(referenceTexture);
+      }, undefined, function(err){
+        console.warn('[Visualize] reference texture failed to load', err);
+        resolve(null);
+      });
+    });
+    return referencePromise;
+  }
+
+  function applyReferenceBackdrop(texture, centerX, centerY, centerZ, span, bounds){
+    if (!texture || !sceneRoot || !THREE) return;
+    var image = texture.image;
+    var ratio = (image && image.width && image.height) ? (image.width / image.height) : (16/9);
+    var width = span * 6.4;
+    var height = width / ratio;
+    var backdropGeom = new THREE.PlaneGeometry(width, height, 1, 1);
+    ensureSecondaryUV(backdropGeom);
+    var backdropMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, toneMapped: false });
+    var backdrop = new THREE.Mesh(backdropGeom, backdropMat);
+    var minY = isFiniteNumber(bounds && bounds.minY) ? bounds.minY : 0;
+    var maxY = isFiniteNumber(bounds && bounds.maxY) ? bounds.maxY : (centerY + span * 0.6);
+    var midY = minY + (maxY - minY) * 0.52;
+    backdrop.position.set(centerX, midY, centerZ - span * 2.6);
+    backdrop.receiveShadow = false;
+    backdrop.castShadow = false;
+    sceneRoot.add(backdrop);
+  }
+
   function ensureRenderer(){
     if (renderer && scene && camera) return;
     var canvas = qs(CANVAS_ID);
     if (!canvas) return;
     renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, preserveDrawingBuffer: true });
+    if (renderer.setPixelRatio && window.devicePixelRatio) {
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.25));
+    }
     if (typeof renderer.outputColorSpace !== 'undefined' && THREE.SRGBColorSpace) {
       renderer.outputColorSpace = THREE.SRGBColorSpace;
     } else if (typeof renderer.outputEncoding !== 'undefined' && THREE.sRGBEncoding) {
       renderer.outputEncoding = THREE.sRGBEncoding;
     }
-    if (typeof renderer.setClearColor === 'function') renderer.setClearColor(0xf5f6f8, 1);
+    if (typeof renderer.setClearColor === 'function') renderer.setClearColor(0xffffff, 0);
     if ('physicallyCorrectLights' in renderer) renderer.physicallyCorrectLights = true;
     if ('toneMapping' in renderer && THREE.ACESFilmicToneMapping) renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    if ('toneMappingExposure' in renderer) renderer.toneMappingExposure = 1.1;
+    if ('toneMappingExposure' in renderer) renderer.toneMappingExposure = 1.32;
     if (renderer.shadowMap) {
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = (THREE.PCFSoftShadowMap || renderer.shadowMap.type);
@@ -115,7 +431,13 @@
     }
     if (THREE.ColorManagement) THREE.ColorManagement.enabled = true;
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf6f7fb);
+    var bg = createSkyTexture();
+    if (bg) {
+      if (THREE && THREE.EquirectangularReflectionMapping) bg.mapping = THREE.EquirectangularReflectionMapping;
+      scene.background = bg;
+    } else {
+      scene.background = new THREE.Color(0xf6f7fb);
+    }
     camera = new THREE.PerspectiveCamera(48, 16/9, 0.05, 1200);
     camera.up.set(0, 1, 0);
     sceneRoot = new THREE.Group();
@@ -150,75 +472,131 @@
 
   function ensureFog(span){
     if (!scene) return;
-    var near = Math.max(30, span * 2.4);
-    var far = Math.max(160, span * 7);
-    scene.fog = new THREE.FogExp2(0xf6f7fb, 1 / Math.max(200, span * 11));
+    var near = Math.max(70, span * 2.8);
+    var far = Math.max(360, span * 12.5);
+    scene.fog = new THREE.Fog(0xf6ddbd, near, far);
   }
 
   function setupLighting(centerX, centerY, centerZ, span){
     if (!scene) return;
     clearLighting();
     ensureFog(span);
-    var ambient = trackLight(new THREE.AmbientLight(0xf7f8fa, 0.42));
+    var hemi = trackLight(new THREE.HemisphereLight(0xfff2d2, 0xf3d3a4, 0.78));
+    if (hemi) hemi.position.set(centerX, centerY + span * 2.6, centerZ);
+
+    var ambient = trackLight(new THREE.AmbientLight(0xffffff, 0.18));
     if (ambient) ambient.castShadow = false;
 
-    var key = trackLight(new THREE.DirectionalLight(0xffffff, 1.18));
-    if (key) {
-      key.position.set(centerX + span * 1.45, centerY + span * 1.9, centerZ + span * 1.2);
-      key.castShadow = true;
-      if (key.shadow && key.shadow.camera) {
-        key.shadow.mapSize.set(2048, 2048);
-        key.shadow.camera.near = 0.5;
-        key.shadow.camera.far = Math.max(400, span * 6.5);
-        key.shadow.camera.left = -span * 2.2;
-        key.shadow.camera.right = span * 2.2;
-        key.shadow.camera.top = span * 2.2;
-        key.shadow.camera.bottom = -span * 2.2;
-        key.shadow.bias = -0.00035;
-        key.shadow.radius = 2;
+    var sun = trackLight(new THREE.DirectionalLight(0xffb777, 1.85));
+    if (sun) {
+      sun.position.set(centerX + span * 2.4, centerY + span * 1.35, centerZ + span * 2.6);
+      sun.castShadow = true;
+      if (sun.shadow && sun.shadow.camera) {
+        sun.shadow.mapSize.set(4096, 4096);
+        sun.shadow.camera.near = 0.35;
+        sun.shadow.camera.far = Math.max(600, span * 8.5);
+        var extent = span * 2.6;
+        sun.shadow.camera.left = -extent;
+        sun.shadow.camera.right = extent;
+        sun.shadow.camera.top = extent;
+        sun.shadow.camera.bottom = -extent;
+        sun.shadow.bias = -0.00016;
+        sun.shadow.normalBias = 0.0075;
+        sun.shadow.radius = 3.2;
       }
+      sun.target.position.set(centerX, centerY + span * 0.12, centerZ - span * 0.08);
     }
 
-    var fill = trackLight(new THREE.DirectionalLight(0xf0f2f6, 0.32));
+    var fill = trackLight(new THREE.DirectionalLight(0xcde3ff, 0.46));
     if (fill) {
-      fill.position.set(centerX - span * 1.4, centerY + span * 0.95, centerZ - span * 1.6);
+      fill.position.set(centerX - span * 1.5, centerY + span * 1.2, centerZ - span * 1.9);
       fill.castShadow = false;
     }
 
-    var rim = trackLight(new THREE.SpotLight(0xffffff, 0.55, span * 7.5, Math.PI / 5.5, 0.45, 1.35));
+    var bounce = trackLight(new THREE.DirectionalLight(0xffcaa0, 0.34));
+    if (bounce) {
+      bounce.position.set(centerX - span * 0.8, centerY + span * 0.6, centerZ + span * 2.2);
+      bounce.target.position.set(centerX, centerY + span * 0.18, centerZ);
+      bounce.castShadow = false;
+    }
+
+    var rim = trackLight(new THREE.SpotLight(0xffefd9, 0.54, span * 9.5, Math.PI / 5.4, 0.42, 1.2));
     if (rim) {
-      rim.position.set(centerX - span * 0.65, centerY + span * 2.4, centerZ + span * 1.9);
-      rim.target.position.set(centerX, centerY + span * 0.12, centerZ);
+      rim.position.set(centerX - span * 0.42, centerY + span * 3.2, centerZ - span * 1.4);
+      rim.target.position.set(centerX, centerY + span * 0.35, centerZ);
       rim.castShadow = true;
       if (rim.shadow) {
-        rim.shadow.mapSize.set(1024, 1024);
-        rim.shadow.bias = -0.0003;
+        rim.shadow.mapSize.set(1820, 1820);
+        rim.shadow.bias = -0.00021;
       }
+    }
+
+    var porch = trackLight(new THREE.PointLight(0xffc48d, 0.28, Math.max(12, span * 3.8)));
+    if (porch) {
+      porch.position.set(centerX + span * 0.22, centerY + span * 0.42, centerZ + span * 0.88);
+      porch.castShadow = false;
     }
   }
 
   function noiseTexture(key, baseBrightness, variation, repeat){
     if (noiseTextures[key]) return noiseTextures[key];
-    var size = 256;
+    var size = 512;
     var canvas = document.createElement('canvas');
     canvas.width = canvas.height = size;
     var ctx = canvas.getContext('2d');
-    var data = ctx.createImageData(size, size);
     var base = (typeof baseBrightness === 'number') ? baseBrightness : 232;
-    var range = (typeof variation === 'number') ? variation : 16;
-    for (var i=0; i<data.data.length; i+=4){
-      var shade = base + Math.round((Math.random() - 0.5) * range);
-      shade = Math.max(0, Math.min(255, shade));
-      data.data[i] = data.data[i+1] = data.data[i+2] = shade;
-      data.data[i+3] = 255;
+    var range = (typeof variation === 'number') ? variation : 18;
+
+    var gradient = ctx.createLinearGradient(0, 0, size, size);
+    gradient.addColorStop(0, 'rgb(' + Math.min(255, base + range * 0.45) + ',' + Math.min(255, base + range * 0.35) + ',' + Math.min(255, base + range * 0.4) + ')');
+    gradient.addColorStop(1, 'rgb(' + Math.max(0, base - range * 0.35) + ',' + Math.max(0, base - range * 0.45) + ',' + Math.max(0, base - range * 0.4) + ')');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, size, size);
+
+    var image = ctx.getImageData(0, 0, size, size);
+    var data = image.data;
+    for (var y = 0; y < size; y++){
+      for (var x = 0; x < size; x++){
+        var idx = (y * size + x) * 4;
+        var macro = Math.sin((x / size) * Math.PI * 2.2) * 0.5 + Math.cos((y / size) * Math.PI * 1.7) * 0.5;
+        var streak = Math.sin((x / size) * 28 + Math.sin((y / size) * 6)) * 0.25;
+        var micro = (Math.random() - 0.5) * 0.6;
+        var tint = Math.sin(((x + y) / size) * Math.PI) * 0.15;
+        var delta = (macro * 0.45 + streak * 0.35 + micro * 0.25 + tint * 0.2) * range;
+        var shade = data[idx] + delta;
+        shade = Math.max(0, Math.min(255, shade));
+        data[idx] = data[idx + 1] = data[idx + 2] = shade;
+      }
     }
-    ctx.putImageData(data, 0, 0);
+    ctx.putImageData(image, 0, 0);
+
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = 0.08;
+    for (var i = 0; i < 5; i++){
+      var angle = (i / 5) * Math.PI;
+      ctx.save();
+      ctx.translate(size / 2, size / 2);
+      ctx.rotate(angle);
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillRect(-size, -size * 0.02, size * 2, size * 0.04);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+
     var texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     texture.anisotropy = renderer ? Math.min(renderer.capabilities.getMaxAnisotropy() || 8, 8) : 4;
     var tiles = (typeof repeat === 'number' && repeat > 0) ? repeat : 4;
     texture.repeat.set(tiles, tiles);
+    if (typeof texture.colorSpace !== 'undefined' && THREE.SRGBColorSpace) {
+      texture.colorSpace = THREE.SRGBColorSpace;
+    } else if (typeof texture.encoding !== 'undefined' && THREE.sRGBEncoding) {
+      texture.encoding = THREE.sRGBEncoding;
+    }
     texture.needsUpdate = true;
+    texture.generateMipmaps = true;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
     noiseTextures[key] = texture;
     return texture;
   }
@@ -256,19 +634,51 @@
   }
 
   function ensureEnvironment(){
-    if (!renderer || envRT) return;
+    if (!renderer) return;
+    if (envRT) {
+      scene.environment = envRT.texture;
+      return;
+    }
     pmremGenerator = pmremGenerator || new THREE.PMREMGenerator(renderer);
     pmremGenerator.compileEquirectangularShader();
-    var roomScene = new THREE.Scene();
-    var neutral = new THREE.Mesh(new THREE.SphereGeometry(40, 32, 32), new THREE.MeshBasicMaterial({ color: 0xfafafa, side: THREE.BackSide }));
-    roomScene.add(neutral);
-    var accent1 = new THREE.Mesh(new THREE.BoxGeometry(12, 12, 12), new THREE.MeshBasicMaterial({ color: 0xe0e3e8 }));
-    accent1.position.set(18, -8, -14);
-    roomScene.add(accent1);
-    var accent2 = new THREE.Mesh(new THREE.BoxGeometry(8, 16, 6), new THREE.MeshBasicMaterial({ color: 0xd1d6dd }));
-    accent2.position.set(-22, 6, 18);
-    roomScene.add(accent2);
-    envRT = pmremGenerator.fromScene(roomScene, 0.04);
+    var studio = new THREE.Scene();
+    var dome = new THREE.Mesh(new THREE.SphereGeometry(60, 64, 32), new THREE.MeshBasicMaterial({ color: 0xfff4e1, side: THREE.BackSide }));
+    studio.add(dome);
+
+    var floor = new THREE.Mesh(new THREE.CircleGeometry(45, 64), new THREE.MeshStandardMaterial({ color: 0xf6e6d2, roughness: 0.38, metalness: 0.16 }));
+    floor.rotation.x = -Math.PI / 2;
+    studio.add(floor);
+
+    var wallPanel = new THREE.Mesh(new THREE.BoxGeometry(38, 24, 2), new THREE.MeshStandardMaterial({ color: 0xf3e5d6, roughness: 0.35, metalness: 0.22, emissive: new THREE.Color(0xf5d3a6), emissiveIntensity: 0.18 }));
+    wallPanel.position.set(-10, 6, -30);
+    studio.add(wallPanel);
+
+    var coolPanel = new THREE.Mesh(new THREE.BoxGeometry(28, 22, 1.8), new THREE.MeshStandardMaterial({ color: 0xdfe7f5, roughness: 0.42, metalness: 0.28 }));
+    coolPanel.position.set(24, 4, 26);
+    coolPanel.rotation.y = Math.PI / 4;
+    studio.add(coolPanel);
+
+    var pillar = new THREE.Mesh(new THREE.CylinderGeometry(4, 4.6, 30, 32), new THREE.MeshStandardMaterial({ color: 0xdadfe4, roughness: 0.38, metalness: 0.24 }));
+    pillar.position.set(-18, 0, 14);
+    studio.add(pillar);
+
+    var pillar2 = pillar.clone();
+    pillar2.position.set(18, -2, -18);
+    studio.add(pillar2);
+
+    function addEmitter(width, height, position, rotation, colorHex, intensity){
+      var mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || 0xffffff).multiplyScalar(intensity || 1.2) });
+      var plane = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
+      plane.position.copy(position);
+      if (rotation) plane.rotation.set(rotation.x || 0, rotation.y || 0, rotation.z || 0);
+      studio.add(plane);
+    }
+
+    addEmitter(28, 18, new THREE.Vector3(-32, 18, 6), { y: Math.PI / 2.2 }, 0xffffff, 4.8);
+    addEmitter(18, 12, new THREE.Vector3(24, 12, -28), { y: -Math.PI / 2.4 }, 0xf7f0df, 3.6);
+    addEmitter(16, 10, new THREE.Vector3(6, 20, 30), { x: -Math.PI / 12 }, 0xcbe2ff, 2.4);
+
+    envRT = pmremGenerator.fromScene(studio, 0.05);
     scene.environment = envRT.texture;
   }
 
@@ -494,6 +904,7 @@
 
   function buildMesh(box, material){
     var geometry = new THREE.BoxGeometry(box.width, box.height, box.depth);
+    ensureSecondaryUV(geometry);
     var mesh = new THREE.Mesh(geometry, material);
     var yBase = baseElevation(box);
     mesh.position.set(box.cx, yBase + (box.height / 2), box.cz);
@@ -502,21 +913,269 @@
   }
 
   function buildWallMesh(strip, material){
-    var x0 = strip.x0 || 0, z0 = strip.z0 || 0;
-    var x1 = strip.x1 || 0, z1 = strip.z1 || 0;
+    var x0 = strip.x0 || 0;
+    var z0 = strip.z0 || 0;
+    var x1 = strip.x1 || 0;
+    var z1 = strip.z1 || 0;
     var len = Math.max(0.05, Math.hypot(x1 - x0, z1 - z0));
-    var wallHeight = Math.max(2.4, strip.height || 3.0);
-    var thickness = Math.max(0.06, strip.thickness || 0.3);
+    var wallHeight = Math.max(2.4, isFiniteNumber(strip.height) ? strip.height : 3.0);
+    var thickness = Math.max(0.06, isFiniteNumber(strip.thickness) ? strip.thickness : 0.3);
     var midX = (x0 + x1) / 2;
     var midZ = (z0 + z1) / 2;
     var angle = Math.atan2(z1 - z0, x1 - x0);
-    var geometry = new THREE.BoxGeometry(len, wallHeight, thickness);
-    var mesh = new THREE.Mesh(geometry, material);
     var baseY = (typeof strip.y === 'number') ? strip.y : 0;
     var levelBase = (strip.level || 0) * floorHeight + baseY;
-    mesh.position.set(midX, levelBase + wallHeight / 2, midZ);
-    mesh.rotation.y = angle;
-    return { mesh: mesh, len: len, wallHeight: wallHeight, thickness: thickness, midX: midX, midZ: midZ };
+
+    var dirX = (len > 0) ? ((x1 - x0) / len) : 1;
+    var dirZ = (len > 0) ? ((z1 - z0) / len) : 0;
+
+    var EPS = 1e-3;
+    var segments = [{ u0: 0, u1: len, v0: 0, v1: wallHeight }];
+    var openingRects = [];
+
+    function clampInterval(a, min, max){
+      if (a < min) return min;
+      if (a > max) return max;
+      return a;
+    }
+
+    function openingDefaultHeight(type){
+      return type === 'door' ? 2.04 : 1.5;
+    }
+
+    function openingDefaultSill(type){
+      return type === 'door' ? 0 : 0.9;
+    }
+
+    if (Array.isArray(strip.openings) && strip.openings.length > 0 && len > EPS){
+      var openings = [];
+      strip.openings.forEach(function(opening){
+        if (!opening) return;
+        var sx = isFiniteNumber(opening.x0) ? opening.x0 : null;
+        var sz = isFiniteNumber(opening.z0) ? opening.z0 : null;
+        var ex = isFiniteNumber(opening.x1) ? opening.x1 : null;
+        var ez = isFiniteNumber(opening.z1) ? opening.z1 : null;
+        if (sx == null || sz == null || ex == null || ez == null) return;
+        var startU = ((sx - x0) * dirX) + ((sz - z0) * dirZ);
+        var endU = ((ex - x0) * dirX) + ((ez - z0) * dirZ);
+        if (!isFiniteNumber(startU) || !isFiniteNumber(endU)) return;
+        var u0 = clampInterval(Math.min(startU, endU), 0, len);
+        var u1 = clampInterval(Math.max(startU, endU), 0, len);
+        if (u1 - u0 < EPS) return;
+        var sill = isFiniteNumber(opening.sillM) ? opening.sillM : openingDefaultSill(opening.type);
+        var height = isFiniteNumber(opening.heightM) ? opening.heightM : openingDefaultHeight(opening.type);
+        if (!isFiniteNumber(sill)) sill = 0;
+        if (!isFiniteNumber(height)) height = openingDefaultHeight(opening.type);
+        var v0 = clampInterval(sill, 0, wallHeight);
+        var v1 = clampInterval(sill + height, 0, wallHeight);
+        if (v1 - v0 < EPS) return;
+        openings.push({ u0: u0, u1: u1, v0: v0, v1: v1, type: (opening.type === 'door') ? 'door' : 'window' });
+      });
+
+      if (openings.length > 0){
+        openings.sort(function(a, b){ return a.u0 - b.u0; });
+        segments = openings.reduce(function(currentSegments, rect){
+          var next = [];
+          currentSegments.forEach(function(seg){
+            var overlapU0 = Math.max(seg.u0, rect.u0);
+            var overlapU1 = Math.min(seg.u1, rect.u1);
+            var overlapV0 = Math.max(seg.v0, rect.v0);
+            var overlapV1 = Math.min(seg.v1, rect.v1);
+            if (overlapU1 - overlapU0 <= EPS || overlapV1 - overlapV0 <= EPS){
+              next.push(seg);
+              return;
+            }
+            if (seg.u0 < rect.u0 - EPS){
+              next.push({ u0: seg.u0, u1: rect.u0, v0: seg.v0, v1: seg.v1 });
+            }
+            if (seg.u1 > rect.u1 + EPS){
+              next.push({ u0: rect.u1, u1: seg.u1, v0: seg.v0, v1: seg.v1 });
+            }
+            var centralU0 = Math.max(seg.u0, rect.u0);
+            var centralU1 = Math.min(seg.u1, rect.u1);
+            if (centralU1 - centralU0 > EPS){
+              if (seg.v0 < rect.v0 - EPS){
+                next.push({ u0: centralU0, u1: centralU1, v0: seg.v0, v1: rect.v0 });
+              }
+              if (seg.v1 > rect.v1 + EPS){
+                next.push({ u0: centralU0, u1: centralU1, v0: rect.v1, v1: seg.v1 });
+              }
+            }
+          });
+          return next;
+        }, segments);
+        openingRects = openings;
+      }
+    }
+
+    var meshes = [];
+    var MIN_SPAN = 0.02;
+    var MIN_HEIGHT = 0.02;
+    segments.forEach(function(seg){
+      var span = seg.u1 - seg.u0;
+      var height = seg.v1 - seg.v0;
+      if (span <= MIN_SPAN || height <= MIN_HEIGHT) return;
+      var geometry = new THREE.BoxGeometry(span, height, thickness);
+      ensureSecondaryUV(geometry);
+      var mesh = new THREE.Mesh(geometry, material.clone());
+      var centerU = seg.u0 + span / 2;
+      var centerY = levelBase + seg.v0 + height / 2;
+      var centerX = x0 + dirX * centerU;
+      var centerZ = z0 + dirZ * centerU;
+      mesh.position.set(centerX, centerY, centerZ);
+      mesh.rotation.y = angle;
+      meshes.push(mesh);
+    });
+
+    if (openingRects.length > 0){
+      var detailMeshes = buildOpeningDetailMeshes(openingRects);
+      if (detailMeshes.length) {
+        Array.prototype.push.apply(meshes, detailMeshes);
+      }
+    }
+
+    return {
+      meshes: meshes,
+      len: len,
+      wallHeight: wallHeight,
+      thickness: thickness,
+      midX: midX,
+      midZ: midZ
+    };
+
+    function buildOpeningDetailMeshes(rects){
+      var results = [];
+      var normalX = -dirZ;
+      var normalZ = dirX;
+      var windowFrameMat = materialFor('windowFrame');
+      var doorFrameMat = materialFor('doorFrame');
+      var doorPanelMat = materialFor('doorPanel');
+      var glassMat = materialFor('glass');
+      glassMat.depthWrite = false;
+      glassMat.side = THREE.DoubleSide;
+      windowFrameMat.needsUpdate = true;
+      doorFrameMat.needsUpdate = true;
+      doorPanelMat.needsUpdate = true;
+      glassMat.needsUpdate = true;
+
+      function worldPosition(baseX, baseZ, offsetAlong, depthOffset){
+        return {
+          x: baseX + dirX * offsetAlong + normalX * depthOffset,
+          z: baseZ + dirZ * offsetAlong + normalZ * depthOffset
+        };
+      }
+
+      function addBox(mat, widthLocal, heightLocal, depthLocal, position, rotationY, overrides){
+        if (widthLocal <= MIN_SPAN || heightLocal <= MIN_HEIGHT) return null;
+        var geom = new THREE.BoxGeometry(widthLocal, heightLocal, depthLocal);
+        ensureSecondaryUV(geom);
+        var mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(position.x, position.y, position.z);
+        mesh.rotation.y = rotationY;
+        mesh.userData = mesh.userData || {};
+        if (overrides) {
+          var optsCopy = {};
+          for (var key in overrides){
+            if (Object.prototype.hasOwnProperty.call(overrides, key)) optsCopy[key] = overrides[key];
+          }
+          mesh.userData.visualizeOpts = optsCopy;
+        }
+        results.push(mesh);
+        return mesh;
+      }
+
+      rects.forEach(function(rect){
+        if (!rect) return;
+        var width = rect.u1 - rect.u0;
+        var height = rect.v1 - rect.v0;
+        if (width <= MIN_SPAN || height <= MIN_HEIGHT) return;
+        var type = rect.type === 'door' ? 'door' : 'window';
+        var centerU = rect.u0 + width / 2;
+        var baseX = x0 + dirX * centerU;
+        var baseZ = z0 + dirZ * centerU;
+        var sillY = levelBase + rect.v0;
+        var centerY = sillY + height / 2;
+        var frameThickness = Math.min(Math.max(width * 0.08, 0.045), 0.18);
+        if (type === 'door') frameThickness = Math.min(Math.max(width * 0.07, 0.05), 0.16);
+        var frameDepth = thickness * (type === 'door' ? 1.45 : 1.25);
+        var exteriorOffset = thickness * 0.2;
+        var verticalHeight = height + frameThickness * 0.8;
+        var frameMat = (type === 'door') ? doorFrameMat : windowFrameMat;
+        var frameOpts = { edgeColor: EDGE_COLORS.frame };
+        if (type === 'door') frameOpts.edgeColor = EDGE_COLORS.accent;
+
+        var leftOffset = -width / 2 + frameThickness / 2;
+        var rightOffset = width / 2 - frameThickness / 2;
+        var verticalY = centerY;
+        var leftPos = worldPosition(baseX, baseZ, leftOffset, exteriorOffset);
+        leftPos.y = verticalY;
+        addBox(frameMat, frameThickness, verticalHeight, frameDepth, leftPos, angle, frameOpts);
+
+        var rightPos = worldPosition(baseX, baseZ, rightOffset, exteriorOffset);
+        rightPos.y = verticalY;
+        addBox(frameMat, frameThickness, verticalHeight, frameDepth, rightPos, angle, frameOpts);
+
+        var topPos = worldPosition(baseX, baseZ, 0, exteriorOffset);
+        topPos.y = sillY + height + frameThickness / 2;
+        addBox(frameMat, width + frameThickness * 0.9, frameThickness, frameDepth, topPos, angle, frameOpts);
+
+        if (type !== 'door' || sillY > levelBase + 0.01){
+          var bottomPos = worldPosition(baseX, baseZ, 0, exteriorOffset * 0.6);
+          bottomPos.y = sillY - frameThickness / 2;
+          addBox(frameMat, width + frameThickness * 0.8, frameThickness * 0.9, frameDepth * 0.85, bottomPos, angle, frameOpts);
+        }
+
+        if (type === 'window') {
+          var mullionDepth = frameDepth * 0.55;
+          if (width > 1.4){
+            var mullionPos = worldPosition(baseX, baseZ, 0, exteriorOffset * 0.8);
+            mullionPos.y = centerY;
+            addBox(frameMat, frameThickness * 0.6, height - frameThickness * 1.1, mullionDepth, mullionPos, angle, frameOpts);
+          }
+          if (height > 1.35){
+            var transomPos = worldPosition(baseX, baseZ, 0, exteriorOffset * 0.85);
+            transomPos.y = centerY + height * 0.18;
+            addBox(frameMat, width - frameThickness * 1.1, frameThickness * 0.55, mullionDepth, transomPos, angle, frameOpts);
+          }
+          var glassWidth = Math.max(width - frameThickness * 2.1, width * 0.62);
+          var glassHeight = Math.max(height - frameThickness * 2.0, height * 0.6);
+          if (glassWidth > MIN_SPAN && glassHeight > MIN_HEIGHT){
+            var glassDepth = Math.max(thickness * 0.18, 0.01);
+            var glassPos = worldPosition(baseX, baseZ, 0, -thickness * 0.05);
+            glassPos.y = centerY;
+            var glassOverrides = { edgeColor: EDGE_COLORS.glass, skipEdges: true, castShadow: false, receiveShadow: true };
+            var glassMesh = addBox(glassMat, glassWidth, glassHeight, glassDepth, glassPos, angle, glassOverrides);
+            if (glassMesh) {
+              glassMesh.renderOrder = 2;
+              glassMesh.material.transparent = true;
+            }
+          }
+        } else {
+          var panelWidth = Math.max(width - frameThickness * 1.4, width * 0.7);
+          var panelHeight = Math.max(height - frameThickness * 0.8, height * 0.9);
+          var panelDepth = Math.max(thickness * 0.7, 0.07);
+          var panelPos = worldPosition(baseX, baseZ, 0, -thickness * 0.04);
+          panelPos.y = centerY;
+          var doorOverrides = { edgeColor: EDGE_COLORS.accent };
+          var doorPanel = addBox(doorPanelMat, panelWidth, panelHeight, panelDepth, panelPos, angle, doorOverrides);
+          if (doorPanel) doorPanel.castShadow = true;
+
+          var handleWidth = Math.max(frameThickness * 0.4, 0.025);
+          var handleHeight = Math.max(panelHeight * 0.16, 0.28);
+          var handleDepth = Math.max(panelDepth * 0.25, 0.03);
+          var handleOffset = panelWidth * 0.28;
+          var handlePos = worldPosition(baseX, baseZ, handleOffset, exteriorOffset * 0.5);
+          handlePos.y = sillY + panelHeight * 0.55;
+          addBox(doorFrameMat, handleWidth, handleHeight, handleDepth, handlePos, angle, { edgeColor: EDGE_COLORS.accent, castShadow: false });
+
+          var insetPos = worldPosition(baseX, baseZ, -handleOffset, exteriorOffset * 0.4);
+          insetPos.y = sillY + panelHeight * 0.35;
+          addBox(doorFrameMat, handleWidth * 0.6, panelHeight * 0.4, handleDepth * 0.6, insetPos, angle, { edgeColor: EDGE_COLORS.accent, castShadow: false });
+        }
+      });
+
+      return results;
+    }
   }
 
   function computeHash(snapshot){
@@ -536,6 +1195,61 @@
     return 'Footprint ≈ ' + size.toFixed(1) + ' m span · Perimeter ≈ ' + perimeter.toFixed(1) + ' m';
   }
 
+  function ensureResizeListener(){
+    if (resizeHooked) return;
+    resizeHooked = true;
+    window.addEventListener('resize', function(){
+      window.requestAnimationFrame(fitRenderToStage);
+    });
+  }
+
+  function fitRenderToStage(){
+    if (!lastCanvasWidth || !lastCanvasHeight) return;
+    var stage = qs('visualize-stage');
+    var wrap = qs('visualize-canvas-wrap');
+    var renderCanvas = qs(CANVAS_ID);
+    if (!stage || !wrap || !renderCanvas) return;
+    var stageWidth = stage.clientWidth;
+    var stageHeight = stage.clientHeight;
+    var cssWidth = lastCanvasWidth;
+    var cssHeight = lastCanvasHeight;
+    if (stageWidth && stageHeight) {
+      var scale = Math.min(stageWidth / lastCanvasWidth, stageHeight / lastCanvasHeight, 1);
+      if (!isFiniteNumber(scale) || scale <= 0) scale = 1;
+      cssWidth = Math.max(1, Math.round(lastCanvasWidth * scale));
+      cssHeight = Math.max(1, Math.round(lastCanvasHeight * scale));
+    }
+    wrap.style.width = cssWidth + 'px';
+    wrap.style.height = cssHeight + 'px';
+    renderCanvas.style.width = '100%';
+    renderCanvas.style.height = '100%';
+    var overlay = qs(FABRIC_ID);
+    if (overlay) {
+      overlay.style.width = '100%';
+      overlay.style.height = '100%';
+    }
+    if (fabricCanvas) {
+      fabricCanvas.setDimensions({ width: lastCanvasWidth, height: lastCanvasHeight });
+      fabricCanvas.setDimensions({ width: '100%', height: '100%' }, { cssOnly: true });
+      fabricCanvas.calcOffset();
+      fabricCanvas.requestRenderAll();
+    }
+  }
+
+  function applyStagePalette(){
+    var stage = qs('visualize-stage');
+    if (!stage) return;
+    if (referencePalette && Array.isArray(referencePalette.skyGradient) && referencePalette.skyGradient.length >= 3) {
+      stage.style.setProperty('--visualize-bg-0', toHexString(referencePalette.skyGradient[0]));
+      stage.style.setProperty('--visualize-bg-1', toHexString(referencePalette.skyGradient[1]));
+      stage.style.setProperty('--visualize-bg-2', toHexString(referencePalette.skyGradient[2]));
+    } else {
+      stage.style.removeProperty('--visualize-bg-0');
+      stage.style.removeProperty('--visualize-bg-1');
+      stage.style.removeProperty('--visualize-bg-2');
+    }
+  }
+
   function ensureFabric(width, height){
     var canvasEl = qs(FABRIC_ID);
     if (!canvasEl) return;
@@ -543,8 +1257,15 @@
     canvasEl.height = height;
     canvasEl.style.width = '100%';
     canvasEl.style.height = '100%';
+    canvasEl.style.maxWidth = '';
+    canvasEl.style.maxHeight = '';
+    canvasEl.style.left = '';
+    canvasEl.style.top = '';
+    canvasEl.style.transform = '';
     if (fabricCanvas) {
       fabricCanvas.setDimensions({ width: width, height: height });
+      fabricCanvas.setDimensions({ width: '100%', height: '100%' }, { cssOnly: true });
+      fabricCanvas.calcOffset();
       return;
     }
     fabricCanvas = new fabric.Canvas(FABRIC_ID, {
@@ -553,6 +1274,8 @@
       selectionColor: 'rgba(37,99,235,0.12)',
       preserveObjectStacking: true
     });
+    fabricCanvas.setDimensions({ width: '100%', height: '100%' }, { cssOnly: true });
+    fabricCanvas.calcOffset();
   }
 
   function addDefaultLabel(){
@@ -616,16 +1339,36 @@
 
   function materialFor(kind){
     var palette = {
-      room: { color: 0xf7f7f5, roughness: 0.32, metalness: 0.03, clearcoat: 0.38, clearcoatRoughness: 0.2, noiseKey: 'room', brightness: 234, variation: 12, repeat: 3.5 },
-      garage: { color: 0xe9eaec, roughness: 0.38, metalness: 0.04, clearcoat: 0.22, clearcoatRoughness: 0.3, noiseKey: 'garage', brightness: 228, variation: 18, repeat: 4 },
-      pergola: { color: 0xf0f1f3, roughness: 0.25, metalness: 0.02, clearcoat: 0.5, clearcoatRoughness: 0.08, opacity: 0.82, transmission: 0.2, thickness: 0.25, noiseKey: 'pergola', brightness: 236, variation: 10, repeat: 5 },
-      pool: { color: 0xf3f4f6, roughness: 0.08, metalness: 0.02, clearcoat: 0.65, clearcoatRoughness: 0.05, transmission: 0.78, thickness: 0.6, attenuationDistance: 2.5, opacity: 1, noiseKey: 'pool', brightness: 240, variation: 6, repeat: 3 },
-      roof: { color: 0xd2d6dc, roughness: 0.28, metalness: 0.12, clearcoat: 0.15, clearcoatRoughness: 0.4, noiseKey: 'roof', brightness: 222, variation: 20, repeat: 4 },
-      balcony: { color: 0xf5f6f7, roughness: 0.35, metalness: 0.03, clearcoat: 0.3, clearcoatRoughness: 0.22, noiseKey: 'balcony', brightness: 235, variation: 10, repeat: 5 },
-      furniture: { color: 0xe6e8ec, roughness: 0.45, metalness: 0.05, clearcoat: 0.1, clearcoatRoughness: 0.5, noiseKey: 'furn', brightness: 226, variation: 22, repeat: 6 },
-      wall: { color: 0xe0e4e9, roughness: 0.4, metalness: 0.04, clearcoat: 0.2, clearcoatRoughness: 0.35, noiseKey: 'wall', brightness: 225, variation: 18, repeat: 6 }
+      room: { color: 0xf4efe8, roughness: 0.28, metalness: 0.06, clearcoat: 0.55, clearcoatRoughness: 0.18, sheen: 0.45, sheenColor: 0xfdf6ed, sheenRoughness: 0.72, noiseKey: 'room', brightness: 236, variation: 18, repeat: 3.5, bumpScale: 0.045, envMapIntensity: 1.4 },
+      garage: { color: 0xdde2e8, roughness: 0.42, metalness: 0.08, clearcoat: 0.18, clearcoatRoughness: 0.38, noiseKey: 'garage', brightness: 222, variation: 22, repeat: 4.5, bumpScale: 0.06, envMapIntensity: 1.2 },
+      pergola: { color: 0xd8c6b4, roughness: 0.32, metalness: 0.04, clearcoat: 0.46, clearcoatRoughness: 0.14, noiseKey: 'pergola', brightness: 220, variation: 26, repeat: 2.8, bumpScale: 0.08, envMapIntensity: 1.15 },
+      pool: { color: 0xc9d8e8, roughness: 0.1, metalness: 0.04, clearcoat: 0.72, clearcoatRoughness: 0.04, transmission: 0.86, thickness: 0.75, attenuationDistance: 3.2, attenuationColor: 0xc8ddf6, opacity: 1, noiseKey: 'pool', brightness: 240, variation: 8, repeat: 3.5, bumpScale: 0.035, envMapIntensity: 1.6 },
+      roof: { color: 0x4b4f56, roughness: 0.52, metalness: 0.18, clearcoat: 0.12, clearcoatRoughness: 0.5, noiseKey: 'roof', brightness: 210, variation: 32, repeat: 5.5, bumpScale: 0.12, envMapIntensity: 1.1 },
+      balcony: { color: 0xe8dfd2, roughness: 0.36, metalness: 0.07, clearcoat: 0.24, clearcoatRoughness: 0.3, sheen: 0.25, sheenColor: 0xf3eade, sheenRoughness: 0.6, noiseKey: 'balcony', brightness: 232, variation: 18, repeat: 3.8, bumpScale: 0.05, envMapIntensity: 1.35 },
+      furniture: { color: 0xe0d4c5, roughness: 0.48, metalness: 0.08, clearcoat: 0.22, clearcoatRoughness: 0.42, sheen: 0.3, sheenColor: 0xf7ede2, sheenRoughness: 0.68, noiseKey: 'furn', brightness: 224, variation: 26, repeat: 4.2, bumpScale: 0.06, envMapIntensity: 1.28 },
+      wall: { color: 0xe6eaef, roughness: 0.38, metalness: 0.05, clearcoat: 0.28, clearcoatRoughness: 0.32, noiseKey: 'wall', brightness: 228, variation: 24, repeat: 5.2, bumpScale: 0.055, envMapIntensity: 1.25 },
+      windowFrame: { color: 0xdbe2ec, roughness: 0.24, metalness: 0.58, clearcoat: 0.92, clearcoatRoughness: 0.22, specularIntensity: 0.92, specularColor: 0xf8fbff, noiseKey: 'window-frame', brightness: 236, variation: 12, repeat: 6, bumpScale: 0.018, envMapIntensity: 2.6 },
+      doorFrame: { color: 0xe4d3c0, roughness: 0.26, metalness: 0.42, clearcoat: 0.68, clearcoatRoughness: 0.28, specularIntensity: 0.78, specularColor: 0xf6ede4, noiseKey: 'door-frame', brightness: 230, variation: 18, repeat: 4.5, bumpScale: 0.02, envMapIntensity: 2.1 },
+      doorPanel: { color: 0xcaa585, roughness: 0.38, metalness: 0.18, clearcoat: 0.42, clearcoatRoughness: 0.28, sheen: 0.24, sheenColor: 0xfbf3eb, sheenRoughness: 0.62, specularIntensity: 0.62, specularColor: 0xf2e5db, noiseKey: 'door-panel', brightness: 224, variation: 28, repeat: 3.4, bumpScale: 0.045, envMapIntensity: 1.4 },
+      glass: { color: 0xf6fbff, roughness: 0.04, metalness: 0.02, clearcoat: 0.12, clearcoatRoughness: 0.05, transmission: 0.98, thickness: 0.5, attenuationDistance: 14, attenuationColor: 0xdbe7ff, opacity: 0.95, envMapIntensity: 1.9, useNoiseMap: false, transparent: true, depthWrite: false, doubleSide: true, specularIntensity: 0.96, specularColor: 0xf1f5ff, ior: 1.52 },
+      accentPanel: { color: 0xf0ede5, roughness: 0.32, metalness: 0.22, clearcoat: 0.48, clearcoatRoughness: 0.16, specularIntensity: 0.74, specularColor: 0xf9f6f0, sheen: 0.18, sheenColor: 0xf4ede2, sheenRoughness: 0.58, noiseKey: 'accent-panel', brightness: 232, variation: 18, repeat: 3.5, bumpScale: 0.035, envMapIntensity: 1.75 },
+      groundPath: { color: 0xd7dae0, roughness: 0.28, metalness: 0.24, clearcoat: 0.22, clearcoatRoughness: 0.28, specularIntensity: 0.68, specularColor: 0xf1f4f8, noiseKey: 'ground-path', brightness: 230, variation: 16, repeat: 8, bumpScale: 0.03, envMapIntensity: 1.65 },
+      woodAccent: { color: 0x3d2a20, roughness: 0.42, metalness: 0.32, clearcoat: 0.68, clearcoatRoughness: 0.32, sheen: 0.35, sheenColor: 0xf0d7c0, sheenRoughness: 0.55, specularIntensity: 0.82, specularColor: 0xf6e4d2, noiseKey: 'wood-accent', brightness: 196, variation: 34, repeat: 5.4, bumpScale: 0.06, envMapIntensity: 2.4 },
+      boulder: { color: 0x6f6761, roughness: 0.94, metalness: 0.12, clearcoat: 0.05, clearcoatRoughness: 0.78, noiseKey: 'boulder', brightness: 190, variation: 36, repeat: 2.6, bumpScale: 0.12, envMapIntensity: 0.9, aoMapIntensity: 0.9 },
+      foliage: { color: 0x5e7f4b, roughness: 0.58, metalness: 0.18, clearcoat: 0.22, clearcoatRoughness: 0.42, transmission: 0, noiseKey: 'foliage', brightness: 178, variation: 42, repeat: 3, bumpScale: 0.08, envMapIntensity: 1.8, aoMapIntensity: 0.4 }
     };
     var spec = palette[kind] || { color: 0xf2f3f5, roughness: 0.4, metalness: 0.05, clearcoat: 0.18, clearcoatRoughness: 0.35, noiseKey: 'default', brightness: 230, variation: 16, repeat: 4 };
+    if (referencePalette) {
+      if (kind === 'woodAccent' || kind === 'doorPanel' || kind === 'doorFrame') {
+        if (isFiniteNumber(referencePalette.woodColor)) spec.color = referencePalette.woodColor;
+      }
+      if (kind === 'wall' || kind === 'room' || kind === 'balcony') {
+        if (isFiniteNumber(referencePalette.wallColor)) spec.color = referencePalette.wallColor;
+      }
+      if (kind === 'groundPath' || kind === 'pergola' || kind === 'furniture') {
+        if (isFiniteNumber(referencePalette.groundColor)) spec.color = mixColors(referencePalette.groundColor, spec.color, 0.25);
+      }
+    }
     var mat = new THREE.MeshPhysicalMaterial({
       color: spec.color,
       roughness: spec.roughness,
@@ -635,16 +1378,35 @@
       transmission: spec.transmission || 0,
       thickness: spec.thickness || 0.1,
       attenuationDistance: spec.attenuationDistance || 0,
-      attenuationColor: new THREE.Color(0xffffff)
+      attenuationColor: new THREE.Color(spec.attenuationColor || 0xffffff),
+      reflectivity: spec.reflectivity != null ? spec.reflectivity : 0.5,
+      ior: spec.ior || 1.45
     });
-    mat.envMapIntensity = spec.envMapIntensity || 1.25;
+    mat.envMapIntensity = spec.envMapIntensity || 1.2;
     if (typeof spec.opacity === 'number') {
       mat.opacity = spec.opacity;
-      mat.transparent = spec.opacity < 1 || (spec.transmission && spec.transmission > 0);
+      mat.transparent = spec.transparent === true || spec.opacity < 1 || (spec.transmission && spec.transmission > 0);
     }
-    mat.side = (kind === 'pergola' || kind === 'roof') ? THREE.DoubleSide : THREE.FrontSide;
-    var tex = noiseTexture(spec.noiseKey || kind, spec.brightness, spec.variation, spec.repeat);
-    mat.map = tex;
+    if (spec.depthWrite === false) mat.depthWrite = false;
+    mat.side = spec.doubleSide ? THREE.DoubleSide : ((kind === 'pergola' || kind === 'roof') ? THREE.DoubleSide : THREE.FrontSide);
+    if (typeof spec.specularIntensity === 'number') mat.specularIntensity = spec.specularIntensity;
+    if (typeof spec.specularColor !== 'undefined') mat.specularColor = new THREE.Color(spec.specularColor);
+    if (spec.useNoiseMap !== false) {
+      var tex = noiseTexture(spec.noiseKey || kind, spec.brightness, spec.variation, spec.repeat);
+      mat.map = tex;
+      mat.roughnessMap = tex;
+      mat.bumpMap = tex;
+      mat.aoMap = tex;
+      mat.aoMapIntensity = spec.aoMapIntensity != null ? spec.aoMapIntensity : 0.6;
+      mat.bumpScale = spec.bumpScale || 0.04;
+    } else {
+      mat.bumpScale = spec.bumpScale || 0;
+    }
+    if (spec.sheen) {
+      mat.sheen = spec.sheen;
+      mat.sheenColor = new THREE.Color(spec.sheenColor || 0xffffff);
+      mat.sheenRoughness = spec.sheenRoughness != null ? spec.sheenRoughness : 0.6;
+    }
     mat.needsUpdate = true;
     return mat;
   }
@@ -656,6 +1418,7 @@
     var baseY = baseElevation(box);
     var trimHeight = Math.min(0.35, Math.max(0.08, box.height * 0.14));
     var trimGeom = new THREE.BoxGeometry(box.width * 1.025, trimHeight, box.depth * 1.025);
+    ensureSecondaryUV(trimGeom);
     var trimMat = new THREE.MeshPhysicalMaterial({
       color: 0xffffff,
       roughness: 0.18,
@@ -671,6 +1434,7 @@
 
     var socleHeight = Math.min(0.25, Math.max(0.05, box.height * 0.07));
     var socleGeom = new THREE.BoxGeometry(box.width * 1.05, socleHeight, box.depth * 1.05);
+    ensureSecondaryUV(socleGeom);
     var socleMat = new THREE.MeshPhysicalMaterial({
       color: 0xe1e5eb,
       roughness: 0.58,
@@ -685,6 +1449,56 @@
     registerMesh(socle, { edgeColor: EDGE_COLORS.default, castShadow: true });
   }
 
+  function addSignatureFacade(bounds, centerX, centerY, centerZ, span){
+    if (!bounds || !THREE) return;
+    var baseY = isFiniteNumber(bounds.minY) ? bounds.minY : 0;
+    var height = Math.max(3.2, (bounds.maxY - baseY) * 0.88);
+    var width = Math.max(6, (bounds.maxX - bounds.minX) * 0.78);
+    var offsetZ = Math.max(0.32, span * 0.18);
+    var frontZ = bounds.maxZ + offsetZ;
+    var frameDepth = Math.max(0.14, span * 0.035);
+
+    var frameGeom = new THREE.BoxGeometry(width + frameDepth * 0.55, height + frameDepth * 0.38, frameDepth);
+    ensureSecondaryUV(frameGeom);
+    var frame = new THREE.Mesh(frameGeom, materialFor('woodAccent'));
+    frame.position.set(centerX, baseY + height * 0.52, frontZ);
+    frame.castShadow = true;
+    registerMesh(frame, { edgeColor: EDGE_COLORS.accent, receiveShadow: true });
+
+    var glassGeom = new THREE.PlaneGeometry(width * 0.94, height * 0.9);
+    var glass = new THREE.Mesh(glassGeom, materialFor('glass'));
+    glass.position.set(centerX, baseY + height * 0.5, frontZ - frameDepth * 0.42);
+    glass.castShadow = false;
+    glass.renderOrder = 2.5;
+    registerMesh(glass, { skipEdges: true, edgeColor: EDGE_COLORS.glass, receiveShadow: true });
+
+    var canopyGeom = new THREE.BoxGeometry(width * 1.05, frameDepth * 0.55, frameDepth * 2.6);
+    ensureSecondaryUV(canopyGeom);
+    var canopy = new THREE.Mesh(canopyGeom, materialFor('accentPanel'));
+    canopy.position.set(centerX, baseY + height + frameDepth * 0.4, frontZ - frameDepth * 0.6);
+    canopy.castShadow = true;
+    registerMesh(canopy, { edgeColor: EDGE_COLORS.accent, receiveShadow: true });
+
+    var slatCount = 6;
+    var slatSpacing = width / slatCount;
+    var slatMat = materialFor('woodAccent');
+    for (var i = 0; i < slatCount; i++){
+      var slatGeom = new THREE.BoxGeometry(Math.max(0.12, slatSpacing * 0.12), height + frameDepth * 0.42, frameDepth * 0.38);
+      ensureSecondaryUV(slatGeom);
+      var slat = new THREE.Mesh(slatGeom, slatMat);
+      var offset = -width / 2 + slatSpacing * (i + 0.5);
+      slat.position.set(centerX + offset, baseY + height * 0.5, frontZ + frameDepth * 0.12);
+      slat.castShadow = true;
+      registerMesh(slat, { edgeColor: EDGE_COLORS.accent, receiveShadow: true });
+    }
+
+    var plinthGeom = new THREE.BoxGeometry(width * 0.92, frameDepth * 0.4, frameDepth * 1.6);
+    ensureSecondaryUV(plinthGeom);
+    var plinth = new THREE.Mesh(plinthGeom, materialFor('groundPath'));
+    plinth.position.set(centerX, baseY + frameDepth * 0.2, frontZ - frameDepth * 0.4);
+    registerMesh(plinth, { edgeColor: EDGE_COLORS.accent, receiveShadow: false, castShadow: false });
+  }
+
   function buildGround(bounds, centerX, centerZ, baseY, span){
     var dx = bounds.maxX - bounds.minX;
     var dz = bounds.maxZ - bounds.minZ;
@@ -694,6 +1508,7 @@
     var footprint = Math.max(dx, dz, span);
     var podiumHeight = Math.max(0.08, footprint * 0.015);
     var baseGeom = new THREE.BoxGeometry(footprint * 1.65, podiumHeight, footprint * 1.5);
+    ensureSecondaryUV(baseGeom);
     var baseMat = new THREE.MeshPhysicalMaterial({ color: 0xe2e6ec, roughness: 0.85, metalness: 0.02, clearcoat: 0.08, clearcoatRoughness: 0.6, map: noiseTexture('ground-base', 224, 18, 2.5) });
     var base = new THREE.Mesh(baseGeom, baseMat);
     var groundY = (typeof baseY === 'number') ? baseY : 0;
@@ -701,12 +1516,69 @@
     registerMesh(base, { edgeColor: EDGE_COLORS.podium, castShadow: false });
 
     var deckGeom = new THREE.BoxGeometry(footprint * 1.35, podiumHeight * 0.55, footprint * 1.25);
+    ensureSecondaryUV(deckGeom);
     var deckMat = new THREE.MeshPhysicalMaterial({ color: 0xf5f6f8, roughness: 0.62, metalness: 0.04, clearcoat: 0.12, clearcoatRoughness: 0.25, map: noiseTexture('ground-deck', 236, 10, 3) });
     var deck = new THREE.Mesh(deckGeom, deckMat);
     deck.position.set(centerX, groundY + podiumHeight * 0.12, centerZ);
     registerMesh(deck, { edgeColor: EDGE_COLORS.default, castShadow: false });
 
+    var pathGeom = new THREE.BoxGeometry(footprint * 0.82, podiumHeight * 0.32, footprint * 0.26);
+    ensureSecondaryUV(pathGeom);
+    var path = new THREE.Mesh(pathGeom, materialFor('groundPath'));
+    path.position.set(centerX, groundY + podiumHeight * 0.28, centerZ + footprint * 0.38);
+    registerMesh(path, { edgeColor: EDGE_COLORS.accent, castShadow: false });
+
+    var paverMat = materialFor('groundPath');
+    var paverCount = 4;
+    for (var i = 0; i < paverCount; i++){
+      var stepGeom = new THREE.BoxGeometry(footprint * 0.26, podiumHeight * 0.24, footprint * 0.08);
+      ensureSecondaryUV(stepGeom);
+      var step = new THREE.Mesh(stepGeom, paverMat);
+      var forward = footprint * 0.55 + i * footprint * 0.12;
+      step.position.set(centerX, groundY + podiumHeight * 0.38, centerZ + forward);
+      registerMesh(step, { edgeColor: EDGE_COLORS.accent, castShadow: false });
+    }
+
+    var boulderConfigs = [
+      { offsetX: -0.42, offsetZ: 0.24, scale: 0.11 },
+      { offsetX: 0.35, offsetZ: 0.18, scale: 0.08 },
+      { offsetX: -0.18, offsetZ: -0.42, scale: 0.06 }
+    ];
+
+    boulderConfigs.forEach(function(cfg){
+      var radius = Math.max(0.35, span * cfg.scale);
+      var detail = 2 + Math.floor(rng.range(0, 3));
+      var boulder = createBoulder(radius, detail, 'boulder');
+      if (!boulder) return;
+      boulder.position.set(
+        centerX + footprint * cfg.offsetX,
+        groundY + podiumHeight * 0.42 + radius * 0.35,
+        centerZ + footprint * cfg.offsetZ
+      );
+      boulder.rotation.y = rng.range(0, Math.PI * 2);
+      registerMesh(boulder, { skipEdges: true, edgeColor: EDGE_COLORS.accent, castShadow: true });
+    });
+
+    var tuftConfigs = [
+      { offsetX: -0.26, offsetZ: 0.32, radius: 0.28, height: 0.9 },
+      { offsetX: 0.28, offsetZ: 0.28, radius: 0.24, height: 0.8 },
+      { offsetX: 0.04, offsetZ: -0.36, radius: 0.22, height: 0.7 }
+    ];
+
+    tuftConfigs.forEach(function(cfg){
+      var tuft = createGrassTuft(Math.max(0.12, span * cfg.radius * 0.12), Math.max(0.4, span * cfg.height * 0.12));
+      if (!tuft) return;
+      tuft.position.set(
+        centerX + footprint * cfg.offsetX,
+        groundY + podiumHeight * 0.32,
+        centerZ + footprint * cfg.offsetZ
+      );
+      tuft.rotation.y = rng.range(0, Math.PI * 2);
+      registerMesh(tuft, { skipEdges: true, castShadow: false, receiveShadow: true });
+    });
+
     var floorGeom = new THREE.PlaneGeometry(footprint * 2.2, footprint * 2.2, 1, 1);
+    ensureSecondaryUV(floorGeom);
     var floorMat = new THREE.MeshPhysicalMaterial({ color: 0xf4f5f7, roughness: 0.95, metalness: 0.0, map: noiseTexture('ground-plane', 240, 6, 4) });
     var floor = new THREE.Mesh(floorGeom, floorMat);
     floor.rotation.x = -Math.PI / 2;
@@ -716,20 +1588,164 @@
     return groundY;
   }
 
-  function renderSnapshot(){
+  function buildViewPresets(centerX, centerY, centerZ, span, bounds){
+    if (!THREE) return [];
+    var presets = [];
+    var safeSpan = Math.max(6, span || 6);
+    var maxY = (bounds && isFiniteNumber(bounds.maxY)) ? bounds.maxY : (centerY + safeSpan * 0.5);
+    var minY = (bounds && isFiniteNumber(bounds.minY)) ? bounds.minY : 0;
+    var heightSpan = Math.max(2.6, maxY - minY);
+    var radius = Math.max(8, safeSpan * 1.92);
+    var baseTargetY = minY + heightSpan * 0.55;
+
+    function pushPreset(angleDeg, options){
+      var opts = options || {};
+      var heightFactor = (opts.heightFactor != null) ? opts.heightFactor : 0.5;
+      var distanceFactor = (opts.distanceFactor != null) ? opts.distanceFactor : 1.75;
+      var tiltOffset = opts.tiltOffset != null ? opts.tiltOffset : 0;
+      var fov = opts.fov || 44;
+      var rad = angleDeg * Math.PI / 180;
+      var dist = radius * distanceFactor;
+      var yPos = minY + Math.max(safeSpan * 0.2, heightSpan * heightFactor);
+      var pos = new THREE.Vector3(
+        centerX + Math.cos(rad) * dist,
+        yPos,
+        centerZ + Math.sin(rad) * dist
+      );
+      var target = new THREE.Vector3(
+        centerX + (opts.targetOffsetX || 0) * safeSpan,
+        baseTargetY + heightSpan * tiltOffset,
+        centerZ + (opts.targetOffsetZ || 0) * safeSpan
+      );
+      presets.push({
+        position: pos,
+        target: target,
+        up: opts.up ? opts.up.clone() : new THREE.Vector3(0, 1, 0),
+        fov: fov,
+        near: 0.05,
+        far: Math.max(600, dist * 6.5)
+      });
+    }
+
+    pushPreset(20, { heightFactor: 0.28, distanceFactor: 1.48, tiltOffset: -0.06, fov: 40 });
+    pushPreset(-18, { heightFactor: 0.3, distanceFactor: 1.5, tiltOffset: -0.05, fov: 40 });
+    pushPreset(38, { heightFactor: 0.46, distanceFactor: 1.72, tiltOffset: 0.03, fov: 44 });
+    pushPreset(-36, { heightFactor: 0.46, distanceFactor: 1.72, tiltOffset: 0.03, fov: 44 });
+    pushPreset(70, { heightFactor: 0.6, distanceFactor: 1.86, tiltOffset: 0.05, fov: 46 });
+    pushPreset(-68, { heightFactor: 0.6, distanceFactor: 1.86, tiltOffset: 0.05, fov: 46 });
+    pushPreset(110, { heightFactor: 0.7, distanceFactor: 2.05, tiltOffset: 0.08, fov: 48 });
+    pushPreset(-108, { heightFactor: 0.7, distanceFactor: 2.05, tiltOffset: 0.08, fov: 48 });
+    pushPreset(150, { heightFactor: 0.6, distanceFactor: 1.92, tiltOffset: 0.04, fov: 50 });
+
+    var topPos = new THREE.Vector3(
+      centerX + safeSpan * 0.04,
+      maxY + safeSpan * 4.2,
+      centerZ + safeSpan * 0.04
+    );
+    presets.push({
+      position: topPos,
+      target: new THREE.Vector3(centerX, baseTargetY, centerZ),
+      up: new THREE.Vector3(0, 0, -1),
+      fov: 52,
+      near: 0.5,
+      far: Math.max(800, safeSpan * 12)
+    });
+
+    if (!presets.length) {
+      var fallback = new THREE.Vector3(centerX + safeSpan * 1.9, maxY + safeSpan * 0.8, centerZ + safeSpan * 1.4);
+      presets.push({
+        position: fallback,
+        target: new THREE.Vector3(centerX, baseTargetY, centerZ),
+        up: new THREE.Vector3(0, 1, 0),
+        fov: 48,
+        near: 0.05,
+        far: Math.max(600, safeSpan * 8)
+      });
+    }
+
+    return presets.slice(0, 10);
+  }
+
+  function applyCameraPreset(index){
+    if (!camera || !Array.isArray(VIEW_PRESETS) || VIEW_PRESETS.length === 0) return;
+    var total = VIEW_PRESETS.length;
+    var normalized = ((index % total) + total) % total;
+    var preset = VIEW_PRESETS[normalized];
+    if (!preset) return;
+    viewIndex = normalized;
+    camera.position.copy(preset.position);
+    if (preset.up) camera.up.copy(preset.up);
+    if (isFiniteNumber(preset.fov)) camera.fov = preset.fov;
+    if (isFiniteNumber(preset.near)) camera.near = preset.near;
+    if (isFiniteNumber(preset.far)) camera.far = preset.far;
+    if (preset.target) camera.lookAt(preset.target);
+    camera.updateProjectionMatrix();
+    syncViewButtons();
+  }
+
+  function syncViewButtons(){
+    if (!viewButtons || !viewButtons.length) return;
+    var total = Array.isArray(VIEW_PRESETS) ? VIEW_PRESETS.length : 0;
+    viewButtons.forEach(function(btn, idx){
+      if (!btn) return;
+      var enabled = idx < total && total > 0;
+      btn.disabled = !enabled;
+      btn.classList.toggle('active', enabled && idx === viewIndex);
+      btn.classList.toggle('inactive', !enabled);
+    });
+  }
+
+  function handleViewSelection(idx){
+    if (!Array.isArray(VIEW_PRESETS) || VIEW_PRESETS.length === 0) return;
+    var total = VIEW_PRESETS.length;
+    var clamped = Math.max(0, Math.min(idx, total - 1));
+    applyCameraPreset(clamped);
+    if (renderer && scene && camera) {
+      renderer.render(scene, camera);
+      if (fabricCanvas) fabricCanvas.requestRenderAll();
+    }
+  }
+
+  function setupViewButtons(){
+    var container = qs('visualize-view-grid');
+    if (!container) return;
+    viewButtons = [];
+    var buttons = container.querySelectorAll('button[data-view-index]');
+    buttons.forEach(function(btn){
+      if (!btn) return;
+      var idx = parseInt(btn.getAttribute('data-view-index'), 10);
+      if (!isFiniteNumber(idx)) return;
+      viewButtons.push(btn);
+      if (!btn.__wired){
+        btn.__wired = true;
+        btn.addEventListener('click', function(){ handleViewSelection(idx); });
+      }
+    });
+    syncViewButtons();
+  }
+
+  async function renderSnapshot(){
     var loading = qs(LOADING_ID);
     if (loading) loading.classList.add('visible');
     try {
       var snapshot = gatherProjectSnapshot();
       var hash = computeHash(snapshot);
+      if (rng && typeof rng.reseed === 'function') rng.reseed(hash);
       var qualitySelect = qs(QUALITY_ID);
       var multiplier = qualitySelect ? parseFloat(qualitySelect.value || '1') : 1;
       if (!isFinite(multiplier) || multiplier <= 0) multiplier = 1;
       currentQuality = multiplier;
       ensureRenderer();
+      var referenceTex = await ensureReferenceTexture();
+      if (renderer && typeof renderer.toneMappingExposure === 'number') {
+        var exposureBase = (referencePalette && isFiniteNumber(referencePalette.exposure)) ? referencePalette.exposure : 1.42;
+        renderer.toneMappingExposure = exposureBase + (multiplier - 1) * 0.24;
+      }
       ensureEnvironment();
+      applyStagePalette();
       disposeSceneChildren();
-      scene.background = new THREE.Color(0xf5f6f8);
+      var backgroundTex = createSkyTexture();
+      scene.background = backgroundTex || new THREE.Color(0xf5f6f8);
 
       var bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity };
       var boxes = gatherBoxes(snapshot);
@@ -741,7 +1757,23 @@
         mat.map = noiseTexture('wall-' + (strip.level || 0), 228, 20, 8);
         var result = buildWallMesh(strip, mat);
         includeBounds(bounds, { cx: result.midX, cz: result.midZ, width: result.len, depth: result.thickness, height: result.wallHeight, level: strip.level || 0 });
-        registerMesh(result.mesh, { edgeColor: EDGE_COLORS.wall });
+        if (Array.isArray(result.meshes) && result.meshes.length){
+          result.meshes.forEach(function(mesh){
+            var baseOptions = { edgeColor: EDGE_COLORS.wall };
+            var overrides = (mesh && mesh.userData) ? mesh.userData.visualizeOpts : null;
+            if (overrides) {
+              var merged = {};
+              var key;
+              for (key in baseOptions) merged[key] = baseOptions[key];
+              for (key in overrides) {
+                if (Object.prototype.hasOwnProperty.call(overrides, key)) merged[key] = overrides[key];
+              }
+              registerMesh(mesh, merged);
+            } else {
+              registerMesh(mesh, baseOptions);
+            }
+          });
+        }
       });
 
       boxes.forEach(function(entry){
@@ -767,28 +1799,46 @@
 
       var groundY = buildGround(bounds, centerX, centerZ, bounds.minY, span);
       createContactShadow(centerX, centerZ, span, groundY);
+      addSignatureFacade(bounds, centerX, centerY, centerZ, span);
+      if (referenceTex) {
+        applyReferenceBackdrop(referenceTex, centerX, centerY, centerZ, span, bounds);
+      }
 
-      var animElevation = Math.max(0.2, span * 0.18);
-      var camDistance = span * 1.9;
-      var elevation = centerY + (span * 0.72) + animElevation;
-      camera.position.set(centerX + camDistance, elevation, centerZ + camDistance * 0.78);
-      camera.near = 0.05;
-      camera.far = Math.max(600, camDistance * 6.5);
-      camera.lookAt(new THREE.Vector3(centerX, centerY + (span * 0.14), centerZ));
-      camera.updateProjectionMatrix();
+      VIEW_PRESETS = buildViewPresets(centerX, centerY, centerZ, span, bounds) || [];
+      if (!Array.isArray(VIEW_PRESETS) || VIEW_PRESETS.length === 0) {
+        VIEW_PRESETS = buildViewPresets(centerX, centerY, centerZ, span || 8, bounds) || [];
+      }
+      if (!Array.isArray(VIEW_PRESETS) || VIEW_PRESETS.length === 0) {
+        VIEW_PRESETS = [{
+          position: new THREE.Vector3(centerX + span * 1.9, centerY + span * 0.8, centerZ + span * 1.4),
+          target: new THREE.Vector3(centerX, centerY, centerZ),
+          up: new THREE.Vector3(0, 1, 0),
+          fov: 48,
+          near: 0.05,
+          far: Math.max(600, span * 8)
+        }];
+      }
+      if (viewIndex >= VIEW_PRESETS.length) viewIndex = VIEW_PRESETS.length - 1;
+      if (viewIndex < 0) viewIndex = 0;
+      applyCameraPreset(viewIndex);
       setupLighting(centerX, centerY, centerZ, span);
 
       var canvas = qs(CANVAS_ID);
       if (canvas) {
-        var width = Math.floor(1600 * multiplier);
+        var baseWidth = 2500;
+        var width = Math.floor(baseWidth * multiplier);
+        if (width > 2800) width = 2800;
         var height = Math.floor(width * 9 / 16);
         camera.aspect = width / height;
         renderer.setSize(width, height, false);
         canvas.width = width;
         canvas.height = height;
-        canvas.style.width = '100%';
-        canvas.style.height = '100%';
+        lastCanvasWidth = width;
+        lastCanvasHeight = height;
         ensureFabric(width, height);
+        ensureResizeListener();
+        fitRenderToStage();
+        window.requestAnimationFrame(fitRenderToStage);
         if (renderer.shadowMap) renderer.shadowMap.needsUpdate = true;
         renderer.render(scene, camera);
         addDefaultLabel();
@@ -839,6 +1889,7 @@
   }
 
   function ensureEvents(){
+    setupViewButtons();
     var closeBtn = qs('visualize-close');
     if (closeBtn && !closeBtn.__wired){
       closeBtn.__wired = true;
@@ -853,6 +1904,11 @@
     if (generate && !generate.__wired){
       generate.__wired = true;
       generate.addEventListener('click', function(){ ensureLibraries().then(renderSnapshot); });
+    }
+    var qualitySelect = qs(QUALITY_ID);
+    if (qualitySelect && !qualitySelect.__wired){
+      qualitySelect.__wired = true;
+      qualitySelect.addEventListener('change', function(){ ensureLibraries().then(renderSnapshot); });
     }
     var downloadBtn = qs('visualize-download');
     if (downloadBtn && !downloadBtn.__wired){
@@ -873,13 +1929,16 @@
         }
       });
     }
+    syncViewButtons();
   }
 
   function showVisualize(){
     var modal = qs(PANEL_ID);
     if (!modal) return;
+    viewIndex = 0;
     modal.classList.add('visible');
     ensureEvents();
+    window.requestAnimationFrame(fitRenderToStage);
     ensureLibraries().then(function(){
       ensureRenderer();
       renderSnapshot();
