@@ -45,6 +45,33 @@
 
   function isFiniteNumber(val){ return typeof val === 'number' && isFinite(val); }
 
+  function computedRoofBaseHeight(){
+    try {
+      if (typeof window.computeRoofBaseHeight === 'function') {
+        var value = window.computeRoofBaseHeight();
+        if (isFiniteNumber(value)) return value;
+      }
+    } catch(_e){}
+    return null;
+  }
+
+  function computedRoofFootprint(){
+    try {
+      if (typeof window.computeRoofFootprint === 'function') {
+        var fp = window.computeRoofFootprint();
+        if (fp && isFiniteNumber(fp.width) && isFiniteNumber(fp.depth)) {
+          return {
+            x: isFiniteNumber(fp.x) ? fp.x : 0,
+            z: isFiniteNumber(fp.z) ? fp.z : 0,
+            width: Math.max(0.5, fp.width),
+            depth: Math.max(0.5, fp.depth)
+          };
+        }
+      }
+    } catch(_e){}
+    return null;
+  }
+
   function ensureLibraries(){
     if (window.THREE && window.fabric) return Promise.resolve();
     if (libsPromise) return libsPromise;
@@ -406,26 +433,40 @@
     var box = boxFromDimensions(roof || {});
     box.height = Math.max(1.0, (roof && roof.height) || 1.2);
 
-    if (envelope) {
-      if (!roof || roof.autoFit !== false) {
-        box.cx = envelope.centerX;
-        box.cz = envelope.centerZ;
-        box.width = envelope.width;
-        box.depth = envelope.depth;
-      }
-      if (!roof || roof.autoBase !== false) {
+    var footprintOverride = null;
+    if (!roof || roof.autoFit !== false) {
+      footprintOverride = computedRoofFootprint();
+    }
+
+    if (footprintOverride) {
+      box.cx = footprintOverride.x;
+      box.cz = footprintOverride.z;
+      box.width = footprintOverride.width;
+      box.depth = footprintOverride.depth;
+    } else if (envelope && (!roof || roof.autoFit !== false)) {
+      box.cx = envelope.centerX;
+      box.cz = envelope.centerZ;
+      box.width = envelope.width;
+      box.depth = envelope.depth;
+    }
+
+    var baseCandidate = null;
+    if (!roof || roof.autoBase !== false) {
+      baseCandidate = computedRoofBaseHeight();
+      if (!isFiniteNumber(baseCandidate) && envelope) {
         var lvl = roof ? (roof.level || 0) : 0;
-        var hasLevelTop = Object.prototype.hasOwnProperty.call(envelope.topByLevel, lvl);
-        var candidate = hasLevelTop ? envelope.topByLevel[lvl] : envelope.maxTop;
-        if (isFiniteNumber(candidate)) {
-          box.baseY = candidate;
-          box.baseIsAbsolute = true;
-        }
+        var hasLevelTop = envelope && envelope.topByLevel && Object.prototype.hasOwnProperty.call(envelope.topByLevel, lvl);
+        var envelopeTop = hasLevelTop ? envelope.topByLevel[lvl] : envelope.maxTop;
+        if (isFiniteNumber(envelopeTop)) baseCandidate = envelopeTop;
       }
     }
 
-    if (!box.baseIsAbsolute && roof && isFiniteNumber(roof.baseHeight)) {
-      box.baseY = roof.baseHeight;
+    if (!isFiniteNumber(baseCandidate) && roof && isFiniteNumber(roof.baseHeight)) {
+      baseCandidate = roof.baseHeight;
+    }
+
+    if (isFiniteNumber(baseCandidate)) {
+      box.baseY = baseCandidate;
       box.baseIsAbsolute = true;
     }
 
