@@ -129,6 +129,12 @@
       camera = Object.assign(camera, data.camera || {});
       allRooms = Array.isArray(data.rooms) ? data.rooms : [];
       wallStrips = Array.isArray(data.wallStrips) ? data.wallStrips : [];
+      
+      // Fix: Deduplicate wall strips by geometry to prevent crash on load from bloated files
+      if (wallStrips.length > 0) {
+        wallStrips = dedupeWallStrips(wallStrips);
+      }
+
       // Restore stairs (multi first, fallback to single)
       try {
         window.stairsComponents = Array.isArray(data.stairsList) ? data.stairsList : [];
@@ -379,6 +385,54 @@
       try { if (typeof updateStatus === 'function') updateStatus('Cleared scene for import'); } catch(_s) {}
     } catch (e) {
       console.warn('resetSceneForImport failed', e);
+    }
+  }
+
+  /**
+   * Deduplicate wall strips by geometry (start/end points) to prevent performance issues.
+   * Merges properties where possible.
+   */
+  function dedupeWallStrips(strips) {
+    if (!Array.isArray(strips) || strips.length === 0) return [];
+    try {
+      var map = {};
+      var out = [];
+      // Helper to quantize coordinates to 1mm
+      function kf(v) { return Math.round((+v || 0) * 1000) / 1000; }
+      
+      for (var i = 0; i < strips.length; i++) {
+        var s = strips[i];
+        if (!s) continue;
+        // Create a sorted key from endpoints (x0,z0) and (x1,z1)
+        var x0 = kf(s.x0), z0 = kf(s.z0);
+        var x1 = kf(s.x1), z1 = kf(s.z1);
+        var p1 = x0 + ',' + z0;
+        var p2 = x1 + ',' + z1;
+        var key = (p1 < p2) ? (p1 + '|' + p2) : (p2 + '|' + p1);
+        
+        // Include level in key to avoid merging strips from different floors
+        key += '|L' + (s.level || 0);
+
+        if (!map[key]) {
+          map[key] = s;
+          out.push(s);
+        } else {
+          // Merge logic: keep the one with openings if the other doesn't have them
+          var existing = map[key];
+          if ((!existing.openings || existing.openings.length === 0) && (s.openings && s.openings.length > 0)) {
+            existing.openings = s.openings;
+          }
+          // If both have openings, we assume they are similar enough or just keep the first one
+          // to avoid complexity. The goal is to stop the crash.
+        }
+      }
+      if (strips.length !== out.length) {
+        console.log('[restoreProject] Deduped wallStrips from ' + strips.length + ' to ' + out.length);
+      }
+      return out;
+    } catch (e) {
+      console.warn('dedupeWallStrips failed', e);
+      return strips;
     }
   }
 
