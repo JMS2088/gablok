@@ -32,6 +32,8 @@
       var baseLimit = 220; // slightly higher initial budget
       if (elemCount > 1200) baseLimit = 80; else if (elemCount > 800) baseLimit = 110; else if (elemCount > 500) baseLimit = 150; else if (elemCount > 300) baseLimit = 190;
       // If last draw was expensive, throttle further
+      var lowQualityMode = false;
+      if (__plan2d.__lastDrawMs && __plan2d.__lastDrawMs > 16) { lowQualityMode = true; }
       if (__plan2d.__lastDrawMs && __plan2d.__lastDrawMs > 20) baseLimit = Math.min(baseLimit, 120);
       if (__plan2d.__lastDrawMs && __plan2d.__lastDrawMs > 32) baseLimit = Math.min(baseLimit, 90);
       // Allow external override (for perf experiments) via __measureLimitOverride
@@ -1255,7 +1257,7 @@
       // Sort by area (desc) so larger rooms have priority
       boxes.sort(function(a,b){ return (b.area||0) - (a.area||0); });
       var placed = [];
-      var maxLabels = 40;
+      var maxLabels = lowQualityMode ? 15 : 40;
       function intersects(a,b){ return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y); }
       function roundedRect(ctx,x,y,w,h,r){ var rr=Math.min(r, Math.min(w,h)/2); ctx.beginPath(); ctx.moveTo(x+rr,y); ctx.lineTo(x+w-rr,y); ctx.quadraticCurveTo(x+w,y,x+w,y+rr); ctx.lineTo(x+w,y+h-rr); ctx.quadraticCurveTo(x+w,y+h,x+w-rr,y+h); ctx.lineTo(x+rr,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-rr); ctx.lineTo(x,y+rr); ctx.quadraticCurveTo(x,y,x+rr,y); ctx.closePath(); }
       var dprL = window.devicePixelRatio || 1;
@@ -1271,9 +1273,14 @@
         var radius = 19 * (window.devicePixelRatio||1);
         lx.save();
         // Slight drop shadow for readability
-        lx.shadowColor = 'rgba(2,6,23,0.35)';
-        lx.shadowBlur = 6 * dprL;
-        lx.shadowOffsetX = 0; lx.shadowOffsetY = 0;
+        if (!lowQualityMode) {
+          lx.shadowColor = 'rgba(2,6,23,0.35)';
+          lx.shadowBlur = 6 * dprL;
+          lx.shadowOffsetX = 0; lx.shadowOffsetY = 0;
+        } else {
+          lx.shadowColor = 'transparent';
+          lx.shadowBlur = 0;
+        }
         // Highlight recent added room for ~1.2s with a subtle pulse
         var isRecent = (recentId && b.id && b.id === recentId && recentAgeMs < 1200);
         var alpha = Math.max(0.75, Math.min(1.0, b.a||0.95));
@@ -1410,6 +1417,7 @@
   if(typeof window.plan2dDraw!=='function'){
     window.plan2dDraw = function plan2dDraw(){
       if(__plan2dDrawPending){ return; }
+      if(document.hidden){ return; }
       __plan2dDrawPending=true;
       requestAnimationFrame(function(){
         __plan2dDrawPending=false;

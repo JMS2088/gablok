@@ -22,6 +22,8 @@
   var sceneRoot = null;
   var pmremGenerator = null;
   var envRT = null;
+  var cubeCamera = null;
+  var cubeRenderTarget = null;
   var currentQuality = 1;
   var lastHash = null;
   var viewIndex = 0;
@@ -623,6 +625,12 @@
     
     sceneRoot = new THREE.Group();
     scene.add(sceneRoot);
+
+    // Dynamic reflections setup
+    cubeRenderTarget = new THREE.WebGLCubeRenderTarget(512);
+    cubeRenderTarget.texture.type = THREE.HalfFloatType;
+    cubeCamera = new THREE.CubeCamera(1, 1000, cubeRenderTarget);
+    scene.add(cubeCamera);
   }
 
   function ensurePostProcessing(width, height){
@@ -687,6 +695,10 @@
 
   function renderSceneWithPostFX(width, height){
     if (!renderer) return;
+
+    // Update reflections
+    updateDynamicReflections();
+
     var w = width || lastCanvasWidth || (renderer.domElement ? renderer.domElement.width : 0) || 1920;
     var h = height || lastCanvasHeight || (renderer.domElement ? renderer.domElement.height : 0) || 1080;
     var useComposer = null;
@@ -1061,7 +1073,7 @@
         garages: snapshot.garages.length,
         pools: snapshot.pools.length,
         roofs: snapshot.roofs.length,
-        balconies: snapshot.balconies.length,
+        balconies: snapshot.balconyComponents.length,
         furniture: snapshot.furniture.length,
         stairs: snapshot.stairs.length,
         sampleRoom: snapshot.rooms[0] || null
@@ -2700,8 +2712,9 @@
         roofs: snapshot.roofs.length,
         pergolas: snapshot.pergolas.length,
         garages: snapshot.garages.length,
-        balconies: snapshot.balconies.length,
+        balconies: snapshot.balconyComponents.length,
         furniture: snapshot.furniture.length,
+        stairs: snapshot.stairs.length,
         bounds: bounds,
         span: span
       });
@@ -2961,6 +2974,32 @@
       fabricCanvas.discardActiveObject();
       fabricCanvas.requestRenderAll();
     }
+  }
+
+  function updateDynamicReflections(){
+    if (!cubeCamera || !renderer || !scene) return;
+    
+    // Position cube camera at the center of the scene or near the main camera target
+    var center = new THREE.Vector3(0, 1.5, 0);
+    if (VIEW_PRESETS[viewIndex] && VIEW_PRESETS[viewIndex].target) {
+       center.copy(VIEW_PRESETS[viewIndex].target);
+       center.y += 1.0; // Lift it up a bit
+    }
+    
+    cubeCamera.position.copy(center);
+    
+    // Use static lighting for the reflection pass to ensure objects are well-lit in the reflection
+    if (envRT && envRT.texture) {
+      scene.environment = envRT.texture;
+    } else {
+      scene.environment = null;
+    }
+    
+    // Update the cube map
+    cubeCamera.update(renderer, scene);
+    
+    // Set the new environment to the dynamic capture
+    scene.environment = cubeRenderTarget.texture;
   }
 
   window.showVisualize = showVisualize;
