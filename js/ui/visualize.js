@@ -24,6 +24,11 @@
   var envRT = null;
   var currentQuality = 1;
   var lastHash = null;
+  // Manual visual offsets to fine-tune where the 3D model
+  // appears within the overlay grid (e.g. to land in B2).
+  // Positive X moves the apparent model right, positive Y moves it up.
+  var VISUALIZE_OFFSET_X = 0.5;
+  var VISUALIZE_OFFSET_Y = 0.5;
   var viewIndex = 0;
   var VIEW_PRESETS = [];
   var viewButtons = [];
@@ -2569,12 +2574,16 @@
         createContactShadow(0, 0, span, groundY);
       } catch(e) { console.error('[Visualize] Ground building failed', e); }
 
-      // Camera Focus Point: look directly at the visual center of
-      // the geometry. Further visual tweaks (e.g. toward B2) should
-      // be applied as small, explicit offsets from this baseline.
+      // Camera Focus Point: start at the visual center of the geometry
+      // and apply small manual offsets so you can fine-tune where the
+      // model appears relative to the grid (e.g. B2).
       var centerY = (box3.min.y + box3.max.y) / 2;
       if (!isFinite(centerY)) centerY = floorHeight * 0.5;
-      var renderFocus = { x: 0, y: centerY, z: 0 };
+      var renderFocus = {
+        x: VISUALIZE_OFFSET_X,
+        y: centerY + VISUALIZE_OFFSET_Y,
+        z: 0
+      };
 
       // Log snapshot data for debugging
       console.log('[Visualize] Snapshot data:', {
