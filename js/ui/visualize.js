@@ -269,81 +269,8 @@
   }
 
   function createSkyTexture(){
-    if (skyTexture) return skyTexture;
-    if (!THREE) return null;
-    var canvas = document.createElement('canvas');
-    canvas.width = 2048;
-    canvas.height = 1024;
-    var ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    
-    // Get randomized sky preset for this render
-    var preset = selectSkyPalette();
-    
-    // Photorealistic sky gradient based on preset
-    var gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, preset.zenith);     // Zenith color
-    gradient.addColorStop(0.5, preset.mid);      // Mid-sky transition
-    gradient.addColorStop(1.0, preset.horizon);  // Horizon glow
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Dynamic sun position based on preset
-    var sunX = canvas.width * preset.sunX;
-    var sunY = canvas.height * preset.sunY;
-    
-    // Outer atmospheric glow
-    var outerGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, canvas.height * 0.5);
-    var sunHex = preset.sun.replace('#', '');
-    var sunR = parseInt(sunHex.substr(0,2), 16);
-    var sunG = parseInt(sunHex.substr(2,2), 16);
-    var sunB = parseInt(sunHex.substr(4,2), 16);
-    outerGlow.addColorStop(0, 'rgba(' + sunR + ',' + sunG + ',' + sunB + ', 0.6)');
-    outerGlow.addColorStop(0.2, 'rgba(' + sunR + ',' + sunG + ',' + sunB + ', 0.3)');
-    outerGlow.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = outerGlow;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Bright sun core
-    var sunGlow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, canvas.height * 0.1);
-    sunGlow.addColorStop(0, 'rgba(255,255,255,1)');
-    sunGlow.addColorStop(0.5, 'rgba(255,255,240,0.9)');
-    sunGlow.addColorStop(1, 'rgba(255,250,220,0)');
-    ctx.fillStyle = sunGlow;
-    ctx.beginPath();
-    ctx.arc(sunX, sunY, canvas.height * 0.15, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Subtle cloud wisps
-    ctx.globalAlpha = 0.15;
-    for (var i = 0; i < 8; i++) {
-      var cloudX = canvas.width * (0.1 + Math.random() * 0.8);
-      var cloudY = canvas.height * (0.1 + Math.random() * 0.4);
-      var cloudW = canvas.width * (0.1 + Math.random() * 0.2);
-      var cloudH = canvas.height * (0.02 + Math.random() * 0.04);
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.ellipse(cloudX, cloudY, cloudW, cloudH, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-
-    var tex = new THREE.CanvasTexture(canvas);
-    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
-    // Maximum anisotropic filtering for crisp sky
-    if (renderer && renderer.capabilities) {
-      var aniso = renderer.capabilities.getMaxAnisotropy && renderer.capabilities.getMaxAnisotropy();
-      if (aniso) tex.anisotropy = aniso; // Use maximum available
-    } else {
-      tex.anisotropy = 16; // Fallback to 16x
-    }
-    if (THREE.SRGBColorSpace) tex.colorSpace = THREE.SRGBColorSpace;
-    tex.magFilter = THREE.LinearFilter;
-    tex.minFilter = THREE.LinearMipmapLinearFilter;
-    tex.generateMipmaps = true;
-    tex.needsUpdate = true;
-    skyTexture = tex;
-    return tex;
+    // Return null to use solid background color
+    return null;
   }
 
   function distortVertices(geometry, strength, randomnessFn){
@@ -636,8 +563,8 @@
       precision: 'highp'
     });
     
-    // Maximum quality - 3x super-sampling for razor-sharp renders
-    var pixelRatio = Math.min(window.devicePixelRatio || 1, 3);
+    // Maximum quality - 4x super-sampling for razor-sharp renders
+    var pixelRatio = Math.min(window.devicePixelRatio || 1, 4);
     renderer.setPixelRatio(pixelRatio);
     
     // Proper color management for photorealism
@@ -645,8 +572,8 @@
       renderer.outputColorSpace = THREE.SRGBColorSpace;
     }
     
-    // Clear to sky blue for outdoor scenes
-    renderer.setClearColor(0x87CEEB, 1);
+    // Clear to white for studio look
+    renderer.setClearColor(0xffffff, 1);
     renderer.autoClear = false;
     
     // Physical lighting model
@@ -655,7 +582,7 @@
     
     // Cinematic tone mapping with bright photorealistic exposure
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.8; // Bright like reference images
+    renderer.toneMappingExposure = 1.2; // Slightly lower exposure for white background
     
     // Ultra high quality soft shadows (8K resolution)
     renderer.shadowMap.enabled = true;
@@ -881,84 +808,33 @@
       return;
     }
     
-    // Professional HDR environment for photorealistic rendering
+    // Professional Studio HDR environment
     pmremGenerator = pmremGenerator || new THREE.PMREMGenerator(renderer);
     pmremGenerator.compileEquirectangularShader();
     
-    // Create procedural HDR environment
+    // Create procedural studio environment
     var studio = new THREE.Scene();
+    studio.background = new THREE.Color(0xffffff);
     
-    // Sky dome with realistic gradient - bright blue sky
-    var skyCanvas = document.createElement('canvas');
-    skyCanvas.width = 1024;
-    skyCanvas.height = 512;
-    var skyCtx = skyCanvas.getContext('2d');
-    var skyGrad = skyCtx.createLinearGradient(0, 0, 0, 512);
-    skyGrad.addColorStop(0, '#4A90D9');      // Deep blue at top
-    skyGrad.addColorStop(0.3, '#87CEEB');    // Sky blue
-    skyGrad.addColorStop(0.6, '#B0E0E6');    // Powder blue
-    skyGrad.addColorStop(0.85, '#E6F3FF');   // Very light blue near horizon
-    skyGrad.addColorStop(1.0, '#FFF8DC');    // Warm cream at horizon
-    skyCtx.fillStyle = skyGrad;
-    skyCtx.fillRect(0, 0, 1024, 512);
-    
-    // Add sun glow
-    var sunGrad = skyCtx.createRadialGradient(750, 100, 0, 750, 100, 150);
-    sunGrad.addColorStop(0, 'rgba(255,255,240,1)');
-    sunGrad.addColorStop(0.1, 'rgba(255,250,220,0.9)');
-    sunGrad.addColorStop(0.4, 'rgba(255,240,200,0.3)');
-    sunGrad.addColorStop(1, 'rgba(255,240,200,0)');
-    skyCtx.fillStyle = sunGrad;
-    skyCtx.fillRect(0, 0, 1024, 512);
-    
-    var skyTex = new THREE.CanvasTexture(skyCanvas);
-    skyTex.mapping = THREE.EquirectangularReflectionMapping;
-    
-    var domeMat = new THREE.MeshBasicMaterial({ 
-      map: skyTex,
-      side: THREE.BackSide 
-    });
-    var dome = new THREE.Mesh(new THREE.SphereGeometry(500, 64, 32), domeMat);
-    studio.add(dome);
-
-    // Ground plane for reflections - warm concrete/grass tint
-    var groundCanvas = document.createElement('canvas');
-    groundCanvas.width = 512;
-    groundCanvas.height = 512;
-    var groundCtx = groundCanvas.getContext('2d');
-    var groundGrad = groundCtx.createRadialGradient(256, 256, 0, 256, 256, 400);
-    groundGrad.addColorStop(0, '#90A090');   // Greenish center (grass)
-    groundGrad.addColorStop(0.5, '#A0A090'); // Transition
-    groundGrad.addColorStop(1, '#B0A898');   // Warm edge
-    groundCtx.fillStyle = groundGrad;
-    groundCtx.fillRect(0, 0, 512, 512);
-    
-    var groundTex = new THREE.CanvasTexture(groundCanvas);
-    var floorMat = new THREE.MeshBasicMaterial({ map: groundTex });
-    var floor = new THREE.Mesh(new THREE.CircleGeometry(400, 64), floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = -1;
-    studio.add(floor);
-
-    // Sun light emitter (very bright, warm)
+    // Soft studio lights for reflections
     function addEmitter(width, height, position, rotation, colorHex, intensity){
       var color = new THREE.Color(colorHex || 0xffffff);
       color.multiplyScalar(intensity || 1);
-      var mat = new THREE.MeshBasicMaterial({ color: color });
+      var mat = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide });
       var plane = new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
       plane.position.copy(position);
       if (rotation) plane.rotation.set(rotation.x || 0, rotation.y || 0, rotation.z || 0);
       studio.add(plane);
     }
 
-    // Bright sun (key light)
-    addEmitter(80, 80, new THREE.Vector3(200, 150, 100), { x: -0.5, y: -0.3 }, 0xFFFAF0, 8.0);
+    // Key light reflection (soft white)
+    addEmitter(100, 100, new THREE.Vector3(100, 100, 100), { x: -Math.PI/4, y: Math.PI/4 }, 0xffffff, 4.0);
     
-    // Sky fill (large soft)
-    addEmitter(200, 150, new THREE.Vector3(0, 200, 0), { x: Math.PI/2 }, 0x87CEEB, 2.0);
+    // Fill light reflection (cool white)
+    addEmitter(100, 100, new THREE.Vector3(-100, 100, 50), { x: -Math.PI/4, y: -Math.PI/4 }, 0xf0f8ff, 2.0);
     
-    // Ground bounce (warm)
-    addEmitter(300, 300, new THREE.Vector3(0, -50, 0), { x: -Math.PI/2 }, 0xE8DCC8, 0.8);
+    // Rim light reflection (warm white)
+    addEmitter(100, 100, new THREE.Vector3(0, 100, -100), { x: Math.PI/4, y: 0 }, 0xfffaf0, 3.0);
 
     envRT = pmremGenerator.fromScene(studio, 0.02);
     scene.environment = envRT.texture;
@@ -987,53 +863,48 @@
   function setupLighting(centerX, centerY, centerZ, span){
     if (!scene) return;
     clearLighting();
-    ensureFog(span);
+    // No fog in studio
+    scene.fog = null;
 
-    var preset = selectSkyPalette();
-    var zenithColor = parseInt(preset.zenith.replace('#', ''), 16);
-    var horizonColor = parseInt(preset.horizon.replace('#', ''), 16);
-    var sunColor = parseInt(preset.sun.replace('#', ''), 16);
+    // Studio Lighting Setup (3-point lighting)
+    
+    // 1. Ambient Fill (Soft, neutral)
+    trackLight(new THREE.AmbientLight(0xffffff, 0.6));
+    
+    // 2. Hemisphere Light (Soft top-down fill)
+    var hemi = trackLight(new THREE.HemisphereLight(0xffffff, 0xeeeeee, 0.5));
+    hemi.position.set(centerX, centerY + span * 5, centerZ);
 
-    // Stronger hemisphere light for better ambient fill
-    var hemi = trackLight(new THREE.HemisphereLight(zenithColor, 0x555555, preset.ambientIntensity * 1.5));
-    if (hemi) hemi.position.set(centerX, centerY + span * 5, centerZ);
+    // 3. Key Light (Main directional shadow caster)
+    var keyLight = trackLight(new THREE.DirectionalLight(0xffffff, 1.5));
+    keyLight.position.set(centerX + span * 2, centerY + span * 4, centerZ + span * 2);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(4096, 4096);
+    keyLight.shadow.bias = -0.0001;
+    keyLight.shadow.normalBias = 0.02;
+    keyLight.shadow.radius = 4; // Soft shadows
+    
+    // Adjust shadow camera to cover the object
+    var extent = span * 3;
+    keyLight.shadow.camera.left = -extent;
+    keyLight.shadow.camera.right = extent;
+    keyLight.shadow.camera.top = extent;
+    keyLight.shadow.camera.bottom = -extent;
+    keyLight.shadow.camera.near = 0.5;
+    keyLight.shadow.camera.far = span * 10;
+    keyLight.target.position.set(centerX, centerY, centerZ);
 
-    trackLight(new THREE.AmbientLight(0xFFFFFF, preset.ambientIntensity * 0.6));
+    // 4. Fill Light (Softer, from opposite side, no shadows)
+    var fillLight = trackLight(new THREE.DirectionalLight(0xeef4ff, 0.8));
+    fillLight.position.set(centerX - span * 2, centerY + span * 2, centerZ - span * 2);
+    fillLight.target.position.set(centerX, centerY, centerZ);
 
-    var sunAngle = (preset.sunX - 0.5) * Math.PI * 2;
-    var sunHeight = 3.5 + preset.sunY * 2.0;
-    var sunDist = 3.5;
-    // Brighter sun for high contrast
-    var sun = trackLight(new THREE.DirectionalLight(sunColor, preset.sunIntensity * 1.8));
-    if (sun) {
-      sun.position.set(
-        centerX + Math.cos(sunAngle) * span * sunDist,
-        centerY + span * sunHeight,
-        centerZ + Math.sin(sunAngle) * span * sunDist
-      );
-      sun.castShadow = true;
-      if (sun.shadow && sun.shadow.camera) {
-        sun.shadow.mapSize.set(8192, 8192);
-        sun.shadow.camera.near = 0.5;
-        sun.shadow.camera.far = Math.max(1000, span * 15);
-        var extent = span * 4;
-        sun.shadow.camera.left = -extent;
-        sun.shadow.camera.right = extent;
-        sun.shadow.camera.top = extent;
-        sun.shadow.camera.bottom = -extent;
-        sun.shadow.bias = -0.00005; // Tighter bias
-        sun.shadow.normalBias = 0.01;
-        sun.shadow.radius = 2; // Sharper shadows
-      }
-      sun.target.position.set(centerX, centerY, centerZ);
-    }
-
-    // Add rim light for edge definition
-    var rim = trackLight(new THREE.SpotLight(0xFFFFFF, 2.0, span * 20, Math.PI / 4, 0.5, 1.0));
-    if (rim) {
-      rim.position.set(centerX - span * 2, centerY + span * 2, centerZ - span * 2);
-      rim.target.position.set(centerX, centerY, centerZ);
-    }
+    // 5. Rim Light (Backlight for edge definition)
+    var rimLight = trackLight(new THREE.SpotLight(0xffffff, 1.0));
+    rimLight.position.set(centerX, centerY + span * 3, centerZ - span * 3);
+    rimLight.target.position.set(centerX, centerY, centerZ);
+    rimLight.angle = Math.PI / 4;
+    rimLight.penumbra = 1;
   }
 
   function createContactShadow(centerX, centerZ, span, groundY){
@@ -1733,12 +1604,18 @@
     var wrap = qs('visualize-canvas-wrap');
     var renderCanvas = qs(CANVAS_ID);
     if (!stage || !wrap || !renderCanvas) return;
+    
+    // Ensure stage centers content
+    stage.style.display = 'flex';
+    stage.style.justifyContent = 'center';
+    stage.style.alignItems = 'center';
+    stage.style.overflow = 'hidden';
+
     var stageWidth = stage.clientWidth;
     var stageHeight = stage.clientHeight;
     if (stageWidth <= 0 && stageHeight <= 0) {
       wrap.style.width = '100%';
       wrap.style.height = 'auto';
-      wrap.style.margin = 'auto';
       return;
     }
     
@@ -1750,13 +1627,16 @@
       // Stage is wider than image -> fit height
       wrap.style.height = '100%';
       wrap.style.width = 'auto';
-      wrap.style.aspectRatio = aspect;
+      wrap.style.aspectRatio = aspect + '';
     } else {
       // Stage is taller than image -> fit width
       wrap.style.width = '100%';
       wrap.style.height = 'auto';
-      wrap.style.aspectRatio = aspect;
+      wrap.style.aspectRatio = aspect + '';
     }
+    
+    // Reset margins as flexbox handles centering
+    wrap.style.margin = '0';
     
     // Ensure canvas element itself is responsive
     renderCanvas.style.width = '100%';
@@ -1798,15 +1678,8 @@
   }
 
   function addDefaultLabel(){
-    if (!fabricCanvas || fabricCanvas.getObjects().length > 0) return;
-    var label = new fabric.IText('Double-click to edit notes...', {
-      left: 24,
-      top: 24,
-      fontSize: 28,
-      fill: '#0f172a',
-      fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif'
-    });
-    fabricCanvas.add(label);
+    // No default label for clean render
+    return;
   }
 
   function setGalleryShots(shots){
@@ -2194,17 +2067,16 @@
     var palette = {
       // High-End Photorealistic Concrete Palette
       room: { 
-        color: 0x888888, // Neutral concrete grey
-        roughness: 0.85, 
-        metalness: 0.05, 
-        envMapIntensity: 1.2,
-        clearcoat: 0.0,
+        color: 0x999999, // Lighter concrete for white studio
+        roughness: 0.9, 
+        metalness: 0.0, 
+        envMapIntensity: 1.0,
         bumpScale: 0.02
       },
       garage: { 
-        color: 0x777777, 
-        roughness: 0.7, 
-        metalness: 0.1, 
+        color: 0x888888, 
+        roughness: 0.8, 
+        metalness: 0.0, 
         envMapIntensity: 1.0
       },
       pergola: { 
@@ -2246,12 +2118,12 @@
         envMapIntensity: 0.8
       },
       wall: { 
-        color: 0x999999, // Light concrete
-        roughness: 0.9, 
-        metalness: 0.05, 
-        envMapIntensity: 1.0, 
+        color: 0x999999, // Lighter concrete
+        roughness: 0.95, 
+        metalness: 0.0, 
+        envMapIntensity: 0.8, 
         needsTexture: true, 
-        bumpScale: 0.05
+        bumpScale: 0.06
       },
       windowFrame: { color: 0x1a1a1a, roughness: 0.2, metalness: 0.8, envMapIntensity: 2.0 },
       doorFrame: { color: 0x222222, roughness: 0.3, metalness: 0.5, envMapIntensity: 1.5 },
@@ -2294,8 +2166,8 @@
     
     // Add procedural texture for materials that need it
     if (spec.needsTexture) {
-      var texBrightness = kind === 'wall' ? 140 : (kind === 'room' ? 130 : 100);
-      var texVariation = kind === 'wall' ? 30 : (kind === 'room' ? 25 : 35);
+      var texBrightness = kind === 'wall' ? 150 : (kind === 'room' ? 140 : 100);
+      var texVariation = kind === 'wall' ? 20 : (kind === 'room' ? 15 : 35);
       var tex = noiseTexture(kind, texBrightness, texVariation, 6);
       if (tex) {
         mat.map = tex;
@@ -2321,63 +2193,14 @@
   }
 
   function buildGround(bounds, centerX, centerZ, baseY, span){
-    var dx = bounds.maxX - bounds.minX;
-    var dz = bounds.maxZ - bounds.minZ;
-    if (!isFinite(dx) || !isFinite(dz) || dx <= 0 || dz <= 0) {
-      dx = dz = 12;
-    }
-    var footprint = Math.max(dx, dz, span);
     var groundY = (typeof baseY === 'number') ? baseY : 0;
-    var padSize = Math.max(footprint * 4, 32);
+    var padSize = Math.max(span * 4, 32);
 
-    var canvas = document.createElement('canvas');
-    canvas.width = canvas.height = 1024;
-    var ctx = canvas.getContext('2d');
-    // Concrete floor colors
-    var baseColor = '#666666';
-    var accentColor = '#555555';
-    var gradient = ctx.createLinearGradient(0, 0, 1024, 1024);
-    gradient.addColorStop(0, baseColor);
-    gradient.addColorStop(1, accentColor);
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 1024, 1024);
-    var noise = ctx.getImageData(0, 0, 1024, 1024);
-    if (noise && noise.data && noise.data.length) {
-      for (var i = 0; i < noise.data.length; i += 4){
-        if (i + 2 >= noise.data.length) continue;
-        var jitter = (Math.random() - 0.5) * 20; // More noise for concrete
-        noise.data[i] = Math.max(0, Math.min(255, noise.data[i] + jitter));
-        noise.data[i + 1] = Math.max(0, Math.min(255, noise.data[i + 1] + jitter));
-        noise.data[i + 2] = Math.max(0, Math.min(255, noise.data[i + 2] + jitter));
-      }
-      ctx.putImageData(noise, 0, 0);
-    }
-    // Scratches / imperfections
-    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-    for (var l = 0; l < 40; l++){
-      ctx.beginPath();
-      ctx.moveTo(Math.random() * 1024, Math.random() * 1024);
-      ctx.lineTo(Math.random() * 1024, Math.random() * 1024);
-      ctx.stroke();
-    }
-
-    var baseTex = new THREE.CanvasTexture(canvas);
-    baseTex.wrapS = baseTex.wrapT = THREE.RepeatWrapping;
-    baseTex.repeat.set(padSize / 8, padSize / 8); // Tighter repeat for detail
-    baseTex.anisotropy = renderer ? (renderer.capabilities.getMaxAnisotropy() || 16) : 16;
-    baseTex.minFilter = THREE.LinearMipmapLinearFilter;
-    baseTex.magFilter = THREE.LinearFilter;
-    baseTex.generateMipmaps = true;
-    if (THREE.SRGBColorSpace) baseTex.colorSpace = THREE.SRGBColorSpace;
-
+    // Shadow catcher only - no visible ground texture
     var padGeom = new THREE.PlaneGeometry(padSize, padSize, 1, 1);
-    ensureSecondaryUV(padGeom);
-    var padMat = new THREE.MeshStandardMaterial({
-      map: baseTex,
-      roughness: 0.8,
-      metalness: 0.1,
-      envMapIntensity: 0.5,
-      color: 0x888888
+    var padMat = new THREE.ShadowMaterial({
+      opacity: 0.15,
+      color: 0x000000
     });
     var pad = new THREE.Mesh(padGeom, padMat);
     pad.rotation.x = -Math.PI / 2;
@@ -2434,22 +2257,22 @@
 
     // 1. Cinematic High-End (Object centered, slight angle, dramatic)
     pushPreset(215, { 
-      heightFactor: 0.4, 
-      distanceFactor: 2.0, 
-      tiltOffset: 0.0, 
-      targetOffsetX: 0, 
-      targetOffsetZ: 0, 
-      fov: 35 
+      heightFactor: 0.2, 
+      distanceFactor: 4.5, 
+      tiltOffset: 0,
+      targetOffsetX: 0,
+      targetOffsetZ: 0,
+      fov: 30 
     });
 
     // 2. Top Right Composition (Balanced, not cropped)
     pushPreset(225, { 
-      heightFactor: 0.5, 
-      distanceFactor: 2.1, 
-      tiltOffset: -0.1, 
-      targetOffsetX: -0.15, // Reduced from -0.4 to keep object in frame
-      targetOffsetZ: -0.15, 
-      fov: 38 
+      heightFactor: 0.4, 
+      distanceFactor: 5.2, 
+      tiltOffset: 0, 
+      targetOffsetX: 0, 
+      targetOffsetZ: 0, 
+      fov: 30 
     });
 
     // 3. Eye Level Concrete Detail
@@ -2459,7 +2282,7 @@
     pushPreset(0, { heightFactor: 2.8, distanceFactor: 0.1, tiltOffset: 0, fov: 28 });
 
     // 5. Wide Architectural
-    pushPreset(315, { heightFactor: 0.3, distanceFactor: 2.4, tiltOffset: 0.05, fov: 28 });
+    pushPreset(315, { heightFactor: 0.3, distanceFactor: 3.2, tiltOffset: 0.0, fov: 28 });
 
     var topPos = new THREE.Vector3(
       orbitX + safeSpan * 0.1,
@@ -2476,7 +2299,7 @@
     });
 
     if (!presets.length) {
-      var fallback = new THREE.Vector3(orbitX + safeSpan * 2, maxY + safeSpan * 0.8, orbitZ + safeSpan * 1.5);
+      var fallback = new THREE.Vector3(orbitX + safeSpan * 2.5, maxY + safeSpan * 0.8, orbitZ + safeSpan * 1.5);
       presets.push({
         position: fallback,
         target: new THREE.Vector3(focusX, focusY, focusZ),
@@ -2579,9 +2402,10 @@
       disposeSceneChildren();
       
       // Set sky as background - beautiful blue sky
-      var backgroundTex = createSkyTexture();
-      scene.background = backgroundTex;
-      console.log('[Visualize] Sky texture created');
+      // var backgroundTex = createSkyTexture();
+      // scene.background = backgroundTex;
+      scene.background = new THREE.Color(0xffffff);
+      console.log('[Visualize] White background set');
 
       var bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity };
       var boxes = [];
@@ -2596,14 +2420,18 @@
       } catch(e) { console.error('[Visualize] Envelope computation failed', e); }
 
       var wallMaterial = materialFor('wall');
+      
+      // Track if we have any geometry
+      var hasGeometry = false;
+
       console.log('[Visualize] Processing wall strips...');
       try {
         snapshot.wallStrips.forEach(function(strip){
           var mat = wallMaterial.clone();
           mat.map = noiseTexture('wall-' + (strip.level || 0), 228, 20, 8);
           var result = buildWallMesh(strip, mat);
-          includeBounds(bounds, { cx: result.midX, cz: result.midZ, width: result.len, depth: result.thickness, height: result.wallHeight, level: strip.level || 0 });
           if (Array.isArray(result.meshes) && result.meshes.length){
+            hasGeometry = true;
             result.meshes.forEach(function(mesh){
               var baseOptions = { edgeColor: EDGE_COLORS.wall };
               var overrides = (mesh && mesh.userData) ? mesh.userData.visualizeOpts : null;
@@ -2635,72 +2463,83 @@
           if (!mesh) {
             mesh = buildMesh(entry.box, mat);
           }
-          registerMesh(mesh, { edgeColor: (entry.kind === 'roof' ? EDGE_COLORS.roof : EDGE_COLORS.default) });
-          if (entry.kind === 'room') addArchitecturalAccents(entry);
+          if (mesh) {
+            hasGeometry = true;
+            registerMesh(mesh, { edgeColor: (entry.kind === 'roof' ? EDGE_COLORS.roof : EDGE_COLORS.default) });
+            if (entry.kind === 'room') addArchitecturalAccents(entry);
+          }
         });
       } catch(e) { console.error('[Visualize] Boxes processing failed', e); }
       console.log('[Visualize] Boxes processed');
 
-      if (!isFinite(bounds.minX)) {
+      if (!hasGeometry) {
         throw new Error('Nothing to visualize yet. Add rooms or structures first.');
       }
 
-      var spanX = bounds.maxX - bounds.minX;
-      var spanZ = bounds.maxZ - bounds.minZ;
-      var span = Math.max(6, spanX, spanZ);
-      var centerX = (bounds.minX + bounds.maxX) / 2;
-      var centerY = Math.max(1.4, (bounds.minY + bounds.maxY) / 2);
-      var centerZ = (bounds.minZ + bounds.maxZ) / 2;
-      var structureEnvelope = computeRoomsEnvelope(snapshot.rooms);
-      var focusCenter = null;
-      if (structureEnvelope) {
-        focusCenter = {
-          x: structureEnvelope.centerX,
-          y: centerY,
-          z: structureEnvelope.centerZ
-        };
-      } else if (primaryStructureEnvelope) {
-        focusCenter = {
-          x: primaryStructureEnvelope.centerX,
-          y: isFiniteNumber(primaryStructureEnvelope.centerY) ? primaryStructureEnvelope.centerY : centerY,
-          z: primaryStructureEnvelope.centerZ
-        };
+      // Compute exact visual bounds from the generated geometry
+      sceneRoot.updateMatrixWorld(true);
+      var visualBox = new THREE.Box3();
+      
+      // Only include meshes in bounds calculation to avoid helpers/lights
+      sceneRoot.traverse(function(obj){
+        if (obj.isMesh && obj.geometry) {
+          // Skip helpers if any
+          if (obj.userData && obj.userData.__edgeHelper) return;
+          visualBox.expandByObject(obj);
+        }
+      });
+      
+      if (visualBox.isEmpty()) {
+         visualBox.min.set(-3, 0, -3);
+         visualBox.max.set(3, 3, 3);
       }
-      var cameraFocus = focusCenter || { x: centerX, y: centerY, z: centerZ };
-      var focusOriginX = isFiniteNumber(cameraFocus.x) ? cameraFocus.x : centerX;
-      var focusOriginZ = isFiniteNumber(cameraFocus.z) ? cameraFocus.z : centerZ;
-      var recenterOffset = { x: focusOriginX, z: focusOriginZ };
-      var renderFocus = {
-        x: focusOriginX - recenterOffset.x,
-        y: isFiniteNumber(cameraFocus.y) ? cameraFocus.y : centerY,
-        z: focusOriginZ - recenterOffset.z
-      };
+
+      var visualCenter = new THREE.Vector3();
+      visualBox.getCenter(visualCenter);
+      var visualSize = new THREE.Vector3();
+      visualBox.getSize(visualSize);
+
+      var span = Math.max(6, visualSize.x, visualSize.z);
+      
+      // Shift scene so object center (X,Z) is at (0,0)
+      var shiftX = -visualCenter.x;
+      var shiftZ = -visualCenter.z;
+      
+      sceneRoot.position.set(shiftX, 0, shiftZ);
+      
+      // The object's Y center in world space is now visualCenter.y
+      var targetY = visualCenter.y;
+      
+      // Ground should be at the bottom of the object
+      var groundY = visualBox.min.y;
+
+      console.log('[Visualize] Geometry Bounds:', {
+        center: visualCenter,
+        size: visualSize,
+        span: span,
+        shift: { x: shiftX, z: shiftZ }
+      });
+
+      console.log('[Visualize] Building ground...');
+      try {
+        // Build ground at original coordinates so it shifts correctly with sceneRoot
+        buildGround(null, visualCenter.x, visualCenter.z, groundY, span);
+        console.log('[Visualize] Ground built');
+        // Contact shadow also at original coordinates
+        createContactShadow(visualCenter.x, visualCenter.z, span, groundY);
+      } catch(e) { console.error('[Visualize] Ground building failed', e); }
+
+      // Camera Focus Point (World Space)
+      // X=0, Z=0 (because we shifted sceneRoot)
+      // Y=targetY
+      var renderFocus = { x: 0, y: targetY, z: 0 };
 
       // Log snapshot data for debugging
       console.log('[Visualize] Snapshot data:', {
         rooms: snapshot.rooms.length,
         wallStrips: snapshot.wallStrips.length,
-        pools: snapshot.pools.length,
-        roofs: snapshot.roofs.length,
-        pergolas: snapshot.pergolas.length,
-        garages: snapshot.garages.length,
-        balconies: snapshot.balconies.length,
-        furniture: snapshot.furniture.length,
-        bounds: bounds,
-        span: span
+        renderFocus: renderFocus
       });
-
-      console.log('[Visualize] Building ground...');
-      var groundY = 0;
-      try {
-        groundY = buildGround(bounds, recenterOffset.x, recenterOffset.z, bounds.minY, span);
-        console.log('[Visualize] Ground built');
-        createContactShadow(recenterOffset.x, recenterOffset.z, span, groundY);
-      } catch(e) { console.error('[Visualize] Ground building failed', e); }
-
-      if (sceneRoot) {
-        sceneRoot.position.set(-recenterOffset.x, 0, -recenterOffset.z);
-      }
       // Note: Removed addSignatureFacade - only render user's actual design
       try {
         VIEW_PRESETS = buildViewPresets(renderFocus.x, renderFocus.y, renderFocus.z, span, bounds, renderFocus) || [];
@@ -2733,7 +2572,12 @@
         var baseWidth = 3840;
         var width = Math.floor(baseWidth * Math.max(1, multiplier));
         if (width > 7680) width = 7680; // Allow up to 8K
-        var height = Math.floor(width * 9 / 16);
+        
+        // Match stage aspect ratio to avoid black bars (edge-to-edge)
+        var stage = qs('visualize-stage');
+        var stageAspect = (stage && stage.clientWidth && stage.clientHeight) ? (stage.clientWidth / stage.clientHeight) : (16/9);
+        var height = Math.floor(width / stageAspect);
+        
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
         renderer.setSize(width, height, false);
