@@ -635,19 +635,21 @@
       composer.addPass(renderPass);
       var ssaoPass = null;
       if (THREE.SSAOPass){
-        ssaoPass = new THREE.SSAOPass(scene, camera, w, h);
-        ssaoPass.kernelRadius = 18;
-        ssaoPass.minDistance = 0.003;
-        ssaoPass.maxDistance = 0.12;
-        composer.addPass(ssaoPass);
+        // SSAO disabled to remove dark borders and graphical artifacts
+        // ssaoPass = new THREE.SSAOPass(scene, camera, w, h);
+        // ssaoPass.kernelRadius = 18;
+        // ssaoPass.minDistance = 0.003;
+        // ssaoPass.maxDistance = 0.12;
+        // composer.addPass(ssaoPass);
       }
       var bloomPass = null;
       if (THREE.UnrealBloomPass){
-        bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(w, h), 0.15, 0.4, 0.85);
-        bloomPass.threshold = 0.85;
-        bloomPass.strength = 0.15; // Reduced from 0.42 to reduce fuzziness
-        bloomPass.radius = 0.4;
-        composer.addPass(bloomPass);
+        // Bloom disabled to remove glow artifacts
+        // bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(w, h), 0.15, 0.4, 0.85);
+        // bloomPass.threshold = 0.85;
+        // bloomPass.strength = 0.15; 
+        // bloomPass.radius = 0.4;
+        // composer.addPass(bloomPass);
       }
       
       // Depth of Field (Bokeh)
@@ -825,19 +827,8 @@
   }
 
   function addEdgesForMesh(mesh, color, threshold){
-    if (!mesh || !mesh.geometry) return;
-    try {
-      var edgeGeo = new THREE.EdgesGeometry(mesh.geometry, threshold || 45);
-      var edgeMat = new THREE.LineBasicMaterial({ color: color || EDGE_COLORS.default, linewidth: 1 });
-      var edges = new THREE.LineSegments(edgeGeo, edgeMat);
-      edges.position.copy(mesh.position);
-      edges.rotation.copy(mesh.rotation);
-      edges.scale.copy(mesh.scale);
-      edges.userData.__edgeHelper = true;
-      edges.castShadow = false;
-      edges.receiveShadow = false;
-      sceneRoot.add(edges);
-    } catch(_e){}
+    // Edges completely disabled
+    return;
   }
 
   function registerMesh(mesh, opts){
@@ -851,9 +842,10 @@
     mesh.castShadow = allowCast;
     mesh.receiveShadow = allowReceive;
     sceneRoot.add(mesh);
-    if (!options.skipEdges) {
-      addEdgesForMesh(mesh, options.edgeColor, options.edgeThreshold);
-    }
+    // Edges removed to eliminate borders
+    // if (!options.skipEdges) {
+    //   addEdgesForMesh(mesh, options.edgeColor, options.edgeThreshold);
+    // }
   }
 
   function ensureEnvironment(){
@@ -971,15 +963,15 @@
     clearLighting();
     ensureFog(span);
 
-    // Engineering Studio Lighting - Neutral and Clean
-    var hemi = trackLight(new THREE.HemisphereLight(0xffffff, 0xe0e0e0, 0.6));
+    // Engineering Studio Lighting - Soft Path Tracer Simulation
+    var hemi = trackLight(new THREE.HemisphereLight(0xffffff, 0xffffff, 0.8)); // Brighter ambient
     if (hemi) hemi.position.set(centerX, centerY + span * 5, centerZ);
 
-    trackLight(new THREE.AmbientLight(0xffffff, 0.4));
+    trackLight(new THREE.AmbientLight(0xffffff, 0.5));
 
-    // Main Key Light (Sun) - Neutral White
+    // Main Key Light (Sun) - Soft Area Light Simulation
     var sunDist = 3.5;
-    var sun = trackLight(new THREE.DirectionalLight(0xffffff, 1.2));
+    var sun = trackLight(new THREE.DirectionalLight(0xffffff, 1.0));
     if (sun) {
       sun.position.set(
         centerX + span * 1.5,
@@ -996,15 +988,15 @@
         sun.shadow.camera.right = extent;
         sun.shadow.camera.top = extent;
         sun.shadow.camera.bottom = -extent;
-        sun.shadow.bias = -0.0005;
-        sun.shadow.normalBias = 0.05;
-        sun.shadow.radius = 2;
+        sun.shadow.bias = -0.0001;
+        sun.shadow.normalBias = 0.02;
+        sun.shadow.radius = 4; // Softer shadows
       }
       sun.target.position.set(centerX, centerY, centerZ);
     }
 
-    // Fill Light - Soft Cool
-    var fill = trackLight(new THREE.DirectionalLight(0xdbeafe, 0.5));
+    // Fill Light - Warm Bounce
+    var fill = trackLight(new THREE.DirectionalLight(0xfff0e0, 0.6));
     if (fill) {
       fill.position.set(
         centerX - span * 2,
@@ -1014,8 +1006,8 @@
       fill.target.position.set(centerX, centerY, centerZ);
     }
 
-    // Rim Light - Sharp White for edge definition
-    var rim = trackLight(new THREE.SpotLight(0xffffff, 0.8, span * 15, Math.PI / 5, 0.5, 1.5));
+    // Rim Light - Reduced intensity to avoid edge artifacts
+    var rim = trackLight(new THREE.SpotLight(0xffffff, 0.4, span * 15, Math.PI / 5, 0.5, 1.5));
     if (rim) {
       rim.position.set(centerX - span * 0.5, centerY + span * 4.0, centerZ - span * 2.0);
       rim.target.position.set(centerX, centerY, centerZ);
@@ -2205,123 +2197,112 @@
 
   function materialFor(kind){
     var palette = {
-      // Clean, bright materials for photorealistic renders
+      // High-end Architectural Materials - Engineering Studio Style
       room: { 
-        color: 0xFFFFFF, 
-        roughness: 0.15, 
-        metalness: 0.0, 
-        envMapIntensity: 2.5,
-        clearcoat: 0.4, 
-        clearcoatRoughness: 0.1
+        color: 0xE5E5E5, // Polished concrete floor
+        roughness: 0.3, 
+        metalness: 0.1, 
+        envMapIntensity: 1.2,
+        clearcoat: 0.2, 
+        clearcoatRoughness: 0.2,
+        needsTexture: true // Subtle grain
       },
       garage: { 
-        color: 0xF0F0E8, 
-        roughness: 0.25, 
-        metalness: 0.0, 
-        envMapIntensity: 2.0,
-        clearcoat: 0.2,
-        clearcoatRoughness: 0.2
+        color: 0xCCCCCC, // Industrial metal/concrete
+        roughness: 0.4, 
+        metalness: 0.4, 
+        envMapIntensity: 1.5,
+        clearcoat: 0.1
       },
       pergola: { 
-        color: 0x9B8568, 
-        roughness: 0.5, 
+        color: 0x5D4037, // Dark Walnut Wood
+        roughness: 0.7, 
         metalness: 0.0, 
-        envMapIntensity: 1.5
+        envMapIntensity: 0.5,
+        needsTexture: true
       },
       pool: { 
-        color: 0x0080C8, 
-        roughness: 0.01, 
-        metalness: 0.0, 
-        transmission: 0.96, 
+        color: 0x29B6F6, // Swimming Pool Blue
+        roughness: 0.1, 
+        metalness: 0.1, 
+        transmission: 0.95, 
         thickness: 2.0, 
-        envMapIntensity: 5.0, 
-        ior: 1.333, 
-        clearcoat: 1.0, 
-        clearcoatRoughness: 0.01,
+        envMapIntensity: 2.5, 
+        ior: 1.33, 
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.05,
         transparent: true,
-        opacity: 0.3
+        opacity: 0.85
       },
       roof: { 
-        color: 0x3A3A3A, 
-        roughness: 0.4, 
-        metalness: 0.3, 
-        envMapIntensity: 2.0,
-        clearcoat: 0.3,
-        clearcoatRoughness: 0.2
+        color: 0xFFFFFF, // White Roof
+        roughness: 0.5, 
+        metalness: 0.1, 
+        envMapIntensity: 0.8,
+        needsTexture: true
       },
       balcony: { 
-        color: 0xFFFFFF, 
-        roughness: 0.2, 
-        metalness: 0.0, 
-        envMapIntensity: 2.2,
-        clearcoat: 0.3, 
-        clearcoatRoughness: 0.15
-      },
-      furniture: { 
-        color: 0xC8B896, 
+        color: 0xFFFFFF, // White Concrete
         roughness: 0.4, 
         metalness: 0.0, 
-        envMapIntensity: 1.6
-      },
-      wall: { 
-        color: 0xFFFFFF, 
-        roughness: 0.2, 
-        metalness: 0.0, 
-        envMapIntensity: 2.0,
-        clearcoat: 0.25, 
-        clearcoatRoughness: 0.2
-      },
-      roof: { 
-        color: 0x2A2A2A, 
-        roughness: 0.45, 
-        metalness: 0.25, 
-        envMapIntensity: 1.8, 
-        needsTexture: true,
-        clearcoat: 0.2,
-        clearcoatRoughness: 0.3 
-      },
-      balcony: { 
-        color: 0xF0F0E8, 
-        roughness: 0.22, 
-        metalness: 0.0, 
-        envMapIntensity: 1.9, 
-        needsTexture: true, 
-        clearcoat: 0.28, 
-        clearcoatRoughness: 0.18,
-        reflectivity: 0.5
+        envMapIntensity: 1.0,
+        needsTexture: true
       },
       furniture: { 
-        color: 0xC8B087, 
-        roughness: 0.42, 
-        metalness: 0.0, 
-        envMapIntensity: 1.3, 
-        needsTexture: true,
-        sheen: 0.15,
-        sheenColor: 0xE8D8C8
+        color: 0xEEEEEE, 
+        roughness: 0.5, 
+        metalness: 0.1, 
+        envMapIntensity: 0.8
       },
       wall: { 
-        color: 0xFFFFFD, 
-        roughness: 0.25, 
-        metalness: 0.0, 
-        envMapIntensity: 1.6, 
-        needsTexture: true, 
-        clearcoat: 0.18, 
-        clearcoatRoughness: 0.28,
-        reflectivity: 0.4,
-        sheen: 0.1,
-        sheenColor: 0xFFFFFF
+        color: 0xEEEEEE, // Elegant White/Light Concrete
+        roughness: 0.4, 
+        metalness: 0.1, 
+        envMapIntensity: 0.9,
+        needsTexture: true,
+        clearcoat: 0.1
       },
-      windowFrame: { color: 0x2A2A2A, roughness: 0.1, metalness: 0.95, envMapIntensity: 2.5, clearcoat: 0.6, clearcoatRoughness: 0.05 },
-      doorFrame: { color: 0x333333, roughness: 0.15, metalness: 0.9, envMapIntensity: 2.2, clearcoat: 0.5, clearcoatRoughness: 0.1 },
-      doorPanel: { color: 0x704830, roughness: 0.35, metalness: 0.0, envMapIntensity: 1.4 },
-      glass: { color: 0xE8F4FF, roughness: 0.01, metalness: 0.0, transmission: 0.96, thickness: 0.1, transparent: true, opacity: 0.1, envMapIntensity: 3.0, ior: 1.52, clearcoat: 1.0, clearcoatRoughness: 0.01 },
-      accentPanel: { color: 0xF0F0E8, roughness: 0.25, metalness: 0.0, envMapIntensity: 1.8 },
-      groundPath: { color: 0xC0C0B8, roughness: 0.6, metalness: 0.0, envMapIntensity: 1.0 },
-      woodAccent: { color: 0x6B5840, roughness: 0.5, metalness: 0.0, envMapIntensity: 1.2 },
-      boulder: { color: 0x808078, roughness: 0.85, metalness: 0.0, envMapIntensity: 0.8 },
-      foliage: { color: 0x5A8A5A, roughness: 0.8, metalness: 0.0, envMapIntensity: 0.7 }
+      windowFrame: { 
+        color: 0x111111, // Matte Black Aluminum
+        roughness: 0.3, 
+        metalness: 0.6, 
+        envMapIntensity: 1.5, 
+        clearcoat: 0.1 
+      },
+      doorFrame: { 
+        color: 0x111111, 
+        roughness: 0.3, 
+        metalness: 0.6, 
+        envMapIntensity: 1.5 
+      },
+      doorPanel: { 
+        color: 0x3E2723, // Dark Wood
+        roughness: 0.6, 
+        metalness: 0.0, 
+        envMapIntensity: 0.6,
+        needsTexture: true
+      },
+      glass: { 
+        color: 0xFFFFFF, 
+        roughness: 0.0, 
+        metalness: 0.1, 
+        transmission: 0.98, 
+        thickness: 0.1, 
+        transparent: true, 
+        opacity: 0.15, 
+        envMapIntensity: 5.0, 
+        ior: 1.52, 
+        clearcoat: 1.0, 
+        clearcoatRoughness: 0.0 
+      },
+      accentPanel: { color: 0x757575, roughness: 0.5, metalness: 0.2 },
+      groundPath: { color: 0x8D6E63, roughness: 0.9, metalness: 0.0 },
+      woodAccent: { color: 0x5D4037, roughness: 0.7, metalness: 0.0 },
+      boulder: { color: 0x616161, roughness: 0.9, metalness: 0.0 },
+      foliage: { color: 0x2E7D32, roughness: 0.8, metalness: 0.0 }
     };
-    var spec = palette[kind] || { color: 0xF0F0F0, roughness: 0.3, metalness: 0.0, envMapIntensity: 1.5 };
+    
+    var spec = palette[kind] || { color: 0xEEEEEE, roughness: 0.5, metalness: 0.0, envMapIntensity: 1.0 };
     
     // Use MeshPhysicalMaterial for clean photorealistic rendering
     var mat = new THREE.MeshPhysicalMaterial({
@@ -2331,31 +2312,17 @@
       envMapIntensity: spec.envMapIntensity || 1.0
     });
     
-    // Concrete/Wall specific tweaks
-    if (kind === 'wall') {
-      // Photorealistic Concrete - Engineering Style
-      mat.color.setHex(0x999999); // Neutral concrete
-      mat.roughness = 0.95; // Matte finish
-      mat.metalness = 0.0;
-      mat.envMapIntensity = 0.2; // Low reflection
-      mat.clearcoat = 0.0;
-      mat.flatShading = false;
-      
-      // Add bump map for texture depth if noise texture is available
-      // (Will be assigned later in the build process)
-    } else {
-      // Add clearcoat for glossy surfaces
-      if (spec.clearcoat) {
-        mat.clearcoat = spec.clearcoat;
-        mat.clearcoatRoughness = spec.clearcoatRoughness || 0.1;
-      }
+    // Apply clearcoat
+    if (spec.clearcoat) {
+      mat.clearcoat = spec.clearcoat;
+      mat.clearcoatRoughness = spec.clearcoatRoughness || 0.1;
     }
     
     // Handle transmission for glass/water
     if (spec.transmission) {
       mat.transmission = spec.transmission;
       mat.thickness = spec.thickness || 0.1;
-      mat.ior = spec.ior || 1.45;
+      mat.ior = spec.ior || 1.5;
     }
     
     if (typeof spec.opacity === 'number') {
@@ -2366,12 +2333,23 @@
     
     // Add procedural texture for materials that need it
     if (spec.needsTexture) {
-      var texBrightness = kind === 'wall' ? 252 : (kind === 'room' ? 250 : 230);
-      var texVariation = kind === 'wall' ? 4 : (kind === 'room' ? 6 : 15);
-      var tex = noiseTexture(kind, texBrightness, texVariation, 6);
+      var texBrightness = 240;
+      var texVariation = 20;
+      var texScale = 6;
+      
+      if (kind === 'wall') { texBrightness = 200; texVariation = 40; texScale = 8; }
+      else if (kind === 'room') { texBrightness = 230; texVariation = 15; texScale = 12; }
+      else if (kind === 'pergola' || kind === 'doorPanel') { texBrightness = 100; texVariation = 30; texScale = 4; }
+      else if (kind === 'roof') { texBrightness = 60; texVariation = 20; texScale = 10; }
+      
+      var tex = noiseTexture(kind, texBrightness, texVariation, texScale);
       if (tex) {
         mat.map = tex;
-        mat.roughnessMap = tex;
+        if (kind === 'wall' || kind === 'roof') {
+          mat.roughnessMap = tex;
+          mat.bumpMap = tex;
+          mat.bumpScale = 0.02;
+        }
       }
     }
     
@@ -2619,15 +2597,14 @@
       if (!isFinite(multiplier) || multiplier <= 0) multiplier = 1;
       currentQuality = multiplier;
       ensureRenderer();
-      // Sky preset determines exposure for perfect lighting match
-      var skyPreset = selectSkyPalette();
+      // Fixed studio exposure for consistent engineering look
       if (renderer && typeof renderer.toneMappingExposure === 'number') {
-        renderer.toneMappingExposure = skyPreset.exposure + (multiplier - 1) * 0.15;
+        renderer.toneMappingExposure = 1.4; // Balanced for studio lighting
       }
       ensureEnvironment();
       disposeSceneChildren();
       
-      // Set sky as background - beautiful blue sky
+      // Set sky as background - Clean Studio Gradient
       var backgroundTex = createSkyTexture();
       scene.background = backgroundTex;
 
@@ -2639,12 +2616,12 @@
       var wallMaterial = materialFor('wall');
       snapshot.wallStrips.forEach(function(strip){
         var mat = wallMaterial.clone();
-        // High-frequency concrete grain for realism
-        var tex = noiseTexture('wall-' + (strip.level || 0), 180, 30, 12); 
+        // Elegant fine grain for concrete
+        var tex = noiseTexture('wall-' + (strip.level || 0), 240, 15, 4); 
         mat.map = tex;
         mat.roughnessMap = tex;
         mat.bumpMap = tex;
-        mat.bumpScale = 0.015; // Fine grain
+        mat.bumpScale = 0.008; // Very subtle texture
         
         var result = buildWallMesh(strip, mat);
         includeBounds(bounds, { cx: result.midX, cz: result.midZ, width: result.len, depth: result.thickness, height: result.wallHeight, level: strip.level || 0 });
@@ -2730,7 +2707,7 @@
       });
 
       var groundY = buildGround(bounds, recenterOffset.x, recenterOffset.z, bounds.minY, span);
-      createContactShadow(recenterOffset.x, recenterOffset.z, span, groundY);
+      // createContactShadow(recenterOffset.x, recenterOffset.z, span, groundY); // Removed for cleaner look
       if (sceneRoot) {
         sceneRoot.position.set(-recenterOffset.x, 0, -recenterOffset.z);
       }
