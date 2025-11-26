@@ -1677,6 +1677,68 @@
     fabricCanvas.calcOffset();
   }
 
+  function drawDebugGrid(rows, cols){
+    if (!fabricCanvas) return;
+    rows = rows || 3;
+    cols = cols || 3;
+    var width = fabricCanvas.getWidth();
+    var height = fabricCanvas.getHeight();
+    if (!width || !height) return;
+
+    fabricCanvas.clear();
+
+    var strokeColor = 'rgba(0,0,0,0.3)';
+    var textColor = 'rgba(0,0,0,0.7)';
+    var lineWidth = 2;
+
+    var cellW = width / cols;
+    var cellH = height / rows;
+
+    for (var c = 1; c < cols; c++){
+      var x = c * cellW;
+      var vLine = new fabric.Line([x, 0, x, height], {
+        stroke: strokeColor,
+        strokeWidth: lineWidth,
+        selectable: false,
+        evented: false
+      });
+      fabricCanvas.add(vLine);
+    }
+
+    for (var r = 1; r < rows; r++){
+      var y = r * cellH;
+      var hLine = new fabric.Line([0, y, width, y], {
+        stroke: strokeColor,
+        strokeWidth: lineWidth,
+        selectable: false,
+        evented: false
+      });
+      fabricCanvas.add(hLine);
+    }
+
+    var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    for (var rr = 0; rr < rows; rr++){
+      for (var cc = 0; cc < cols; cc++){
+        var label = letters.charAt(rr) + String(cc + 1);
+        var tx = (cc + 0.5) * cellW;
+        var ty = (rr + 0.5) * cellH;
+        var text = new fabric.Text(label, {
+          left: tx,
+          top: ty,
+          originX: 'center',
+          originY: 'center',
+          fill: textColor,
+          fontSize: Math.max(18, Math.min(cellW, cellH) * 0.18),
+          selectable: false,
+          evented: false
+        });
+        fabricCanvas.add(text);
+      }
+    }
+
+    fabricCanvas.renderAll();
+  }
+
   function addDefaultLabel(){
     // No default label for clean render
     return;
@@ -2476,63 +2538,43 @@
         throw new Error('Nothing to visualize yet. Add rooms or structures first.');
       }
 
-      // Compute exact visual bounds from the generated geometry
-      sceneRoot.updateMatrixWorld(true);
-      var visualBox = new THREE.Box3();
-      
-      // Only include meshes in bounds calculation to avoid helpers/lights
-      sceneRoot.traverse(function(obj){
-        if (obj.isMesh && obj.geometry) {
-          // Skip helpers if any
-          if (obj.userData && obj.userData.__edgeHelper) return;
-          visualBox.expandByObject(obj);
-        }
-      });
-      
-      if (visualBox.isEmpty()) {
-         visualBox.min.set(-3, 0, -3);
-         visualBox.max.set(3, 3, 3);
+      // Use primary structure envelope (rooms/roofs/etc) for approximate size
+      var span = Math.max(6, bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ);
+      if (!isFinite(span) || span <= 0) span = 8;
+
+      // Compute actual mesh bounds from the scene so we center the
+      // *visible* geometry, not just the abstract project bounds.
+      var box3 = new THREE.Box3();
+      box3.setFromObject(sceneRoot);
+      var meshCenter = new THREE.Vector3();
+      box3.getCenter(meshCenter);
+      var meshSize = new THREE.Vector3();
+      box3.getSize(meshSize);
+
+      if (meshSize.x > 0 && meshSize.z > 0) {
+        span = Math.max(span, meshSize.x, meshSize.z);
       }
 
-      var visualCenter = new THREE.Vector3();
-      visualBox.getCenter(visualCenter);
-      var visualSize = new THREE.Vector3();
-      visualBox.getSize(visualSize);
+      var groundY = isFinite(bounds.minY) ? bounds.minY : (isFinite(box3.min.y) ? box3.min.y : 0);
 
-      var span = Math.max(6, visualSize.x, visualSize.z);
-      
-      // Shift scene so object center (X,Z) is at (0,0)
-      var shiftX = -visualCenter.x;
-      var shiftZ = -visualCenter.z;
-      
-      sceneRoot.position.set(shiftX, 0, shiftZ);
-      
-      // The object's Y center in world space is now visualCenter.y
-      var targetY = visualCenter.y;
-      
-      // Ground should be at the bottom of the object
-      var groundY = visualBox.min.y;
-
-      console.log('[Visualize] Geometry Bounds:', {
-        center: visualCenter,
-        size: visualSize,
-        span: span,
-        shift: { x: shiftX, z: shiftZ }
-      });
+      // Shift so the visual center of the geometry is at world origin (0,0,0)
+      sceneRoot.position.x -= meshCenter.x;
+      sceneRoot.position.z -= meshCenter.z;
 
       console.log('[Visualize] Building ground...');
       try {
-        // Build ground at original coordinates so it shifts correctly with sceneRoot
-        buildGround(null, visualCenter.x, visualCenter.z, groundY, span);
+        // Ground and shadow centered under the geometry
+        buildGround(null, 0, 0, groundY, span);
         console.log('[Visualize] Ground built');
-        // Contact shadow also at original coordinates
-        createContactShadow(visualCenter.x, visualCenter.z, span, groundY);
+        createContactShadow(0, 0, span, groundY);
       } catch(e) { console.error('[Visualize] Ground building failed', e); }
 
-      // Camera Focus Point (World Space)
-      // X=0, Z=0 (because we shifted sceneRoot)
-      // Y=targetY
-      var renderFocus = { x: 0, y: targetY, z: 0 };
+      // Camera Focus Point: look directly at the visual center of
+      // the geometry. Further visual tweaks (e.g. toward B2) should
+      // be applied as small, explicit offsets from this baseline.
+      var centerY = (box3.min.y + box3.max.y) / 2;
+      if (!isFinite(centerY)) centerY = floorHeight * 0.5;
+      var renderFocus = { x: 0, y: centerY, z: 0 };
 
       // Log snapshot data for debugging
       console.log('[Visualize] Snapshot data:', {
@@ -2609,6 +2651,7 @@
         });
         
         ensureFabric(width, height);
+        drawDebugGrid(3, 3);
         ensureResizeListener();
         fitRenderToStage();
         window.requestAnimationFrame(fitRenderToStage);
