@@ -27,8 +27,8 @@
   // Manual visual offsets to fine-tune where the 3D model
   // appears within the overlay grid (e.g. to land in B2).
   // Positive X moves the apparent model right, positive Y moves it up.
-  var VISUALIZE_OFFSET_X = 0.5;
-  var VISUALIZE_OFFSET_Y = 0.5;
+  var VISUALIZE_OFFSET_X = -31;
+  var VISUALIZE_OFFSET_Y = 10;
   var viewIndex = 0;
   var VIEW_PRESETS = [];
   var viewButtons = [];
@@ -36,6 +36,7 @@
   var skyGradientPalette = null;
   var galleryShots = [];
   var galleryShotMap = Object.create(null);
+  var concreteTextureCache = null;
   var SKY_GRADIENT_PRESETS = [
     // Photorealistic sky variations - different times and weather conditions
     { name: 'Midday Clear', zenith: '#2B5FAB', mid: '#5B9DE8', horizon: '#FFE8C8', sun: '#FFFACD', sunX: 0.7, sunY: 0.22, exposure: 1.85, sunIntensity: 5.2, ambientIntensity: 0.45 },
@@ -534,25 +535,10 @@
       return loadSequential(optionalScripts, { optional: true }).then(function(){
         if (THREE && THREE.EffectComposer) {
           console.log('[Visualize] Post-processing extensions available');
-        } else {
-          console.warn('[Visualize] Post-processing extensions unavailable. Falling back to direct render.');
         }
       });
-    }).catch(function(err){
-      libsPromise = null;
-      throw err;
     });
-    return libsPromise;
-  }
 
-  function ensureRenderer(){
-    if (renderer && scene && camera) return;
-    var canvas = qs(CANVAS_ID);
-    if (!canvas) return;
-
-    if (composer && typeof composer.dispose === 'function') {
-      try { composer.dispose(); } catch(_c){}
-    }
     composer = null;
     
     // Ultra-realistic WebGL renderer with advanced settings
@@ -669,25 +655,6 @@
         useComposer.__ssaoPass.camera = camera;
       }
       useComposer.render();
-    } else {
-      renderer.render(scene, camera);
-    }
-  }
-
-  function clearLighting(){
-    if (!scene) return;
-    for (var i=0; i<lights.length; i++){
-      var light = lights[i];
-      if (!light) continue;
-      scene.remove(light);
-      if (light.target) scene.remove(light.target);
-      try {
-        if (light.shadow && light.shadow.map) light.shadow.map.dispose();
-      } catch(_s){}
-      try { if (light.dispose) light.dispose(); } catch(_d){}
-    }
-    lights = [];
-  }
 
   function trackLight(light){
     if (!light || !scene) return light;
@@ -1297,6 +1264,21 @@
     extrude.translate(0, baseHeight, 0);
     ensureSecondaryUV(extrude);
     var mesh = new THREE.Mesh(extrude, material);
+    // Jitter UVs for rooms to break up uniform patterns
+    if (extrude.attributes && extrude.attributes.uv) {
+      var uvAttr = extrude.attributes.uv;
+      var uvArray = uvAttr.array;
+      // Smaller tile factors → larger visible tiles. Halve again to double size.
+      var tileU = 0.15 + rng.range(-0.04, 0.04);
+      var tileV = 0.15 + rng.range(-0.04, 0.04);
+      var offU = rng.range(0, 5);
+      var offV = rng.range(0, 5);
+      for (var i = 0; i < uvArray.length; i += 2) {
+        uvArray[i]   = uvArray[i]   * tileU + offU;
+        uvArray[i+1] = uvArray[i+1] * tileV + offV;
+      }
+      uvAttr.needsUpdate = true;
+    }
     mesh.position.set(center.x, 0, center.z);
     return mesh;
   }
@@ -1414,6 +1396,22 @@
       var centerZ = z0 + dirZ * centerU;
       mesh.position.set(centerX, centerY, centerZ);
       mesh.rotation.y = angle;
+      // Jitter UVs for each wall segment to break tiling
+      if (geometry.attributes && geometry.attributes.uv) {
+        var uvAttr = geometry.attributes.uv;
+        var uvs = uvAttr.array;
+        // Smaller tile factors → larger visible tiles. Halve again to double size.
+        var tileU = 0.15 + rng.range(-0.04, 0.04);
+        var tileV = 0.15 + rng.range(-0.04, 0.04);
+        var offU = rng.range(0, 5);
+        var offV = rng.range(0, 5);
+        for (var ui = 0; ui < uvs.length; ui += 2) {
+          uvs[ui]   = uvs[ui]   * tileU + offU;
+          uvs[ui+1] = uvs[ui+1] * tileV + offV;
+        }
+        uvAttr.needsUpdate = true;
+      }
+
       meshes.push(mesh);
     });
 
@@ -1682,67 +1680,7 @@
     fabricCanvas.calcOffset();
   }
 
-  function drawDebugGrid(rows, cols){
-    if (!fabricCanvas) return;
-    rows = rows || 3;
-    cols = cols || 3;
-    var width = fabricCanvas.getWidth();
-    var height = fabricCanvas.getHeight();
-    if (!width || !height) return;
-
-    fabricCanvas.clear();
-
-    var strokeColor = 'rgba(0,0,0,0.3)';
-    var textColor = 'rgba(0,0,0,0.7)';
-    var lineWidth = 2;
-
-    var cellW = width / cols;
-    var cellH = height / rows;
-
-    for (var c = 1; c < cols; c++){
-      var x = c * cellW;
-      var vLine = new fabric.Line([x, 0, x, height], {
-        stroke: strokeColor,
-        strokeWidth: lineWidth,
-        selectable: false,
-        evented: false
-      });
-      fabricCanvas.add(vLine);
-    }
-
-    for (var r = 1; r < rows; r++){
-      var y = r * cellH;
-      var hLine = new fabric.Line([0, y, width, y], {
-        stroke: strokeColor,
-        strokeWidth: lineWidth,
-        selectable: false,
-        evented: false
-      });
-      fabricCanvas.add(hLine);
-    }
-
-    var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    for (var rr = 0; rr < rows; rr++){
-      for (var cc = 0; cc < cols; cc++){
-        var label = letters.charAt(rr) + String(cc + 1);
-        var tx = (cc + 0.5) * cellW;
-        var ty = (rr + 0.5) * cellH;
-        var text = new fabric.Text(label, {
-          left: tx,
-          top: ty,
-          originX: 'center',
-          originY: 'center',
-          fill: textColor,
-          fontSize: Math.max(18, Math.min(cellW, cellH) * 0.18),
-          selectable: false,
-          evented: false
-        });
-        fabricCanvas.add(text);
-      }
-    }
-
-    fabricCanvas.renderAll();
-  }
+  // Grid helper removed for production renders (clean image)
 
   function addDefaultLabel(){
     // No default label for clean render
@@ -2134,17 +2072,20 @@
     var palette = {
       // High-End Photorealistic Concrete Palette
       room: { 
-        color: 0x999999, // Lighter concrete for white studio
-        roughness: 0.9, 
+        color: 0x8b8b8b, // Slightly darker formed concrete interior
+        roughness: 0.95, 
         metalness: 0.0, 
-        envMapIntensity: 1.0,
-        bumpScale: 0.02
+        envMapIntensity: 0.55,
+        needsTexture: true,
+        bumpScale: 0.085
       },
-      garage: { 
-        color: 0x888888, 
-        roughness: 0.8, 
+      wall: { 
+        color: 0x7a7a7a, // Darker formed concrete
+        roughness: 0.97, 
         metalness: 0.0, 
-        envMapIntensity: 1.0
+        envMapIntensity: 0.5,
+        needsTexture: true,
+        bumpScale: 0.11
       },
       pergola: { 
         color: 0x333333, // Dark steel/wood
@@ -2185,12 +2126,12 @@
         envMapIntensity: 0.8
       },
       wall: { 
-        color: 0x999999, // Lighter concrete
-        roughness: 0.95, 
+        color: 0x8a8a8a, // Darker formed concrete
+        roughness: 0.96, 
         metalness: 0.0, 
-        envMapIntensity: 0.8, 
+        envMapIntensity: 0.7, 
         needsTexture: true, 
-        bumpScale: 0.06
+        bumpScale: 0.09
       },
       windowFrame: { color: 0x1a1a1a, roughness: 0.2, metalness: 0.8, envMapIntensity: 2.0 },
       doorFrame: { color: 0x222222, roughness: 0.3, metalness: 0.5, envMapIntensity: 1.5 },
@@ -2231,17 +2172,39 @@
     }
     if (spec.transparent) mat.transparent = true;
     
-    // Add procedural texture for materials that need it
+    // Add concrete/other textures for materials that need it
     if (spec.needsTexture) {
-      var texBrightness = kind === 'wall' ? 150 : (kind === 'room' ? 140 : 100);
-      var texVariation = kind === 'wall' ? 20 : (kind === 'room' ? 15 : 35);
-      var tex = noiseTexture(kind, texBrightness, texVariation, 6);
-      if (tex) {
-        mat.map = tex;
-        mat.roughnessMap = tex;
-        // Use noise as bump map for concrete texture
-        mat.bumpMap = tex;
-        mat.bumpScale = spec.bumpScale || 0.02;
+      if ((kind === 'wall' || kind === 'room') && window.THREE && THREE.TextureLoader) {
+        if (!concreteTextureCache) {
+          try {
+            var loader = new THREE.TextureLoader();
+            var tex = loader.load('/js/textures/concrete/stone-background-wall-texture-banner-grunge-cement-concrete.jpg');
+            tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+            tex.anisotropy = 8;
+            // Moderate repeat; UV jitter controls effective tile size
+            tex.repeat.set(1, 1);
+            if (THREE.SRGBColorSpace && tex.colorSpace !== THREE.SRGBColorSpace) {
+              tex.colorSpace = THREE.SRGBColorSpace;
+            }
+            concreteTextureCache = tex;
+          } catch(_e){}
+        }
+        if (concreteTextureCache) {
+          mat.map = concreteTextureCache;
+          mat.roughnessMap = concreteTextureCache;
+          mat.bumpMap = concreteTextureCache;
+          mat.bumpScale = spec.bumpScale || 0.08;
+        }
+      } else {
+        var texBrightness = kind === 'wall' ? 150 : (kind === 'room' ? 140 : 100);
+        var texVariation = kind === 'wall' ? 20 : (kind === 'room' ? 15 : 35);
+        var tex = noiseTexture(kind, texBrightness, texVariation, 6);
+        if (tex) {
+          mat.map = tex;
+          mat.roughnessMap = tex;
+          mat.bumpMap = tex;
+          mat.bumpScale = spec.bumpScale || 0.02;
+        }
       }
     }
     
@@ -2342,27 +2305,43 @@
       fov: 30 
     });
 
-    // 3. Eye Level Concrete Detail
-    pushPreset(45, { heightFactor: 0.15, distanceFactor: 1.6, tiltOffset: 0.1, fov: 45 });
+    // 3. Eye Level Concrete Detail (front-ish)
+    pushPreset(215, {
+      heightFactor: 0.4,
+      distanceFactor: 5.2,
+      tiltOffset: 0.0,
+      fov: 25
+    });
 
-    // 4. Top Down Plan
-    pushPreset(0, { heightFactor: 2.8, distanceFactor: 0.1, tiltOffset: 0, fov: 28 });
+    // 4. Side Left
+    pushPreset(215, {
+      heightFactor: 0.4,
+      distanceFactor: 4.5,
+      tiltOffset: 0.0,
+      fov: 20
+    });
 
-    // 5. Wide Architectural
-    pushPreset(315, { heightFactor: 0.3, distanceFactor: 3.2, tiltOffset: 0.0, fov: 28 });
+    // 5. Side Right
+    pushPreset(215, {
+      heightFactor: 0.4,
+      distanceFactor: 5.2,
+      tiltOffset: 0.05,
+      fov: 30
+    });
 
+    // 6. Top / Plan-style (closer, straight down for detail)
     var topPos = new THREE.Vector3(
-      orbitX + safeSpan * 0.1,
-      maxY + safeSpan * 3,
-      orbitZ + safeSpan * 0.5
+      orbitX,
+      maxY + safeSpan * 1.8,
+      orbitZ
     );
     presets.push({
       position: topPos,
       target: new THREE.Vector3(focusX, focusY, focusZ),
       up: new THREE.Vector3(0, 0, -1),
-      fov: 55,
+      fov: 45,
       near: 0.5,
-      far: Math.max(1000, safeSpan * 15)
+      far: Math.max(1000, safeSpan * 10)
     });
 
     if (!presets.length) {
@@ -2660,7 +2639,6 @@
         });
         
         ensureFabric(width, height);
-        drawDebugGrid(3, 3);
         ensureResizeListener();
         fitRenderToStage();
         window.requestAnimationFrame(fitRenderToStage);
