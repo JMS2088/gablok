@@ -443,7 +443,11 @@
   }
 
   function ensureLibraries(){
-    if (window.THREE && window.fabric) return Promise.resolve();
+    if (window.THREE && window.fabric) {
+      THREE = window.THREE;
+      fabricRef = window.fabric;
+      return Promise.resolve();
+    }
     if (libsPromise) return libsPromise;
     var loader = window.loadScript || function(url){
       return new Promise(function(resolve, reject){
@@ -538,59 +542,90 @@
         }
       });
     });
+    return libsPromise;
+  }
 
-    composer = null;
-    
-    // Ultra-realistic WebGL renderer with advanced settings
-    renderer = new THREE.WebGLRenderer({ 
-      canvas: canvas, 
-      antialias: true, 
-      preserveDrawingBuffer: true,
-      alpha: false,
-      powerPreference: 'high-performance',
-      stencil: true,
-      depth: true,
-      logarithmicDepthBuffer: true,
-      precision: 'highp'
-    });
-    
-    // Maximum quality - 4x super-sampling for razor-sharp renders
+  function ensureRenderer(){
+    var canvas = qs(CANVAS_ID);
+    if (!canvas) throw new Error('Visualize render canvas not found.');
+
+    if (renderer && renderer.domElement !== canvas) {
+      if (typeof renderer.dispose === 'function') {
+        renderer.dispose();
+      }
+      renderer = null;
+      composer = null;
+      scene = null;
+      camera = null;
+      sceneRoot = null;
+      pmremGenerator = null;
+      envRT = null;
+    }
+
+    if (!renderer) {
+      THREE = window.THREE || THREE;
+      fabricRef = window.fabric || fabricRef;
+      if (!THREE || !THREE.WebGLRenderer) {
+        throw new Error('Three.js not available; ensure libraries loaded.');
+      }
+
+      composer = null;
+      pmremGenerator = null;
+      envRT = null;
+
+      renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true,
+        preserveDrawingBuffer: true,
+        alpha: false,
+        powerPreference: 'high-performance',
+        stencil: true,
+        depth: true,
+        logarithmicDepthBuffer: true,
+        precision: 'highp'
+      });
+
+      if (renderer.capabilities && renderer.capabilities.isWebGL2 === false && renderer.forceContextLoss) {
+        console.warn('[Visualize] WebGL1 detected; some effects may degrade.');
+      }
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 2000);
+      camera.up.set(0, 1, 0);
+      sceneRoot = new THREE.Group();
+      scene.add(sceneRoot);
+    } else if (!sceneRoot && scene) {
+      sceneRoot = new THREE.Group();
+      scene.add(sceneRoot);
+    }
+
+    // Update renderer settings on each ensure to respect current device capabilities
     var pixelRatio = Math.min(window.devicePixelRatio || 1, 4);
     renderer.setPixelRatio(pixelRatio);
-    
-    // Proper color management for photorealism
+
     if (THREE.SRGBColorSpace) {
       renderer.outputColorSpace = THREE.SRGBColorSpace;
     }
-    
-    // Clear to white for studio look
+
     renderer.setClearColor(0xffffff, 1);
     renderer.autoClear = false;
-    
-    // Physical lighting model
+
     if ('useLegacyLights' in renderer) renderer.useLegacyLights = false;
     if ('physicallyCorrectLights' in renderer) renderer.physicallyCorrectLights = true;
-    
-    // Cinematic tone mapping with bright photorealistic exposure
+
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2; // Slightly lower exposure for white background
-    
-    // Ultra high quality soft shadows (8K resolution)
+    if (typeof renderer.toneMappingExposure !== 'number') renderer.toneMappingExposure = 1.2;
+
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.shadowMap.autoUpdate = true;
-    
+    renderer.shadowMap.needsUpdate = true;
+
     if (THREE.ColorManagement) THREE.ColorManagement.enabled = true;
-    
-    // Scene setup
-    scene = new THREE.Scene();
-    
-    // Camera - professional architectural lens (24mm equivalent)
-    camera = new THREE.PerspectiveCamera(50, 16/9, 0.1, 2000);
-    camera.up.set(0, 1, 0);
-    
-    sceneRoot = new THREE.Group();
-    scene.add(sceneRoot);
+
+    lights.length = 0;
+
+    return renderer;
   }
 
   function ensurePostProcessing(width, height){
@@ -598,6 +633,11 @@
     var w = width || (renderer.domElement ? renderer.domElement.width : 1920) || 1920;
     var h = height || (renderer.domElement ? renderer.domElement.height : 1080) || 1080;
     if (!composer){
+      if (!THREE.EffectComposer || !THREE.RenderPass) return null;
+      if (!THREE.ShaderPass || !THREE.CopyShader) {
+        console.warn('[Visualize] Post-processing shaders missing; skipping composer');
+        return null;
+      }
       composer = new THREE.EffectComposer(renderer);
       var renderPass = new THREE.RenderPass(scene, camera);
       composer.addPass(renderPass);
@@ -655,6 +695,11 @@
         useComposer.__ssaoPass.camera = camera;
       }
       useComposer.render();
+      return;
+    }
+
+    renderer.render(scene, camera);
+  }
 
   function trackLight(light){
     if (!light || !scene) return light;
@@ -665,6 +710,24 @@
       lights.push(light.target);
     }
     return light;
+  }
+
+  function clearLighting(){
+    if (!Array.isArray(lights) || lights.length === 0) return;
+    lights.forEach(function(light){
+      if (!light) return;
+      if (light.parent && typeof light.parent.remove === 'function') {
+        light.parent.remove(light);
+      }
+      if (light.shadow && light.shadow.map && light.shadow.map.dispose) {
+        light.shadow.map.dispose();
+        light.shadow.map = null;
+      }
+      if (typeof light.dispose === 'function') {
+        try { light.dispose(); } catch(_e){}
+      }
+    });
+    lights.length = 0;
   }
 
   function ensureFog(span){
@@ -838,45 +901,56 @@
     // No fog in studio
     scene.fog = null;
 
-    // Studio Lighting Setup (3-point lighting)
-    
-    // 1. Ambient Fill (Soft, neutral)
-    trackLight(new THREE.AmbientLight(0xffffff, 0.6));
-    
-    // 2. Hemisphere Light (Soft top-down fill)
-    var hemi = trackLight(new THREE.HemisphereLight(0xffffff, 0xeeeeee, 0.5));
+    // Studio Lighting Setup (three-point rig)
+
+    // 1. Ambient lift for subtle base illumination
+    trackLight(new THREE.AmbientLight(0xf5f7fb, 0.35));
+
+    // 2. Sky/Ground contribution for believable bounce light
+    var hemi = trackLight(new THREE.HemisphereLight(0xf0f6ff, 0xd7e0ea, 0.6));
     hemi.position.set(centerX, centerY + span * 5, centerZ);
 
-    // 3. Key Light (Main directional shadow caster)
-    var keyLight = trackLight(new THREE.DirectionalLight(0xffffff, 1.5));
-    keyLight.position.set(centerX + span * 2, centerY + span * 4, centerZ + span * 2);
+    // 3. Key Light - primary directional sun source
+    var keyLight = trackLight(new THREE.DirectionalLight(0xffffff, 1.6));
+    keyLight.name = 'VisualizeKey';
+    keyLight.position.set(centerX + span * 2.4, centerY + span * 4.2, centerZ + span * 2.2);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(4096, 4096);
-    keyLight.shadow.bias = -0.0001;
+    keyLight.shadow.bias = -0.00008;
     keyLight.shadow.normalBias = 0.02;
-    keyLight.shadow.radius = 4; // Soft shadows
-    
-    // Adjust shadow camera to cover the object
-    var extent = span * 3;
+    keyLight.shadow.radius = 3.5; // Slight softening for natural penumbra
+
+    var extent = span * 3.2;
     keyLight.shadow.camera.left = -extent;
     keyLight.shadow.camera.right = extent;
     keyLight.shadow.camera.top = extent;
     keyLight.shadow.camera.bottom = -extent;
     keyLight.shadow.camera.near = 0.5;
-    keyLight.shadow.camera.far = span * 10;
+    keyLight.shadow.camera.far = span * 12;
     keyLight.target.position.set(centerX, centerY, centerZ);
 
-    // 4. Fill Light (Softer, from opposite side, no shadows)
-    var fillLight = trackLight(new THREE.DirectionalLight(0xeef4ff, 0.8));
-    fillLight.position.set(centerX - span * 2, centerY + span * 2, centerZ - span * 2);
+    // 4. Fill Light - softer opposing directional without shadows
+    var fillLight = trackLight(new THREE.DirectionalLight(0xe8f0ff, 0.75));
+    fillLight.name = 'VisualizeFill';
+    fillLight.position.set(centerX - span * 2.6, centerY + span * 1.9, centerZ - span * 1.8);
     fillLight.target.position.set(centerX, centerY, centerZ);
+    fillLight.castShadow = false;
 
-    // 5. Rim Light (Backlight for edge definition)
-    var rimLight = trackLight(new THREE.SpotLight(0xffffff, 1.0));
-    rimLight.position.set(centerX, centerY + span * 3, centerZ - span * 3);
-    rimLight.target.position.set(centerX, centerY, centerZ);
+    // 5. Rim/Back Light - accentuates silhouette, soft shadows for depth
+    var rimLight = trackLight(new THREE.SpotLight(0xffffff, 1.1));
+    rimLight.name = 'VisualizeRim';
+    rimLight.position.set(centerX, centerY + span * 3.4, centerZ - span * 3.2);
+    rimLight.target.position.set(centerX, centerY + span * 0.3, centerZ);
     rimLight.angle = Math.PI / 4;
-    rimLight.penumbra = 1;
+    rimLight.penumbra = 0.85;
+    rimLight.decay = 1.2;
+    rimLight.castShadow = true;
+    rimLight.shadow.mapSize.set(2048, 2048);
+    rimLight.shadow.bias = -0.00005;
+    rimLight.shadow.normalBias = 0.01;
+    rimLight.shadow.camera.near = 0.5;
+    rimLight.shadow.camera.far = span * 10;
+    rimLight.shadow.focus = 1.0;
   }
 
   function createContactShadow(centerX, centerZ, span, groundY){
@@ -2834,3 +2908,5 @@
 
   window.showVisualize = showVisualize;
   window.hideVisualize = hideVisualize;
+
+}());
