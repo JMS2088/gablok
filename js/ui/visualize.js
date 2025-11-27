@@ -1,5 +1,6 @@
 // Visualize modal: high-end render preview via three.js with Fabric.js annotations.
-if (typeof window === 'undefined') return;
+(function(){
+  if (typeof window === 'undefined') return;
 
   var THREE = window.THREE;
   var fabricRef = window.fabric;
