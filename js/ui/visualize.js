@@ -147,7 +147,9 @@
         up: window.__proj.up ? Array.from(window.__proj.up) : null,
         right: window.__proj.right ? Array.from(window.__proj.right) : null,
         fwd: window.__proj.fwd ? Array.from(window.__proj.fwd) : null,
-        matrix: window.__proj.matrix ? Array.from(window.__proj.matrix) : null
+        matrix: window.__proj.matrix ? Array.from(window.__proj.matrix) : null,
+        perspectiveStrength: (typeof window.PERSPECTIVE_STRENGTH === 'number') ? window.PERSPECTIVE_STRENGTH : null,
+        referenceDistance: (window.camera && isFiniteNumber(window.camera.distance)) ? window.camera.distance : null
       };
       console.log('  ✓ Projection scale:', profile.projection.scale);
       if (profile.projection.cam) {
@@ -161,6 +163,33 @@
           '(' + profile.projection.target[0].toFixed(2) + 
           ', ' + profile.projection.target[1].toFixed(2) + 
           ', ' + profile.projection.target[2].toFixed(2) + ')');
+      }
+      if (!profile.projection.perspectiveStrength && typeof window.PERSPECTIVE_STRENGTH === 'number') {
+        profile.projection.perspectiveStrength = window.PERSPECTIVE_STRENGTH;
+      }
+      if (!profile.projection.referenceDistance && window.camera && isFiniteNumber(window.camera.distance)) {
+        profile.projection.referenceDistance = window.camera.distance;
+      }
+      var cssWidth = profile.canvas && isFiniteNumber(profile.canvas.cssWidth) && profile.canvas.cssWidth > 0 ? profile.canvas.cssWidth : null;
+      var cssHeight = profile.canvas && isFiniteNumber(profile.canvas.cssHeight) && profile.canvas.cssHeight > 0 ? profile.canvas.cssHeight : null;
+      if ((!cssWidth || !cssHeight) && profile.canvas && isFiniteNumber(profile.canvas.width) && profile.canvas.devicePixelRatio) {
+        var dprForCanvas = profile.canvas.devicePixelRatio || 1;
+        if (!cssWidth || !cssHeight) {
+          cssWidth = cssWidth || (profile.canvas.width / dprForCanvas);
+          cssHeight = cssHeight || (profile.canvas.height / dprForCanvas);
+        }
+      }
+      if (cssWidth && cssHeight) {
+        var nearClip = profile.camera && isFiniteNumber(profile.camera.near) ? profile.camera.near : 0.05;
+        var farClip = profile.camera && isFiniteNumber(profile.camera.far) ? profile.camera.far : Math.max(nearClip + 1000, 2000);
+        var hybridMatrix = computeHybridProjectionMatrix(cssWidth, cssHeight, nearClip, farClip, {
+          scale: profile.projection.scale,
+          perspectiveStrength: profile.projection.perspectiveStrength,
+          referenceDistance: profile.projection.referenceDistance
+        });
+        if (hybridMatrix) {
+          profile.projection.matrix = Array.from(hybridMatrix.elements);
+        }
       }
     }
     
@@ -244,14 +273,21 @@
     console.log('🎯 APPLYING VIEWPORT PROFILE TO CAMERA');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
+    var liveProjection = profile.projection || null;
+    var canvasInfo = profile.canvas || null;
+    var hasLiveMatrix = !!(liveProjection && Array.isArray(liveProjection.matrix) && liveProjection.matrix.length === 16);
+    var hasLiveCam = !!(liveProjection && Array.isArray(liveProjection.cam) && liveProjection.cam.length >= 3);
+    var hasBasis = !!(liveProjection && Array.isArray(liveProjection.right) && Array.isArray(liveProjection.up) && Array.isArray(liveProjection.fwd));
+    var applied = false;
+
     // FIX #12: Use projection.target from __proj (the actual lookAt point)
     // NOT camera.target which may be orbit center (0,0,0)
     var target = new THREE.Vector3(0, 0, 0);
-    if (profile.projection && Array.isArray(profile.projection.target)) {
+    if (liveProjection && Array.isArray(liveProjection.target)) {
       target.set(
-        profile.projection.target[0],
-        profile.projection.target[1],
-        profile.projection.target[2]
+        liveProjection.target[0],
+        liveProjection.target[1],
+        liveProjection.target[2]
       );
       console.log('  ✓ Using projection.target:', target.toArray());
     } else if (profile.camera) {
@@ -264,82 +300,99 @@
     }
     
     // FIX #7: Use EXACT camera position from projection.cam array
-    if (profile.projection && Array.isArray(profile.projection.cam)) {
+    if (hasLiveCam) {
       camera.position.set(
-        profile.projection.cam[0],
-        profile.projection.cam[1],
-        profile.projection.cam[2]
+        liveProjection.cam[0],
+        liveProjection.cam[1],
+        liveProjection.cam[2]
       );
       console.log('  ✓ Camera position from projection.cam:', camera.position.toArray());
       console.log('  ✓ Target:', target.toArray());
       console.log('  ✓ Distance:', camera.position.distanceTo(target).toFixed(4));
-      
-      // FIX #16: Orient camera using lookAt 
-      camera.lookAt(target);
-      console.log('  ✓ Camera oriented via lookAt');
+      applied = true;
     }
     
     function isFiniteNumber(val) {
       return typeof val === 'number' && isFinite(val);
     }
     
-    // Set up vector
-    if (profile.projection && profile.projection.up && Array.isArray(profile.projection.up)) {
-      camera.up.set(
-        profile.projection.up[0],
-        profile.projection.up[1],
-        profile.projection.up[2]
-      ).normalize();
-      console.log('  ✓ Camera up vector:', camera.up);
-    } else {
-      camera.up.set(0, 1, 0);
+    var orientationLocked = false;
+    if (hasBasis) {
+      var rightVec = new THREE.Vector3(liveProjection.right[0], liveProjection.right[1], liveProjection.right[2]).normalize();
+      var upVec = new THREE.Vector3(liveProjection.up[0], liveProjection.up[1], liveProjection.up[2]).normalize();
+      var fwdVec = new THREE.Vector3(liveProjection.fwd[0], liveProjection.fwd[1], liveProjection.fwd[2]).normalize();
+      var cameraMatrix = new THREE.Matrix4();
+      var negForward = fwdVec.clone().negate();
+      cameraMatrix.makeBasis(rightVec, upVec, negForward);
+      camera.quaternion.setFromRotationMatrix(cameraMatrix);
+      camera.up.copy(upVec);
+      orientationLocked = true;
+      console.log('  ✓ Orientation basis copied from live viewport');
+      // If target was not provided, derive it from basis + position to guarantee alignment
+      if (!profile.camera && target.lengthSq() === 0) {
+        target.copy(camera.position).add(fwdVec);
+      }
+    }
+    if (!orientationLocked) {
+      if (liveProjection && Array.isArray(liveProjection.up)) {
+        camera.up.set(
+          liveProjection.up[0],
+          liveProjection.up[1],
+          liveProjection.up[2]
+        ).normalize();
+        console.log('  ✓ Camera up vector:', camera.up);
+      } else {
+        camera.up.set(0, 1, 0);
+      }
+      camera.lookAt(target);
+      console.log('  ✓ Camera oriented via lookAt');
+    } else if (target) {
+      // Re-assert lookAt to keep Three's internal matrices coherent with the copied quaternion
+      camera.lookAt(target);
     }
     
-    // Set aspect ratio from canvas
-    if (profile.canvas) {
-      camera.aspect = profile.canvas.width / profile.canvas.height;
+    // Set aspect ratio from canvas (used for logs/diagnostics only; projection matrix may override)
+    if (canvasInfo) {
+      camera.aspect = canvasInfo.width / canvasInfo.height;
       console.log('  ✓ Aspect ratio:', camera.aspect.toFixed(3));
     }
     
-    // FIX #13: Calculate FOV from projection.scale to match live viewport's hybrid projection
-    // The projection.scale represents screen pixels per world unit
-    // For hybrid projection (not pure perspective), use a fixed FOV
-    if (profile.projection && profile.projection.scale && profile.canvas) {
-      // Hybrid projection uses scale in its projection matrix, not via FOV
-      // Use standard camera FOV that works with the hybrid projection matrix
-      camera.fov = 48;
-      console.log('  ✓ FOV set to 48 degrees (hybrid projection uses scale in matrix)');
-    } else {
-      camera.fov = 48;
-      console.log('  ✓ FOV fallback to 48 degrees');
+    var fovApplied = false;
+    if (profile.camera && isFiniteNumber(profile.camera.fov)) {
+      camera.fov = profile.camera.fov;
+      fovApplied = true;
+      console.log('  ✓ FOV copied from live camera:', camera.fov.toFixed(4));
+    }
+    if (!fovApplied && liveProjection && liveProjection.scale && canvasInfo) {
+      var half = canvasInfo.cssHeight ? (canvasInfo.cssHeight * 0.5) : (canvasInfo.height * 0.5);
+      if (half > 0) {
+        var fovRad = 2 * Math.atan(half / liveProjection.scale);
+        var fovDeg = fovRad * (180 / Math.PI);
+        if (isFiniteNumber(fovDeg)) {
+          camera.fov = fovDeg;
+          fovApplied = true;
+          console.log('  ✓ FOV derived from projection scale:', camera.fov.toFixed(4));
+        }
+      }
+    }
+    if (!fovApplied) {
+      camera.fov = computeViewportFov();
+      console.log('  ✓ FOV fallback (computeViewportFov):', camera.fov.toFixed(4));
     }
     
     // Set near/far planes
     if (profile.camera) {
-      if (profile.camera.near) camera.near = profile.camera.near;
-      if (profile.camera.far) camera.far = profile.camera.far;
+      if (isFiniteNumber(profile.camera.near)) camera.near = profile.camera.near;
+      if (isFiniteNumber(profile.camera.far)) camera.far = profile.camera.far;
       console.log('  ✓ Near/Far:', camera.near, '/', camera.far);
     }
     
-    // FIX #8: Apply pan offset if present
-    if (profile.viewport && profile.viewport.pan) {
-      var panX = profile.viewport.pan.x || 0;
-      var panY = profile.viewport.pan.y || 0;
-      if (panX !== 0 || panY !== 0) {
-        // Pan is screen-space, so we need to apply it to camera position
-        var right = new THREE.Vector3();
-        var up = new THREE.Vector3();
-        camera.getWorldDirection(right);
-        right.cross(camera.up).normalize();
-        up.copy(camera.up).normalize();
-        camera.position.add(right.multiplyScalar(panX * 0.001));
-        camera.position.add(up.multiplyScalar(panY * 0.001));
-        console.log('  ✓ Pan offset applied:', panX.toFixed(4), panY.toFixed(4));
-      }
-    }
+    // Pan is handled by DOM-level translate (syncLivePanTransform) to keep
+    // the live viewport screenshot and WebGL render perfectly aligned. Do not
+    // reapply it to the camera, otherwise we introduce a double shift.
     
-    // FIX #9: Apply zoom level if present (affects FOV)
-    if (profile.viewport && profile.viewport.zoom) {
+    // FIX #9: Apply zoom level if present (only when we do not have the live projection matrix)
+    if (!hasLiveMatrix && profile.viewport && profile.viewport.zoom) {
       var zoom = profile.viewport.zoom;
       if (zoom !== 1.0) {
         camera.fov = camera.fov / zoom;
@@ -347,17 +400,31 @@
       }
     }
     
-    // Update projection matrix with hybrid projection to match live viewport
-    // The live viewport uses PERSPECTIVE_STRENGTH=0.88 to blend perspective and orthographic
-    if (profile.projection && profile.projection.scale && profile.canvas) {
-      var cssWidth = profile.canvas.cssWidth || (profile.canvas.width / (window.devicePixelRatio || 2));
-      var cssHeight = profile.canvas.cssHeight || (profile.canvas.height / (window.devicePixelRatio || 2));
-      applyExactProjection(camera, cssWidth, cssHeight, camera.near, camera.far);
+    var projectionMatrixApplied = false;
+    if (hasLiveMatrix) {
+      camera.projectionMatrix.fromArray(liveProjection.matrix);
+      camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+      projectionMatrixApplied = true;
+      console.log('  ✓ Projection matrix copied from live viewport cache');
+    } else if (liveProjection && liveProjection.scale && canvasInfo) {
+      // Update projection matrix with hybrid projection to match live viewport
+      // The live viewport uses PERSPECTIVE_STRENGTH=0.88 to blend perspective and orthographic
+      var cssWidth = canvasInfo.cssWidth || (canvasInfo.width / (window.devicePixelRatio || 2));
+      var cssHeight = canvasInfo.cssHeight || (canvasInfo.height / (window.devicePixelRatio || 2));
+      applyExactProjection(camera, cssWidth, cssHeight, camera.near, camera.far, {
+        scale: liveProjection.scale,
+        perspectiveStrength: liveProjection.perspectiveStrength,
+        referenceDistance: liveProjection.referenceDistance || (profile.camera && profile.camera.distance)
+      });
+      projectionMatrixApplied = true;
       console.log('  ✓ Hybrid projection applied (PERSPECTIVE_STRENGTH=0.88)');
-    } else {
+    }
+
+    if (!projectionMatrixApplied) {
       camera.updateProjectionMatrix();
       console.log('  ✓ Standard projection (fallback)');
     }
+    camera.updateMatrixWorld(true);
     
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('✅ CAMERA CONFIGURED FROM PROFILE');
@@ -371,16 +438,11 @@
       console.log('╚════════════════════════════════════════════════════════════════╝');
       console.log('');
       console.log('FIXES APPLIED:');
-      console.log('  #7: Camera position from projection.cam (exact Y position)');
-      console.log('  #8: Pan offset applied to camera transformation');
-      console.log('  #9: Zoom level applied to FOV calculation');
-      console.log('  #10: Removed deprecated THREE.js API calls');
-      console.log('  #11: Post-processing disabled (direct render)');
-      console.log('  #12: Target from projection.target (actual lookAt point)');
-      console.log('  #13: FOV calculated from projection.scale (matches hybrid projection)');
-      console.log('  #14: Hybrid projection matrix (PERSPECTIVE_STRENGTH=0.88)');
-      console.log('  #15: Target from camera.targetX/Y/Z (not hardcoded to origin)');
-      console.log('  #16: Camera position and lookAt (simplified)');
+      console.log('  • Camera position pulled directly from live orbit cache');
+      console.log('  • Orientation basis (right/up/fwd) cloned for pixel-perfect alignment');
+      console.log('  • Live FOV/clip planes copied verbatim (fallbacks only when missing)');
+      console.log('  • Hybrid projection matrix reused when available');
+      console.log('  • DOM pan handles screen-space offsets (no double-application)');
       console.log('');
       console.log('┌─────────────────────────┬──────────────────────┬──────────────────────┐');
       console.log('│ Parameter               │ Live 3D Viewport     │ Visualize Render     │');
@@ -558,35 +620,47 @@
     return fallback || 0;
   }
 
-  function applyExactProjection(cam, cssWidth, cssHeight, near, far){
-    if (!THREE || !cam) return;
-    var proj = (typeof window !== 'undefined') ? window.__proj : null;
-    if (!proj || !isFiniteNumber(proj.scale) || proj.scale <= 0) {
-      cam.updateProjectionMatrix();
-      return;
+  function computeHybridProjectionMatrix(cssWidth, cssHeight, near, far, options){
+    if (!THREE) return null;
+    options = options || {};
+    var scale = isFiniteNumber(options.scale) ? options.scale : null;
+    if (!scale) {
+      var proj = (typeof window !== 'undefined') ? window.__proj : null;
+      if (proj && isFiniteNumber(proj.scale)) scale = proj.scale;
     }
-    if (!isFiniteNumber(cssWidth) || cssWidth <= 0 || !isFiniteNumber(cssHeight) || cssHeight <= 0) {
-      cam.updateProjectionMatrix();
-      return;
-    }
-    var k = (typeof window !== 'undefined' && isFiniteNumber(window.PERSPECTIVE_STRENGTH)) ? Math.max(0, Math.min(1, window.PERSPECTIVE_STRENGTH)) : 0.88;
-    var refZ = (typeof window !== 'undefined' && window.camera && isFiniteNumber(window.camera.distance)) ? Math.max(0.5, window.camera.distance) : 12;
-    var scale = proj.scale;
-    var range = (isFiniteNumber(far) && isFiniteNumber(near) && far > near + 1e-6) ? (far - near) : 1000;
+    if (!isFiniteNumber(scale) || scale <= 0) return null;
+    if (!isFiniteNumber(cssWidth) || cssWidth <= 0 || !isFiniteNumber(cssHeight) || cssHeight <= 0) return null;
     if (!isFiniteNumber(near) || near <= 0) near = 0.1;
-    if (!isFiniteNumber(far) || far <= near) far = near + range;
-
-    var scaleX = -2 * scale / cssWidth;
-    var scaleY =  2 * scale / cssHeight;
+    if (!isFiniteNumber(far) || far <= near) far = near + 1000;
+    var perspectiveStrength = options.hasOwnProperty('perspectiveStrength') && isFiniteNumber(options.perspectiveStrength)
+      ? options.perspectiveStrength
+      : ((typeof window !== 'undefined' && isFiniteNumber(window.PERSPECTIVE_STRENGTH)) ? window.PERSPECTIVE_STRENGTH : 0.88);
+    var k = Math.max(0, Math.min(1, perspectiveStrength));
+    var refZ = options && isFiniteNumber(options.referenceDistance) ? options.referenceDistance : null;
+    if (!isFiniteNumber(refZ) || refZ <= 0.01) {
+      refZ = (typeof window !== 'undefined' && window.camera && isFiniteNumber(window.camera.distance)) ? window.camera.distance : 12;
+    }
+    refZ = Math.max(0.5, refZ);
+    var scaleX =  2 * scale / cssWidth;
+    var scaleY = -2 * scale / cssHeight;
     var m = new THREE.Matrix4();
     var e = m.elements;
     e[0] = scaleX; e[4] = 0;       e[8]  = 0;                        e[12] = 0;
     e[1] = 0;      e[5] = scaleY; e[9]  = 0;                        e[13] = 0;
     e[2] = 0;      e[6] = 0;      e[10] = -(far + near) / (far - near); e[14] = -(2 * far * near) / (far - near);
-    e[3] = 0;      e[7] = 0;      e[11] = -k;                       e[15] = -(1 - k) * refZ;
+    e[3] = 0;      e[7] = 0;      e[11] = -k;                       e[15] = (1 - k) * refZ;
+    return m;
+  }
 
-    cam.projectionMatrix.copy(m);
-    cam.projectionMatrixInverse.copy(m.clone().invert());
+  function applyExactProjection(cam, cssWidth, cssHeight, near, far, options){
+    if (!THREE || !cam) return;
+    var matrix = computeHybridProjectionMatrix(cssWidth, cssHeight, near, far, options);
+    if (!matrix) {
+      cam.updateProjectionMatrix();
+      return;
+    }
+    cam.projectionMatrix.copy(matrix);
+    cam.projectionMatrixInverse.copy(matrix.clone().invert());
   }
 
   function cloneFootprint(points){
@@ -2874,6 +2948,9 @@
         var dataUrl = baseCanvas.toDataURL('image/png');
         if (!dataUrl || dataUrl.length < 32) return false;
         wrap.style.backgroundImage = 'url(' + dataUrl + ')';
+        wrap.style.backgroundSize = '100% 100%';
+        wrap.style.backgroundPosition = '0 0';
+        wrap.style.backgroundRepeat = 'no-repeat';
         wrap.classList.add('visualize-live-preview');
         return true;
       } catch(err) {
@@ -2886,7 +2963,11 @@
       var wrap = qs('visualize-canvas-wrap');
       if (!wrap) return;
       wrap.style.backgroundImage = '';
+      wrap.style.backgroundSize = '';
+      wrap.style.backgroundPosition = '';
+      wrap.style.backgroundRepeat = '';
       wrap.classList.remove('visualize-live-preview');
+      syncLivePanTransform(true);
     }
 
     function renderLiveViewportOnly(options){
@@ -2926,8 +3007,9 @@
         lastLiveViewportDataUrl = dataUrl;
         if (wrap) {
           wrap.style.backgroundImage = 'url(' + dataUrl + ')';
-          wrap.style.backgroundSize = 'cover';
-          wrap.style.backgroundPosition = 'center';
+          wrap.style.backgroundSize = '100% 100%';
+          wrap.style.backgroundPosition = '0 0';
+          wrap.style.backgroundRepeat = 'no-repeat';
           wrap.classList.add('visualize-live-preview');
         }
       }
