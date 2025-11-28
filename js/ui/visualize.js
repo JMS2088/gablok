@@ -25,11 +25,11 @@
   var envLoadPromise = null;
   var currentQuality = 1;
   var lastHash = null;
-  // Manual visual offsets to fine-tune where the 3D model
-  // appears within the overlay grid (e.g. to land in B2).
+  // Optional manual offsets (default zero) to shift the model within the frame if needed.
   // Positive X moves the apparent model right, positive Y moves it up.
-  var VISUALIZE_OFFSET_X = -31;
-  var VISUALIZE_OFFSET_Y = 10;
+  var VISUALIZE_OFFSET_X = 0;
+  var VISUALIZE_OFFSET_Y = 0;
+  var RENDER_CAMERA_PULLBACK = 1;
   var viewIndex = 0;
   var VIEW_PRESETS = [];
   var viewButtons = [];
@@ -52,8 +52,16 @@
   var rng = createRandomGenerator();
   var lastCanvasWidth = 0;
   var lastCanvasHeight = 0;
+  var lastCanvasCssWidth = 0;
+  var lastCanvasCssHeight = 0;
   var resizeHooked = false;
   var resizeObserver = null;
+  var tileOverlayCanvas = null;
+  var tileRevealTimers = [];
+  var tileRevealCleanup = null;
+  var TILE_REVEAL_SIZE = 100;
+  var alignmentGridEnabled = true;
+  var alignmentGridCanvas = null;
 
   var floorHeight = (function(){
     var defaultHeight = 3.5;
@@ -68,6 +76,7 @@
   var noiseTextures = Object.create(null);
   var materialExposureCache = Object.create(null);
   var EDGE_COLORS = {
+
     // Subtle edge definition for clean architectural look
     default: 0xe0e5eb,
     roof: 0xc5cad2,
@@ -77,6 +86,7 @@
     glass: 0xe5f0ff,
     accent: 0xd0d8e2
   };
+  var LIVE_VIEW_LABEL = 'Current View';
   var staticBaseCache = null;
   var HDRI_CANDIDATES = [
     'textures/env/studio_loft_4k.hdr',
@@ -134,6 +144,30 @@
     return [Number(vec.x) || 0, Number(vec.y) || 0, Number(vec.z) || 0];
   }
 
+  function computeViewportFov(){
+    try {
+      if (!window) return 48;
+      var scale = window.__proj && isFiniteNumber(window.__proj.scale) ? window.__proj.scale : null;
+      if (!scale || scale <= 0) return 48;
+      var dpr = window.devicePixelRatio || 1;
+      var baseCanvas = document.getElementById('canvas');
+      var cssHeight = 0;
+      if (baseCanvas && isFiniteNumber(baseCanvas.height) && baseCanvas.height > 0) {
+        cssHeight = baseCanvas.height / dpr;
+      } else {
+        cssHeight = window.innerHeight || 720;
+      }
+      if (!cssHeight || cssHeight <= 0) cssHeight = 720;
+      var half = cssHeight * 0.5;
+      var fovRad = 2 * Math.atan(half / scale);
+      var fovDeg = fovRad * (180 / Math.PI);
+      if (isFiniteNumber(fovDeg) && fovDeg > 10 && fovDeg < 170) {
+        return fovDeg;
+      }
+    } catch(_eFov){}
+    return 48;
+  }
+
   function numberFromKeys(source, keys, fallback){
     if (!source) return fallback || 0;
     for (var i = 0; i < keys.length; i++){
@@ -141,6 +175,37 @@
       if (isFiniteNumber(source[key])) return Number(source[key]);
     }
     return fallback || 0;
+  }
+
+  function applyExactProjection(cam, cssWidth, cssHeight, near, far){
+    if (!THREE || !cam) return;
+    var proj = (typeof window !== 'undefined') ? window.__proj : null;
+    if (!proj || !isFiniteNumber(proj.scale) || proj.scale <= 0) {
+      cam.updateProjectionMatrix();
+      return;
+    }
+    if (!isFiniteNumber(cssWidth) || cssWidth <= 0 || !isFiniteNumber(cssHeight) || cssHeight <= 0) {
+      cam.updateProjectionMatrix();
+      return;
+    }
+    var k = (typeof window !== 'undefined' && isFiniteNumber(window.PERSPECTIVE_STRENGTH)) ? Math.max(0, Math.min(1, window.PERSPECTIVE_STRENGTH)) : 0.88;
+    var refZ = (typeof window !== 'undefined' && window.camera && isFiniteNumber(window.camera.distance)) ? Math.max(0.5, window.camera.distance) : 12;
+    var scale = proj.scale;
+    var range = (isFiniteNumber(far) && isFiniteNumber(near) && far > near + 1e-6) ? (far - near) : 1000;
+    if (!isFiniteNumber(near) || near <= 0) near = 0.1;
+    if (!isFiniteNumber(far) || far <= near) far = near + range;
+
+    var scaleX = -2 * scale / cssWidth;
+    var scaleY =  2 * scale / cssHeight;
+    var m = new THREE.Matrix4();
+    var e = m.elements;
+    e[0] = scaleX; e[4] = 0;       e[8]  = 0;                        e[12] = 0;
+    e[1] = 0;      e[5] = scaleY; e[9]  = 0;                        e[13] = 0;
+    e[2] = 0;      e[6] = 0;      e[10] = -(far + near) / (far - near); e[14] = -(2 * far * near) / (far - near);
+    e[3] = 0;      e[7] = 0;      e[11] = -k;                       e[15] = -(1 - k) * refZ;
+
+    cam.projectionMatrix.copy(m);
+    cam.projectionMatrixInverse.copy(m.clone().invert());
   }
 
   function cloneFootprint(points){
@@ -377,40 +442,37 @@
         return ((t ^ t >>> 14) >>> 0) / 4294967296;
       };
     }
-    var randomFn = mulberry32(seed);
+    var rand = mulberry32(seed);
     return {
-      reseed: function(str){
-        if (!str) str = String(Date.now());
-        var hash = 0;
-        for (var i = 0; i < str.length; i++){
-          hash = Math.imul(31, hash) + str.charCodeAt(i) | 0;
-        }
-        if (hash === 0) hash = 1;
-        seed = hash >>> 0;
-        randomFn = mulberry32(seed);
+      next: function(){
+        return rand();
       },
-      next: function(){ return randomFn(); },
+      reseed: function(nextSeed){
+        seed = nextSeed || 1;
+        rand = mulberry32(seed);
+      },
       range: function(min, max){
-        if (!isFiniteNumber(min)) min = 0;
-        if (!isFiniteNumber(max)) max = 1;
-        return min + (max - min) * randomFn();
+        var a = isFiniteNumber(min) ? min : 0;
+        var b = isFiniteNumber(max) ? max : 1;
+        if (b < a) {
+          var tmp = a;
+          a = b;
+          b = tmp;
+        }
+        return a + (b - a) * rand();
+      },
+      rangeInt: function(min, max){
+        var a = Math.ceil(isFiniteNumber(min) ? min : 0);
+        var b = Math.floor(isFiniteNumber(max) ? max : a);
+        if (b < a) {
+          var tmp = a;
+          a = b;
+          b = tmp;
+        }
+        if (a === b) return a;
+        return a + Math.floor(rand() * (b - a + 1));
       }
     };
-  }
-
-  function getMaterialExposureJitter(kind){
-    var key = kind || 'default';
-    if (Object.prototype.hasOwnProperty.call(materialExposureCache, key)) return materialExposureCache[key];
-    var factor = 1;
-    if (rng && typeof rng.range === 'function') {
-      factor = rng.range(0.92, 1.08);
-    }
-    materialExposureCache[key] = factor;
-    return factor;
-  }
-
-  function clampColor(value){
-    return Math.max(0, Math.min(255, value));
   }
 
   function rgbToHex(r, g, b){
@@ -1753,49 +1815,152 @@
     var wrap = qs('visualize-canvas-wrap');
     var renderCanvas = qs(CANVAS_ID);
     if (!stage || !wrap || !renderCanvas) return;
-    
-    // Ensure stage centers content
+
+    // Align capture overlay with the live viewport in CSS pixel space
     stage.style.display = 'flex';
-    stage.style.justifyContent = 'center';
-    stage.style.alignItems = 'center';
+    stage.style.justifyContent = 'flex-start';
+    stage.style.alignItems = 'flex-start';
     stage.style.overflow = 'hidden';
 
-    var stageWidth = stage.clientWidth;
-    var stageHeight = stage.clientHeight;
-    if (stageWidth <= 0 && stageHeight <= 0) {
-      wrap.style.width = '100%';
-      wrap.style.height = 'auto';
-      return;
-    }
-    
-    // Force canvas to fill container while maintaining aspect ratio
-    var aspect = lastCanvasWidth / lastCanvasHeight;
-    var stageAspect = stageWidth / stageHeight;
-    
-    if (stageAspect > aspect) {
-      // Stage is wider than image -> fit height
-      wrap.style.height = '100%';
-      wrap.style.width = 'auto';
-      wrap.style.aspectRatio = aspect + '';
-    } else {
-      // Stage is taller than image -> fit width
-      wrap.style.width = '100%';
-      wrap.style.height = 'auto';
-      wrap.style.aspectRatio = aspect + '';
-    }
-    
-    // Reset margins as flexbox handles centering
+    var baseCanvasEl = document.getElementById('canvas');
+    var baseRect = baseCanvasEl && baseCanvasEl.getBoundingClientRect ? baseCanvasEl.getBoundingClientRect() : null;
+    var cssWidth = baseRect && baseRect.width > 0 ? baseRect.width : (stage.clientWidth || window.innerWidth || 1920);
+    var cssHeight = baseRect && baseRect.height > 0 ? baseRect.height : (stage.clientHeight || window.innerHeight || 1080);
+
+    wrap.style.width = cssWidth + 'px';
+    wrap.style.height = cssHeight + 'px';
     wrap.style.margin = '0';
-    
-    // Ensure canvas element itself is responsive
-    renderCanvas.style.width = '100%';
-    renderCanvas.style.height = '100%';
-    renderCanvas.style.objectFit = 'contain';
-    
+    wrap.style.aspectRatio = '';
+
+    renderCanvas.style.width = cssWidth + 'px';
+    renderCanvas.style.height = cssHeight + 'px';
+    renderCanvas.style.objectFit = 'fill';
+
     if (fabricCanvas) {
       fabricCanvas.setDimensions({ width: '100%', height: '100%' }, { cssOnly: true });
       fabricCanvas.calcOffset();
     }
+    updateAlignmentGrid(cssWidth, cssHeight);
+  }
+
+  function removeAlignmentGrid(){
+    if (alignmentGridCanvas && alignmentGridCanvas.parentNode) {
+      alignmentGridCanvas.parentNode.removeChild(alignmentGridCanvas);
+    }
+    alignmentGridCanvas = null;
+  }
+
+  function updateAlignmentGrid(cssWidth, cssHeight){
+    if (!alignmentGridEnabled) {
+      removeAlignmentGrid();
+      return;
+    }
+    var wrap = qs('visualize-canvas-wrap');
+    if (!wrap) return;
+    var width = isFiniteNumber(cssWidth) && cssWidth > 0 ? cssWidth : (lastCanvasCssWidth || wrap.clientWidth || 0);
+    var height = isFiniteNumber(cssHeight) && cssHeight > 0 ? cssHeight : (lastCanvasCssHeight || wrap.clientHeight || 0);
+    if (width <= 0 || height <= 0) {
+      removeAlignmentGrid();
+      return;
+    }
+    if (!alignmentGridCanvas || alignmentGridCanvas.parentNode !== wrap) {
+      if (alignmentGridCanvas && alignmentGridCanvas.parentNode) alignmentGridCanvas.parentNode.removeChild(alignmentGridCanvas);
+      alignmentGridCanvas = document.createElement('canvas');
+      alignmentGridCanvas.id = 'visualize-alignment-grid';
+      alignmentGridCanvas.style.position = 'absolute';
+      alignmentGridCanvas.style.inset = '0';
+      alignmentGridCanvas.style.pointerEvents = 'none';
+      alignmentGridCanvas.style.zIndex = '4';
+      alignmentGridCanvas.style.mixBlendMode = 'normal';
+      wrap.appendChild(alignmentGridCanvas);
+    }
+    var dpr = window.devicePixelRatio || 1;
+    var scaledWidth = Math.max(1, Math.round(width * dpr));
+    var scaledHeight = Math.max(1, Math.round(height * dpr));
+    if (alignmentGridCanvas.width !== scaledWidth) alignmentGridCanvas.width = scaledWidth;
+    if (alignmentGridCanvas.height !== scaledHeight) alignmentGridCanvas.height = scaledHeight;
+    alignmentGridCanvas.style.width = width + 'px';
+    alignmentGridCanvas.style.height = height + 'px';
+    var ctx = alignmentGridCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, alignmentGridCanvas.width, alignmentGridCanvas.height);
+    ctx.save();
+    ctx.scale(dpr, dpr);
+
+    var minorStep = 50;
+    var majorStep = 200;
+    var centerX = width / 2;
+    var centerY = height / 2;
+
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+    for (var x = 0; x <= width; x += minorStep) {
+      ctx.beginPath();
+      var xPos = Math.round(x) + 0.5;
+      ctx.moveTo(xPos, 0);
+      ctx.lineTo(xPos, height);
+      ctx.stroke();
+    }
+    for (var y = 0; y <= height; y += minorStep) {
+      ctx.beginPath();
+      var yPos = Math.round(y) + 0.5;
+      ctx.moveTo(0, yPos);
+      ctx.lineTo(width, yPos);
+      ctx.stroke();
+    }
+
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.55)';
+    for (var mx = 0; mx <= width; mx += majorStep) {
+      ctx.beginPath();
+      var majorX = Math.round(mx) + 0.5;
+      ctx.moveTo(majorX, 0);
+      ctx.lineTo(majorX, height);
+      ctx.stroke();
+    }
+    for (var my = 0; my <= height; my += majorStep) {
+      ctx.beginPath();
+      var majorY = Math.round(my) + 0.5;
+      ctx.moveTo(0, majorY);
+      ctx.lineTo(width, majorY);
+      ctx.stroke();
+    }
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(16, 185, 129, 0.9)';
+    ctx.beginPath();
+    ctx.moveTo(Math.round(centerX) + 0.5, 0);
+    ctx.lineTo(Math.round(centerX) + 0.5, height);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, Math.round(centerY) + 0.5);
+    ctx.lineTo(width, Math.round(centerY) + 0.5);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.9)';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function setAlignmentGridState(enabled){
+    alignmentGridEnabled = !!enabled;
+    if (!alignmentGridEnabled) removeAlignmentGrid();
+    else updateAlignmentGrid(lastCanvasCssWidth, lastCanvasCssHeight);
+    syncAlignmentGridButton();
+  }
+
+  function toggleAlignmentGrid(){
+    setAlignmentGridState(!alignmentGridEnabled);
+  }
+
+  function syncAlignmentGridButton(){
+    var btn = qs('visualize-toggle-grid');
+    if (!btn) return;
+    btn.textContent = alignmentGridEnabled ? 'Hide Grid Overlay' : 'Show Grid Overlay';
   }
 
   function ensureFabric(width, height){
@@ -1880,6 +2045,28 @@
     });
   }
 
+  function focusPhotorealShot(id){
+    if (!id) return;
+    window.requestAnimationFrame(function(){
+      var gallery = qs('visualize-gallery');
+      if (!gallery) return;
+      var selector = 'button[data-gallery-id="' + id + '"]';
+      var btn = gallery.querySelector(selector);
+      if (btn) {
+        btn.classList.add('highlight');
+        try {
+          btn.focus({ preventScroll: false });
+        } catch(_focusErr){
+          try { btn.focus(); } catch(_ignored){}
+        }
+        window.setTimeout(function(){
+          btn.classList.remove('highlight');
+        }, 2200);
+      }
+      openPhotoViewerById(id);
+    });
+  }
+
   function openPhotoViewerById(id){
     var shot = galleryShotMap && galleryShotMap[id];
     if (!shot) return;
@@ -1942,6 +2129,121 @@
     cam.updateProjectionMatrix();
   }
 
+  function clonePreset(preset){
+    if (!preset || !THREE) return null;
+    return {
+      position: preset.position ? preset.position.clone() : null,
+      target: preset.target ? preset.target.clone() : null,
+      up: preset.up ? preset.up.clone() : new THREE.Vector3(0, 1, 0),
+      fov: preset.fov,
+      near: preset.near,
+      far: preset.far,
+      __label: preset.__label || null,
+      __source: preset.__source || null
+    };
+  }
+
+  function captureLiveOrbitPreset(span, meshCenter, meshSize, renderFocus, options){
+    if (!THREE || !window || !window.camera) return null;
+    options = options || {};
+    var recenterScene = options.recenter !== false;
+    var pullbackRatio = options && isFiniteNumber(options.pullbackRatio) ? Math.max(1, options.pullbackRatio) : RENDER_CAMERA_PULLBACK;
+    var camState = window.camera;
+    var target = new THREE.Vector3(
+      isFiniteNumber(camState.targetX) ? camState.targetX : 0,
+      isFiniteNumber(camState.targetY) ? camState.targetY : 0,
+      isFiniteNumber(camState.targetZ) ? camState.targetZ : 0
+    );
+    try {
+      if (typeof window.updateProjectionCache === 'function') window.updateProjectionCache();
+    } catch(_eCache){}
+
+    var posVec = null;
+    if (window.__proj && Array.isArray(window.__proj.cam)) {
+      var camArr = window.__proj.cam;
+      posVec = new THREE.Vector3(camArr[0], camArr[1], camArr[2]);
+    }
+    if (!posVec) {
+      var dist = isFiniteNumber(camState.distance) ? camState.distance : 18;
+      var yaw = isFiniteNumber(camState.yaw) ? camState.yaw : 0;
+      var pitch = isFiniteNumber(camState.pitch) ? camState.pitch : -0.4;
+      var cp = Math.cos(pitch);
+      var sp = Math.sin(pitch);
+      var cy = Math.cos(yaw);
+      var sy = Math.sin(yaw);
+      var fwd = new THREE.Vector3(sy * cp, sp, cy * cp);
+      posVec = target.clone().sub(fwd.multiplyScalar(dist));
+    }
+
+    if (recenterScene) {
+      var offsetX = (meshCenter && isFiniteNumber(meshCenter.x)) ? meshCenter.x : 0;
+      var offsetZ = (meshCenter && isFiniteNumber(meshCenter.z)) ? meshCenter.z : 0;
+      var focusOffsetX = renderFocus && isFiniteNumber(renderFocus.x) ? renderFocus.x : 0;
+      var focusOffsetZ = renderFocus && isFiniteNumber(renderFocus.z) ? renderFocus.z : 0;
+      posVec.x = posVec.x - offsetX + focusOffsetX;
+      posVec.z = posVec.z - offsetZ + focusOffsetZ;
+      target.x = target.x - offsetX + focusOffsetX;
+      target.z = target.z - offsetZ + focusOffsetZ;
+    }
+
+    var distToTarget = Math.max(0.5, posVec.distanceTo(target));
+    var safeSpan = Math.max(1, span || distToTarget * 0.5);
+    var maxDimension = safeSpan;
+    if (meshSize) {
+      maxDimension = Math.max(maxDimension, meshSize.x || 0, meshSize.y || 0, meshSize.z || 0);
+    }
+
+    var fovEstimate = computeViewportFov();
+    if (!isFiniteNumber(fovEstimate)) fovEstimate = 60;
+
+    if (recenterScene && THREE.MathUtils) {
+      var radius = Math.max(0.5, maxDimension * 0.6);
+      var fovRadians = THREE.MathUtils.degToRad(fovEstimate);
+      var fitDist = radius / Math.tan(Math.max(0.2, fovRadians * 0.5));
+      var desiredDist = Math.max(distToTarget, fitDist * 1.15);
+      if (desiredDist > distToTarget + 0.01) {
+        var direction = target.clone().sub(posVec);
+        if (direction.lengthSq() > 0.0001) {
+          direction.normalize();
+          posVec = target.clone().sub(direction.multiplyScalar(desiredDist));
+          distToTarget = desiredDist;
+        }
+      }
+    }
+
+    if (pullbackRatio > 1.0001 && distToTarget > 0.1) {
+      var pullDir = posVec.clone().sub(target);
+      var len = pullDir.length();
+      if (len > 0.0001) {
+        pullDir.multiplyScalar((distToTarget * pullbackRatio) / len);
+        posVec = target.clone().add(pullDir);
+        distToTarget *= pullbackRatio;
+      }
+    }
+
+    var near = Math.max(0.1, distToTarget * 0.02);
+    var far = Math.max(distToTarget + maxDimension * 6, distToTarget + 120);
+
+    var upVec = new THREE.Vector3(0, 1, 0);
+    if (window && window.__proj && Array.isArray(window.__proj.up)) {
+      var upArr = window.__proj.up;
+      if (isFiniteNumber(upArr[0]) && isFiniteNumber(upArr[1]) && isFiniteNumber(upArr[2])) {
+        upVec.set(upArr[0], upArr[1], upArr[2]).normalize();
+      }
+    }
+
+    return {
+      position: posVec,
+      target: target,
+      up: upVec,
+      fov: fovEstimate,
+      near: near,
+      far: far,
+      __label: LIVE_VIEW_LABEL,
+      __source: 'live'
+    };
+  }
+
   function applyPresetToCameraObject(cam, preset){
     if (!cam || !preset) return;
     if (preset.position) cam.position.copy(preset.position);
@@ -1952,6 +2254,44 @@
     var target = preset.target || new THREE.Vector3(0, 0, 0);
     cam.lookAt(target);
     cam.updateProjectionMatrix();
+  }
+
+  function syncCameraWithLiveView(){
+    if (!camera || !window || !window.camera) return null;
+    var live = window.camera;
+    var target = new THREE.Vector3(
+      isFiniteNumber(live.targetX) ? live.targetX : 0,
+      isFiniteNumber(live.targetY) ? live.targetY : 0,
+      isFiniteNumber(live.targetZ) ? live.targetZ : 0
+    );
+    var distance = isFiniteNumber(live.distance) ? Math.max(0.1, live.distance) : 18;
+    var yaw = isFiniteNumber(live.yaw) ? live.yaw : 0;
+    var pitch = isFiniteNumber(live.pitch) ? live.pitch : -0.4;
+    var cp = Math.cos(pitch);
+    var sp = Math.sin(pitch);
+    var cy = Math.cos(yaw);
+    var sy = Math.sin(yaw);
+    var forward = new THREE.Vector3(sy * cp, sp, cy * cp);
+    var position = target.clone().sub(forward.clone().multiplyScalar(distance));
+    camera.position.copy(position);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(target);
+    if (isFiniteNumber(live.fov)) {
+      camera.fov = Math.max(10, Math.min(170, live.fov));
+    } else {
+      camera.fov = computeViewportFov();
+    }
+    if (isFiniteNumber(live.near)) {
+      camera.near = Math.max(0.01, live.near);
+    } else {
+      camera.near = Math.max(0.05, distance * 0.02);
+    }
+    if (isFiniteNumber(live.far)) {
+      camera.far = Math.max(camera.near + 1, live.far);
+    } else {
+      camera.far = Math.max(distance + 200, camera.near + 100);
+    }
+    return { target: target, position: position, distance: distance };
   }
 
   async function generateViewSnapshots(options){
@@ -1984,14 +2324,15 @@
           console.warn('[Visualize] Failed to capture preset snapshot', err);
         }
         if (dataUrl){
-          var desc = 'Camera preset ' + (i + 1);
+          var presetLabel = preset.__label || describePreset(i);
+          var desc = presetLabel || ('Camera preset ' + (i + 1));
           if (preset && preset.target) {
             var t = preset.target;
             desc = desc + ' - Focus (' + t.x.toFixed(1) + ', ' + t.y.toFixed(1) + ', ' + t.z.toFixed(1) + ')';
           }
           shots.push({
             id: 'preset-' + (i + 1),
-            label: describePreset(i),
+            label: presetLabel,
             description: desc,
             previewUrl: dataUrl,
             fullUrl: dataUrl,
@@ -2010,6 +2351,199 @@
     }
     return shots;
   }
+
+    function primeLivePreview(){
+      try {
+        var wrap = qs('visualize-canvas-wrap');
+        var baseCanvas = document.getElementById('canvas');
+        if (!wrap || !baseCanvas) return false;
+        if (!baseCanvas.width || !baseCanvas.height) return false;
+        var dataUrl = baseCanvas.toDataURL('image/png');
+        if (!dataUrl || dataUrl.length < 32) return false;
+        wrap.style.backgroundImage = 'url(' + dataUrl + ')';
+        wrap.classList.add('visualize-live-preview');
+        return true;
+      } catch(err) {
+        console.warn('[Visualize] Unable to prime live preview', err);
+        return false;
+      }
+    }
+
+    function clearLivePreview(){
+      var wrap = qs('visualize-canvas-wrap');
+      if (!wrap) return;
+      wrap.style.backgroundImage = '';
+      wrap.classList.remove('visualize-live-preview');
+    }
+
+    function syncLivePanTransform(disable){
+      var wrap = qs('visualize-canvas-wrap');
+      if (!wrap) return;
+      if (disable) {
+        wrap.style.transform = '';
+        return;
+      }
+      var panState = (window && window.pan) ? window.pan : null;
+      if (!panState) {
+        wrap.style.transform = '';
+        return;
+      }
+      var dpr = window.devicePixelRatio || 1;
+      var tx = (panState.x || 0);
+      var ty = (panState.y || 0);
+      if (dpr && dpr !== 1) {
+        tx /= dpr;
+        ty /= dpr;
+      }
+      if (Math.abs(tx) < 0.001 && Math.abs(ty) < 0.001) {
+        wrap.style.transform = '';
+        return;
+      }
+      wrap.style.transform = 'translate(' + tx.toFixed(2) + 'px,' + ty.toFixed(2) + 'px)';
+    }
+
+    function resetTileReveal(){
+      if (tileRevealCleanup) {
+        var cleanup = tileRevealCleanup;
+        tileRevealCleanup = null;
+        try { cleanup(false, true); } catch(_eCleanup){}
+      } else {
+        if (tileRevealTimers && tileRevealTimers.length){
+          tileRevealTimers.forEach(function(id){ window.clearTimeout(id); });
+          tileRevealTimers.length = 0;
+        }
+        tileRevealTimers = [];
+        if (tileOverlayCanvas && tileOverlayCanvas.parentNode) {
+          tileOverlayCanvas.parentNode.removeChild(tileOverlayCanvas);
+        }
+        tileOverlayCanvas = null;
+        if (renderer && renderer.domElement) renderer.domElement.style.opacity = '1';
+      }
+    }
+
+    function animateRenderReveal(canvas, stageRect, options){
+      options = options || {};
+      var wrap = qs('visualize-canvas-wrap');
+      if (!wrap || !canvas) return null;
+      var dataUrl = null;
+      try {
+        dataUrl = canvas.toDataURL('image/png');
+      } catch(err) {
+        console.warn('[Visualize] Unable to capture render surface for reveal', err);
+        return null;
+      }
+      if (!dataUrl || dataUrl.length < 32) return null;
+
+      var displayWidth = stageRect && stageRect.width ? stageRect.width : wrap.clientWidth;
+      var displayHeight = stageRect && stageRect.height ? stageRect.height : wrap.clientHeight;
+      displayWidth = Math.max(1, Math.round(displayWidth));
+      displayHeight = Math.max(1, Math.round(displayHeight));
+
+      var overlay = document.createElement('canvas');
+      overlay.id = 'visualize-tile-overlay';
+      overlay.width = displayWidth;
+      overlay.height = displayHeight;
+      overlay.style.position = 'absolute';
+      overlay.style.inset = '0';
+      overlay.style.width = '100%';
+      overlay.style.height = '100%';
+      overlay.style.pointerEvents = 'none';
+      overlay.style.zIndex = '5';
+      overlay.style.backgroundColor = 'transparent';
+      overlay.style.imageRendering = 'auto';
+      wrap.appendChild(overlay);
+      tileOverlayCanvas = overlay;
+
+      var ctx = overlay.getContext('2d');
+      if (!ctx) {
+        wrap.removeChild(overlay);
+        tileOverlayCanvas = null;
+        return null;
+      }
+      ctx.clearRect(0, 0, displayWidth, displayHeight);
+
+      if (tileRevealTimers && tileRevealTimers.length){
+        tileRevealTimers.forEach(function(id){ window.clearTimeout(id); });
+        tileRevealTimers.length = 0;
+      }
+      tileRevealTimers = [];
+
+      if (renderer && renderer.domElement) renderer.domElement.style.opacity = '0';
+
+      var tileSize = (options.tileSize && options.tileSize > 0) ? options.tileSize : TILE_REVEAL_SIZE;
+      var delay = (options.delay && options.delay >= 0) ? options.delay : 28;
+
+      var promise = new Promise(function(resolve){
+        var resolved = false;
+        tileRevealCleanup = function(success, skipCallbacks){
+          if (tileRevealTimers && tileRevealTimers.length){
+            tileRevealTimers.forEach(function(id){ window.clearTimeout(id); });
+            tileRevealTimers.length = 0;
+          }
+          tileRevealTimers = [];
+          if (renderer && renderer.domElement) renderer.domElement.style.opacity = '1';
+          if (tileOverlayCanvas && tileOverlayCanvas.parentNode){
+            tileOverlayCanvas.parentNode.removeChild(tileOverlayCanvas);
+          }
+          tileOverlayCanvas = null;
+          if (!skipCallbacks && options && typeof options.onComplete === 'function') {
+            try { options.onComplete(success); } catch(_cbErr){}
+          }
+          if (!resolved) {
+            resolved = true;
+            resolve(success);
+          }
+          tileRevealCleanup = null;
+        };
+
+        var image = new Image();
+        image.onload = function(){
+          var cols = Math.ceil(displayWidth / tileSize);
+          var rows = Math.ceil(displayHeight / tileSize);
+          var total = cols * rows;
+          var index = 0;
+          var drawNext = function(){
+            if (!tileOverlayCanvas) {
+              tileRevealCleanup(false, true);
+              return;
+            }
+            if (index >= total) {
+              tileRevealCleanup(true, false);
+              return;
+            }
+            var col = index % cols;
+            var row = Math.floor(index / cols);
+            var dx = col * tileSize;
+            var dy = row * tileSize;
+            var dw = Math.min(tileSize, displayWidth - dx);
+            var dh = Math.min(tileSize, displayHeight - dy);
+            if (dw <= 0 || dh <= 0) {
+              index++;
+              tileRevealTimers.push(window.setTimeout(drawNext, delay));
+              return;
+            }
+            var sx = dx / displayWidth * canvas.width;
+            var sy = dy / displayHeight * canvas.height;
+            var sw = dw / displayWidth * canvas.width;
+            var sh = dh / displayHeight * canvas.height;
+            try {
+              ctx.drawImage(image, sx, sy, sw, sh, dx, dy, dw, dh);
+            } catch(drawErr) {
+              console.warn('[Visualize] Tile draw failed', drawErr);
+              tileRevealCleanup(false, false);
+              return;
+            }
+            index++;
+            tileRevealTimers.push(window.setTimeout(drawNext, delay));
+          };
+          drawNext();
+        };
+        image.onerror = function(){ tileRevealCleanup(false, false); };
+        image.src = dataUrl;
+      });
+
+      return promise;
+    }
 
   function captureLiveCanvasShot(){
     try {
@@ -2091,6 +2625,8 @@
     if (!result) return;
     if (result.message) {
       setPhotorealStatus(result.message, result.status === 'completed' ? 'success' : undefined);
+    } else if (result.status === 'completed') {
+      setPhotorealStatus('Photoreal render ready.', 'success');
     }
     if (!result.imageUrl) return;
     var shot = {
@@ -2107,6 +2643,7 @@
     list.unshift(shot);
     setGalleryShots(list);
     updateGalleryGrid();
+    focusPhotorealShot(shot.id);
   }
 
   async function requestPhotorealRender(){
@@ -2271,6 +2808,7 @@
         metalness: 0.2, 
         envMapIntensity: 0.8
       },
+      garage: null,
       windowFrame: { color: 0x1a1a1a, roughness: 0.2, metalness: 0.8, envMapIntensity: 2.0 },
       doorFrame: { color: 0x222222, roughness: 0.3, metalness: 0.5, envMapIntensity: 1.5 },
       doorPanel: { color: 0x443322, roughness: 0.6, metalness: 0.0, envMapIntensity: 0.8 },
@@ -2281,7 +2819,16 @@
       boulder: { color: 0x555555, roughness: 0.95, metalness: 0.0, envMapIntensity: 0.4 },
       foliage: { color: 0x335533, roughness: 0.8, metalness: 0.0, envMapIntensity: 0.6 }
     };
-    var spec = palette[kind] || { color: 0x888888, roughness: 0.8, metalness: 0.1, envMapIntensity: 1.0 };
+    var baseSpec;
+    if (kind === 'garage') {
+      baseSpec = palette.wall;
+    } else {
+      baseSpec = palette[kind];
+    }
+    if (!baseSpec) {
+      baseSpec = { color: 0x888888, roughness: 0.8, metalness: 0.1, envMapIntensity: 1.0 };
+    }
+    var spec = Object.assign({}, baseSpec);
     
     // Use MeshPhysicalMaterial for clean photorealistic rendering
     var mat = new THREE.MeshPhysicalMaterial({
@@ -2334,8 +2881,18 @@
           mat.bumpScale = spec.bumpScale || 0.08;
         }
       } else {
-        var texBrightness = kind === 'wall' ? 205 : (kind === 'room' ? 195 : 118);
-        var texVariation = kind === 'wall' ? 26 : (kind === 'room' ? 20 : 35);
+        var texBrightness;
+        var texVariation;
+        if (kind === 'wall' || kind === 'garage') {
+          texBrightness = 205;
+          texVariation = 26;
+        } else if (kind === 'room') {
+          texBrightness = 195;
+          texVariation = 20;
+        } else {
+          texBrightness = 118;
+          texVariation = 35;
+        }
         var tex = noiseTexture(kind, texBrightness, texVariation, 6);
         if (tex) {
           mat.map = tex;
@@ -2399,7 +2956,7 @@
       var heightFactor = (opts.heightFactor != null) ? opts.heightFactor : 0.45;
       var distanceFactor = (opts.distanceFactor != null) ? opts.distanceFactor : 1.2;
       var tiltOffset = opts.tiltOffset != null ? opts.tiltOffset : 0;
-      var fov = opts.fov || 45;
+      var fov = (opts && Object.prototype.hasOwnProperty.call(opts, 'fov')) ? opts.fov : computeViewportFov();
       var rad = angleDeg * Math.PI / 180;
       var dist = radius * distanceFactor;
       var yPos = Math.max(minY + Math.max(safeSpan * 0.3, heightSpan * heightFactor), orbitY);
@@ -2556,6 +3113,11 @@
   async function renderSnapshot(){
     var loading = qs(LOADING_ID);
     var shouldHideLoading = true;
+    var previewPrimed = false;
+    var previewCleared = false;
+    var tileRevealPromise = null;
+    resetTileReveal();
+    previewPrimed = primeLivePreview();
     if (loading) {
       loading.textContent = 'Generating...';
       loading.classList.add('visible');
@@ -2687,28 +3249,54 @@
 
       var groundY = isFinite(bounds.minY) ? bounds.minY : (isFinite(box3.min.y) ? box3.min.y : 0);
 
-      // Shift so the visual center of the geometry is at world origin (0,0,0)
-      sceneRoot.position.x -= meshCenter.x;
-      sceneRoot.position.z -= meshCenter.z;
+      var centerY = (box3.min.y + box3.max.y) / 2;
+      if (!isFinite(centerY)) centerY = floorHeight * 0.5;
+      var renderFocus = {
+        x: meshCenter.x + VISUALIZE_OFFSET_X,
+        y: centerY + VISUALIZE_OFFSET_Y,
+        z: meshCenter.z
+      };
+
+      var livePreset = null;
+      var shouldCenterScene = true;
+      if (window && window.camera) {
+        livePreset = captureLiveOrbitPreset(span, meshCenter, meshSize, renderFocus, { recenter: false, pullbackRatio: RENDER_CAMERA_PULLBACK });
+        if (livePreset) {
+          shouldCenterScene = false;
+          if (livePreset.target) {
+            renderFocus.x = livePreset.target.x;
+            renderFocus.y = livePreset.target.y;
+            renderFocus.z = livePreset.target.z;
+          }
+        }
+      }
+
+      if (shouldCenterScene) {
+        // Shift so the visual center of the geometry is at world origin (0,0,0)
+        sceneRoot.position.x -= meshCenter.x;
+        sceneRoot.position.z -= meshCenter.z;
+        renderFocus.x = VISUALIZE_OFFSET_X;
+        renderFocus.z = 0;
+        if (!livePreset && window && window.camera) {
+          livePreset = captureLiveOrbitPreset(span, meshCenter, meshSize, renderFocus, { recenter: true, pullbackRatio: RENDER_CAMERA_PULLBACK });
+        }
+      }
+
+      syncLivePanTransform(false);
 
       console.log('[Visualize] Building ground...');
       try {
         // Ground and shadow centered under the geometry
-        buildGround(null, 0, 0, groundY, span);
+        var groundCenterX = shouldCenterScene ? 0 : meshCenter.x;
+        var groundCenterZ = shouldCenterScene ? 0 : meshCenter.z;
+        buildGround(null, groundCenterX, groundCenterZ, groundY, span);
         console.log('[Visualize] Ground built');
-        createContactShadow(0, 0, span, groundY);
+        createContactShadow(groundCenterX, groundCenterZ, span, groundY);
       } catch(e) { console.error('[Visualize] Ground building failed', e); }
 
       // Camera Focus Point: start at the visual center of the geometry
       // and apply small manual offsets so you can fine-tune where the
       // model appears relative to the grid (e.g. B2).
-      var centerY = (box3.min.y + box3.max.y) / 2;
-      if (!isFinite(centerY)) centerY = floorHeight * 0.5;
-      var renderFocus = {
-        x: VISUALIZE_OFFSET_X,
-        y: centerY + VISUALIZE_OFFSET_Y,
-        z: 0
-      };
 
       // Log snapshot data for debugging
       console.log('[Visualize] Snapshot data:', {
@@ -2718,19 +3306,26 @@
       });
       // Note: Removed addSignatureFacade - only render user's actual design
       try {
-        VIEW_PRESETS = buildViewPresets(renderFocus.x, renderFocus.y, renderFocus.z, span, bounds, renderFocus) || [];
+        var presetCenterX = shouldCenterScene ? 0 : meshCenter.x;
+        var presetCenterZ = shouldCenterScene ? 0 : meshCenter.z;
+        VIEW_PRESETS = buildViewPresets(presetCenterX, renderFocus.y, presetCenterZ, span, bounds, renderFocus) || [];
         if (!Array.isArray(VIEW_PRESETS) || VIEW_PRESETS.length === 0) {
-          VIEW_PRESETS = buildViewPresets(renderFocus.x, renderFocus.y, renderFocus.z, span || 8, bounds, renderFocus) || [];
+          VIEW_PRESETS = buildViewPresets(presetCenterX, renderFocus.y, presetCenterZ, span || 8, bounds, renderFocus) || [];
         }
         if (!Array.isArray(VIEW_PRESETS) || VIEW_PRESETS.length === 0) {
           VIEW_PRESETS = [{
-            position: new THREE.Vector3(renderFocus.x + span * 1.25, renderFocus.y + span * 0.65, renderFocus.z + span * 1.05),
-            target: new THREE.Vector3(renderFocus.x, renderFocus.y, renderFocus.z),
+            position: new THREE.Vector3(presetCenterX + span * 1.25, renderFocus.y + span * 0.65, presetCenterZ + span * 1.05),
+            target: new THREE.Vector3(presetCenterX, renderFocus.y, presetCenterZ),
             up: new THREE.Vector3(0, 1, 0),
             fov: 48,
             near: 0.05,
             far: Math.max(400, span * 6)
           }];
+        }
+        if (livePreset) {
+          var presetClone = clonePreset(livePreset) || livePreset;
+          VIEW_PRESETS.unshift(presetClone);
+          viewIndex = 0;
         }
         if (viewIndex >= VIEW_PRESETS.length) viewIndex = VIEW_PRESETS.length - 1;
         if (viewIndex < 0) viewIndex = 0;
@@ -2738,29 +3333,83 @@
       } catch(e) { console.error('[Visualize] Camera setup failed', e); }
 
       try {
-        setupLighting(renderFocus.x, renderFocus.y, renderFocus.z, span);
+        setupLighting(presetCenterX, renderFocus.y, presetCenterZ, span);
         console.log('[Visualize] Lighting setup');
       } catch(e) { console.error('[Visualize] Lighting setup failed', e); }
 
       var canvas = qs(CANVAS_ID);
       if (canvas) {
-        // Ultra high resolution - start at 4K for maximum sharpness
-        var baseWidth = 3840;
-        var width = Math.floor(baseWidth * Math.max(1, multiplier));
-        if (width > 7680) width = 7680; // Allow up to 8K
-        
-        // Match stage aspect ratio to avoid black bars (edge-to-edge)
+        var baseCanvasEl = document.getElementById('canvas');
         var stage = qs('visualize-stage');
-        var stageAspect = (stage && stage.clientWidth && stage.clientHeight) ? (stage.clientWidth / stage.clientHeight) : (16/9);
-        var height = Math.floor(width / stageAspect);
-        
+        var baseRect = baseCanvasEl && baseCanvasEl.getBoundingClientRect ? baseCanvasEl.getBoundingClientRect() : null;
+        var cssWidth = baseRect && baseRect.width > 0 ? baseRect.width : (stage && stage.clientWidth ? stage.clientWidth : window.innerWidth || 1920);
+        var cssHeight = baseRect && baseRect.height > 0 ? baseRect.height : (stage && stage.clientHeight ? stage.clientHeight : window.innerHeight || 1080);
+        lastCanvasCssWidth = cssWidth;
+        lastCanvasCssHeight = cssHeight;
+        var dpr = window.devicePixelRatio || 1;
+        var backingWidth = baseCanvasEl && baseCanvasEl.width ? baseCanvasEl.width : Math.round(cssWidth * dpr);
+        var backingHeight = baseCanvasEl && baseCanvasEl.height ? baseCanvasEl.height : Math.round(cssHeight * dpr);
+        if (!isFiniteNumber(backingWidth) || backingWidth <= 0) backingWidth = Math.round(cssWidth * dpr) || 1920;
+        if (!isFiniteNumber(backingHeight) || backingHeight <= 0) backingHeight = Math.round(cssHeight * dpr) || 1080;
+
+        var qualityScale = Math.max(1, multiplier);
+        if (qualityScale > 2.5) qualityScale = 2.5;
+        var width = Math.max(1, Math.round(backingWidth * qualityScale));
+        var height = Math.max(1, Math.round(backingHeight * qualityScale));
+
+        var liveCameraState = syncCameraWithLiveView();
+        var usingLiveCamera = !!liveCameraState;
         camera.aspect = width / height;
-        camera.updateProjectionMatrix();
+        var liveProj = window.__proj;
+        var liveProjectionApplied = false;
+        if (liveProj && Array.isArray(liveProj.proj)) {
+          try {
+            if (typeof window.updateProjectionCache === 'function') window.updateProjectionCache();
+            var projArr = liveProj.proj;
+            if (projArr.length === 16 && camera.projectionMatrix && camera.projectionMatrix.elements) {
+              for (var pm = 0; pm < 16; pm++) {
+                camera.projectionMatrix.elements[pm] = projArr[pm];
+              }
+              camera.projectionMatrixInverse.copy(camera.projectionMatrix.clone().invert());
+              liveProjectionApplied = true;
+            }
+            if (Array.isArray(liveProj.cam) && camera.position && camera.up) {
+              camera.position.set(liveProj.cam[0], liveProj.cam[1], liveProj.cam[2]);
+            }
+            if (Array.isArray(liveProj.target) && camera.lookAt) {
+              camera.lookAt(new THREE.Vector3(liveProj.target[0], liveProj.target[1], liveProj.target[2]));
+            }
+            if (Array.isArray(liveProj.up) && camera.up) {
+              camera.up.set(liveProj.up[0], liveProj.up[1], liveProj.up[2]).normalize();
+            }
+            camera.updateMatrixWorld(true);
+          } catch(_projCopyErr) {
+            camera.updateProjectionMatrix();
+          }
+        }
+        if (!liveProjectionApplied) {
+          camera.updateProjectionMatrix();
+        }
         renderer.setSize(width, height, false);
         canvas.width = width;
         canvas.height = height;
+        canvas.style.width = cssWidth + 'px';
+        canvas.style.height = cssHeight + 'px';
         lastCanvasWidth = width;
         lastCanvasHeight = height;
+        var shouldApplyExactProjection = !liveProjectionApplied && !usingLiveCamera;
+        if (shouldApplyExactProjection) {
+          applyExactProjection(camera, cssWidth, cssHeight, camera.near, camera.far);
+        }
+        var liveViewMatrix = liveProj && Array.isArray(liveProj.view) ? liveProj.view : null;
+        if (liveViewMatrix && THREE.Matrix4) {
+          try {
+            camera.matrixWorldInverse.fromArray(liveViewMatrix);
+            camera.matrixWorld.copy(camera.matrixWorldInverse.clone().invert());
+            camera.updateMatrixWorld(true);
+          } catch(_viewErr){}
+        }
+        var stageMetrics = { width: cssWidth, height: cssHeight };
         
         // Multi-pass rendering for maximum quality and sharpness
         if (renderer.shadowMap) renderer.shadowMap.needsUpdate = true;
@@ -2788,7 +3437,23 @@
         ensureResizeListener();
         fitRenderToStage();
         window.requestAnimationFrame(fitRenderToStage);
+        updateAlignmentGrid(cssWidth, cssHeight);
+        window.requestAnimationFrame(function(){ updateAlignmentGrid(cssWidth, cssHeight); });
         addDefaultLabel();
+        tileRevealPromise = animateRenderReveal(canvas, stageMetrics, {
+          tileSize: TILE_REVEAL_SIZE,
+          delay: 28,
+          onComplete: function(){
+            if (previewPrimed && !previewCleared) {
+              clearLivePreview();
+              previewCleared = true;
+            }
+          }
+        });
+        if (!tileRevealPromise && previewPrimed && !previewCleared) {
+          clearLivePreview();
+          previewCleared = true;
+        }
       }
       if (loading) loading.textContent = 'Capturing design views...';
       await populateDesignGallery({ loadingEl: loading });
@@ -2811,6 +3476,10 @@
       updateGalleryGrid(err && err.message ? err.message : 'Unable to generate design images.');
       try { if (window.updateStatus) window.updateStatus('Visualize failed: ' + err.message); } catch(_s){}
     } finally {
+      if (shouldHideLoading && previewPrimed && !previewCleared && !tileOverlayCanvas) {
+        clearLivePreview();
+        previewCleared = true;
+      }
       if (shouldHideLoading && loading) {
         loading.textContent = 'Generating...';
         loading.classList.remove('visible');
@@ -2892,6 +3561,11 @@
       downloadBtn.__wired = true;
       downloadBtn.addEventListener('click', exportImage);
     }
+    var gridBtn = qs('visualize-toggle-grid');
+    if (gridBtn && !gridBtn.__wired){
+      gridBtn.__wired = true;
+      gridBtn.addEventListener('click', toggleAlignmentGrid);
+    }
     var photorealBtn = qs('visualize-photoreal');
     if (photorealBtn && !photorealBtn.__wired){
       photorealBtn.__wired = true;
@@ -2943,6 +3617,7 @@
       });
     }
     syncViewButtons();
+    syncAlignmentGridButton();
   }
 
   function startVisualizeRender(){
@@ -2959,6 +3634,7 @@
     if (!modal) return;
     viewIndex = 0;
     modal.classList.add('visible');
+    try { document.body.classList.add('visualize-active'); } catch(_b){}
     closePhotoViewer();
     setGalleryShots([]);
     updateGalleryGrid('Generating design images...');
@@ -2971,7 +3647,11 @@
   function hideVisualize(){
     var modal = qs(PANEL_ID);
     if (modal) modal.classList.remove('visible');
+    try { document.body.classList.remove('visualize-active'); } catch(_b){}
     closePhotoViewer();
+    resetTileReveal();
+    clearLivePreview();
+    syncLivePanTransform(true);
     if (fabricCanvas) {
       fabricCanvas.discardActiveObject();
       fabricCanvas.requestRenderAll();
