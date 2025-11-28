@@ -62,6 +62,12 @@
   var TILE_REVEAL_SIZE = 100;
   var alignmentGridEnabled = true;
   var alignmentGridCanvas = null;
+  var CAMERA_PULLBACK_METERS = 0;
+  var CAMERA_FOCUS_OFFSET_RIGHT = 0;
+  var CAMERA_FOCUS_OFFSET_UP = 0;
+  var CAMERA_FOCUS_OFFSET_FORWARD = 0;
+  var DEBUG_MARKERS_ENABLED = true;
+  var debugMarkers = [];
 
   var floorHeight = (function(){
     var defaultHeight = 3.5;
@@ -149,7 +155,7 @@
       if (!window) return 48;
       var scale = window.__proj && isFiniteNumber(window.__proj.scale) ? window.__proj.scale : null;
       if (!scale || scale <= 0) return 48;
-      var dpr = window.devicePixelRatio || 1;
+        var dpr = window.devicePixelRatio || 1; // Device pixel ratio for accurate viewport calculations.
       var baseCanvas = document.getElementById('canvas');
       var cssHeight = 0;
       if (baseCanvas && isFiniteNumber(baseCanvas.height) && baseCanvas.height > 0) {
@@ -812,9 +818,85 @@
       }
     });
     lights.length = 0;
+    clearDebugMarkers();
   }
 
   function ensureFog(span){
+
+  function clearDebugMarkers(){
+    for (var i = 0; i < debugMarkers.length; i++){
+      var marker = debugMarkers[i];
+      if (!marker) continue;
+      try {
+        if (marker.parent) marker.parent.remove(marker);
+        if (marker.material && typeof marker.material.dispose === 'function') marker.material.dispose();
+        if (marker.geometry && typeof marker.geometry.dispose === 'function') marker.geometry.dispose();
+      } catch(_disposeErr){}
+    }
+    debugMarkers.length = 0;
+  }
+
+  function createTextSprite(text, bgColor, textColor){
+    var size = 256;
+    var canvasEl = document.createElement('canvas');
+    canvasEl.width = size;
+    canvasEl.height = size;
+    var ctx = canvasEl.getContext('2d');
+    if (ctx){
+      ctx.fillStyle = bgColor || 'rgba(15, 23, 42, 0.92)';
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = textColor || '#f8fafc';
+      ctx.font = 'bold 160px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, size / 2, size / 2);
+    }
+    var texture = new THREE.CanvasTexture(canvasEl);
+    texture.needsUpdate = true;
+    var material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, depthTest: true });
+    var sprite = new THREE.Sprite(material);
+    sprite.scale.set(3, 3, 1);
+    return sprite;
+  }
+
+  function createAxisMarker(length, color){
+    var geometry = new THREE.CylinderGeometry(0.05, 0.05, length, 16, 1, true);
+    var material = new THREE.MeshBasicMaterial({ color: color || 0xffffff, wireframe: false });
+    var mesh = new THREE.Mesh(geometry, material);
+    return mesh;
+  }
+
+  function injectDebugMarkers(root, focusPoint){
+    if (!DEBUG_MARKERS_ENABLED || !root || !THREE) return;
+    clearDebugMarkers();
+    var focus = focusPoint || { x: 0, y: 0, z: 0 };
+
+    var xSprite = createTextSprite('X', 'rgba(239,68,68,0.85)', '#fff');
+    xSprite.position.set(focus.x + 4, focus.y + 1, focus.z);
+    root.add(xSprite); debugMarkers.push(xSprite);
+
+    var zSprite = createTextSprite('Z', 'rgba(59,130,246,0.85)', '#fff');
+    zSprite.position.set(focus.x, focus.y + 1, focus.z + 4);
+    root.add(zSprite); debugMarkers.push(zSprite);
+
+    var originSprite = createTextSprite('O', 'rgba(22,163,74,0.85)', '#fff');
+    originSprite.position.set(focus.x, focus.y + 1.5, focus.z);
+    root.add(originSprite); debugMarkers.push(originSprite);
+
+    var xAxis = createAxisMarker(10, 0xef4444);
+    xAxis.rotation.z = Math.PI / 2;
+    xAxis.position.set(focus.x + 5, focus.y, focus.z);
+    root.add(xAxis); debugMarkers.push(xAxis);
+
+    var zAxis = createAxisMarker(10, 0x3b82f6);
+    zAxis.rotation.x = Math.PI / 2;
+    zAxis.position.set(focus.x, focus.y, focus.z + 5);
+    root.add(zAxis); debugMarkers.push(zAxis);
+
+    var verticalAxis = createAxisMarker(8, 0x22c55e);
+    verticalAxis.position.set(focus.x, focus.y + 4, focus.z);
+    root.add(verticalAxis); debugMarkers.push(verticalAxis);
+  }
     if (!scene) return;
     // Atmospheric perspective - subtle blue haze for depth
     var near = Math.max(50, span * 2);
@@ -2154,6 +2236,9 @@
       isFiniteNumber(camState.targetY) ? camState.targetY : 0,
       isFiniteNumber(camState.targetZ) ? camState.targetZ : 0
     );
+    target.x += CAMERA_FOCUS_OFFSET_RIGHT;
+    target.y += CAMERA_FOCUS_OFFSET_UP;
+    target.z += CAMERA_FOCUS_OFFSET_FORWARD;
     try {
       if (typeof window.updateProjectionCache === 'function') window.updateProjectionCache();
     } catch(_eCache){}
@@ -2193,8 +2278,25 @@
       maxDimension = Math.max(maxDimension, meshSize.x || 0, meshSize.y || 0, meshSize.z || 0);
     }
 
-    var fovEstimate = computeViewportFov();
-    if (!isFiniteNumber(fovEstimate)) fovEstimate = 60;
+    var fovEstimate = isFiniteNumber(camState.fov) ? camState.fov : NaN;
+    if (!isFiniteNumber(fovEstimate) && window && window.__proj && isFiniteNumber(window.__proj.scale) && window.__proj.scale > 0) {
+      var dpr = window.devicePixelRatio || 1;
+      var baseCanvas = document.getElementById('canvas');
+      var cssHeight = (baseCanvas && isFiniteNumber(baseCanvas.height) && baseCanvas.height > 0) ? (baseCanvas.height / dpr) : (window.innerHeight || 720);
+      if (cssHeight > 0) {
+        var halfHeight = cssHeight * 0.5;
+        var scale = window.__proj.scale;
+        var rad = 2 * Math.atan(halfHeight / scale);
+        var deg = rad * (180 / Math.PI);
+        if (isFiniteNumber(deg) && deg > 0) fovEstimate = deg;
+      }
+    }
+    if (!isFiniteNumber(fovEstimate)) {
+      fovEstimate = computeViewportFov();
+    }
+    if (!isFiniteNumber(fovEstimate)) {
+      fovEstimate = 60;
+    }
 
     if (recenterScene && THREE.MathUtils) {
       var radius = Math.max(0.5, maxDimension * 0.6);
@@ -2221,8 +2323,8 @@
       }
     }
 
-    var near = Math.max(0.1, distToTarget * 0.02);
-    var far = Math.max(distToTarget + maxDimension * 6, distToTarget + 120);
+    var near = isFiniteNumber(camState.near) ? Math.max(0.01, camState.near) : Math.max(0.1, distToTarget * 0.02);
+    var far = isFiniteNumber(camState.far) ? Math.max(near + 1, camState.far) : Math.max(distToTarget + maxDimension * 6, distToTarget + 120);
 
     var upVec = new THREE.Vector3(0, 1, 0);
     if (window && window.__proj && Array.isArray(window.__proj.up)) {
@@ -2257,41 +2359,89 @@
   }
 
   function syncCameraWithLiveView(){
-    if (!camera || !window || !window.camera) return null;
-    var live = window.camera;
-    var target = new THREE.Vector3(
-      isFiniteNumber(live.targetX) ? live.targetX : 0,
-      isFiniteNumber(live.targetY) ? live.targetY : 0,
-      isFiniteNumber(live.targetZ) ? live.targetZ : 0
+    if (!camera || !window || !window.camera || !window.__proj) return null; // Skip when the visualize camera or live viewport data is unavailable.
+    try { if (typeof window.updateProjectionCache === 'function') window.updateProjectionCache(); } catch(_e){ } // Refresh the live projection cache so we copy current matrices.
+    var live = window.camera; // Snapshot of the live orbit controller state (target, yaw, pitch, distance).
+    var cache = window.__proj; // Projection cache exposing world-space camera position and axes.
+    var baseCanvas = document.getElementById('canvas'); // DOM canvas that renders the live 3D viewport.
+    var dpr = window.devicePixelRatio || 1; // Device pixel ratio to translate buffer size into CSS pixels.
+    var cssWidth = baseCanvas && baseCanvas.width ? baseCanvas.width / dpr : (window.innerWidth || 1920); // Width of the live viewport in CSS pixels.
+    var cssHeight = baseCanvas && baseCanvas.height ? baseCanvas.height / dpr : (window.innerHeight || 1080); // Height of the live viewport in CSS pixels.
+    if (!isFiniteNumber(cssWidth) || cssWidth <= 0) cssWidth = 1920; // Default width when the canvas has not initialized yet.
+    if (!isFiniteNumber(cssHeight) || cssHeight <= 0) cssHeight = 1080; // Default height when the canvas has not initialized yet.
+    var target = new THREE.Vector3( // World-space point the live camera focuses on.
+      isFiniteNumber(live.targetX) ? live.targetX : 0, // X component of the live target.
+      isFiniteNumber(live.targetY) ? live.targetY : 0, // Y component of the live target.
+      isFiniteNumber(live.targetZ) ? live.targetZ : 0  // Z component of the live target.
     );
-    var distance = isFiniteNumber(live.distance) ? Math.max(0.1, live.distance) : 18;
-    var yaw = isFiniteNumber(live.yaw) ? live.yaw : 0;
-    var pitch = isFiniteNumber(live.pitch) ? live.pitch : -0.4;
-    var cp = Math.cos(pitch);
-    var sp = Math.sin(pitch);
-    var cy = Math.cos(yaw);
-    var sy = Math.sin(yaw);
-    var forward = new THREE.Vector3(sy * cp, sp, cy * cp);
-    var position = target.clone().sub(forward.clone().multiplyScalar(distance));
-    camera.position.copy(position);
-    camera.up.set(0, 1, 0);
-    camera.lookAt(target);
-    if (isFiniteNumber(live.fov)) {
-      camera.fov = Math.max(10, Math.min(170, live.fov));
+    target.x += CAMERA_FOCUS_OFFSET_RIGHT; // Shift focus toward the positive X axis.
+    target.y += CAMERA_FOCUS_OFFSET_UP; // Raise focus vertically to frame taller compositions.
+    target.z += CAMERA_FOCUS_OFFSET_FORWARD; // Optional forward/back offset (currently zero).
+    var position = (cache && Array.isArray(cache.cam) && cache.cam.length >= 3) // Determine which position source we can trust.
+      ? new THREE.Vector3(cache.cam[0], cache.cam[1], cache.cam[2]) // Preferred: exact camera coordinates copied from the cache.
+      : target.clone(); // Fallback placeholder that will be replaced by orbit reconstruction.
+    if (!Array.isArray(cache.cam) || cache.cam.length < 3) { // When the cache fails to expose a camera vector...
+      var distance = isFiniteNumber(live.distance) ? Math.max(0.1, live.distance) : 18; // Use the orbit distance from the live controller.
+      var yaw = isFiniteNumber(live.yaw) ? live.yaw : 0; // Live yaw angle for horizontal orbiting.
+      var pitch = isFiniteNumber(live.pitch) ? live.pitch : -0.4; // Live pitch angle for vertical orbiting.
+      var cp = Math.cos(pitch); // Cosine of pitch for forward vector reconstruction.
+      var sp = Math.sin(pitch); // Sine of pitch for forward vector reconstruction.
+      var cy = Math.cos(yaw);   // Cosine of yaw for forward vector reconstruction.
+      var sy = Math.sin(yaw);   // Sine of yaw for forward vector reconstruction.
+      var forward = new THREE.Vector3(sy * cp, sp, cy * cp); // Forward vector pointing from camera to target.
+      position = target.clone().sub(forward.multiplyScalar(distance)); // Rebuild camera position by walking back along the forward vector.
+    }
+    var pullbackVector = position.clone().sub(target); // Vector from focus point toward the camera.
+    var pullbackLength = pullbackVector.length(); // Current camera distance before manual pullback.
+    var pullbackApplied = false; // Track whether the manual pullback adjustment runs.
+    var extendedDistance = pullbackLength + CAMERA_PULLBACK_METERS; // Target distance if pullback triggers.
+    if (pullbackLength > 0.0001) { // Only apply pullback when the vector has a measurable length.
+      pullbackVector.normalize(); // Normalize so scaling adds the desired meters.
+      position.copy(pullbackVector.multiplyScalar(extendedDistance).add(target)); // Move the camera further along the vector by the extra distance.
+      pullbackApplied = true; // Flag that the camera distance has been extended.
+    }
+    var cameraDistance = position.distanceTo(target); // Actual distance between camera and target in world units.
+    if (!isFiniteNumber(cameraDistance) || cameraDistance <= 0) { // Guard against degenerate distances.
+      cameraDistance = isFiniteNumber(live.distance) ? Math.max(0.1, live.distance) : 18; // Fall back to orbit distance to keep math stable.
+    } else if (pullbackApplied && cameraDistance < extendedDistance) { // Ensure cameraDistance reflects the manual pullback.
+      cameraDistance = extendedDistance; // Align distance metric with the adjusted position.
+    }
+    if (cache && Array.isArray(cache.up) && cache.up.length >= 3) { // If the projection cache includes an up vector...
+      camera.up.set(cache.up[0], cache.up[1], cache.up[2]).normalize(); // Use the live up vector so roll matches the viewport.
     } else {
-      camera.fov = computeViewportFov();
+      camera.up.set(0, 1, 0); // Otherwise default to world-up.
+    }
+    camera.position.copy(position); // Place the visualize camera at the reconstructed live position.
+    camera.lookAt(target); // Aim the visualize camera at the same target point as the live viewport.
+    camera.aspect = cssWidth / cssHeight; // Mirror the live viewport aspect ratio.
+    var liveScale = cache && isFiniteNumber(cache.scale) ? cache.scale : null; // Pull the live projection scale for FOV conversion.
+    var fovFromScale = liveScale ? (2 * Math.atan((cssHeight * 0.5) / liveScale) * (180 / Math.PI)) : null; // Convert the scale to degrees.
+    if (isFiniteNumber(live.fov)) {
+      camera.fov = Math.max(10, Math.min(160, live.fov)); // Prefer explicit FOV values from the live camera when available.
+    } else if (isFiniteNumber(fovFromScale)) {
+      camera.fov = Math.max(10, Math.min(160, fovFromScale)); // Otherwise use the FOV derived from the projection scale.
+    } else {
+      camera.fov = computeViewportFov(); // Final fallback uses the legacy heuristic to avoid regressions.
     }
     if (isFiniteNumber(live.near)) {
-      camera.near = Math.max(0.01, live.near);
+      camera.near = Math.max(0.01, live.near); // Respect live near-plane overrides.
     } else {
-      camera.near = Math.max(0.05, distance * 0.02);
+      camera.near = Math.max(0.05, cameraDistance * 0.01); // Tie near-plane to camera distance to avoid clipping through geometry.
     }
     if (isFiniteNumber(live.far)) {
-      camera.far = Math.max(camera.near + 1, live.far);
+      camera.far = Math.max(camera.near + 1, live.far); // Respect live far-plane overrides.
     } else {
-      camera.far = Math.max(distance + 200, camera.near + 100);
+      camera.far = Math.max(camera.near + 100, cameraDistance * 6); // Expand the far-plane enough to cover the working scene.
     }
-    return { target: target, position: position, distance: distance };
+    camera.updateProjectionMatrix(); // Recompute the Three.js projection with the updated aspect/FOV/clip settings.
+    return {
+      target: target, // Expose the live target so downstream logic can align helpers.
+      position: position, // Return the camera position for diagnostics and testing.
+      distance: cameraDistance, // Propagate distance for heuristics like ground shadow sizing.
+      cssWidth: cssWidth, // Provide viewport width to keep projection helpers in sync.
+      cssHeight: cssHeight, // Provide viewport height for the same reason.
+      fov: camera.fov // Surface the effective FOV for logging and UI.
+    };
   }
 
   async function generateViewSnapshots(options){
@@ -3256,6 +3406,9 @@
         y: centerY + VISUALIZE_OFFSET_Y,
         z: meshCenter.z
       };
+      renderFocus.x += CAMERA_FOCUS_OFFSET_RIGHT;
+      renderFocus.y += CAMERA_FOCUS_OFFSET_UP;
+      renderFocus.z += CAMERA_FOCUS_OFFSET_FORWARD;
 
       var livePreset = null;
       var shouldCenterScene = true;
@@ -3337,6 +3490,10 @@
         console.log('[Visualize] Lighting setup');
       } catch(e) { console.error('[Visualize] Lighting setup failed', e); }
 
+      try {
+        injectDebugMarkers(sceneRoot, renderFocus);
+      } catch(e) { console.warn('[Visualize] Debug markers failed', e); }
+
       var canvas = qs(CANVAS_ID);
       if (canvas) {
         var baseCanvasEl = document.getElementById('canvas');
@@ -3358,38 +3515,17 @@
         var height = Math.max(1, Math.round(backingHeight * qualityScale));
 
         var liveCameraState = syncCameraWithLiveView();
-        var usingLiveCamera = !!liveCameraState;
+        if (liveCameraState && isFiniteNumber(liveCameraState.cssWidth) && liveCameraState.cssWidth > 0) {
+          cssWidth = liveCameraState.cssWidth;
+        }
+        if (liveCameraState && isFiniteNumber(liveCameraState.cssHeight) && liveCameraState.cssHeight > 0) {
+          cssHeight = liveCameraState.cssHeight;
+        }
+        lastCanvasCssWidth = cssWidth;
+        lastCanvasCssHeight = cssHeight;
         camera.aspect = width / height;
-        var liveProj = window.__proj;
-        var liveProjectionApplied = false;
-        if (liveProj && Array.isArray(liveProj.proj)) {
-          try {
-            if (typeof window.updateProjectionCache === 'function') window.updateProjectionCache();
-            var projArr = liveProj.proj;
-            if (projArr.length === 16 && camera.projectionMatrix && camera.projectionMatrix.elements) {
-              for (var pm = 0; pm < 16; pm++) {
-                camera.projectionMatrix.elements[pm] = projArr[pm];
-              }
-              camera.projectionMatrixInverse.copy(camera.projectionMatrix.clone().invert());
-              liveProjectionApplied = true;
-            }
-            if (Array.isArray(liveProj.cam) && camera.position && camera.up) {
-              camera.position.set(liveProj.cam[0], liveProj.cam[1], liveProj.cam[2]);
-            }
-            if (Array.isArray(liveProj.target) && camera.lookAt) {
-              camera.lookAt(new THREE.Vector3(liveProj.target[0], liveProj.target[1], liveProj.target[2]));
-            }
-            if (Array.isArray(liveProj.up) && camera.up) {
-              camera.up.set(liveProj.up[0], liveProj.up[1], liveProj.up[2]).normalize();
-            }
-            camera.updateMatrixWorld(true);
-          } catch(_projCopyErr) {
-            camera.updateProjectionMatrix();
-          }
-        }
-        if (!liveProjectionApplied) {
-          camera.updateProjectionMatrix();
-        }
+        camera.updateProjectionMatrix();
+        applyExactProjection(camera, cssWidth, cssHeight, camera.near, camera.far);
         renderer.setSize(width, height, false);
         canvas.width = width;
         canvas.height = height;
@@ -3397,18 +3533,6 @@
         canvas.style.height = cssHeight + 'px';
         lastCanvasWidth = width;
         lastCanvasHeight = height;
-        var shouldApplyExactProjection = !liveProjectionApplied && !usingLiveCamera;
-        if (shouldApplyExactProjection) {
-          applyExactProjection(camera, cssWidth, cssHeight, camera.near, camera.far);
-        }
-        var liveViewMatrix = liveProj && Array.isArray(liveProj.view) ? liveProj.view : null;
-        if (liveViewMatrix && THREE.Matrix4) {
-          try {
-            camera.matrixWorldInverse.fromArray(liveViewMatrix);
-            camera.matrixWorld.copy(camera.matrixWorldInverse.clone().invert());
-            camera.updateMatrixWorld(true);
-          } catch(_viewErr){}
-        }
         var stageMetrics = { width: cssWidth, height: cssHeight };
         
         // Multi-pass rendering for maximum quality and sharpness
