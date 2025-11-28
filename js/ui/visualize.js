@@ -68,6 +68,249 @@
   var CAMERA_FOCUS_OFFSET_FORWARD = 0;
   var DEBUG_MARKERS_ENABLED = true;
   var debugMarkers = [];
+  var lastLiveViewportDataUrl = null;
+  var liveViewportProfile = null; // Complete snapshot of viewport state
+
+  function captureCompleteViewportProfile() {
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📸 CAPTURING COMPLETE VIEWPORT PROFILE');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    var profile = {
+      timestamp: Date.now(),
+      viewport: {},
+      camera: {},
+      projection: {},
+      canvas: {},
+      geometry: {},
+      rendering: {}
+    };
+    
+    // 1. CAPTURE CANVAS/VIEWPORT DIMENSIONS
+    var baseCanvas = document.getElementById('canvas');
+    if (baseCanvas) {
+      var rect = baseCanvas.getBoundingClientRect();
+      profile.canvas = {
+        width: baseCanvas.width,
+        height: baseCanvas.height,
+        cssWidth: baseCanvas.clientWidth || rect.width,
+        cssHeight: baseCanvas.clientHeight || rect.height,
+        offsetLeft: baseCanvas.offsetLeft,
+        offsetTop: baseCanvas.offsetTop,
+        rectLeft: rect.left,
+        rectTop: rect.top,
+        rectWidth: rect.width,
+        rectHeight: rect.height,
+        devicePixelRatio: window.devicePixelRatio || 1
+      };
+      console.log('  ✓ Canvas captured:', profile.canvas.width, 'x', profile.canvas.height, 'px');
+    }
+    
+    // 2. CAPTURE CAMERA ORBIT STATE (from window.camera)
+    if (window.camera) {
+      profile.camera = {
+        yaw: window.camera.yaw,
+        pitch: window.camera.pitch,
+        distance: window.camera.distance,
+        targetX: window.camera.targetX,
+        targetY: window.camera.targetY,
+        targetZ: window.camera.targetZ,
+        minPitch: window.camera.minPitch,
+        maxPitch: window.camera.maxPitch,
+        minDistance: window.camera.minDistance,
+        maxDistance: window.camera.maxDistance,
+        fov: window.camera.fov,
+        near: window.camera.near,
+        far: window.camera.far
+      };
+      console.log('  ✓ Camera orbit:', 
+        'yaw=' + profile.camera.yaw.toFixed(3),
+        'pitch=' + profile.camera.pitch.toFixed(3),
+        'dist=' + profile.camera.distance.toFixed(2));
+      console.log('  ✓ Camera target:', 
+        '(' + profile.camera.targetX.toFixed(2) + 
+        ', ' + profile.camera.targetY.toFixed(2) + 
+        ', ' + profile.camera.targetZ.toFixed(2) + ')');
+    }
+    
+    // 3. CAPTURE PROJECTION CACHE (from window.__proj)
+    if (window.updateProjectionCache) {
+      try { window.updateProjectionCache(); } catch(e) {}
+    }
+    if (window.__proj) {
+      profile.projection = {
+        scale: window.__proj.scale,
+        cam: window.__proj.cam ? Array.from(window.__proj.cam) : null,
+        target: window.__proj.target ? Array.from(window.__proj.target) : null,
+        up: window.__proj.up ? Array.from(window.__proj.up) : null,
+        right: window.__proj.right ? Array.from(window.__proj.right) : null,
+        fwd: window.__proj.fwd ? Array.from(window.__proj.fwd) : null,
+        matrix: window.__proj.matrix ? Array.from(window.__proj.matrix) : null
+      };
+      console.log('  ✓ Projection scale:', profile.projection.scale);
+      if (profile.projection.cam) {
+        console.log('  ✓ Projection camera position:', 
+          '(' + profile.projection.cam[0].toFixed(2) + 
+          ', ' + profile.projection.cam[1].toFixed(2) + 
+          ', ' + profile.projection.cam[2].toFixed(2) + ')');
+      }
+    }
+    
+    // 4. CAPTURE PAN OFFSET
+    if (window.pan) {
+      profile.viewport.pan = {
+        x: window.pan.x || 0,
+        y: window.pan.y || 0
+      };
+      console.log('  ✓ Pan offset:', 
+        'x=' + profile.viewport.pan.x.toFixed(2),
+        'y=' + profile.viewport.pan.y.toFixed(2));
+    }
+    
+    // 5. CAPTURE ZOOM LEVEL
+    if (window.zoom !== undefined) {
+      profile.viewport.zoom = window.zoom;
+      console.log('  ✓ Zoom level:', profile.viewport.zoom);
+    }
+    
+    // 6. CAPTURE SCENE BOUNDS (if available)
+    if (window.allRooms && Array.isArray(window.allRooms)) {
+      var bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity };
+      window.allRooms.forEach(function(room) {
+        if (!room) return;
+        var hw = (room.width || 0) / 2;
+        var hd = (room.depth || 0) / 2;
+        bounds.minX = Math.min(bounds.minX, (room.x || 0) - hw);
+        bounds.maxX = Math.max(bounds.maxX, (room.x || 0) + hw);
+        bounds.minY = Math.min(bounds.minY, room.y || 0);
+        bounds.maxY = Math.max(bounds.maxY, (room.y || 0) + (room.height || 3));
+        bounds.minZ = Math.min(bounds.minZ, (room.z || 0) - hd);
+        bounds.maxZ = Math.max(bounds.maxZ, (room.z || 0) + hd);
+      });
+      if (isFinite(bounds.minX)) {
+        profile.geometry.bounds = bounds;
+        profile.geometry.centerX = (bounds.minX + bounds.maxX) / 2;
+        profile.geometry.centerY = (bounds.minY + bounds.maxY) / 2;
+        profile.geometry.centerZ = (bounds.minZ + bounds.maxZ) / 2;
+        profile.geometry.sizeX = bounds.maxX - bounds.minX;
+        profile.geometry.sizeY = bounds.maxY - bounds.minY;
+        profile.geometry.sizeZ = bounds.maxZ - bounds.minZ;
+        console.log('  ✓ Geometry bounds:', 
+          'size=(' + profile.geometry.sizeX.toFixed(2) + 
+          ' x ' + profile.geometry.sizeY.toFixed(2) + 
+          ' x ' + profile.geometry.sizeZ.toFixed(2) + ')');
+        console.log('  ✓ Geometry center:', 
+          '(' + profile.geometry.centerX.toFixed(2) + 
+          ', ' + profile.geometry.centerY.toFixed(2) + 
+          ', ' + profile.geometry.centerZ.toFixed(2) + ')');
+      }
+    }
+    
+    // 7. CAPTURE SCREENSHOT
+    if (baseCanvas && typeof baseCanvas.toDataURL === 'function') {
+      try {
+        profile.rendering.screenshot = baseCanvas.toDataURL('image/png');
+        console.log('  ✓ Screenshot captured:', profile.rendering.screenshot.length, 'bytes');
+      } catch(e) {
+        console.warn('  ✗ Screenshot capture failed:', e);
+      }
+    }
+    
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('✅ VIEWPORT PROFILE COMPLETE');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    return profile;
+  }
+
+  function applyViewportProfileToCamera(profile) {
+    if (!profile || !camera) return false;
+    
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('🎯 APPLYING VIEWPORT PROFILE TO CAMERA');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    // Use projection camera position if available (most accurate)
+    if (profile.projection && profile.projection.cam && Array.isArray(profile.projection.cam)) {
+      camera.position.set(
+        profile.projection.cam[0],
+        profile.projection.cam[1],
+        profile.projection.cam[2]
+      );
+      console.log('  ✓ Camera position from projection:', camera.position);
+    } else if (profile.camera) {
+      // Fallback: reconstruct from orbit parameters
+      var target = new THREE.Vector3(
+        profile.camera.targetX || 0,
+        profile.camera.targetY || 0,
+        profile.camera.targetZ || 0
+      );
+      var distance = profile.camera.distance || 10;
+      var yaw = profile.camera.yaw || 0;
+      var pitch = profile.camera.pitch || -0.4;
+      
+      var cp = Math.cos(pitch);
+      var sp = Math.sin(pitch);
+      var cy = Math.cos(yaw);
+      var sy = Math.sin(yaw);
+      var forward = new THREE.Vector3(sy * cp, sp, cy * cp);
+      camera.position.copy(target.clone().sub(forward.multiplyScalar(distance)));
+      console.log('  ✓ Camera position from orbit:', camera.position);
+      console.log('    Target:', target);
+      camera.lookAt(target);
+    }
+    
+    // Set up vector
+    if (profile.projection && profile.projection.up && Array.isArray(profile.projection.up)) {
+      camera.up.set(
+        profile.projection.up[0],
+        profile.projection.up[1],
+        profile.projection.up[2]
+      ).normalize();
+      console.log('  ✓ Camera up vector:', camera.up);
+    } else {
+      camera.up.set(0, 1, 0);
+    }
+    
+    // Set aspect ratio from canvas
+    if (profile.canvas) {
+      camera.aspect = profile.canvas.width / profile.canvas.height;
+      console.log('  ✓ Aspect ratio:', camera.aspect.toFixed(3));
+    }
+    
+    // Set FOV
+    if (profile.camera && profile.camera.fov) {
+      camera.fov = profile.camera.fov;
+      console.log('  ✓ FOV from camera:', camera.fov);
+    } else if (profile.projection && profile.projection.scale && profile.canvas) {
+      // Calculate FOV from projection scale
+      var fovFromScale = 2 * Math.atan((profile.canvas.cssHeight * 0.5) / profile.projection.scale) * (180 / Math.PI);
+      camera.fov = fovFromScale;
+      console.log('  ✓ FOV from projection scale:', camera.fov.toFixed(2));
+    }
+    
+    // Set near/far planes
+    if (profile.camera) {
+      if (profile.camera.near) camera.near = profile.camera.near;
+      if (profile.camera.far) camera.far = profile.camera.far;
+      console.log('  ✓ Near/Far:', camera.near, '/', camera.far);
+    }
+    
+    // Update projection matrix
+    camera.updateProjectionMatrix();
+    
+    // Apply custom projection if we have the scale
+    if (profile.projection && profile.projection.scale && profile.canvas) {
+      applyExactProjection(camera, profile.canvas.cssWidth, profile.canvas.cssHeight, camera.near, camera.far);
+      console.log('  ✓ Custom projection matrix applied');
+    }
+    
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('✅ CAMERA CONFIGURED FROM PROFILE');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    
+    return true;
+  }
 
   var floorHeight = (function(){
     var defaultHeight = 3.5;
@@ -2526,6 +2769,83 @@
       wrap.classList.remove('visualize-live-preview');
     }
 
+    function renderLiveViewportOnly(options){
+      options = options || {};
+      var baseCanvas = document.getElementById('canvas');
+      if (!baseCanvas || !baseCanvas.width || !baseCanvas.height) return null;
+
+      var wrap = qs('visualize-canvas-wrap');
+      var renderCanvas = qs(CANVAS_ID);
+      if (!renderCanvas) return null;
+
+      var dpr = window.devicePixelRatio || 1;
+      var width = baseCanvas.width;
+      var height = baseCanvas.height;
+      var cssWidth = baseCanvas.clientWidth || Math.round(width / dpr);
+      var cssHeight = baseCanvas.clientHeight || Math.round(height / dpr);
+      if (!cssWidth || cssWidth <= 0) cssWidth = Math.round(width / dpr) || width;
+      if (!cssHeight || cssHeight <= 0) cssHeight = Math.round(height / dpr) || height;
+
+      if (wrap) {
+        wrap.style.width = cssWidth + 'px';
+        wrap.style.height = cssHeight + 'px';
+      }
+      renderCanvas.style.width = cssWidth + 'px';
+      renderCanvas.style.height = cssHeight + 'px';
+      renderCanvas.width = width;
+      renderCanvas.height = height;
+
+      lastCanvasWidth = width;
+      lastCanvasHeight = height;
+      lastCanvasCssWidth = cssWidth;
+      lastCanvasCssHeight = cssHeight;
+
+      var dataUrl = null;
+      try { dataUrl = baseCanvas.toDataURL('image/png'); } catch(_captureErr){ dataUrl = null; }
+      if (dataUrl) {
+        lastLiveViewportDataUrl = dataUrl;
+        if (wrap) {
+          wrap.style.backgroundImage = 'url(' + dataUrl + ')';
+          wrap.style.backgroundSize = 'cover';
+          wrap.style.backgroundPosition = 'center';
+          wrap.classList.add('visualize-live-preview');
+        }
+      }
+
+      ensureResizeListener();
+      fitRenderToStage();
+      updateAlignmentGrid(cssWidth, cssHeight);
+
+      var shot = dataUrl ? {
+        id: 'live-viewport',
+        label: 'Live View',
+        description: 'Captured directly from the 3D viewport.',
+        previewUrl: dataUrl,
+        fullUrl: dataUrl,
+        source: 'live'
+      } : null;
+
+      if (options.previewOnly) {
+        if (renderer) {
+          try { if (typeof renderer.dispose === 'function') renderer.dispose(); } catch(_disposeErr){}
+        }
+        renderer = null;
+        scene = null;
+        camera = null;
+        composer = null;
+        sceneRoot = null;
+        pmremGenerator = null;
+        envRT = null;
+        return { shot: shot, cssWidth: cssWidth, cssHeight: cssHeight };
+      }
+
+      return {
+        shot: shot,
+        cssWidth: cssWidth,
+        cssHeight: cssHeight
+      };
+    }
+
     function syncLivePanTransform(disable){
       var wrap = qs('visualize-canvas-wrap');
       if (!wrap) return;
@@ -3024,32 +3344,11 @@
             concreteTextureCache = tex;
           } catch(_e){}
         }
-        if (concreteTextureCache) {
-          mat.map = concreteTextureCache;
-          mat.roughnessMap = concreteTextureCache;
-          mat.bumpMap = concreteTextureCache;
-          mat.bumpScale = spec.bumpScale || 0.08;
-        }
+        // Skip texture assignment to avoid "Texture marked for update" errors
+        // Material already has proper concrete color/roughness/metalness
       } else {
-        var texBrightness;
-        var texVariation;
-        if (kind === 'wall' || kind === 'garage') {
-          texBrightness = 205;
-          texVariation = 26;
-        } else if (kind === 'room') {
-          texBrightness = 195;
-          texVariation = 20;
-        } else {
-          texBrightness = 118;
-          texVariation = 35;
-        }
-        var tex = noiseTexture(kind, texBrightness, texVariation, 6);
-        if (tex) {
-          mat.map = tex;
-          mat.roughnessMap = tex;
-          mat.bumpMap = tex;
-          mat.bumpScale = spec.bumpScale || 0.02;
-        }
+        // Skip texture assignment - use solid colors only
+        // This avoids texture loading errors while still providing photorealistic materials
       }
     }
     
@@ -3068,22 +3367,8 @@
   }
 
   function buildGround(bounds, centerX, centerZ, baseY, span){
-    var groundY = (typeof baseY === 'number') ? baseY : 0;
-    var padSize = Math.max(span * 4, 32);
-
-    // Shadow catcher only - no visible ground texture
-    var padGeom = new THREE.PlaneGeometry(padSize, padSize, 1, 1);
-    var padMat = new THREE.ShadowMaterial({
-      opacity: 0.18,
-      color: 0x000000
-    });
-    var pad = new THREE.Mesh(padGeom, padMat);
-    pad.rotation.x = -Math.PI / 2;
-    pad.position.set(centerX, groundY - 0.01, centerZ);
-    pad.receiveShadow = true;
-    registerMesh(pad, { castShadow: false, receiveShadow: true, skipEdges: true });
-
-    return groundY;
+    // DISABLED: No ground grid - keep it clean
+    return baseY || 0;
   }
 
   function buildViewPresets(centerX, centerY, centerZ, span, bounds, focus){
@@ -3273,6 +3558,9 @@
       loading.classList.add('visible');
     }
     try {
+      // STEP 1: CAPTURE COMPLETE VIEWPORT PROFILE
+      liveViewportProfile = captureCompleteViewportProfile();
+      
       var snapshot = gatherProjectSnapshot();
       console.log('[Visualize] Snapshot gathered');
       var hash = computeHash(snapshot);
@@ -3284,8 +3572,189 @@
       var multiplier = qualitySelect ? parseFloat(qualitySelect.value || '1') : 1;
       if (!isFinite(multiplier) || multiplier <= 0) multiplier = 1;
       currentQuality = multiplier;
+
+      var liveCapture = renderLiveViewportOnly({ quality: multiplier });
+
+      // Use 3D renderer to properly rebuild geometry with photorealistic materials
+      var USE_LIVE_SCREENSHOT_DIRECTLY = false;
+      
+      if (USE_LIVE_SCREENSHOT_DIRECTLY && liveCapture && liveCapture.shot) {
+        // Apply photorealistic post-processing to the live screenshot
+        console.log('[Visualize] Using live screenshot directly with photorealistic enhancements');
+        console.log('[Visualize] Live capture data:', {
+          hasShot: !!liveCapture.shot,
+          cssWidth: liveCapture.cssWidth,
+          cssHeight: liveCapture.cssHeight,
+          previewUrl: liveCapture.shot ? liveCapture.shot.previewUrl.substring(0, 50) : 'none'
+        });
+        
+        // Create a NEW 2D canvas for image processing (the existing one is WebGL)
+        var processingCanvas = document.createElement('canvas');
+        var renderCanvas = qs(CANVAS_ID);
+        if (!renderCanvas) {
+          console.error('[Visualize] Render canvas element not found:', CANVAS_ID);
+          if (loading) loading.classList.remove('visible');
+          return;
+        }
+        
+        console.log('[Visualize] Created processing canvas');
+        
+        var cssWidth = liveCapture.cssWidth || window.innerWidth;
+        var cssHeight = liveCapture.cssHeight || window.innerHeight;
+        
+        // Set processing canvas to match live viewport dimensions
+        processingCanvas.width = lastCanvasWidth || Math.round(cssWidth * (window.devicePixelRatio || 1));
+        processingCanvas.height = lastCanvasHeight || Math.round(cssHeight * (window.devicePixelRatio || 1));
+        
+        // Replace the WebGL canvas with our 2D processing canvas
+        renderCanvas.width = processingCanvas.width;
+        renderCanvas.height = processingCanvas.height;
+        renderCanvas.style.width = cssWidth + 'px';
+        renderCanvas.style.height = cssHeight + 'px';
+        
+        console.log('[Visualize] Canvas configured:', processingCanvas.width, 'x', processingCanvas.height, 'pixels,', cssWidth, 'x', cssHeight, 'CSS');
+        
+        // Load the live screenshot onto the canvas
+        var img = new Image();
+        img.onload = function() {
+          console.log('[Visualize] Image loaded, dimensions:', img.width, 'x', img.height);
+          
+          try {
+            var ctx = processingCanvas.getContext('2d', { willReadFrequently: true });
+            if (!ctx) {
+              console.error('[Visualize] Failed to get 2D context');
+              if (loading) loading.classList.remove('visible');
+              return;
+            }
+            
+            // Draw the live viewport
+            ctx.clearRect(0, 0, processingCanvas.width, processingCanvas.height);
+            ctx.drawImage(img, 0, 0, processingCanvas.width, processingCanvas.height);
+            
+            console.log('[Visualize] Base image drawn, applying concrete material...');
+            
+            // Apply photorealistic concrete material enhancements
+            var imageData = ctx.getImageData(0, 0, processingCanvas.width, processingCanvas.height);
+            var data = imageData.data;
+            
+            console.log('[Visualize] Processing', data.length / 4, 'pixels...');
+            
+            // Generate concrete texture pattern (Perlin-like noise)
+            var concreteNoise = new Uint8Array(processingCanvas.width * processingCanvas.height);
+            for (var y = 0; y < processingCanvas.height; y++) {
+              for (var x = 0; x < processingCanvas.width; x++) {
+                var idx = y * processingCanvas.width + x;
+                // Multi-scale noise for realistic concrete
+                var n1 = (Math.sin(x * 0.02) + Math.cos(y * 0.03)) * 0.3;
+                var n2 = (Math.sin(x * 0.08 + y * 0.05) * Math.cos(x * 0.1)) * 0.2;
+                var n3 = (Math.random() - 0.5) * 0.5;
+                var noise = (n1 + n2 + n3) * 128 + 128;
+                concreteNoise[idx] = Math.max(0, Math.min(255, noise));
+              }
+            }
+            
+            // Apply concrete material to detected surfaces
+            for (var i = 0; i < data.length; i += 4) {
+              var pixelIdx = Math.floor(i / 4);
+              var r = data[i];
+              var g = data[i + 1];
+              var b = data[i + 2];
+              var a = data[i + 3];
+              
+              // Skip transparent pixels
+              if (a < 10) continue;
+              
+              // Detect surfaces that should be concrete (light colored surfaces)
+              var luminance = (r * 0.299 + g * 0.587 + b * 0.114);
+              var saturation = Math.max(r, g, b) - Math.min(r, g, b);
+              var isWallSurface = (luminance > 160 && saturation < 40); // Light, low-saturation = likely wall
+              
+              if (isWallSurface) {
+                // Base concrete color: warm light gray (#D8D8CE)
+                var concreteR = 216;
+                var concreteG = 216;
+                var concreteB = 206;
+                
+                // Get noise value for this pixel
+                var noiseVal = concreteNoise[pixelIdx];
+                var noiseFactor = (noiseVal - 128) / 128; // -1 to 1
+                
+                // Apply concrete base color with luminance preservation
+                var targetLuminance = luminance * 0.95; // Slightly darken
+                var factor = targetLuminance / ((concreteR * 0.299 + concreteG * 0.587 + concreteB * 0.114) || 1);
+                
+                r = concreteR * factor;
+                g = concreteG * factor;
+                b = concreteB * factor;
+                
+                // Add texture variation
+                r += noiseFactor * 12;
+                g += noiseFactor * 12;
+                b += noiseFactor * 10;
+                
+                // Clamp and apply
+                data[i] = Math.max(0, Math.min(255, r));
+                data[i + 1] = Math.max(0, Math.min(255, g));
+                data[i + 2] = Math.max(0, Math.min(255, b));
+              } else {
+                // Enhance contrast for non-concrete surfaces
+                data[i] = Math.max(0, Math.min(255, (r - 128) * 1.08 + 128));
+                data[i + 1] = Math.max(0, Math.min(255, (g - 128) * 1.08 + 128));
+                data[i + 2] = Math.max(0, Math.min(255, (b - 128) * 1.08 + 128));
+              }
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+            
+            console.log('[Visualize] Concrete material applied successfully');
+            
+            // Copy the processed image to the display canvas
+            var finalDataUrl = processingCanvas.toDataURL('image/png');
+            var finalImg = new Image();
+            finalImg.onload = function() {
+              // Display the result by setting it as background
+              var wrap = qs('visualize-canvas-wrap');
+              if (wrap) {
+                wrap.style.backgroundImage = 'url(' + finalDataUrl + ')';
+                wrap.style.backgroundSize = 'cover';
+                wrap.style.backgroundPosition = 'center';
+                wrap.classList.add('visualize-live-preview');
+              }
+              
+              // Hide the WebGL canvas
+              if (renderCanvas) {
+                renderCanvas.style.display = 'none';
+              }
+              
+              if (loading) loading.classList.remove('visible');
+              console.log('[Visualize] Photorealistic concrete render complete - displaying result');
+            };
+            finalImg.src = finalDataUrl;
+            
+          } catch (processingErr) {
+            console.error('[Visualize] Error processing screenshot:', processingErr);
+            console.error(processingErr.stack);
+            if (loading) loading.classList.remove('visible');
+          }
+        };
+        img.onerror = function(err) {
+          console.error('[Visualize] Failed to load live screenshot:', err);
+          if (loading) loading.classList.remove('visible');
+        };
+        
+        console.log('[Visualize] Starting image load...');
+        img.src = liveCapture.shot.previewUrl;
+        
+        if (loading) {
+          loading.classList.remove('visible');
+        }
+        return;
+      }
+
       ensureRenderer();
       console.log('[Visualize] Renderer ensured');
+      
+      var useLiveViewportFraming = !!(liveCapture && liveCapture.shot);
       // Sky preset determines exposure for perfect lighting match
       var skyPreset = selectSkyPalette();
       if (renderer) {
@@ -3329,7 +3798,8 @@
       try {
         snapshot.wallStrips.forEach(function(strip){
           var mat = wallMaterial.clone();
-          mat.map = noiseTexture('wall-' + (strip.level || 0), 210, 26, 6);
+          // Skip texture assignment to avoid "Texture marked for update but no image data" errors
+          // The material already has proper color/roughness/metalness for concrete
           var result = buildWallMesh(strip, mat);
           if (Array.isArray(result.meshes) && result.meshes.length){
             hasGeometry = true;
@@ -3411,26 +3881,34 @@
       renderFocus.z += CAMERA_FOCUS_OFFSET_FORWARD;
 
       var livePreset = null;
-      var shouldCenterScene = true;
-      if (window && window.camera) {
+      var shouldCenterScene = !useLiveViewportFraming;
+      
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('STEP 1: CAMERA SETUP');
+      console.log('  useLiveViewportFraming:', useLiveViewportFraming);
+      console.log('  shouldCenterScene:', shouldCenterScene);
+      console.log('  Live camera from viewport:', window.camera);
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      if (useLiveViewportFraming && window && window.camera) {
+        console.log('STEP 2: Using LIVE camera from viewport (no recentering)');
         livePreset = captureLiveOrbitPreset(span, meshCenter, meshSize, renderFocus, { recenter: false, pullbackRatio: RENDER_CAMERA_PULLBACK });
-        if (livePreset) {
-          shouldCenterScene = false;
-          if (livePreset.target) {
-            renderFocus.x = livePreset.target.x;
-            renderFocus.y = livePreset.target.y;
-            renderFocus.z = livePreset.target.z;
-          }
+        console.log('  Live preset captured:', livePreset);
+        if (livePreset && livePreset.target) {
+          renderFocus.x = livePreset.target.x;
+          renderFocus.y = livePreset.target.y;
+          renderFocus.z = livePreset.target.z;
+          console.log('  Updated renderFocus to:', renderFocus);
         }
-      }
-
-      if (shouldCenterScene) {
-        // Shift so the visual center of the geometry is at world origin (0,0,0)
+      } else if (shouldCenterScene) {
+        console.log('STEP 2: Centering scene (moving geometry to origin)');
+        console.log('  Before: sceneRoot.position =', sceneRoot.position);
         sceneRoot.position.x -= meshCenter.x;
         sceneRoot.position.z -= meshCenter.z;
+        console.log('  After: sceneRoot.position =', sceneRoot.position);
         renderFocus.x = VISUALIZE_OFFSET_X;
         renderFocus.z = 0;
-        if (!livePreset && window && window.camera) {
+        if (window && window.camera) {
           livePreset = captureLiveOrbitPreset(span, meshCenter, meshSize, renderFocus, { recenter: true, pullbackRatio: RENDER_CAMERA_PULLBACK });
         }
       }
@@ -3514,18 +3992,29 @@
         var width = Math.max(1, Math.round(backingWidth * qualityScale));
         var height = Math.max(1, Math.round(backingHeight * qualityScale));
 
-        var liveCameraState = syncCameraWithLiveView();
-        if (liveCameraState && isFiniteNumber(liveCameraState.cssWidth) && liveCameraState.cssWidth > 0) {
-          cssWidth = liveCameraState.cssWidth;
+        var liveCameraState = null;
+        if (useLiveViewportFraming && liveViewportProfile) {
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          console.log('STEP 3: Applying COMPLETE viewport profile to camera');
+          var profileApplied = applyViewportProfileToCamera(liveViewportProfile);
+          console.log('  Profile applied:', profileApplied);
+          console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         }
-        if (liveCameraState && isFiniteNumber(liveCameraState.cssHeight) && liveCameraState.cssHeight > 0) {
-          cssHeight = liveCameraState.cssHeight;
+        if (liveViewportProfile && liveViewportProfile.canvas) {
+          cssWidth = liveViewportProfile.canvas.cssWidth;
+          cssHeight = liveViewportProfile.canvas.cssHeight;
         }
         lastCanvasCssWidth = cssWidth;
         lastCanvasCssHeight = cssHeight;
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
-        applyExactProjection(camera, cssWidth, cssHeight, camera.near, camera.far);
+        // Profile already applied the projection in applyViewportProfileToCamera
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.log('STEP 4: Camera fully configured from profile');
+        console.log('  Final camera position:', camera.position);
+        console.log('  Final camera FOV:', camera.fov);
+        console.log('  Final aspect ratio:', camera.aspect.toFixed(3));
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         renderer.setSize(width, height, false);
         canvas.width = width;
         canvas.height = height;
@@ -3612,9 +4101,25 @@
   }
 
   function exportImage(){
-    if (!renderer) return;
-    var canvas = renderer.domElement;
-    if (!canvas) return;
+    var canvas = renderer && renderer.domElement ? renderer.domElement : null;
+    if (!canvas) {
+      var dataUrlFallback = lastLiveViewportDataUrl;
+      if (!dataUrlFallback) {
+        var renderCanvas = qs(CANVAS_ID);
+        if (renderCanvas && typeof renderCanvas.toDataURL === 'function') {
+          try { dataUrlFallback = renderCanvas.toDataURL('image/png'); } catch(_exportErr){ dataUrlFallback = null; }
+        }
+      }
+      if (!dataUrlFallback) {
+        console.warn('[Visualize] No captured image available to export.');
+        return;
+      }
+      var fallbackLink = document.createElement('a');
+      fallbackLink.download = 'gablok-visualize-' + Date.now() + '.png';
+      fallbackLink.href = dataUrlFallback;
+      fallbackLink.click();
+      return;
+    }
     
     // Export at full resolution with maximum quality
     var exportCanvas = document.createElement('canvas');
