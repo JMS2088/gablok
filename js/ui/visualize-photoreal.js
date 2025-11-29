@@ -388,10 +388,10 @@
       // Negate X to flip horizontally (match yaw negation)
       dirX = -dirX;
       
-      // Scale by 1.9 to pull back for perspective matching
+      // Scale by 3.5 to pull back for perspective matching
       // Use smaller scale for Y to reduce pitch effect (camera was looking too far down)
-      var distScale = 1.9;
-      var yScale = 1.5;  // Less scaling on Y to raise the camera angle
+      var distScale = 3.5;
+      var yScale = 2.5;  // Less scaling on Y to raise the camera angle
       camX = targetX + dirX * distScale;
       camY = targetY + dirY * yScale;
       camZ = targetZ + dirZ * distScale;
@@ -454,8 +454,8 @@
     var tanHalfFov = mainCanvasHeight / (2 * projScale);
     var fov = 2 * Math.atan(tanHalfFov) * (180 / Math.PI);
     
-    // Reduce FOV slightly for stronger perspective effect
-    fov = fov * 0.85;
+    // Reduce FOV for stronger perspective effect
+    fov = fov * 0.55;
     
     // Scale FOV for render canvas vs main canvas aspect difference
     var mainAspect = mainCanvasWidth / mainCanvasHeight;
