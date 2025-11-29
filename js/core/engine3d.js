@@ -750,6 +750,7 @@
           camera.targetZ = 0;
           pan.x = 0;
           pan.y = 0;
+          console.log('[AutoCenter] No rooms, reset to origin');
           return;
         }
         // Compute bounds of all rooms (XZ and Y)
@@ -788,10 +789,15 @@
         // Reset pan to ensure centered projection
         pan.x = 0;
         pan.y = 0;
+        console.log('[AutoCenter] Centered camera: targetX=' + camera.targetX.toFixed(2) + 
+                    ' targetY=' + camera.targetY.toFixed(2) + 
+                    ' targetZ=' + camera.targetZ.toFixed(2) +
+                    ' pan=(' + pan.x + ',' + pan.y + ')');
       } catch (e) {
         camera.targetY = 1.5;
         pan.x = 0;
         pan.y = 0;
+        console.log('[AutoCenter] Error, reset to defaults:', e);
       }
     };
   }
@@ -2556,11 +2562,20 @@
           return; 
         }
         
-        // Auto-center camera Y on first few frames to ensure proper centering after load
+        // Auto-center camera on scene content during startup
+        // More aggressive: run for first 30 frames or first 2 seconds
         try {
-          if (typeof window.__autoCenterFrameCount !== 'number') window.__autoCenterFrameCount = 0;
-          if (window.__autoCenterFrameCount < 5 && typeof window.autoCenterCameraY === 'function') {
-            window.autoCenterCameraY();
+          if (typeof window.__autoCenterFrameCount !== 'number') {
+            window.__autoCenterFrameCount = 0;
+            window.__autoCenterStartTime = Date.now();
+          }
+          var elapsedMs = Date.now() - window.__autoCenterStartTime;
+          var shouldAutoCenter = (window.__autoCenterFrameCount < 30) || (elapsedMs < 2000);
+          if (shouldAutoCenter && typeof window.autoCenterCameraY === 'function') {
+            // Only auto-center if there are rooms to center on
+            if (Array.isArray(window.allRooms) && window.allRooms.length > 0) {
+              window.autoCenterCameraY();
+            }
             window.__autoCenterFrameCount++;
           }
         } catch (_eAutoCenter) {}
@@ -2575,6 +2590,23 @@
         // Ensure canvas/context ready and projection up-to-date
         setupCanvas();
         if (!window.canvas || !window.ctx) { requestAnimationFrame(renderLoop); return; }
+        
+        // DEBUG: Log pan values on first 10 frames
+        try {
+          if (typeof window.__debugPanFrameCount !== 'number') window.__debugPanFrameCount = 0;
+          if (window.__debugPanFrameCount < 10) {
+            console.log('[RenderDebug] Frame ' + window.__debugPanFrameCount + 
+                        ': pan=(' + (pan.x||0).toFixed(1) + ',' + (pan.y||0).toFixed(1) + ')' +
+                        ' camera.target=(' + (camera.targetX||0).toFixed(2) + ',' + (camera.targetY||0).toFixed(2) + ',' + (camera.targetZ||0).toFixed(2) + ')' +
+                        ' canvas=' + canvas.width + 'x' + canvas.height);
+            window.__debugPanFrameCount++;
+          }
+        } catch(_dbg){}
+        
+        // Force pan to zero on every frame to diagnose
+        pan.x = 0;
+        pan.y = 0;
+        
         if (typeof updateProjectionCache==='function') updateProjectionCache();
 
         // Detect if camera is inside any room on the current floor; if so, allow close/inside wall rendering

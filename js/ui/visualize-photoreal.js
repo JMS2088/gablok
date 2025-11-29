@@ -242,31 +242,16 @@
       threeCamera.aspect = aspect;
       threeCamera.updateProjectionMatrix();
       
-      // For ultra-wide screens, apply a view offset to shift the render
-      // This corrects for perspective distortion on wide aspect ratios
+      // Clear any previous view offset - don't apply ultra-wide correction as it causes off-center issues
       threeCamera.clearViewOffset();
-      if (aspect > 2.0) {
-        // Ultra-wide: shift view slightly to center the object visually
-        // The offset is in pixels; negative shifts content right on screen
-        var shiftPercent = (aspect - 2.0) * 0.02;  // 2% per 1.0 aspect over 2.0
-        var pixelShift = renderWidth * shiftPercent;
-        threeCamera.setViewOffset(
-          renderWidth, renderHeight,  // full size
-          -pixelShift, 0,             // offset (negative X = shift right)
-          renderWidth, renderHeight   // render size
-        );
-        console.log('[CameraTracker] v3 Ultra-wide correction: aspect=' + aspect.toFixed(2) + 
-                    ' shiftPercent=' + (shiftPercent * 100).toFixed(1) + '% pixelShift=' + pixelShift.toFixed(0) + 'px');
-      }
       
-      console.log('[CameraTracker] v3 Camera setup:', {
+      console.log('[CameraTracker] Camera setup:', {
         camPos: '(' + camX.toFixed(2) + ', ' + camY.toFixed(2) + ', ' + camZ.toFixed(2) + ')',
         lookAt: '(' + centerX.toFixed(2) + ', ' + centerY.toFixed(2) + ', ' + centerZ.toFixed(2) + ')',
         viewDist: viewDist.toFixed(2),
-        yaw: '45.0° (forced)',
+        yaw: (yaw * 180 / Math.PI).toFixed(1) + '°',
+        pitch: (this.pitch * 180 / Math.PI).toFixed(1) + '°',
         aspect: aspect.toFixed(2),
-        xOffset: (camX - centerX).toFixed(2),
-        zOffset: (camZ - centerZ).toFixed(2),
         fov: threeCamera.fov.toFixed(1) + '°'
       });
     }
@@ -1261,15 +1246,22 @@
       width = Math.max(width, 800);
       height = Math.max(height, 600);
       
+      // NOTE: pixelRatio is handled by renderer.setPixelRatio() in ensureRenderer()
+      // We pass CSS dimensions to setSize and Three.js multiplies internally
       var pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-      var renderWidth = Math.floor(width * pixelRatio);
-      var renderHeight = Math.floor(height * pixelRatio);
       
-      console.log('[Photoreal] Render dimensions:', renderWidth, 'x', renderHeight, '(stage:', width, 'x', height, ')');
+      console.log('[Photoreal] Stage dimensions:', width, 'x', height, '(pixelRatio:', pixelRatio, ')');
 
       // Step 3: Setup renderer and scene
       ensureRenderer();
-      renderer.setSize(renderWidth, renderHeight, false);
+      // Pass CSS dimensions - renderer.setPixelRatio already handles the internal scaling
+      renderer.setSize(width, height, false);
+      
+      // Calculate the actual render dimensions for logging and camera setup
+      var renderWidth = Math.floor(width * pixelRatio);
+      var renderHeight = Math.floor(height * pixelRatio);
+      
+      console.log('[Photoreal] Actual canvas buffer:', renderWidth, 'x', renderHeight);
       
       // Set canvas to fill entire stage
       if (state.renderCanvas) {
@@ -1335,6 +1327,17 @@
         width: renderWidth,
         height: renderHeight
       };
+
+      // Debug canvas dimensions
+      console.log('[Photoreal] Final canvas state:', {
+        internalWidth: state.renderCanvas.width,
+        internalHeight: state.renderCanvas.height,
+        cssWidth: state.renderCanvas.style.width,
+        cssHeight: state.renderCanvas.style.height,
+        offsetWidth: state.renderCanvas.offsetWidth,
+        offsetHeight: state.renderCanvas.offsetHeight,
+        aspectRatio: (state.renderCanvas.width / state.renderCanvas.height).toFixed(3)
+      });
 
       var preset = LIGHTING_PRESETS[state.currentLighting % LIGHTING_PRESETS.length];
 
