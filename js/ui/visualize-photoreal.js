@@ -366,7 +366,7 @@
     // Offset X to shift object in render
     // (positive offset lowers the view because camera looks down at target)
     var targetX, targetY, targetZ;
-    var xOffset = 22.0;  // Shift target right to move object left in render (view is flipped)
+    var xOffset = 19.0;  // Shift target - reduced by 1 to track camera right
     if (viewportTarget && viewportTarget.length === 3) {
       targetX = viewportTarget[0] + xOffset;
       targetY = viewportTarget[1] + 2.0;  // Raise the target to lower the view
