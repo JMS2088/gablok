@@ -30,6 +30,7 @@
       pitch: -0.55,
       distance: 32,
       targetX: 0,
+      targetY: 1.5,  // Center view on typical room height
       targetZ: 0,
       cachedBasis: null,
       cachedMatrix: null

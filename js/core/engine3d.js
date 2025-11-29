@@ -26,7 +26,7 @@
       distance: 26,           // radial distance from target
       targetX: 0,
       targetZ: 0,
-      targetY: 0,            // vertical anchor (keep 0 for ground reference)
+      targetY: 1.5,           // vertical anchor (center view on typical room height)
       minPitch: -1.15,       // avoid flipping under the ground
       maxPitch: 0.35,        // slight upward tilt allowed
       minDistance: 6,        // prevent extreme zoom-in clipping
@@ -41,7 +41,7 @@
     if (typeof c.maxDistance !== 'number') c.maxDistance = 140;
     if (typeof c.targetX !== 'number') c.targetX = 0;
     if (typeof c.targetZ !== 'number') c.targetZ = 0;
-    if (typeof c.targetY !== 'number') c.targetY = 0;
+    if (typeof c.targetY !== 'number') c.targetY = 1.5;  // Center on typical room height
   }
   // Normalize yaw to [-PI, PI] so large drags never accumulate floating error.
   function __normalizeYaw(y) {
@@ -314,8 +314,12 @@
         if (!obj) return;
         var w = Math.max(0.5, obj.width || 2);
         var d = Math.max(0.5, obj.depth || 2);
+        var h = Math.max(0.5, obj.height || 3);
         camera.targetX = obj.x || 0;
         camera.targetZ = obj.z || 0;
+        // Center vertically on the object (account for floor level)
+        var baseY = ((obj.level || 0) * 3.5);
+        camera.targetY = baseY + (h / 2);
         // Pad distance so object fills a good portion of the view
         camera.distance = Math.max(8, Math.max(w, d) * 2 + 5);
         // Reset pan to center screen
@@ -728,6 +732,67 @@
       else { selectedRoomId=r.id; try { if (typeof updateMeasurements==='function') updateMeasurements(); } catch(_eMU) {} }
       updateStatus('Added room'); _needsFullRender=true; startRender();
       try { if (typeof window.historyPushChange==='function') window.historyPushChange('3d-add-room', { coalesce: false }); } catch(_hpa){}
+      // Center camera vertically on the new content
+      try { if (typeof window.autoCenterCameraY === 'function') window.autoCenterCameraY(); } catch(_eAutoY) {}
+    };
+  }
+
+  // Auto-center camera on scene content (X, Y, Z)
+  // This ensures rooms appear centered in the 3D viewport
+  if (typeof window.autoCenterCameraY === 'undefined') {
+    window.autoCenterCameraY = function autoCenterCameraY() {
+      try {
+        var rooms = Array.isArray(window.allRooms) ? window.allRooms : [];
+        if (rooms.length === 0) {
+          // No rooms - use default position
+          camera.targetX = 0;
+          camera.targetY = 1.5;
+          camera.targetZ = 0;
+          pan.x = 0;
+          pan.y = 0;
+          return;
+        }
+        // Compute bounds of all rooms (XZ and Y)
+        var minX = Infinity, maxX = -Infinity;
+        var minZ = Infinity, maxZ = -Infinity;
+        var minY = Infinity, maxY = -Infinity;
+        for (var i = 0; i < rooms.length; i++) {
+          var r = rooms[i];
+          if (!r) continue;
+          var hw = (r.width || 4) / 2;
+          var hd = (r.depth || 4) / 2;
+          var rx = r.x || 0;
+          var rz = r.z || 0;
+          if (rx - hw < minX) minX = rx - hw;
+          if (rx + hw > maxX) maxX = rx + hw;
+          if (rz - hd < minZ) minZ = rz - hd;
+          if (rz + hd > maxZ) maxZ = rz + hd;
+          var baseY = (r.level || 0) * 3.5;
+          var h = (typeof r.height === 'number') ? r.height : 3.0;
+          var topY = baseY + h;
+          if (baseY < minY) minY = baseY;
+          if (topY > maxY) maxY = topY;
+        }
+        // Set camera target to center of all content
+        if (isFinite(minX) && isFinite(maxX)) {
+          camera.targetX = (minX + maxX) / 2;
+        }
+        if (isFinite(minZ) && isFinite(maxZ)) {
+          camera.targetZ = (minZ + maxZ) / 2;
+        }
+        if (isFinite(minY) && isFinite(maxY)) {
+          camera.targetY = (minY + maxY) / 2;
+        } else {
+          camera.targetY = 1.5;
+        }
+        // Reset pan to ensure centered projection
+        pan.x = 0;
+        pan.y = 0;
+      } catch (e) {
+        camera.targetY = 1.5;
+        pan.x = 0;
+        pan.y = 0;
+      }
     };
   }
 
@@ -2490,6 +2555,15 @@
           requestAnimationFrame(renderLoop); 
           return; 
         }
+        
+        // Auto-center camera Y on first few frames to ensure proper centering after load
+        try {
+          if (typeof window.__autoCenterFrameCount !== 'number') window.__autoCenterFrameCount = 0;
+          if (window.__autoCenterFrameCount < 5 && typeof window.autoCenterCameraY === 'function') {
+            window.autoCenterCameraY();
+            window.__autoCenterFrameCount++;
+          }
+        } catch (_eAutoCenter) {}
         
         // Throttle inactive frames to reduce CPU
         var now = (performance && performance.now) ? performance.now() : Date.now();
