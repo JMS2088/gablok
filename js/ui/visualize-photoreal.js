@@ -363,10 +363,10 @@
     
     // TARGET: Use the 3D viewport's target if available, otherwise scene center
     // Offset Y up by ~2.0 world units to lower the center point in the render
-    // Offset X to shift object left in render (negative X shifts target left, object appears more left)
+    // Offset X to shift object in render
     // (positive offset lowers the view because camera looks down at target)
     var targetX, targetY, targetZ;
-    var xOffset = -1.5;  // Shift target left to move object left in render
+    var xOffset = 22.0;  // Shift target right to move object left in render (view is flipped)
     if (viewportTarget && viewportTarget.length === 3) {
       targetX = viewportTarget[0] + xOffset;
       targetY = viewportTarget[1] + 2.0;  // Raise the target to lower the view
@@ -385,16 +385,21 @@
       var dirY = viewportCam[1] - targetY;
       var dirZ = viewportCam[2] - targetZ;
       
-      // Negate X to flip horizontally (match yaw negation)
-      dirX = -dirX;
+      // Flip Z instead of X to flip the view horizontally
+      dirZ = -dirZ;
       
-      // Scale by 3.5 to pull back for perspective matching
-      // Use smaller scale for Y to reduce pitch effect (camera was looking too far down)
-      var distScale = 3.5;
-      var yScale = 2.5;  // Less scaling on Y to raise the camera angle
-      camX = targetX + dirX * distScale;
-      camY = targetY + dirY * yScale;
-      camZ = targetZ + dirZ * distScale;
+      // Scale by 0.9 for distance, Y scale for vertical movement
+      var distScale = 1.1;
+      var yScale = 0.2;  // Adjusted to match 3D area Y movement
+      var heightOffset = 3.0;  // Raise camera to look down more at the object
+      
+      // Calculate XZ distance and push back proportionally to height to maintain same apparent distance
+      var xzDist = Math.sqrt(dirX * dirX + dirZ * dirZ);
+      var pushBackFactor = 1.0 + (heightOffset / Math.max(1, xzDist)) * 0.3;
+      
+      camX = targetX + dirX * distScale * pushBackFactor;
+      camY = targetY + dirY * yScale + heightOffset;
+      camZ = targetZ + dirZ * distScale * pushBackFactor;
       
       console.log('[Photoreal] Using viewport cam pos:', viewportCam, '-> scaled:', [camX.toFixed(2), camY.toFixed(2), camZ.toFixed(2)]);
     } else {
@@ -454,8 +459,8 @@
     var tanHalfFov = mainCanvasHeight / (2 * projScale);
     var fov = 2 * Math.atan(tanHalfFov) * (180 / Math.PI);
     
-    // Reduce FOV for stronger perspective effect
-    fov = fov * 0.55;
+    // Increase FOV massively for much stronger perspective effect to match 3D area
+    fov = fov * 22.0;
     
     // Scale FOV for render canvas vs main canvas aspect difference
     var mainAspect = mainCanvasWidth / mainCanvasHeight;
@@ -477,6 +482,9 @@
     // Create camera
     camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
     camera.position.set(camX, camY, camZ);
+    
+    // Ensure camera is level (up vector is world Y)
+    camera.up.set(0, 1, 0);
     camera.lookAt(targetX, targetY, targetZ);
     camera.updateProjectionMatrix();
     
