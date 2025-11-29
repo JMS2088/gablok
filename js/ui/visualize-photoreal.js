@@ -198,13 +198,13 @@
       var maxDim = Math.max(sceneWidth, sceneDepth, sceneHeight);
       
       // Use the actual camera distance from 3D area
-      // Scale up the distance to pull camera back further
+      // Scale up the distance significantly to pull camera back further
       // The 3D area uses hybrid projection which compresses depth
-      // Real perspective needs more distance to look similar
-      var viewDist = this.distance * 1.8;  // Scale up distance by 1.8x
+      // Real perspective needs much more distance to look similar
+      var viewDist = this.distance * 3.0;  // Scale up distance by 3x
       
       // Ensure minimum distance so camera doesn't clip into object
-      var minDist = maxDim * 1.5;  // At least 1.5x object size away
+      var minDist = maxDim * 2.5;  // At least 2.5x object size away
       viewDist = Math.max(minDist, viewDist);
       
       console.log('[CameraTracker] Scene info:', {
@@ -219,9 +219,13 @@
       var cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
       var cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
       
+      // Horizontal offset to center the object after flip
+      // Negative value shifts object left in the render
+      var xCenterOffset = -8.0;
+      
       // Camera position: offset from center based on yaw/pitch
       // NEGATE X and Z to match 3D area coordinate system (camera on opposite side)
-      var camX = centerX - sy * cp * viewDist;
+      var camX = centerX - sy * cp * viewDist + xCenterOffset;
       
       // Apply vertical scale like camera.js does - reduce vertical movement when looking down
       // This keeps the camera lower and matches the 3D area view better
@@ -236,9 +240,9 @@
       // Set camera position
       threeCamera.position.set(camX, camY, camZ);
       
-      // Look at scene center
+      // Look at scene center with same X offset to keep object centered
       threeCamera.up.set(0, 1, 0);
-      threeCamera.lookAt(centerX, centerY, centerZ);
+      threeCamera.lookAt(centerX + xCenterOffset, centerY, centerZ);
       
       // Use wider FOV for more perspective effect
       // Wider FOV = more perspective distortion, objects look smaller/further
