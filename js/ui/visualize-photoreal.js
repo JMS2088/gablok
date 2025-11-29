@@ -97,6 +97,175 @@
   var pmremGenerator = null;
   var envRT = null;
 
+  // =========================================================================
+  // CAMERA TRACKING SYSTEM
+  // Captures all camera parameters from 3D viewport for exact render matching
+  // =========================================================================
+  var cameraTracker = {
+    // Position in world space
+    x: 0,
+    y: 0,
+    z: 0,
+    // Orientation angles (radians)
+    yaw: 0,      // Rotation around Y axis (left-right)
+    pitch: 0,    // Rotation around X axis (up-down)
+    roll: 0,     // Rotation around Z axis (tilt) - usually 0
+    // Camera parameters
+    distance: 10,
+    fov: 50,
+    // Target point camera looks at
+    targetX: 0,
+    targetY: 0,
+    targetZ: 0,
+    // Projection parameters from 3D area
+    projScale: 500,
+    perspectiveStrength: 0.88,
+    
+    // Capture current camera state from 3D viewport
+    capture: function() {
+      var mainCam = window.camera || {};
+      var proj = window.__proj || {};
+      
+      // Get orientation from camera object
+      this.yaw = (typeof mainCam.yaw === 'number') ? mainCam.yaw : 0.65;
+      this.pitch = (typeof mainCam.pitch === 'number') ? mainCam.pitch : -0.55;
+      this.roll = 0;  // No roll in the 3D viewport
+      this.distance = (typeof mainCam.distance === 'number') ? mainCam.distance : 10;
+      
+      // Get target position
+      this.targetX = (typeof mainCam.targetX === 'number') ? mainCam.targetX : 0;
+      this.targetY = (typeof mainCam.targetY === 'number') ? mainCam.targetY : 0;
+      this.targetZ = (typeof mainCam.targetZ === 'number') ? mainCam.targetZ : 0;
+      
+      // Get actual camera position from projection cache
+      if (proj.cam && proj.cam.length === 3) {
+        this.x = proj.cam[0];
+        this.y = proj.cam[1];
+        this.z = proj.cam[2];
+      } else {
+        // Calculate from yaw/pitch/distance if not available
+        var cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
+        var cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
+        this.x = this.targetX - sy * cp * this.distance;
+        this.y = this.targetY - sp * this.distance;
+        this.z = this.targetZ - cy * cp * this.distance;
+      }
+      
+      // Get projection parameters
+      this.projScale = (proj.scale && proj.scale > 0) ? proj.scale : 500;
+      this.perspectiveStrength = (typeof proj.perspectiveStrength === 'number') ? proj.perspectiveStrength : 0.88;
+      
+      // Calculate FOV from projScale
+      var dpr = window.devicePixelRatio || 1;
+      var canvasHeight = (window.canvas && window.canvas.height) ? window.canvas.height / dpr : 800;
+      var tanHalfFov = canvasHeight / (2 * this.projScale);
+      this.fov = 2 * Math.atan(tanHalfFov) * (180 / Math.PI);
+      
+      console.log('[CameraTracker] Captured camera state:', this.toString());
+      return this;
+    },
+    
+    // Get a formatted string of all camera parameters
+    toString: function() {
+      return JSON.stringify({
+        position: { x: this.x.toFixed(3), y: this.y.toFixed(3), z: this.z.toFixed(3) },
+        orientation: { 
+          yaw: (this.yaw * 180 / Math.PI).toFixed(1) + '°', 
+          pitch: (this.pitch * 180 / Math.PI).toFixed(1) + '°',
+          roll: (this.roll * 180 / Math.PI).toFixed(1) + '°'
+        },
+        target: { x: this.targetX.toFixed(3), y: this.targetY.toFixed(3), z: this.targetZ.toFixed(3) },
+        distance: this.distance.toFixed(2),
+        fov: this.fov.toFixed(1) + '°',
+        projScale: this.projScale.toFixed(1)
+      }, null, 2);
+    },
+    
+    // Apply captured camera to Three.js camera with adjustments for render matching
+    applyToRenderCamera: function(threeCamera, bounds, renderWidth, renderHeight) {
+      if (!threeCamera || !THREE) return;
+      
+      // Use scene bounds to calculate camera position
+      // bounds contains: cx, cz (center), width, depth, height, minX, maxX, minZ, maxZ
+      var centerX = bounds.cx || 0;
+      var centerY = (bounds.height || 3) / 2;  // Center height of building
+      var centerZ = bounds.cz || 0;
+      
+      // Get scene dimensions
+      var sceneWidth = bounds.width || 10;
+      var sceneDepth = bounds.depth || 10;
+      var sceneHeight = bounds.height || 3;
+      var maxDim = Math.max(sceneWidth, sceneDepth, sceneHeight);
+      
+      // Use the actual camera distance from 3D area
+      // Scale up the distance to pull camera back further
+      // The 3D area uses hybrid projection which compresses depth
+      // Real perspective needs more distance to look similar
+      var viewDist = this.distance * 1.8;  // Scale up distance by 1.8x
+      
+      // Ensure minimum distance so camera doesn't clip into object
+      var minDist = maxDim * 1.5;  // At least 1.5x object size away
+      viewDist = Math.max(minDist, viewDist);
+      
+      console.log('[CameraTracker] Scene info:', {
+        sceneWidth: sceneWidth.toFixed(2),
+        sceneDepth: sceneDepth.toFixed(2),
+        sceneHeight: sceneHeight.toFixed(2),
+        maxDim: maxDim.toFixed(2),
+        capturedDistance: this.distance.toFixed(2),
+        viewDist: viewDist.toFixed(2)
+      });
+      
+      var cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
+      var cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
+      
+      // Camera position: offset from center based on yaw/pitch
+      // NEGATE X and Z to match 3D area coordinate system (camera on opposite side)
+      var camX = centerX - sy * cp * viewDist;
+      
+      // Apply vertical scale like camera.js does - reduce vertical movement when looking down
+      // This keeps the camera lower and matches the 3D area view better
+      var verticalScale = (sp < 0) ? 0.4 : 1.0;  // Reduce height when looking down (negative pitch)
+      var camY = centerY - sp * viewDist * verticalScale;
+      
+      var camZ = centerZ - cy * cp * viewDist;
+      
+      // Ensure camera is above ground but not too high
+      camY = Math.max(sceneHeight * 0.3, camY);
+      
+      // Set camera position
+      threeCamera.position.set(camX, camY, camZ);
+      
+      // Look at scene center
+      threeCamera.up.set(0, 1, 0);
+      threeCamera.lookAt(centerX, centerY, centerZ);
+      
+      // Use wider FOV for more perspective effect
+      // Wider FOV = more perspective distortion, objects look smaller/further
+      // 60-75 degrees gives nice architectural perspective
+      var baseFov = 65;
+      threeCamera.fov = baseFov;
+      
+      // Update aspect ratio
+      threeCamera.aspect = renderWidth / renderHeight;
+      
+      // Update projection matrix
+      threeCamera.updateProjectionMatrix();
+      
+      console.log('[CameraTracker] Applied to render camera:', {
+        sceneCenter: '(' + centerX.toFixed(2) + ', ' + centerY.toFixed(2) + ', ' + centerZ.toFixed(2) + ')',
+        camPos: '(' + camX.toFixed(2) + ', ' + camY.toFixed(2) + ', ' + camZ.toFixed(2) + ')',
+        viewDist: viewDist.toFixed(2),
+        fov: threeCamera.fov.toFixed(1) + '°',
+        yaw: (this.yaw * 180 / Math.PI).toFixed(1) + '°',
+        pitch: (this.pitch * 180 / Math.PI).toFixed(1) + '°'
+      });
+    }
+  };
+  
+  // Export camera tracker for debugging
+  window.cameraTracker = cameraTracker;
+
   var state = {
     initialized: false,
     panel: null,
@@ -327,13 +496,8 @@
     console.log('[Photoreal] Render canvas size:', width, 'x', height);
     console.log('[Photoreal] Scene bounds:', JSON.stringify(bounds));
     
-    // Read current 3D viewport camera and projection
-    var mainCam = window.camera || {};
-    var proj = window.__proj || {};
-    
-    console.log('[Photoreal] 3D viewport: yaw=' + (mainCam.yaw || 0).toFixed(3) + 
-                ', pitch=' + (mainCam.pitch || 0).toFixed(3) + 
-                ', dist=' + (mainCam.distance || 0).toFixed(2));
+    // Capture current camera state from 3D viewport
+    cameraTracker.capture();
     
     // Dispose old camera if exists
     if (camera) {
@@ -341,175 +505,28 @@
     }
     
     // =========================================================================
-    // Camera setup: Use 3D area's angle but frame the scene properly
-    // - Use yaw/pitch from 3D viewport for consistent viewing angle
-    // - Target the CENTER of the scene bounds (not ground level)
-    // - Calculate distance to fit the entire scene in view
+    // Create Three.js camera and apply tracked camera state
     // =========================================================================
     
     var aspect = width / height;
+    var fov = Math.max(25, Math.min(90, cameraTracker.fov * 5.0));  // FOV multiplier for perspective
+    var near = 0.1;
+    var far = 1000;
     
-    // Get viewing angle from 3D viewport
-    // NEGATE yaw to flip the horizontal axis (Three.js uses opposite handedness)
-    var yaw = (typeof mainCam.yaw === 'number') ? -mainCam.yaw : -0.65;
-    var pitch = (typeof mainCam.pitch === 'number') ? mainCam.pitch : -0.55;
-    var viewportDist = (typeof mainCam.distance === 'number') ? mainCam.distance : 20;
-    
-    // Get the ACTUAL camera position from the 3D viewport projection cache
-    // This includes user dragging adjustments and all constraints
-    var proj = window.__proj || {};
-    var viewportCam = proj.cam || null;  // [x, y, z] from camera.js
-    var viewportTarget = proj.target || null;  // [x, y, z] target
-    
-    // TARGET: Use the 3D viewport's target if available, otherwise scene center
-    // Offset Y up by ~2.0 world units to lower the center point in the render
-    // Offset X to shift object in render
-    // (positive offset lowers the view because camera looks down at target)
-    var targetX, targetY, targetZ;
-    var xOffset = 30.0;  // Shift target - reduced by 1 to track camera right
-    if (viewportTarget && viewportTarget.length === 3) {
-      targetX = viewportTarget[0] + xOffset;
-      targetY = viewportTarget[1] + 2.0;  // Raise the target to lower the view
-      targetZ = viewportTarget[2];
-    } else {
-      targetX = (bounds.cx || 0) + xOffset;
-      targetY = (bounds.height || 3) / 2 + 2.0;  // Raise the target to lower the view
-      targetZ = bounds.cz || 0;
-    }
-    
-    // CAMERA POSITION: Use actual viewport camera position, just scale for distance
-    var camX, camY, camZ;
-    if (viewportCam && viewportCam.length === 3) {
-      // Get the direction from target to camera (XZ plane only for horizontal distance)
-      var dirX = viewportCam[0] - targetX;
-      var dirY = viewportCam[1] - targetY;
-      var dirZ = viewportCam[2] - targetZ;
-      
-      // Flip Z instead of X to flip the view horizontally
-      dirZ = -dirZ;
-      
-      // Calculate XZ distance - this should stay CONSTANT regardless of pitch
-      var xzDist = Math.sqrt(dirX * dirX + dirZ * dirZ);
-      
-      // Normalize XZ direction to maintain constant horizontal distance
-      var xzLen = Math.max(0.01, xzDist);
-      var normDirX = dirX / xzLen;
-      var normDirZ = dirZ / xzLen;
-      
-      // Fixed horizontal distance from object
-      var fixedXZDist = 1.1 * 4.0;  // distScale * base distance
-      
-      // XZ position: fixed distance, only direction changes with yaw
-      camX = targetX + normDirX * fixedXZDist;
-      camZ = targetZ + normDirZ * fixedXZDist;
-      
-      // Y position: Use viewport camera Y directly with increased scale for more vertical movement
-      // The camera should rise significantly when looking down
-      var yScale = 2.1;  // Increased to make camera go higher when pitched down
-      var heightOffset = 2.0;  // Base height above target
-      camY = heightOffset + viewportCam[1] * yScale;
-      
-      console.log('[Photoreal] Using viewport cam pos:', viewportCam, '-> scaled:', [camX.toFixed(2), camY.toFixed(2), camZ.toFixed(2)]);
-    } else {
-      // Fallback: calculate from yaw/pitch
-      var cy = Math.cos(yaw), sy = Math.sin(yaw);
-      var cp = Math.cos(pitch), sp = Math.sin(pitch);
-      
-      var fwdX = sy * cp;
-      var fwdY = sp;
-      var fwdZ = cy * cp;
-      
-      var distance = viewportDist * 1.6;
-      var verticalScale = (fwdY < 0) ? 0.5 : 1.0;
-      
-      camX = targetX - fwdX * distance;
-      camY = targetY - fwdY * distance * verticalScale;
-      camZ = targetZ - fwdZ * distance;
-    }
-    
-    // Apply minCamY constraint (same as camera.js)
-    var minCamY = (typeof mainCam.minCamY === 'number') ? mainCam.minCamY : 0.3;
-    camY = Math.max(minCamY, camY);
-    
-    // Recalculate actual distance after constraints
-    var actualDist = Math.sqrt(
-      (camX - targetX) * (camX - targetX) +
-      (camY - targetY) * (camY - targetY) +
-      (camZ - targetZ) * (camZ - targetZ)
-    );
-    
-    // Get projection params from 3D area
-    var projScale = (proj.scale && proj.scale > 0) ? proj.scale : 500;
-    var dpr = window.devicePixelRatio || 1;
-    var mainCanvasHeight = (window.canvas && window.canvas.height) ? window.canvas.height / dpr : 800;
-    var mainCanvasWidth = (window.canvas && window.canvas.width) ? window.canvas.width / dpr : 1200;
-    
-    // =========================================================================
-    // FOV MATCHING for hybrid projection
-    // =========================================================================
-    // The 3D area uses hybrid projection: czEff = cz * k + refZ * (1-k) where k=0.88
-    // This makes objects appear less shrunken with distance than true perspective.
-    // 
-    // For an object AT THE REFERENCE DISTANCE (where czEff = refZ):
-    //   screenSize = worldSize * (projScale / refZ)
-    //
-    // For true perspective to match at that same distance:
-    //   screenSize = worldSize * (height / (2 * tan(fov/2))) / distance
-    //
-    // Setting them equal when cz = refZ:
-    //   projScale / refZ = height / (2 * tan(fov/2) * distance)
-    //   tan(fov/2) = height * refZ / (2 * projScale * distance)
-    //
-    // Since we're using the viewport distance (≈ refZ), this simplifies to:
-    //   tan(fov/2) = height / (2 * projScale)
-    // =========================================================================
-    
-    var tanHalfFov = mainCanvasHeight / (2 * projScale);
-    var fov = 2 * Math.atan(tanHalfFov) * (180 / Math.PI);
-    
-    // Increase FOV massively for much stronger perspective effect to match 3D area
-    fov = fov * 28.0;
-    
-    // Scale FOV for render canvas vs main canvas aspect difference
-    var mainAspect = mainCanvasWidth / mainCanvasHeight;
-    var renderAspect = width / height;
-    
-    // If render is wider than main, we may need to widen the FOV slightly
-    // to fit the same vertical content
-    if (renderAspect > mainAspect) {
-      // Keep same vertical FOV - no adjustment needed
-    }
-    
-    // Clamp FOV to reasonable range  
-    fov = Math.max(25, Math.min(90, fov));
-    
-    // Near/far planes
-    var near = Math.max(0.05, actualDist * 0.02);
-    var far = Math.max(near + 500, actualDist * 50);
-    
-    // Create camera
     camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-    camera.position.set(camX, camY, camZ);
     
-    // Ensure camera is level (up vector is world Y)
-    camera.up.set(0, 1, 0);
-    camera.lookAt(targetX, targetY, targetZ);
-    camera.updateProjectionMatrix();
+    // Apply camera position and orientation from tracker
+    cameraTracker.applyToRenderCamera(camera, bounds, width, height);
     
-    console.log('[Photoreal] Camera setup complete:', {
-      fov: fov.toFixed(1) + '°',
-      viewportDist: viewportDist.toFixed(2),
-      actualDist: actualDist.toFixed(2),
-      camPos: '(' + camX.toFixed(2) + ', ' + camY.toFixed(2) + ', ' + camZ.toFixed(2) + ')',
-      target: '(' + targetX.toFixed(2) + ', ' + targetY.toFixed(2) + ', ' + targetZ.toFixed(2) + ')',
-      projScale: projScale.toFixed(1),
-      mainCanvasHeight: mainCanvasHeight.toFixed(0),
-      tanHalfFov: tanHalfFov.toFixed(4)
-    });
+    console.log('[Photoreal] Camera setup complete using tracker');
 
     return camera;
   }
-
+  
+  // =========================================================================
+  // Old camera code removed - now using cameraTracker
+  // =========================================================================
+  
   function disposeRenderer(){
     // Clear lights
     lights.forEach(function(light){
