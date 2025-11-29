@@ -63,6 +63,36 @@ FOV varies from 35mm (bird's eye) to 65mm (ultra-wide drama).
 4. **Varied Cameras** - 12 different angles captured
 5. **Gallery** - Shows 4-5 best views automatically
 
+## Architecture Plan
+
+- **Live Scene Reuse**
+	- Lock the active Three.js scene, renderer state, orbit camera cache, and Fabric overlays behind `visualize.captureLiveViewport()` so we never rebuild geometry.
+	- Clone materials/meshes for the offscreen renderer while keeping references back to their originals for later restoration.
+
+- **Renderer Bootstrap**
+	- Spin up a dedicated `THREE.WebGLRenderer` in the modal mirroring tone mapping, output encoding, and pixel ratio from the live viewport.
+	- Share PMREM/environment maps via a lightweight cache to avoid reloading HDRIs for every capture run.
+
+- **Camera + Projection Sync**
+	- Build a `THREE.PerspectiveCamera` from `window.__proj` (position, quaternion, hybrid projection matrix, FOV, near/far) for the “Current View” render.
+	- Apply screen-space pan via CSS transforms on the capture overlay so the WebGL frame and screenshot remain perfectly registered.
+
+- **Material + Lighting Pipeline**
+	- Walk the cloned scene graph and swap in the PBR presets (walls, roof, pool, glass, balconies, etc.) while persisting original materials in a lookup table.
+	- Drive sun/ambient intensities, color temperature, fog, and exposure directly from the selected sky preset data.
+
+- **Capture Flow**
+	- Always capture the live orbit view first; resolve it immediately in the UI for instant feedback.
+	- Reuse the same renderer/camera for queued preset shots to minimize GPU thrash, only adjusting camera transforms between captures.
+
+- **Multi-Angle + Gallery Strategy**
+	- Define 8–12 preset orbits (birds-eye, ground, drama, detail) as offsets from the live target/scene bounds.
+	- Push each completed frame (data URL + metadata) through a gallery controller that decides which 4–5 angles to surface based on diversity heuristics.
+
+- **Export & Photoreal Endpoint**
+	- Package the scene hash, camera payloads, and sky/lighting metadata for `/api/photoreal/render` so the same captures can be reproduced server-side later.
+	- Allow direct image download/share from the gallery once a capture completes.
+
 ## Result
 
 **Every visualization session produces completely different, photorealistic renders** with:

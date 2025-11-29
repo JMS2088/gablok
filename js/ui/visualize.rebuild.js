@@ -54,6 +54,7 @@
   var lastCanvasHeight = 0;
   var lastCanvasCssWidth = 0;
   var lastCanvasCssHeight = 0;
+  var liveOverlayImg = null;
   var resizeHooked = false;
   var resizeObserver = null;
   var tileOverlayCanvas = null;
@@ -70,6 +71,7 @@
   var debugMarkers = [];
   var lastLiveViewportDataUrl = null;
   var liveViewportProfile = null; // Complete snapshot of viewport state
+  var lastLayoutLog = 0;
 
   function captureCompleteViewportProfile() {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -264,6 +266,165 @@
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
     return profile;
+  }
+
+  function applyPhotorealMaterialDefaults(mat, options){
+    if (!mat || typeof mat !== 'object') return mat;
+    var exposure = options && typeof options.exposure === 'number' ? options.exposure : 1;
+    if (mat.isMaterial) {
+      if (typeof mat.roughness === 'undefined') mat.roughness = 0.4;
+      if (typeof mat.metalness === 'undefined') mat.metalness = 0.12;
+      if (typeof mat.clearcoat === 'undefined') mat.clearcoat = 0.08;
+      if (typeof mat.clearcoatRoughness === 'undefined') mat.clearcoatRoughness = 0.22;
+      if (typeof mat.envMapIntensity === 'undefined') mat.envMapIntensity = 1 * exposure;
+      else mat.envMapIntensity *= exposure;
+      if (typeof mat.opacity === 'number' && mat.opacity < 1) mat.transparent = true;
+      mat.needsUpdate = true;
+    }
+    return mat;
+  }
+
+  function safeCloneMaterial(material, options){
+    if (!material) return material;
+    if (Array.isArray(material)) {
+      return material.map(function(entry){ return safeCloneMaterial(entry, options); });
+    }
+    if (!material.clone) return material;
+    var clone = material.clone();
+    applyPhotorealMaterialDefaults(clone, options);
+    return clone;
+  }
+
+  function cloneSceneGraph(source, options){
+    if (!source || !THREE || typeof source.clone !== 'function') return null;
+    var clone;
+    try {
+      clone = source.clone(true);
+    } catch(err){
+      console.warn('[Visualize] Unable to clone live scene graph', err);
+      return null;
+    }
+    var cloneGeometry = !options || options.cloneGeometry !== false;
+    var cloneMaterials = !options || options.cloneMaterials !== false;
+    var exposure = options && typeof options.exposure === 'number' ? options.exposure : 1;
+    clone.traverse(function(node){
+      if (!node || !node.isMesh) return;
+      if (cloneGeometry && node.geometry && typeof node.geometry.clone === 'function') {
+        node.geometry = node.geometry.clone();
+      }
+      if (cloneMaterials) {
+        node.material = safeCloneMaterial(node.material, { exposure: exposure });
+      }
+      node.castShadow = true;
+      node.receiveShadow = true;
+    });
+    return clone;
+  }
+
+  var liveViewportBridge = (function(){
+    var liveContext = null;
+
+    function resolveContext(input){
+      if (!input) return null;
+      var ctx = {
+        scene: input.scene,
+        root: input.root,
+        camera: input.camera,
+        renderer: input.renderer,
+        composer: input.composer,
+        fabricCanvas: input.fabricCanvas,
+        captureScreenshot: typeof input.captureScreenshot === 'function' ? input.captureScreenshot : null,
+        screenshot: input.screenshot || null,
+        cssWidth: input.cssWidth,
+        cssHeight: input.cssHeight
+      };
+      if (!ctx.scene && typeof input.getScene === 'function') ctx.scene = input.getScene();
+      if (!ctx.root && typeof input.getRoot === 'function') ctx.root = input.getRoot();
+      if (!ctx.camera && typeof input.getCamera === 'function') ctx.camera = input.getCamera();
+      if (!ctx.renderer && typeof input.getRenderer === 'function') ctx.renderer = input.getRenderer();
+      if (!ctx.root && ctx.scene) ctx.root = ctx.scene;
+      return ctx;
+    }
+
+    function register(context){
+      var resolved = resolveContext(context);
+      if (!resolved || (!resolved.scene && !resolved.root)) {
+        console.warn('[Visualize] Live viewport registration skipped (missing scene/root).');
+        return false;
+      }
+      liveContext = resolved;
+      try { window.__visualizeLiveContext = resolved; } catch(_e){}
+      console.log('[Visualize] Live viewport registered for reuse');
+      return true;
+    }
+
+    function capture(options){
+      options = options || {};
+      var ctx = liveContext || window.__visualizeLiveContext || null;
+      if (!ctx) return null;
+      var result = {
+        timestamp: Date.now(),
+        cssWidth: ctx.cssWidth || null,
+        cssHeight: ctx.cssHeight || null,
+        profile: options.profile || null
+      };
+      if (!result.profile) {
+        try { result.profile = captureCompleteViewportProfile(); } catch(_eProfile){}
+      }
+      if (ctx.captureScreenshot) {
+        try { result.screenshot = ctx.captureScreenshot(); } catch(err){ console.warn('[Visualize] Live screenshot failed', err); }
+      } else if (ctx.screenshot) {
+        result.screenshot = ctx.screenshot;
+      }
+      if (ctx.camera && typeof ctx.camera.clone === 'function') {
+        try { result.camera = ctx.camera.clone(); } catch(_cloneErr){ result.camera = null; }
+      }
+      var graphSource = ctx.root || ctx.scene;
+      if (graphSource) {
+        var cloned = cloneSceneGraph(graphSource, options);
+        if (cloned) {
+          result.sceneGraph = cloned;
+          if (THREE && THREE.Box3) {
+            var box = new THREE.Box3().setFromObject(cloned);
+            if (box && box.isBox3) {
+              result.bounds = { min: box.min.toArray(), max: box.max.toArray() };
+              result.hashPayload = {
+                bounds: result.bounds,
+                camera: result.camera ? { position: result.camera.position.toArray(), up: result.camera.up.toArray() } : null
+              };
+            }
+          }
+        }
+      }
+      if (ctx.renderer) {
+        result.rendererState = {
+          toneMapping: ctx.renderer.toneMapping,
+          toneMappingExposure: ctx.renderer.toneMappingExposure,
+          outputColorSpace: ctx.renderer.outputColorSpace || ctx.renderer.outputEncoding || null
+        };
+      }
+      if (!result.hashPayload) {
+        result.hashPayload = result.profile || { timestamp: result.timestamp };
+      }
+      return result;
+    }
+
+    function hasLiveContext(){
+      return !!(liveContext || window.__visualizeLiveContext);
+    }
+
+    return {
+      register: register,
+      capture: capture,
+      hasLiveContext: hasLiveContext
+    };
+  })();
+
+  if (typeof window !== 'undefined') {
+    window.visualizeBridge = window.visualizeBridge || {};
+    window.visualizeBridge.registerLiveViewport = liveViewportBridge.register;
+    window.visualizeBridge.captureLiveViewport = liveViewportBridge.capture;
+    window.visualizeBridge.hasLiveContext = liveViewportBridge.hasLiveContext;
   }
 
   function applyViewportProfileToCamera(profile) {
@@ -504,6 +665,32 @@
     }
     
     return true;
+  }
+
+  function overrideViewportProfileTarget(profile, focusVec){
+    if (!profile || !focusVec) return false;
+    var tx = isFiniteNumber(focusVec.x) ? focusVec.x : 0;
+    var ty = isFiniteNumber(focusVec.y) ? focusVec.y : 0;
+    var tz = isFiniteNumber(focusVec.z) ? focusVec.z : 0;
+    var updated = false;
+    profile.camera = profile.camera || {};
+    if (profile.camera.targetX !== tx || profile.camera.targetY !== ty || profile.camera.targetZ !== tz) {
+      profile.camera.targetX = tx;
+      profile.camera.targetY = ty;
+      profile.camera.targetZ = tz;
+      updated = true;
+    }
+    profile.projection = profile.projection || {};
+    var nextTarget = [tx, ty, tz];
+    if (!Array.isArray(profile.projection.target) || profile.projection.target.length < 3 ||
+        profile.projection.target[0] !== tx || profile.projection.target[1] !== ty || profile.projection.target[2] !== tz) {
+      profile.projection.target = nextTarget;
+      updated = true;
+    }
+    if (updated) {
+      console.log('[Visualize] Viewport target overridden to mesh center:', nextTarget);
+    }
+    return updated;
   }
 
   var floorHeight = (function(){
@@ -776,6 +963,30 @@
       near: cam.near,
       far: cam.far,
       aspect: cam.aspect
+    };
+  }
+
+  function cameraPresetFromInstance(cam){
+    if (!cam || !THREE) return null;
+    var position = cam.position ? cam.position.clone() : new THREE.Vector3();
+    var up = cam.up ? cam.up.clone() : new THREE.Vector3(0, 1, 0);
+    var dir = new THREE.Vector3(0, 0, -1);
+    try {
+      cam.getWorldDirection(dir);
+    } catch(_eDir){
+      dir.set(0, 0, -1);
+    }
+    if (dir.lengthSq() === 0) dir.set(0, 0, -1);
+    dir.normalize();
+    var focusDist = (cam && typeof cam.userData === 'object' && typeof cam.userData.focusDistance === 'number') ? cam.userData.focusDistance : 5;
+    var target = position.clone().add(dir.multiplyScalar(focusDist || 5));
+    return {
+      position: position,
+      target: target,
+      up: up,
+      fov: isFiniteNumber(cam.fov) ? cam.fov : computeViewportFov(),
+      near: isFiniteNumber(cam.near) ? cam.near : 0.1,
+      far: isFiniteNumber(cam.far) ? cam.far : 2000
     };
   }
 
@@ -2328,10 +2539,14 @@
     stage.style.alignItems = 'flex-start';
     stage.style.overflow = 'hidden';
 
+    var cssWidth = isFiniteNumber(lastCanvasCssWidth) && lastCanvasCssWidth > 0 ? lastCanvasCssWidth : null;
+    var cssHeight = isFiniteNumber(lastCanvasCssHeight) && lastCanvasCssHeight > 0 ? lastCanvasCssHeight : null;
     var baseCanvasEl = document.getElementById('canvas');
     var baseRect = baseCanvasEl && baseCanvasEl.getBoundingClientRect ? baseCanvasEl.getBoundingClientRect() : null;
-    var cssWidth = baseRect && baseRect.width > 0 ? baseRect.width : (stage.clientWidth || window.innerWidth || 1920);
-    var cssHeight = baseRect && baseRect.height > 0 ? baseRect.height : (stage.clientHeight || window.innerHeight || 1080);
+    if (!cssWidth || !cssHeight) {
+      cssWidth = baseRect && baseRect.width > 0 ? baseRect.width : (stage.clientWidth || window.innerWidth || 1920);
+      cssHeight = baseRect && baseRect.height > 0 ? baseRect.height : (stage.clientHeight || window.innerHeight || 1080);
+    }
 
     wrap.style.width = cssWidth + 'px';
     wrap.style.height = cssHeight + 'px';
@@ -2342,11 +2557,47 @@
     renderCanvas.style.height = cssHeight + 'px';
     renderCanvas.style.objectFit = 'fill';
 
+    if (liveOverlayImg && liveOverlayImg.parentNode) {
+      liveOverlayImg.style.width = cssWidth + 'px';
+      liveOverlayImg.style.height = cssHeight + 'px';
+    }
+
     if (fabricCanvas) {
       fabricCanvas.setDimensions({ width: '100%', height: '100%' }, { cssOnly: true });
       fabricCanvas.calcOffset();
     }
     updateAlignmentGrid(cssWidth, cssHeight);
+
+    try {
+      var now = (performance && performance.now) ? performance.now() : Date.now();
+      if (!lastLayoutLog || now - lastLayoutLog > 750) {
+        var wrapRect = wrap.getBoundingClientRect();
+        var renderRect = renderCanvas.getBoundingClientRect();
+        console.log('[Visualize] Layout sync', {
+          cssWidth: cssWidth,
+          cssHeight: cssHeight,
+          baseCanvas: baseRect ? {
+            width: Math.round(baseRect.width),
+            height: Math.round(baseRect.height),
+            left: Math.round(baseRect.left),
+            top: Math.round(baseRect.top)
+          } : null,
+          visualizeWrap: {
+            width: Math.round(wrapRect.width),
+            height: Math.round(wrapRect.height),
+            left: Math.round(wrapRect.left),
+            top: Math.round(wrapRect.top)
+          },
+          visualizeCanvas: {
+            width: Math.round(renderRect.width),
+            height: Math.round(renderRect.height),
+            left: Math.round(renderRect.left),
+            top: Math.round(renderRect.top)
+          }
+        });
+        lastLayoutLog = now;
+      }
+    } catch(_layoutErr) {}
   }
 
   function removeAlignmentGrid(){
@@ -2620,7 +2871,9 @@
       up: cam.up.clone(),
       fov: cam.fov,
       near: cam.near,
-      far: cam.far
+      far: cam.far,
+      projectionMatrix: cam.projectionMatrix ? cam.projectionMatrix.elements.slice() : null,
+      projectionMatrixInverse: cam.projectionMatrixInverse ? cam.projectionMatrixInverse.elements.slice() : null
     };
   }
 
@@ -2632,7 +2885,22 @@
     if (isFiniteNumber(state.fov)) cam.fov = state.fov;
     if (isFiniteNumber(state.near)) cam.near = state.near;
     if (isFiniteNumber(state.far)) cam.far = state.far;
-    cam.updateProjectionMatrix();
+
+    var restoredProjection = false;
+    if (state.projectionMatrix && state.projectionMatrix.length === 16 && cam.projectionMatrix) {
+      cam.projectionMatrix.fromArray(state.projectionMatrix);
+      if (state.projectionMatrixInverse && state.projectionMatrixInverse.length === 16 && cam.projectionMatrixInverse) {
+        cam.projectionMatrixInverse.fromArray(state.projectionMatrixInverse);
+      } else if (cam.projectionMatrixInverse) {
+        cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+      }
+      restoredProjection = true;
+    }
+
+    if (!restoredProjection) {
+      cam.updateProjectionMatrix();
+    }
+    cam.updateMatrixWorld(true);
   }
 
   function clonePreset(preset){
@@ -2658,18 +2926,29 @@
     
     // CRITICAL FIX: When not recentering, camera must look at actual geometry center
     var targetX, targetY, targetZ;
-    if (!recenterScene && meshCenter) {
-      // Use actual geometry center as camera target
-      targetX = isFiniteNumber(meshCenter.x) ? meshCenter.x : 0;
-      targetY = isFiniteNumber(renderFocus.y) ? renderFocus.y : 0;
-      targetZ = isFiniteNumber(meshCenter.z) ? meshCenter.z : 0;
-      console.log('[captureLiveOrbitPreset] Using geometry center as target:', targetX, targetY, targetZ);
+    var liveTargetArr = (window && window.__proj && Array.isArray(window.__proj.target)) ? window.__proj.target : null;
+    if (!recenterScene) {
+      if (liveTargetArr && liveTargetArr.length >= 3) {
+        targetX = isFiniteNumber(liveTargetArr[0]) ? liveTargetArr[0] : 0;
+        targetY = isFiniteNumber(liveTargetArr[1]) ? liveTargetArr[1] : 0;
+        targetZ = isFiniteNumber(liveTargetArr[2]) ? liveTargetArr[2] : 0;
+        console.log('[captureLiveOrbitPreset] Using live projection target:', targetX, targetY, targetZ);
+      } else if (meshCenter) {
+        targetX = isFiniteNumber(meshCenter.x) ? meshCenter.x : 0;
+        targetY = isFiniteNumber(renderFocus.y) ? renderFocus.y : 0;
+        targetZ = isFiniteNumber(meshCenter.z) ? meshCenter.z : 0;
+        console.log('[captureLiveOrbitPreset] Using geometry center as fallback target:', targetX, targetY, targetZ);
+      } else {
+        targetX = isFiniteNumber(camState.targetX) ? camState.targetX : 0;
+        targetY = isFiniteNumber(camState.targetY) ? camState.targetY : 0;
+        targetZ = isFiniteNumber(camState.targetZ) ? camState.targetZ : 0;
+        console.log('[captureLiveOrbitPreset] Using camera target as fallback:', targetX, targetY, targetZ);
+      }
     } else {
-      // Use camera's current target
       targetX = isFiniteNumber(camState.targetX) ? camState.targetX : 0;
       targetY = isFiniteNumber(camState.targetY) ? camState.targetY : 0;
       targetZ = isFiniteNumber(camState.targetZ) ? camState.targetZ : 0;
-      console.log('[captureLiveOrbitPreset] Using camera target:', targetX, targetY, targetZ);
+      console.log('[captureLiveOrbitPreset] Recentering; using camera target:', targetX, targetY, targetZ);
     }
     
     var target = new THREE.Vector3(targetX, targetY, targetZ);
@@ -2939,19 +3218,45 @@
     return shots;
   }
 
+    function ensureLiveOverlay(){
+      if (liveOverlayImg && liveOverlayImg.parentNode) return liveOverlayImg;
+      var wrap = qs('visualize-canvas-wrap');
+      if (!wrap) return null;
+      var img = document.createElement('img');
+      img.id = 'visualize-live-overlay';
+      img.alt = 'Captured viewport overlay';
+      img.style.position = 'absolute';
+      img.style.top = '0';
+      img.style.left = '0';
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'fill';
+      img.style.zIndex = '-1';
+      img.style.pointerEvents = 'none';
+      wrap.insertBefore(img, wrap.firstChild || null);
+      liveOverlayImg = img;
+      return img;
+    }
+
     function primeLivePreview(){
       try {
-        var wrap = qs('visualize-canvas-wrap');
         var baseCanvas = document.getElementById('canvas');
-        if (!wrap || !baseCanvas) return false;
-        if (!baseCanvas.width || !baseCanvas.height) return false;
+        if (!baseCanvas || !baseCanvas.width || !baseCanvas.height) return false;
         var dataUrl = baseCanvas.toDataURL('image/png');
         if (!dataUrl || dataUrl.length < 32) return false;
-        wrap.style.backgroundImage = 'url(' + dataUrl + ')';
-        wrap.style.backgroundSize = '100% 100%';
-        wrap.style.backgroundPosition = '0 0';
-        wrap.style.backgroundRepeat = 'no-repeat';
-        wrap.classList.add('visualize-live-preview');
+        var img = ensureLiveOverlay();
+        if (!img) return false;
+        var dpr = window.devicePixelRatio || 1;
+        var cssWidth = baseCanvas.clientWidth || Math.round(baseCanvas.width / dpr) || baseCanvas.width;
+        var cssHeight = baseCanvas.clientHeight || Math.round(baseCanvas.height / dpr) || baseCanvas.height;
+        img.src = dataUrl;
+        img.style.display = 'block';
+        img.style.opacity = '1';
+        img.style.width = cssWidth + 'px';
+        img.style.height = cssHeight + 'px';
+        img.style.transform = '';
+        var wrap = qs('visualize-canvas-wrap');
+        if (wrap) wrap.classList.add('visualize-live-preview');
         return true;
       } catch(err) {
         console.warn('[Visualize] Unable to prime live preview', err);
@@ -2962,10 +3267,12 @@
     function clearLivePreview(){
       var wrap = qs('visualize-canvas-wrap');
       if (!wrap) return;
-      wrap.style.backgroundImage = '';
-      wrap.style.backgroundSize = '';
-      wrap.style.backgroundPosition = '';
-      wrap.style.backgroundRepeat = '';
+      if (liveOverlayImg) {
+        liveOverlayImg.removeAttribute('src');
+        liveOverlayImg.style.display = 'none';
+        liveOverlayImg.style.opacity = '0';
+        liveOverlayImg.style.transform = '';
+      }
       wrap.classList.remove('visualize-live-preview');
       syncLivePanTransform(true);
     }
@@ -3005,13 +3312,16 @@
       try { dataUrl = baseCanvas.toDataURL('image/png'); } catch(_captureErr){ dataUrl = null; }
       if (dataUrl) {
         lastLiveViewportDataUrl = dataUrl;
-        if (wrap) {
-          wrap.style.backgroundImage = 'url(' + dataUrl + ')';
-          wrap.style.backgroundSize = '100% 100%';
-          wrap.style.backgroundPosition = '0 0';
-          wrap.style.backgroundRepeat = 'no-repeat';
-          wrap.classList.add('visualize-live-preview');
+        var img = ensureLiveOverlay();
+        if (img) {
+          img.src = dataUrl;
+          img.style.display = 'block';
+          img.style.opacity = '1';
+          img.style.width = cssWidth + 'px';
+          img.style.height = cssHeight + 'px';
+          img.style.transform = '';
         }
+        if (wrap) wrap.classList.add('visualize-live-preview');
       }
 
       ensureResizeListener();
@@ -3051,15 +3361,33 @@
     function syncLivePanTransform(disable){
       var wrap = qs('visualize-canvas-wrap');
       if (!wrap) return;
+      var renderCanvas = qs(CANVAS_ID);
+      var annotationCanvas = qs('visualize-annotations');
+
+      function applyTransform(value){
+        if (renderCanvas) {
+          renderCanvas.style.transformOrigin = '0 0';
+          renderCanvas.style.transform = value;
+        }
+        if (annotationCanvas) {
+          annotationCanvas.style.transformOrigin = '0 0';
+          annotationCanvas.style.transform = value;
+        }
+      }
+
       if (disable) {
         wrap.style.transform = '';
+        applyTransform('');
         return;
       }
+
       var panState = (window && window.pan) ? window.pan : null;
       if (!panState) {
         wrap.style.transform = '';
+        applyTransform('');
         return;
       }
+
       var dpr = window.devicePixelRatio || 1;
       var tx = (panState.x || 0);
       var ty = (panState.y || 0);
@@ -3069,9 +3397,13 @@
       }
       if (Math.abs(tx) < 0.001 && Math.abs(ty) < 0.001) {
         wrap.style.transform = '';
+        applyTransform('');
         return;
       }
-      wrap.style.transform = 'translate(' + tx.toFixed(2) + 'px,' + ty.toFixed(2) + 'px)';
+
+      wrap.style.transform = '';
+      var transform = 'translate(' + tx.toFixed(2) + 'px,' + ty.toFixed(2) + 'px)';
+      applyTransform(transform);
     }
 
     function resetTileReveal(){
@@ -3253,6 +3585,14 @@
         updateGalleryGrid('Unable to generate design images.');
       }
     }
+  }
+
+  function setCaptureStatus(message, state){
+    var el = qs('visualize-capture-status');
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.remove('live', 'fallback', 'error', 'info');
+    if (state) el.classList.add(state);
   }
 
   function setPhotorealStatus(message, kind){
@@ -3753,6 +4093,8 @@
     var previewPrimed = false;
     var previewCleared = false;
     var tileRevealPromise = null;
+    var captureMode = 'info';
+    setCaptureStatus('Syncing live viewport…', 'info');
     resetTileReveal();
     previewPrimed = primeLivePreview();
     if (loading) {
@@ -3762,18 +4104,42 @@
     try {
       // STEP 1: CAPTURE COMPLETE VIEWPORT PROFILE
       liveViewportProfile = captureCompleteViewportProfile();
-      
-      var snapshot = gatherProjectSnapshot();
-      console.log('[Visualize] Snapshot gathered');
-      var hash = computeHash(snapshot);
-      if (rng && typeof rng.reseed === 'function') rng.reseed(hash);
-      materialExposureCache = Object.create(null);
-      skyTexture = null;
-      skyGradientPalette = null;
+
       var qualitySelect = qs(QUALITY_ID);
       var multiplier = qualitySelect ? parseFloat(qualitySelect.value || '1') : 1;
       if (!isFinite(multiplier) || multiplier <= 0) multiplier = 1;
       currentQuality = multiplier;
+      var liveSceneSnapshot = liveViewportBridge.capture({
+        profile: liveViewportProfile,
+        cloneMaterials: true,
+        cloneGeometry: true,
+        exposure: multiplier
+      });
+      if (liveSceneSnapshot && liveSceneSnapshot.sceneGraph) {
+        captureMode = 'live';
+        setCaptureStatus('Reusing live 3D viewport (pixel-perfect alignment).', 'live');
+      } else if (liveViewportBridge.hasLiveContext()) {
+        captureMode = 'fallback';
+        setCaptureStatus('Live viewport registered — waiting for updated geometry…', 'info');
+      } else {
+        captureMode = 'fallback';
+        setCaptureStatus('Rebuilding high-end scene from project data…', 'fallback');
+      }
+
+      var snapshot = gatherProjectSnapshot();
+      console.log('[Visualize] Snapshot gathered');
+      if (liveSceneSnapshot) {
+        console.log('[Visualize] Live scene snapshot available', {
+          hasGraph: !!liveSceneSnapshot.sceneGraph,
+          hasCamera: !!liveSceneSnapshot.camera
+        });
+      }
+      var hashSeed = (liveSceneSnapshot && liveSceneSnapshot.hashPayload) ? liveSceneSnapshot.hashPayload : snapshot;
+      var hash = computeHash(hashSeed);
+      if (rng && typeof rng.reseed === 'function') rng.reseed(hash);
+      materialExposureCache = Object.create(null);
+      skyTexture = null;
+      skyGradientPalette = null;
 
       var liveCapture = renderLiveViewportOnly({ quality: multiplier });
 
@@ -3956,14 +4322,20 @@
       ensureRenderer();
       console.log('[Visualize] Renderer ensured');
       
-      var useLiveViewportFraming = !!(liveCapture && liveCapture.shot);
+      var useLiveViewportFraming = !!((liveCapture && liveCapture.shot) || (liveSceneSnapshot && liveSceneSnapshot.camera));
       // Sky preset determines exposure for perfect lighting match
       var skyPreset = selectSkyPalette();
       if (renderer) {
         var presetExposure = (skyPreset && typeof skyPreset.exposure === 'number') ? skyPreset.exposure : 1.2;
-        var toneExposure = Math.min(1.4, Math.max(0.9, presetExposure * 0.75));
+        var liveExposure = (liveSceneSnapshot && liveSceneSnapshot.rendererState && typeof liveSceneSnapshot.rendererState.toneMappingExposure === 'number')
+          ? liveSceneSnapshot.rendererState.toneMappingExposure
+          : null;
+        var toneExposure = liveExposure != null ? liveExposure : Math.min(1.4, Math.max(0.9, presetExposure * 0.75));
         var qualityBoost = Math.pow(multiplier > 0 ? multiplier : 1, 0.25);
         renderer.toneMappingExposure = toneExposure * qualityBoost;
+        if (liveSceneSnapshot && liveSceneSnapshot.rendererState && typeof liveSceneSnapshot.rendererState.toneMapping !== 'undefined') {
+          renderer.toneMapping = liveSceneSnapshot.rendererState.toneMapping;
+        }
       }
       try {
         await ensureEnvironment();
@@ -3981,69 +4353,98 @@
 
       var bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity, minZ: Infinity, maxZ: -Infinity };
       var boxes = [];
-      try {
-        boxes = gatherBoxes(snapshot);
-        console.log('[Visualize] Boxes gathered', boxes.length);
-      } catch(e) { console.error('[Visualize] gatherBoxes failed', e); }
-
-      try {
-        boxes.forEach(function(entry){ includeBounds(bounds, entry.box); });
-        var primaryStructureEnvelope = computePrimaryStructureEnvelope(boxes);
-      } catch(e) { console.error('[Visualize] Envelope computation failed', e); }
-
-      var wallMaterial = materialFor('wall');
-      
-      // Track if we have any geometry
       var hasGeometry = false;
+      var usingLiveScene = !!(liveSceneSnapshot && liveSceneSnapshot.sceneGraph);
+      var liveSceneRoot = null;
+      var primaryStructureEnvelope = null;
 
-      console.log('[Visualize] Processing wall strips...');
-      try {
-        snapshot.wallStrips.forEach(function(strip){
-          var mat = wallMaterial.clone();
-          // Skip texture assignment to avoid "Texture marked for update but no image data" errors
-          // The material already has proper color/roughness/metalness for concrete
-          var result = buildWallMesh(strip, mat);
-          if (Array.isArray(result.meshes) && result.meshes.length){
-            hasGeometry = true;
-            result.meshes.forEach(function(mesh){
-              var baseOptions = { edgeColor: EDGE_COLORS.wall };
-              var overrides = (mesh && mesh.userData) ? mesh.userData.visualizeOpts : null;
-              if (overrides) {
-                var merged = {};
-                var key;
-                for (key in baseOptions) merged[key] = baseOptions[key];
-                for (key in overrides) {
-                  if (Object.prototype.hasOwnProperty.call(overrides, key)) merged[key] = overrides[key];
+      if (usingLiveScene) {
+        liveSceneRoot = liveSceneSnapshot.sceneGraph;
+        if (liveSceneRoot) {
+          sceneRoot.add(liveSceneRoot);
+          hasGeometry = true;
+          console.log('[Visualize] Injected live scene graph into Visualize renderer');
+        }
+        if (!hasGeometry) {
+          usingLiveScene = false;
+          if (liveViewportBridge.hasLiveContext()) {
+            console.warn('[Visualize] Live scene capture missing; falling back to geometry rebuild.');
+          }
+          captureMode = 'fallback';
+          setCaptureStatus('Live scene unavailable. Rebuilding from project data…', 'fallback');
+        }
+      }
+
+      if (!usingLiveScene) {
+        try {
+          boxes = gatherBoxes(snapshot);
+          console.log('[Visualize] Boxes gathered', boxes.length);
+        } catch(e) { console.error('[Visualize] gatherBoxes failed', e); }
+
+        try {
+          boxes.forEach(function(entry){ includeBounds(bounds, entry.box); });
+          primaryStructureEnvelope = computePrimaryStructureEnvelope(boxes);
+        } catch(e) { console.error('[Visualize] Envelope computation failed', e); }
+
+        var wallMaterial = materialFor('wall');
+
+        console.log('[Visualize] Processing wall strips...');
+        try {
+          snapshot.wallStrips.forEach(function(strip){
+            var mat = wallMaterial.clone();
+            var result = buildWallMesh(strip, mat);
+            if (Array.isArray(result.meshes) && result.meshes.length){
+              hasGeometry = true;
+              result.meshes.forEach(function(mesh){
+                var baseOptions = { edgeColor: EDGE_COLORS.wall };
+                var overrides = (mesh && mesh.userData) ? mesh.userData.visualizeOpts : null;
+                if (overrides) {
+                  var merged = {};
+                  var key;
+                  for (key in baseOptions) merged[key] = baseOptions[key];
+                  for (key in overrides) {
+                    if (Object.prototype.hasOwnProperty.call(overrides, key)) merged[key] = overrides[key];
+                  }
+                  registerMesh(mesh, merged);
+                } else {
+                  registerMesh(mesh, baseOptions);
                 }
-                registerMesh(mesh, merged);
-              } else {
-                registerMesh(mesh, baseOptions);
-              }
-            });
-          }
-        });
-      } catch(e) { console.error('[Visualize] Wall strips processing failed', e); }
-      console.log('[Visualize] Wall strips processed');
+              });
+            }
+          });
+        } catch(e) { console.error('[Visualize] Wall strips processing failed', e); }
+        console.log('[Visualize] Wall strips processed');
 
-      console.log('[Visualize] Processing boxes...');
-      try {
-        boxes.forEach(function(entry){
-          var mat = materialFor(entry.kind);
-          var mesh = null;
-          if (entry.kind === 'room' && entry.room) {
-            mesh = buildRoomMeshFromRoom(entry.room, mat);
-          }
-          if (!mesh) {
-            mesh = buildMesh(entry.box, mat);
-          }
-          if (mesh) {
-            hasGeometry = true;
-            registerMesh(mesh, { edgeColor: (entry.kind === 'roof' ? EDGE_COLORS.roof : EDGE_COLORS.default) });
-            if (entry.kind === 'room') addArchitecturalAccents(entry);
-          }
-        });
-      } catch(e) { console.error('[Visualize] Boxes processing failed', e); }
-      console.log('[Visualize] Boxes processed');
+        console.log('[Visualize] Processing boxes...');
+        try {
+          boxes.forEach(function(entry){
+            var mat = materialFor(entry.kind);
+            var mesh = null;
+            if (entry.kind === 'room' && entry.room) {
+              mesh = buildRoomMeshFromRoom(entry.room, mat);
+            }
+            if (!mesh) {
+              mesh = buildMesh(entry.box, mat);
+            }
+            if (mesh) {
+              hasGeometry = true;
+              registerMesh(mesh, { edgeColor: (entry.kind === 'roof' ? EDGE_COLORS.roof : EDGE_COLORS.default) });
+              if (entry.kind === 'room') addArchitecturalAccents(entry);
+            }
+          });
+        } catch(e) { console.error('[Visualize] Boxes processing failed', e); }
+        console.log('[Visualize] Boxes processed');
+      }
+
+      if (usingLiveScene && liveSceneSnapshot && liveSceneSnapshot.bounds && liveSceneSnapshot.bounds.min && liveSceneSnapshot.bounds.max) {
+        var liveBounds = liveSceneSnapshot.bounds;
+        bounds.minX = Math.min(bounds.minX, liveBounds.min[0]);
+        bounds.maxX = Math.max(bounds.maxX, liveBounds.max[0]);
+        bounds.minY = Math.min(bounds.minY, liveBounds.min[1]);
+        bounds.maxY = Math.max(bounds.maxY, liveBounds.max[1]);
+        bounds.minZ = Math.min(bounds.minZ, liveBounds.min[2]);
+        bounds.maxZ = Math.max(bounds.maxZ, liveBounds.max[2]);
+      }
 
       if (!hasGeometry) {
         throw new Error('Nothing to visualize yet. Add rooms or structures first.');
@@ -4081,9 +4482,10 @@
       renderFocus.x += CAMERA_FOCUS_OFFSET_RIGHT;
       renderFocus.y += CAMERA_FOCUS_OFFSET_UP;
       renderFocus.z += CAMERA_FOCUS_OFFSET_FORWARD;
+      var meshFocusVector = new THREE.Vector3(renderFocus.x, renderFocus.y, renderFocus.z);
 
       var livePreset = null;
-      var shouldCenterScene = !useLiveViewportFraming;
+      var shouldCenterScene = !useLiveViewportFraming && !usingLiveScene;
       
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('STEP 1: CAMERA SETUP');
@@ -4099,15 +4501,45 @@
       console.log('STEP 2: Geometry kept in world coordinates (NO RECENTERING)');
       console.log('  sceneRoot.position stays at:', sceneRoot.position);
       
+      if (!livePreset && liveSceneSnapshot && liveSceneSnapshot.camera) {
+        livePreset = cameraPresetFromInstance(liveSceneSnapshot.camera);
+      }
+
       if (window && window.camera) {
         livePreset = captureLiveOrbitPreset(span, meshCenter, meshSize, renderFocus, { recenter: false, pullbackRatio: RENDER_CAMERA_PULLBACK });
         console.log('  Live preset captured:', livePreset);
-        if (livePreset && livePreset.target) {
-          renderFocus.x = livePreset.target.x;
-          renderFocus.y = livePreset.target.y;
-          renderFocus.z = livePreset.target.z;
-          console.log('  Updated renderFocus to:', renderFocus);
+        if (livePreset) {
+          if (!livePreset.target) {
+            livePreset.target = meshFocusVector.clone();
+          } else {
+            livePreset.target.copy(meshFocusVector);
+          }
+          console.log('  Forced live preset target to mesh center:', meshFocusVector.toArray());
         }
+      }
+
+      if (shouldCenterScene && livePreset && livePreset.target) {
+        // Only translate the rebuilt scene when we intentionally recentered the content
+        // (i.e., we have no live viewport reference). When live framing is active we must
+        // leave geometry in world space so the captured screenshot and render stay aligned.
+        var offsetX = livePreset.target.x - meshCenter.x;
+        var offsetZ = livePreset.target.z - meshCenter.z;
+        var offsetMagSq = (offsetX * offsetX) + (offsetZ * offsetZ);
+        if (offsetMagSq > 1e-6) {
+          sceneRoot.position.x += offsetX;
+          sceneRoot.position.z += offsetZ;
+          meshCenter.x += offsetX;
+          meshCenter.z += offsetZ;
+          console.log('[Visualize] Applied live target alignment offset (fallback only):', { x: offsetX, z: offsetZ });
+        } else {
+          console.log('[Visualize] Live target already aligned; no scene translation needed.');
+        }
+      } else if (useLiveViewportFraming) {
+        console.log('[Visualize] Preserving world-space alignment (no scene translation).');
+      }
+
+      if (liveViewportProfile && meshFocusVector) {
+        overrideViewportProfileTarget(liveViewportProfile, meshFocusVector);
       }
 
       syncLivePanTransform(false);
@@ -4278,8 +4710,14 @@
       lastHash = hash;
       var footnote = qs(FOOTNOTE_ID);
       if (footnote) footnote.textContent = formatFootnote(bounds);
+      if (captureMode === 'live') {
+        setCaptureStatus('Render complete (live viewport scene).', 'live');
+      } else {
+        setCaptureStatus('Render complete (rebuilt scene).', 'fallback');
+      }
     } catch(err){
       console.error('[Visualize] render failed', err);
+      setCaptureStatus(err && err.message ? err.message : 'Render failed.', 'error');
       shouldHideLoading = false;
       if (loading) {
         var message = err && err.message ? err.message : 'Render failed';
@@ -4473,6 +4911,7 @@
     setGalleryShots([]);
     updateGalleryGrid('Generating design images...');
     setPhotorealStatus('');
+    setCaptureStatus('Preparing capture pipeline…', 'info');
     ensureEvents();
     window.requestAnimationFrame(fitRenderToStage);
     startVisualizeRender();
@@ -4486,6 +4925,7 @@
     resetTileReveal();
     clearLivePreview();
     syncLivePanTransform(true);
+    setCaptureStatus('', null);
     if (fabricCanvas) {
       fabricCanvas.discardActiveObject();
       fabricCanvas.requestRenderAll();

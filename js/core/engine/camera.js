@@ -63,15 +63,46 @@
       right = norm(right); up = norm(up); fwd = norm(fwd);
 
       // Camera position: target minus forward*distance, with slight vertical bias when looking down
+      const targetX = window.camera.targetX || 0;
+      const targetY = window.camera.targetY || 0;
+      const targetZ = window.camera.targetZ || 0;
+      const desiredDistance = Math.max(0.01, window.camera.distance || 12);
       const verticalScale = (fwd[1] < 0 ? 0.6 : 1.0);
-      let camY = (window.camera.targetY || 0) - fwd[1] * window.camera.distance * verticalScale;
-      if (typeof window.camera.minCamY === 'number') camY = Math.max(window.camera.minCamY, camY);
-      const cam = [
-        window.camera.targetX - fwd[0]*window.camera.distance,
-        camY,
-        window.camera.targetZ - fwd[2]*window.camera.distance
+      var cam = [
+        targetX - fwd[0] * desiredDistance,
+        targetY - fwd[1] * desiredDistance * verticalScale,
+        targetZ - fwd[2] * desiredDistance
       ];
+      if (typeof window.camera.minCamY === 'number') cam[1] = Math.max(window.camera.minCamY, cam[1]);
+      var vecX = cam[0] - targetX;
+      var vecY = cam[1] - targetY;
+      var vecZ = cam[2] - targetZ;
+      var actualDist = Math.hypot(vecX, vecY, vecZ) || desiredDistance;
+      if (Math.abs(actualDist - desiredDistance) > 1e-5) {
+        var scale = desiredDistance / actualDist;
+        vecX *= scale;
+        vecY *= scale;
+        vecZ *= scale;
+        cam = [targetX + vecX, targetY + vecY, targetZ + vecZ];
+        if (typeof window.camera.minCamY === 'number') cam[1] = Math.max(window.camera.minCamY, cam[1]);
+      }
 
+
+        function buildHybridProjectionMatrix(scale, cssWidth, cssHeight, referenceDistance){
+          if (!scale || !cssWidth || !cssHeight) return null;
+          var near = (window.camera && typeof window.camera.near === 'number') ? Math.max(0.001, window.camera.near) : 0.1;
+          var far = (window.camera && typeof window.camera.far === 'number') ? Math.max(near + 1, window.camera.far) : 600;
+          var refZ = Math.max(0.5, referenceDistance || (window.camera && window.camera.distance) || 12);
+          var k = window.PERSPECTIVE_STRENGTH || 0.88;
+          var scaleX =  2 * scale / cssWidth;
+          var scaleY = -2 * scale / cssHeight;
+          var m = new Float32Array(16);
+          m[0] = scaleX; m[4] = 0;       m[8]  = 0;                        m[12] = 0;
+          m[1] = 0;      m[5] = scaleY; m[9]  = 0;                        m[13] = 0;
+          m[2] = 0;      m[6] = 0;      m[10] = -(far + near) / (far - near); m[14] = -(2 * far * near) / (far - near);
+          m[3] = 0;      m[7] = 0;      m[11] = -k;                       m[15] = (1 - k) * refZ;
+          return Array.from(m);
+        }
       // Update global projection cache used by drawRoom/grid/inputs
       try {
         if (!window.__proj) window.__proj = { right:[1,0,0], up:[0,1,0], fwd:[0,0,1], cam:[0,0,10], scale:600 };
@@ -79,14 +110,27 @@
         window.__proj.up = up;
         window.__proj.fwd = fwd;
         window.__proj.cam = cam;
+        window.__proj.target = [targetX, targetY, targetZ];
         const dpr = window.devicePixelRatio || 1;
         const W = window.canvas ? window.canvas.width : 1200;
         const H = window.canvas ? window.canvas.height : 800;
+        const cssW = W / dpr;
+        const cssH = H / dpr;
         window.__proj.scale = Math.max(300, Math.min(H, W) * 0.6) / dpr;
+        window.__proj.cssWidth = cssW;
+        window.__proj.cssHeight = cssH;
+        window.__proj.perspectiveStrength = PERSPECTIVE_STRENGTH;
+        window.__proj.referenceDistance = desiredDistance;
+        window.__proj.matrix = buildHybridProjectionMatrix(window.__proj.scale, cssW, cssH, desiredDistance);
       } catch(_eProj) {}
 
       // Cache essentials for camera.js consumers
-      window.camera.cachedBasis = { camX: cam[0], camY: cam[1], camZ: cam[2], aspect: (window.canvas ? (window.canvas.width/Math.max(1, window.canvas.height)) : (16/9)) };
+      const aspect = (window.canvas ? (window.canvas.width / Math.max(1, window.canvas.height)) : (16/9));
+      const near = Math.max(0.05, desiredDistance * 0.01);
+      const far = Math.max(near + 50, desiredDistance + 200);
+      window.camera.near = near;
+      window.camera.far = far;
+      window.camera.cachedBasis = { camX: cam[0], camY: cam[1], camZ: cam[2], aspect: aspect };
       window.camera.cachedMatrix = { perspective: PERSPECTIVE_STRENGTH, invPerspective: 1 - PERSPECTIVE_STRENGTH };
     };
 

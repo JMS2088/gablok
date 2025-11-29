@@ -212,10 +212,11 @@ function __wireAppUi(){
           case 'share': if (typeof showShare==='function') showShare(); break;
           case 'price': if (typeof showPricing==='function') showPricing(); break;
           case 'visualize':
+          case 'visualize-photoreal':
             if (typeof showVisualize === 'function') {
               showVisualize();
             } else if (typeof loadScript === 'function') {
-              loadScript('js/ui/visualize.js').then(function(){ if (typeof showVisualize === 'function') showVisualize(); });
+              loadScript('js/ui/visualize-photoreal.js').then(function(){ if (typeof showVisualize === 'function') showVisualize(); });
             }
             break;
           case 'admin': if (typeof showAdmin==='function') showAdmin(); break;

@@ -101,7 +101,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 			<div class="dropdown-item separator" aria-hidden="true"></div>
 			<div class="dropdown-title">Project</div>
 			<div class="dropdown-item" data-action="price">Price</div>
-			<div class="dropdown-item" data-action="visualize">Visualize (High-End Render)</div>
+			<div class="dropdown-item" data-action="visualize-photoreal">📸 Visualize (Screenshot)</div>
 			<div class="dropdown-item separator" aria-hidden="true"></div>
 			<div class="dropdown-title">Export</div>
 			<div class="dropdown-item" data-action="obj">⬇ 3D - OBJ</div>
@@ -353,49 +353,19 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 			</div>
 			<div id="visualize-controls">
 				<button id="visualize-close" class="secondary" title="Close">✕</button>
-				<div class="visualize-control-row" style="margin-top:20px;">
-					<label for="visualize-quality">Quality</label>
-					<select id="visualize-quality">
-						<option value="1">Standard (1.0×)</option>
-						<option value="1.5">High (1.5×)</option>
-						<option value="2">Ultra (2.0×)</option>
-					</select>
-				</div>
-				<div class="visualize-control-row">
-					<span class="visualize-subtitle">Camera Views</span>
-					<div id="visualize-view-grid">
-						<button type="button" data-view-index="0">1</button>
-						<button type="button" data-view-index="1">2</button>
-						<button type="button" data-view-index="2">3</button>
-						<button type="button" data-view-index="3">4</button>
-						<button type="button" data-view-index="4">5</button>
-						<button type="button" data-view-index="5">6</button>
-						<button type="button" data-view-index="6">7</button>
-						<button type="button" data-view-index="7">8</button>
-						<button type="button" data-view-index="8">9</button>
-						<button type="button" data-view-index="9">10</button>
-					</div>
-				</div>
-				<div class="visualize-buttons">
-					<button id="visualize-generate">Generate Render</button>
-					<button id="visualize-add-label" class="secondary">Add Label</button>
+				<p id="visualize-capture-status" class="visualize-hint" aria-live="polite"></p>
+				<div class="visualize-buttons" style="margin-top:20px;">
+					<button id="visualize-generate">Re-Render</button>
 					<button id="visualize-download" class="secondary">Download PNG</button>
-					<button id="visualize-toggle-grid" class="secondary">Hide Grid Overlay</button>
-				</div>
-				<div class="visualize-control-row visualize-photoreal-row">
-					<span class="visualize-subtitle">Photorealistic Render (Beta)</span>
-					<button id="visualize-photoreal">Send to Photoreal Renderer</button>
-					<p id="visualize-photoreal-status" class="visualize-hint" aria-live="polite"></p>
 				</div>
 				<div class="visualize-control-row visualize-gallery-row">
 					<span class="visualize-subtitle">Your Design Views</span>
 					<div id="visualize-gallery" class="visualize-gallery-grid">
-						<div class="visualize-gallery-empty">Generate a render to populate design views.</div>
+						<div class="visualize-gallery-empty">Renders will appear here.</div>
 					</div>
 				</div>
 
 				<p id="visualize-footnote" class="visualize-footnote"></p>
-				<p class="visualize-hint">Tip: drag notes on the overlay canvas before exporting.</p>
 			</div>
 		</div>
 	</div>
