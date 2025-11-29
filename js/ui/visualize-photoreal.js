@@ -30,19 +30,23 @@
 
   // Photorealistic PBR material palette
   var MATERIAL_PALETTE = {
-    // Concrete surfaces (walls, rooms)
+    // Concrete surfaces (walls, rooms) - with texture support
     concrete: {
-      color: 0xd8d8ce,        // Warm light gray
-      roughness: 0.88,
+      color: 0xe0e0d8,        // Warm light gray
+      roughness: 0.85,
       metalness: 0.0,
-      envMapIntensity: 0.75
+      envMapIntensity: 0.8,
+      bumpScale: 0.015,
+      textureRepeat: 2.0
     },
     // Exterior concrete massing
     wall: {
-      color: 0x6d7075,        // Darker architectural concrete
-      roughness: 0.92,
+      color: 0x9a9a92,        // Medium architectural concrete
+      roughness: 0.75,
       metalness: 0.02,
-      envMapIntensity: 0.85
+      envMapIntensity: 0.9,
+      bumpScale: 0.02,
+      textureRepeat: 3.0
     },
     // Glass surfaces
     glass: {
@@ -64,28 +68,74 @@
       ior: 1.33,
       clearcoat: 1.0
     },
-    // Dark slate roof
+    // Flat roof - white/light gray plastic with shine
     roof: {
-      color: 0x222222,
-      roughness: 0.9,
-      metalness: 0.1,
-      envMapIntensity: 0.5
+      color: 0xf0f0f0,        // White/very light gray
+      roughness: 0.35,        // Smooth plastic finish
+      metalness: 0.0,         // Non-metallic plastic
+      envMapIntensity: 1.2,   // Good reflections
+      clearcoat: 0.6,         // Plastic sheen
+      clearcoatRoughness: 0.2
     },
-    // Ground/path - very light grey studio floor
+    // Roof edge trim - slightly darker accent
+    roofEdge: {
+      color: 0xe8e8e8,        // Light gray edge
+      roughness: 0.3,
+      metalness: 0.05,
+      envMapIntensity: 1.0,
+      clearcoat: 0.5,
+      clearcoatRoughness: 0.15
+    },
+    // Ground/path - textured ground
     ground: {
-      color: 0xe8eaec,        // Very light grey
+      color: 0xd5d8da,        // Light grey ground
+      roughness: 0.85,
+      metalness: 0.0,
+      envMapIntensity: 0.4,
+      bumpScale: 0.005,
+      textureRepeat: 20.0
+    },
+    // Pergola wood
+    pergola: {
+      color: 0x8b6914,        // Warm wood color
       roughness: 0.7,
       metalness: 0.0,
-      envMapIntensity: 0.3
+      envMapIntensity: 0.5
+    },
+    // Garage door metal
+    garage: {
+      color: 0x555555,
+      roughness: 0.4,
+      metalness: 0.8,
+      envMapIntensity: 1.2
+    },
+    // Balcony railing
+    balcony: {
+      color: 0x333333,
+      roughness: 0.3,
+      metalness: 0.9,
+      envMapIntensity: 1.5
+    },
+    // Stairs
+    stairs: {
+      color: 0xb0b0a8,
+      roughness: 0.8,
+      metalness: 0.05,
+      envMapIntensity: 0.7,
+      bumpScale: 0.01
     }
   };
 
-  // Architectural lighting presets
+  // Texture cache
+  var textureCache = {};
+  var textureLoader = null;
+
+  // Architectural lighting presets - enhanced
   var LIGHTING_PRESETS = [
-    { name: 'Golden Hour', sunColor: 0xffeedd, intensity: 1.8, angle: 15, warmth: 0.15 },
-    { name: 'Midday', sunColor: 0xffffff, intensity: 2.2, angle: 60, warmth: 0.02 },
-    { name: 'Overcast', sunColor: 0xe8f0f8, intensity: 1.2, angle: 45, warmth: -0.03 },
-    { name: 'Studio', sunColor: 0xffffff, intensity: 1.6, angle: 35, warmth: 0.0 }
+    { name: 'Golden Hour', sunColor: 0xffeedd, intensity: 2.2, angle: 15, warmth: 0.15, shadowSoftness: 4 },
+    { name: 'Midday', sunColor: 0xffffff, intensity: 2.8, angle: 60, warmth: 0.02, shadowSoftness: 2 },
+    { name: 'Overcast', sunColor: 0xe8f0f8, intensity: 1.5, angle: 45, warmth: -0.03, shadowSoftness: 6 },
+    { name: 'Studio', sunColor: 0xffffff, intensity: 2.0, angle: 35, warmth: 0.0, shadowSoftness: 3 }
   ];
 
   // Three.js renderer state
@@ -196,27 +246,9 @@
       var sceneDepth = bounds.depth || 10;
       var sceneHeight = bounds.height || 3;
       
-      // Calculate distance that ensures entire scene is visible
-      // Use scene diagonal for better framing of multi-room layouts
-      var sceneDiagonal = Math.sqrt(sceneWidth * sceneWidth + sceneDepth * sceneDepth);
-      
-      // Base distance on scene size - ensure camera is far enough to see everything
-      var baseFov = 55; // degrees
-      var fovRad = baseFov * Math.PI / 180;
-      
-      // Distance needed to fit scene in view (using FOV geometry)
-      var requiredDist = (sceneDiagonal / 2) / Math.tan(fovRad / 2);
-      
-      // Only enforce minimum distance if user is zoomed in too close
-      // But keep the camera at a similar relative position to what the user set
-      // Scale factor: how much the photoreal view needs to zoom out vs 3D view
-      var minDist = requiredDist * 1.2; // Reduced from 1.5 - less aggressive padding
-      
-      // Use user's actual distance, but scale proportionally if we need to zoom out
-      var viewDist = this.distance;
-      if (viewDist < minDist) {
-        viewDist = minDist;
-      }
+      // Use the user's distance from the 3D viewport with a slight push-back
+      // Multiply by 1.25 to push camera back for better framing
+      var viewDist = this.distance * 1.25;
       
       // Use the EXACT same math as engine3d.js for camera positioning
       // This matches the 3D viewport exactly
@@ -239,8 +271,9 @@
       var camY = centerY - fwdY * viewDist * verticalScale;
       var camZ = centerZ - fwdZ * viewDist;
       
-      // Ensure camera is above ground
-      camY = Math.max(sceneHeight * 0.3, camY);
+      // Allow camera to go very low (just above ground) to match 3D viewport
+      // This enables looking up at buildings from ground level
+      camY = Math.max(0.1, camY);
       
       // Since sceneRoot has scale.x = -1, we need to negate camera X and lookAt X
       // to view the mirrored scene correctly
@@ -254,11 +287,11 @@
       threeCamera.up.set(0, 1, 0);
       threeCamera.lookAt(mirrorLookX, centerY, centerZ);
       
-      // Calculate FOV based on distance
-      var baseFov = 55;
-      if (this.distance < 10) baseFov = 45;
-      else if (this.distance > 50) baseFov = 65;
-      threeCamera.fov = baseFov;
+      // Use the captured FOV from the 3D viewport for matching perspective
+      // Allow wider FOV for stronger perspective effect matching the 3D area
+      var capturedFov = this.fov || 80;
+      // Allow up to 100° FOV for strong perspective
+      threeCamera.fov = Math.max(60, Math.min(100, capturedFov));
       
       // Update aspect ratio and projection
       var aspect = renderWidth / renderHeight;
@@ -581,19 +614,25 @@
       antialias: true,
       preserveDrawingBuffer: true,
       alpha: false,
-      powerPreference: 'high-performance'
+      powerPreference: 'high-performance',
+      logarithmicDepthBuffer: true  // Better depth precision
     });
 
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setClearColor(0xf0f4f8, 1);
+    renderer.setClearColor(0xf5f7fa, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace || THREE.sRGBEncoding;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMappingExposure = 1.15;  // Slightly brighter
 
-    // Enable shadows for realistic lighting
+    // Enable high quality shadows
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.shadowMap.autoUpdate = true;
+    
+    // Enable physically correct lighting
+    if (renderer.physicallyCorrectLights !== undefined) {
+      renderer.physicallyCorrectLights = true;
+    }
 
     return renderer;
   }
@@ -712,20 +751,81 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // PBR MATERIAL CREATION
+  // TEXTURE LOADING
   // ─────────────────────────────────────────────────────────────────────────
 
-  function materialFor(kind){
+  function getTextureLoader() {
+    if (!textureLoader && THREE) {
+      textureLoader = new THREE.TextureLoader();
+    }
+    return textureLoader;
+  }
+
+  function loadConcreteTexture(repeatX, repeatY) {
+    var cacheKey = 'concrete_' + repeatX + '_' + repeatY;
+    if (textureCache[cacheKey]) {
+      return textureCache[cacheKey];
+    }
+    
+    var loader = getTextureLoader();
+    if (!loader) return null;
+    
+    var texturePath = 'js/textures/concrete/stone-background-wall-texture-banner-grunge-cement-concrete.jpg';
+    var texture = loader.load(texturePath, function(tex) {
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(repeatX || 2, repeatY || 2);
+      tex.anisotropy = 16;
+      console.log('[Photoreal] Concrete texture loaded');
+    }, undefined, function(err) {
+      console.warn('[Photoreal] Failed to load concrete texture:', err);
+    });
+    
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(repeatX || 2, repeatY || 2);
+    
+    textureCache[cacheKey] = texture;
+    return texture;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PBR MATERIAL CREATION - ENHANCED
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function materialFor(kind, width, height){
     if (!THREE) return null;
     
     var spec = MATERIAL_PALETTE[kind] || MATERIAL_PALETTE.concrete;
     
-    var mat = new THREE.MeshPhysicalMaterial({
+    // Calculate texture repeat based on surface size
+    var repeatX = spec.textureRepeat || 1;
+    var repeatY = spec.textureRepeat || 1;
+    if (width && height) {
+      repeatX = Math.max(1, width * (spec.textureRepeat || 1) / 4);
+      repeatY = Math.max(1, height * (spec.textureRepeat || 1) / 4);
+    }
+    
+    var matConfig = {
       color: spec.color,
       roughness: spec.roughness || 0.8,
       metalness: spec.metalness || 0.0,
-      envMapIntensity: spec.envMapIntensity || 1.0
-    });
+      envMapIntensity: spec.envMapIntensity || 1.0,
+      flatShading: false
+    };
+    
+    // Add texture for concrete-like materials
+    if (kind === 'wall' || kind === 'concrete' || kind === 'ground' || kind === 'stairs') {
+      var texture = loadConcreteTexture(repeatX, repeatY);
+      if (texture) {
+        matConfig.map = texture;
+        // Use texture as bump map for surface detail
+        matConfig.bumpMap = texture;
+        matConfig.bumpScale = spec.bumpScale || 0.01;
+      }
+    }
+    
+    var mat = new THREE.MeshPhysicalMaterial(matConfig);
 
     // Add clearcoat for glossy surfaces
     if (spec.clearcoat) {
@@ -746,7 +846,7 @@
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // LIGHTING SETUP
+  // LIGHTING SETUP - ENHANCED
   // ─────────────────────────────────────────────────────────────────────────
 
   function setupLighting(centerX, centerY, centerZ, span){
@@ -762,50 +862,51 @@
     
     // Ensure span is reasonable for shadow calculations
     var effectiveSpan = Math.max(span, 10);
+    var shadowSoftness = preset.shadowSoftness || 3;
 
-    // 1. Ambient base - slightly stronger for studio look
-    var ambient = new THREE.AmbientLight(0xf0f3f8, 0.35);
+    // 1. Ambient base - stronger for better shadow visibility
+    var ambient = new THREE.AmbientLight(0xf5f7fa, 0.45);
     scene.add(ambient);
     lights.push(ambient);
 
-    // 2. Hemisphere light for sky/ground bounce
-    var hemi = new THREE.HemisphereLight(0xdce8f5, 0x8a9099, 0.45);
-    hemi.position.set(centerX, centerY + effectiveSpan * 4, centerZ);
+    // 2. Hemisphere light for sky/ground color bounce
+    var hemi = new THREE.HemisphereLight(0xc8e0ff, 0x806040, 0.55);
+    hemi.position.set(centerX, centerY + effectiveSpan * 5, centerZ);
     scene.add(hemi);
     lights.push(hemi);
 
-    // 3. Key light (sun) - main shadow caster
+    // 3. Key light (sun) - main shadow caster with high quality shadows
     var sunAngleRad = (preset.angle || 45) * Math.PI / 180;
-    var keyLight = new THREE.DirectionalLight(preset.sunColor || 0xffffff, preset.intensity || 2.0);
+    var keyLight = new THREE.DirectionalLight(preset.sunColor || 0xffffff, preset.intensity || 2.5);
     keyLight.position.set(
-      centerX + effectiveSpan * 3 * Math.cos(sunAngleRad),
-      centerY + effectiveSpan * 4,
-      centerZ + effectiveSpan * 3 * Math.sin(sunAngleRad)
+      centerX + effectiveSpan * 4 * Math.cos(sunAngleRad),
+      centerY + effectiveSpan * 5,
+      centerZ + effectiveSpan * 4 * Math.sin(sunAngleRad)
     );
     keyLight.target.position.set(centerX, 0, centerZ);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(4096, 4096);
-    keyLight.shadow.bias = -0.0001;
+    keyLight.shadow.bias = -0.00005;
     keyLight.shadow.normalBias = 0.02;
-    keyLight.shadow.radius = 3;  // Softer shadows
+    keyLight.shadow.radius = shadowSoftness;
 
-    // Shadow camera covers entire scene
-    var shadowExtent = effectiveSpan * 4;
+    // Shadow camera covers entire scene with padding
+    var shadowExtent = effectiveSpan * 5;
     keyLight.shadow.camera.left = -shadowExtent;
     keyLight.shadow.camera.right = shadowExtent;
     keyLight.shadow.camera.top = shadowExtent;
     keyLight.shadow.camera.bottom = -shadowExtent;
     keyLight.shadow.camera.near = 1;
-    keyLight.shadow.camera.far = effectiveSpan * 15;
+    keyLight.shadow.camera.far = effectiveSpan * 20;
 
     scene.add(keyLight);
     scene.add(keyLight.target);
     lights.push(keyLight);
     lights.push(keyLight.target);
 
-    // 4. Fill light
-    var fillLight = new THREE.DirectionalLight(0xe0ecff, 0.6);
-    fillLight.position.set(centerX - span * 2, centerY + span * 1.5, centerZ - span * 1.5);
+    // 4. Fill light - cooler tone from opposite side
+    var fillLight = new THREE.DirectionalLight(0xd0e8ff, 0.7);
+    fillLight.position.set(centerX - effectiveSpan * 3, centerY + effectiveSpan * 2, centerZ - effectiveSpan * 2);
     fillLight.target.position.set(centerX, centerY, centerZ);
     fillLight.castShadow = false;
     scene.add(fillLight);
@@ -813,18 +914,42 @@
     lights.push(fillLight);
     lights.push(fillLight.target);
 
-    // 5. Rim light for depth
-    var rimLight = new THREE.SpotLight(0xfafbff, 0.8);
-    rimLight.position.set(centerX, centerY + span * 3, centerZ - span * 2.5);
+    // 5. Back/rim light for edge definition and depth
+    var rimLight = new THREE.DirectionalLight(0xfff8f0, 0.5);
+    rimLight.position.set(centerX + effectiveSpan * 2, centerY + effectiveSpan * 3, centerZ - effectiveSpan * 3);
     rimLight.target.position.set(centerX, centerY, centerZ);
-    rimLight.angle = Math.PI / 4;
-    rimLight.penumbra = 0.8;
-    rimLight.castShadow = true;
-    rimLight.shadow.mapSize.set(2048, 2048);
+    rimLight.castShadow = false;
     scene.add(rimLight);
     scene.add(rimLight.target);
     lights.push(rimLight);
     lights.push(rimLight.target);
+
+    // 6. Ground bounce light - simulates light reflecting off ground
+    var bounceLight = new THREE.DirectionalLight(0xfaf0e6, 0.3);
+    bounceLight.position.set(centerX, centerY - effectiveSpan, centerZ);
+    bounceLight.target.position.set(centerX, centerY + effectiveSpan, centerZ);
+    bounceLight.castShadow = false;
+    scene.add(bounceLight);
+    scene.add(bounceLight.target);
+    lights.push(bounceLight);
+    lights.push(bounceLight.target);
+
+    // 7. Accent spot light for architectural highlight
+    var accentLight = new THREE.SpotLight(0xffffff, 0.6);
+    accentLight.position.set(centerX - effectiveSpan, centerY + effectiveSpan * 4, centerZ + effectiveSpan);
+    accentLight.target.position.set(centerX, centerY, centerZ);
+    accentLight.angle = Math.PI / 5;
+    accentLight.penumbra = 0.9;
+    accentLight.decay = 1.5;
+    accentLight.castShadow = true;
+    accentLight.shadow.mapSize.set(2048, 2048);
+    accentLight.shadow.bias = -0.0001;
+    scene.add(accentLight);
+    scene.add(accentLight.target);
+    lights.push(accentLight);
+    lights.push(accentLight.target);
+    
+    console.log('[Photoreal] Enhanced lighting setup:', preset.name, '- 7 lights configured');
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1125,8 +1250,8 @@
 
     // Build ground plane - very large to fill entire view edge-to-edge
     var groundSize = Math.max(bounds.width, bounds.depth, 50) * 10;
-    var groundGeom = new THREE.PlaneGeometry(groundSize, groundSize, 1, 1);
-    var groundMat = materialFor('ground');
+    var groundGeom = new THREE.PlaneGeometry(groundSize, groundSize, 32, 32);
+    var groundMat = materialFor('ground', groundSize, groundSize);
     var ground = new THREE.Mesh(groundGeom, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.set(bounds.cx, 0, bounds.cz);
@@ -1136,11 +1261,12 @@
     
     console.log('[Photoreal] Ground plane:', groundSize, 'x', groundSize, 'at', bounds.cx, bounds.cz);
 
-    // Build rooms as concrete boxes
+    // Build rooms as detailed concrete boxes with beveled edges
     console.log('[Photoreal] Building', data.rooms.length, 'rooms into scene');
     data.rooms.forEach(function(room, idx){
-      var geom = new THREE.BoxGeometry(room.width, room.height, room.depth);
-      var mat = materialFor('wall');
+      // Create room geometry with segments for better lighting
+      var geom = new THREE.BoxGeometry(room.width, room.height, room.depth, 4, 4, 4);
+      var mat = materialFor('wall', room.width, room.height);
       var mesh = new THREE.Mesh(geom, mat);
       
       // Calculate Y position from level OR explicit y/baseHeight
@@ -1156,26 +1282,43 @@
       
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      mesh.name = 'Room_' + idx;
       sceneRoot.add(mesh);
 
-      // Add edges for architectural detail
-      var edges = new THREE.EdgesGeometry(geom, 30);
-      var edgeMat = new THREE.LineBasicMaterial({ color: 0x333333, linewidth: 1 });
+      // Add subtle edge lines for architectural definition
+      var edges = new THREE.EdgesGeometry(geom, 25);
+      var edgeMat = new THREE.LineBasicMaterial({ 
+        color: 0x404040, 
+        linewidth: 1,
+        transparent: true,
+        opacity: 0.6
+      });
       var edgeMesh = new THREE.LineSegments(edges, edgeMat);
       edgeMesh.position.copy(mesh.position);
       edgeMesh.rotation.copy(mesh.rotation);
+      edgeMesh.name = 'RoomEdges_' + idx;
       sceneRoot.add(edgeMesh);
+      
+      // Add a subtle base/plinth for grounding
+      var plinthGeom = new THREE.BoxGeometry(room.width + 0.1, 0.05, room.depth + 0.1);
+      var plinthMat = materialFor('stairs', room.width, room.depth);
+      var plinth = new THREE.Mesh(plinthGeom, plinthMat);
+      plinth.position.set(posX, baseY + 0.025, posZ);
+      if (room.rotation) plinth.rotation.y = (room.rotation * Math.PI) / 180;
+      plinth.receiveShadow = true;
+      plinth.name = 'RoomPlinth_' + idx;
+      sceneRoot.add(plinth);
     });
 
-    // Build wall strips
+    // Build wall strips with improved materials
     data.walls.forEach(function(wall){
       var dx = wall.x1 - wall.x0;
       var dz = wall.z1 - wall.z0;
       var length = Math.sqrt(dx * dx + dz * dz);
       if (length < 0.1) return;
 
-      var geom = new THREE.BoxGeometry(length, wall.height, wall.thickness);
-      var mat = materialFor('wall');
+      var geom = new THREE.BoxGeometry(length, wall.height, wall.thickness, 4, 4, 1);
+      var mat = materialFor('wall', length, wall.height);
       var mesh = new THREE.Mesh(geom, mat);
 
       var cx = (wall.x0 + wall.x1) / 2;
@@ -1187,19 +1330,71 @@
       mesh.rotation.y = -angle;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      mesh.name = 'Wall';
       sceneRoot.add(mesh);
     });
 
-    // Build roofs
-    data.roofs.forEach(function(roof){
-      var geom = new THREE.BoxGeometry(roof.width + 0.5, roof.height || 0.3, roof.depth + 0.5);
-      var mat = materialFor('roof');
+    // Build roofs - white plastic flat roofs with edge trim
+    data.roofs.forEach(function(roof, idx){
+      var roofWidth = roof.width + 0.5;
+      var roofDepth = roof.depth + 0.5;
+      var roofHeight = roof.height || 0.25;
+      var edgeThickness = 0.08;
+      
+      // Main roof surface - white plastic
+      var geom = new THREE.BoxGeometry(roofWidth, roofHeight, roofDepth, 2, 1, 2);
+      var mat = materialFor('roof', roofWidth, roofDepth);
       var mesh = new THREE.Mesh(geom, mat);
       
-      mesh.position.set(roof.x, (roof.baseHeight || 3) + (roof.height || 0.3) / 2, roof.z);
+      var roofY = (roof.baseHeight || 3) + roofHeight / 2;
+      mesh.position.set(roof.x, roofY, roof.z);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
+      mesh.name = 'Roof_' + idx;
       sceneRoot.add(mesh);
+      
+      // Add edge trim around the roof perimeter
+      var edgeMat = materialFor('roofEdge');
+      
+      // Front edge
+      var frontEdge = new THREE.Mesh(
+        new THREE.BoxGeometry(roofWidth + edgeThickness * 2, roofHeight + 0.05, edgeThickness),
+        edgeMat
+      );
+      frontEdge.position.set(roof.x, roofY, roof.z + roofDepth / 2 + edgeThickness / 2);
+      frontEdge.castShadow = true;
+      frontEdge.receiveShadow = true;
+      sceneRoot.add(frontEdge);
+      
+      // Back edge
+      var backEdge = new THREE.Mesh(
+        new THREE.BoxGeometry(roofWidth + edgeThickness * 2, roofHeight + 0.05, edgeThickness),
+        edgeMat
+      );
+      backEdge.position.set(roof.x, roofY, roof.z - roofDepth / 2 - edgeThickness / 2);
+      backEdge.castShadow = true;
+      backEdge.receiveShadow = true;
+      sceneRoot.add(backEdge);
+      
+      // Left edge
+      var leftEdge = new THREE.Mesh(
+        new THREE.BoxGeometry(edgeThickness, roofHeight + 0.05, roofDepth),
+        edgeMat
+      );
+      leftEdge.position.set(roof.x - roofWidth / 2 - edgeThickness / 2, roofY, roof.z);
+      leftEdge.castShadow = true;
+      leftEdge.receiveShadow = true;
+      sceneRoot.add(leftEdge);
+      
+      // Right edge
+      var rightEdge = new THREE.Mesh(
+        new THREE.BoxGeometry(edgeThickness, roofHeight + 0.05, roofDepth),
+        edgeMat
+      );
+      rightEdge.position.set(roof.x + roofWidth / 2 + edgeThickness / 2, roofY, roof.z);
+      rightEdge.castShadow = true;
+      rightEdge.receiveShadow = true;
+      sceneRoot.add(rightEdge);
     });
 
     // Build pools
