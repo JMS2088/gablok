@@ -196,11 +196,11 @@
       var sceneHeight = bounds.height || 3;
       var maxDim = Math.max(sceneWidth, sceneDepth, sceneHeight);
       
-      // Scale distance based on 3D area distance
-      var viewDist = this.distance * 2.5;
+      // Scale distance based on 3D area distance - use larger multiplier for better framing
+      var viewDist = this.distance * 3.5;
       
-      // Minimum distance to prevent clipping
-      var minDist = maxDim * 1.5;
+      // Minimum distance to ensure object isn't too close
+      var minDist = maxDim * 3.5;
       viewDist = Math.max(minDist, viewDist);
       
       // Calculate pitch component
@@ -238,17 +238,33 @@
       threeCamera.fov = baseFov;
       
       // Update aspect ratio and projection
-      threeCamera.aspect = renderWidth / renderHeight;
+      var aspect = renderWidth / renderHeight;
+      threeCamera.aspect = aspect;
       threeCamera.updateProjectionMatrix();
       
-      // Clear any view offset
+      // For ultra-wide screens, apply a view offset to shift the render
+      // This corrects for perspective distortion on wide aspect ratios
       threeCamera.clearViewOffset();
+      if (aspect > 2.0) {
+        // Ultra-wide: shift view slightly to center the object visually
+        // The offset is in pixels; negative shifts content right on screen
+        var shiftPercent = (aspect - 2.0) * 0.02;  // 2% per 1.0 aspect over 2.0
+        var pixelShift = renderWidth * shiftPercent;
+        threeCamera.setViewOffset(
+          renderWidth, renderHeight,  // full size
+          -pixelShift, 0,             // offset (negative X = shift right)
+          renderWidth, renderHeight   // render size
+        );
+        console.log('[CameraTracker] v3 Ultra-wide correction: aspect=' + aspect.toFixed(2) + 
+                    ' shiftPercent=' + (shiftPercent * 100).toFixed(1) + '% pixelShift=' + pixelShift.toFixed(0) + 'px');
+      }
       
-      console.log('[CameraTracker] v2 Camera setup:', {
+      console.log('[CameraTracker] v3 Camera setup:', {
         camPos: '(' + camX.toFixed(2) + ', ' + camY.toFixed(2) + ', ' + camZ.toFixed(2) + ')',
         lookAt: '(' + centerX.toFixed(2) + ', ' + centerY.toFixed(2) + ', ' + centerZ.toFixed(2) + ')',
         viewDist: viewDist.toFixed(2),
         yaw: '45.0° (forced)',
+        aspect: aspect.toFixed(2),
         xOffset: (camX - centerX).toFixed(2),
         zOffset: (camZ - centerZ).toFixed(2),
         fov: threeCamera.fov.toFixed(1) + '°'
