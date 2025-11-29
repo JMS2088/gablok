@@ -1,6 +1,7 @@
 /**
  * @file visualize-photoreal.js
  * @description Photorealistic 3D rendering using Three.js PBR materials
+ * @version 2.1.0 - Fresh render on each open, updated 2025
  * 
  * Auto-renders the 3D viewport with photorealistic materials when panel opens.
  * Uses MeshPhysicalMaterial for accurate PBR rendering with proper lighting.
@@ -161,21 +162,33 @@
   }
 
   function showVisualize(){
+    console.log('[Photoreal] showVisualize() called');
     init();
     if (!state.panel) return;
+    
+    // If panel is already visible, force a new render immediately
+    var wasAlreadyVisible = state.panel.classList.contains('visible');
+    
     state.panel.classList.add('visible');
     document.body.classList.add('visualize-open');
     
-    // AUTO-START: Begin photorealistic render immediately when panel opens
+    // ALWAYS reset and trigger fresh render
     state.renderStarted = false;
+    state.busy = false; // Reset busy state to allow re-render
     setStatus('Initializing photorealistic renderer…', 'info');
     
-    // Start render after a brief delay for panel animation
-    setTimeout(function(){
-      if (state.panel && state.panel.classList.contains('visible') && !state.renderStarted) {
-        startPhotorealisticRender();
-      }
-    }, 100);
+    if (wasAlreadyVisible) {
+      // Panel already open - start render immediately
+      console.log('[Photoreal] Panel already visible, triggering immediate fresh render');
+      startPhotorealisticRender();
+    } else {
+      // Start render after a brief delay for panel animation
+      setTimeout(function(){
+        if (state.panel && state.panel.classList.contains('visible') && !state.renderStarted) {
+          startPhotorealisticRender();
+        }
+      }, 100);
+    }
   }
 
   function hideVisualize(){
@@ -236,13 +249,14 @@
     var canvas = state.renderCanvas;
     if (!canvas) throw new Error('Render canvas not found');
 
-    if (renderer && renderer.domElement === canvas) {
-      return renderer;
-    }
+    console.log('[Photoreal] ensureRenderer: setting up WebGL renderer');
 
-    // Dispose old renderer if exists
+    // Always dispose and recreate renderer for fresh state
     if (renderer) {
-      try { renderer.dispose(); } catch(e){}
+      try { 
+        renderer.dispose(); 
+        console.log('[Photoreal] Disposed old renderer');
+      } catch(e){}
       renderer = null;
     }
 
@@ -272,17 +286,36 @@
   function ensureScene(){
     if (!THREE) throw new Error('Three.js not loaded');
     
-    if (!scene) {
-      scene = new THREE.Scene();
-      // Pure white background/sky/environment
-      scene.background = new THREE.Color(0xffffff);
+    console.log('[Photoreal] ensureScene: rebuilding scene from scratch');
+    
+    // Dispose old scene completely if exists
+    if (scene) {
+      // Remove all children from scene
+      while (scene.children.length > 0) {
+        var child = scene.children[0];
+        scene.remove(child);
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach(function(m){ if (m.dispose) m.dispose(); });
+          } else if (child.material.dispose) {
+            child.material.dispose();
+          }
+        }
+      }
     }
     
-    if (!sceneRoot) {
-      sceneRoot = new THREE.Group();
-      sceneRoot.name = 'PhotorealSceneRoot';
-      scene.add(sceneRoot);
-    }
+    // Create fresh scene
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xffffff);
+    
+    // Create fresh scene root
+    sceneRoot = new THREE.Group();
+    sceneRoot.name = 'PhotorealSceneRoot';
+    scene.add(sceneRoot);
+    
+    // Clear lights array for fresh lighting setup
+    lights = [];
     
     return scene;
   }
@@ -290,148 +323,172 @@
   function ensureCamera(width, height, bounds){
     if (!THREE) throw new Error('Three.js not loaded');
     
-    // =========================================================================
-    // EXACT MATCH to 3D Area Camera (camera.js / engine3d.js)
-    // The 3D area uses a hybrid projection. We read the EXACT computed camera
-    // position from __proj.cam and derive the equivalent Three.js FOV.
-    // =========================================================================
+    console.log('[Photoreal] ========== CAMERA SETUP ==========');
+    console.log('[Photoreal] Render canvas size:', width, 'x', height);
+    console.log('[Photoreal] Scene bounds:', JSON.stringify(bounds));
     
-    // Force update projection cache to get latest camera state
-    if (typeof window.updateProjectionCache === 'function') {
-      window.updateProjectionCache();
-    }
-    
-    var aspect = width / height;
+    // Read current 3D viewport camera and projection
     var mainCam = window.camera || {};
     var proj = window.__proj || {};
     
-    // Use EXACT camera position from projection cache (already computed by camera.js)
-    var camX, camY, camZ;
-    if (proj.cam && Array.isArray(proj.cam) && proj.cam.length >= 3) {
-      camX = proj.cam[0];
-      camY = proj.cam[1];
-      camZ = proj.cam[2];
+    console.log('[Photoreal] 3D viewport: yaw=' + (mainCam.yaw || 0).toFixed(3) + 
+                ', pitch=' + (mainCam.pitch || 0).toFixed(3) + 
+                ', dist=' + (mainCam.distance || 0).toFixed(2));
+    
+    // Dispose old camera if exists
+    if (camera) {
+      camera = null;
+    }
+    
+    // =========================================================================
+    // Camera setup: Use 3D area's angle but frame the scene properly
+    // - Use yaw/pitch from 3D viewport for consistent viewing angle
+    // - Target the CENTER of the scene bounds (not ground level)
+    // - Calculate distance to fit the entire scene in view
+    // =========================================================================
+    
+    var aspect = width / height;
+    
+    // Get viewing angle from 3D viewport
+    // NEGATE yaw to flip the horizontal axis (Three.js uses opposite handedness)
+    var yaw = (typeof mainCam.yaw === 'number') ? -mainCam.yaw : -0.65;
+    var pitch = (typeof mainCam.pitch === 'number') ? mainCam.pitch : -0.55;
+    var viewportDist = (typeof mainCam.distance === 'number') ? mainCam.distance : 20;
+    
+    // Get the ACTUAL camera position from the 3D viewport projection cache
+    // This includes user dragging adjustments and all constraints
+    var proj = window.__proj || {};
+    var viewportCam = proj.cam || null;  // [x, y, z] from camera.js
+    var viewportTarget = proj.target || null;  // [x, y, z] target
+    
+    // TARGET: Use the 3D viewport's target if available, otherwise scene center
+    // Offset Y up by ~2.0 world units to lower the center point in the render
+    // Offset X to shift object left in render (negative X shifts target left, object appears more left)
+    // (positive offset lowers the view because camera looks down at target)
+    var targetX, targetY, targetZ;
+    var xOffset = -1.5;  // Shift target left to move object left in render
+    if (viewportTarget && viewportTarget.length === 3) {
+      targetX = viewportTarget[0] + xOffset;
+      targetY = viewportTarget[1] + 2.0;  // Raise the target to lower the view
+      targetZ = viewportTarget[2];
     } else {
-      // Fallback: compute ourselves
-      var yaw = (typeof mainCam.yaw === 'number') ? mainCam.yaw : 0.65;
-      var pitch = (typeof mainCam.pitch === 'number') ? mainCam.pitch : -0.45;
-      var distance = (typeof mainCam.distance === 'number') ? mainCam.distance : 26;
+      targetX = (bounds.cx || 0) + xOffset;
+      targetY = (bounds.height || 3) / 2 + 2.0;  // Raise the target to lower the view
+      targetZ = bounds.cz || 0;
+    }
+    
+    // CAMERA POSITION: Use actual viewport camera position, just scale for distance
+    var camX, camY, camZ;
+    if (viewportCam && viewportCam.length === 3) {
+      // Get the direction from target to camera
+      var dirX = viewportCam[0] - targetX;
+      var dirY = viewportCam[1] - targetY;
+      var dirZ = viewportCam[2] - targetZ;
+      
+      // Negate X to flip horizontally (match yaw negation)
+      dirX = -dirX;
+      
+      // Scale by 1.9 to pull back for perspective matching
+      // Use smaller scale for Y to reduce pitch effect (camera was looking too far down)
+      var distScale = 1.9;
+      var yScale = 1.5;  // Less scaling on Y to raise the camera angle
+      camX = targetX + dirX * distScale;
+      camY = targetY + dirY * yScale;
+      camZ = targetZ + dirZ * distScale;
+      
+      console.log('[Photoreal] Using viewport cam pos:', viewportCam, '-> scaled:', [camX.toFixed(2), camY.toFixed(2), camZ.toFixed(2)]);
+    } else {
+      // Fallback: calculate from yaw/pitch
       var cy = Math.cos(yaw), sy = Math.sin(yaw);
       var cp = Math.cos(pitch), sp = Math.sin(pitch);
-      var fwd = [sy * cp, sp, cy * cp];
-      var verticalScale = (fwd[1] < 0) ? 0.6 : 1.0;
-      camX = -fwd[0] * distance;
-      camY = -fwd[1] * distance * verticalScale;
-      camZ = -fwd[2] * distance;
-      camY = Math.max(0.3, camY);
+      
+      var fwdX = sy * cp;
+      var fwdY = sp;
+      var fwdZ = cy * cp;
+      
+      var distance = viewportDist * 1.6;
+      var verticalScale = (fwdY < 0) ? 0.5 : 1.0;
+      
+      camX = targetX - fwdX * distance;
+      camY = targetY - fwdY * distance * verticalScale;
+      camZ = targetZ - fwdZ * distance;
     }
     
-    // Use EXACT target position from projection cache
-    var targetX, targetY, targetZ;
-    if (proj.target && Array.isArray(proj.target) && proj.target.length >= 3) {
-      targetX = proj.target[0];
-      targetY = proj.target[1];
-      targetZ = proj.target[2];
-    } else {
-      targetX = (typeof mainCam.targetX === 'number') ? mainCam.targetX : 0;
-      targetY = (typeof mainCam.targetY === 'number') ? mainCam.targetY : 0;
-      targetZ = (typeof mainCam.targetZ === 'number') ? mainCam.targetZ : 0;
-    }
+    // Apply minCamY constraint (same as camera.js)
+    var minCamY = (typeof mainCam.minCamY === 'number') ? mainCam.minCamY : 0.3;
+    camY = Math.max(minCamY, camY);
     
-    // Get the scale and perspective parameters from the 3D area
-    var projScale = (proj.scale && proj.scale > 0) ? proj.scale : 600;
-    var perspectiveStrength = (typeof window.PERSPECTIVE_STRENGTH === 'number') 
-      ? window.PERSPECTIVE_STRENGTH : 0.88;
-    var distance = (typeof mainCam.distance === 'number') ? mainCam.distance : 26;
+    // Recalculate actual distance after constraints
+    var actualDist = Math.sqrt(
+      (camX - targetX) * (camX - targetX) +
+      (camY - targetY) * (camY - targetY) +
+      (camZ - targetZ) * (camZ - targetZ)
+    );
     
-    // The 3D area projection formula is:
-    //   czEff = cz * k + refZ * (1 - k)   where k = perspectiveStrength, refZ = distance
-    //   s = scale / czEff
-    //   screenY = (canvasHeight/2) - (worldY * s)
-    //
-    // For objects at the target (cz ≈ distance), czEff ≈ distance
-    // So s ≈ scale / distance
-    //
-    // In Three.js perspective: screenY relates to worldY by:
-    //   screenY = (canvasHeight/2) - worldY * (canvasHeight / (2 * tan(fov/2) * distance))
-    //
-    // Matching: scale / distance = canvasHeight / (2 * tan(fov/2) * distance)
-    //   => scale = canvasHeight / (2 * tan(fov/2))
-    //   => tan(fov/2) = canvasHeight / (2 * scale)
-    //   => fov = 2 * atan(canvasHeight / (2 * scale))
-    
-    // Use the CSS height for calculation (matching camera.js which uses cssH)
+    // Get projection params from 3D area
+    var projScale = (proj.scale && proj.scale > 0) ? proj.scale : 500;
     var dpr = window.devicePixelRatio || 1;
-    var cssHeight = height / dpr;
+    var mainCanvasHeight = (window.canvas && window.canvas.height) ? window.canvas.height / dpr : 800;
+    var mainCanvasWidth = (window.canvas && window.canvas.width) ? window.canvas.width / dpr : 1200;
     
-    // Calculate FOV that matches the 3D area's projection at the target distance
-    var tanHalfFov = cssHeight / (2 * projScale);
+    // =========================================================================
+    // FOV MATCHING for hybrid projection
+    // =========================================================================
+    // The 3D area uses hybrid projection: czEff = cz * k + refZ * (1-k) where k=0.88
+    // This makes objects appear less shrunken with distance than true perspective.
+    // 
+    // For an object AT THE REFERENCE DISTANCE (where czEff = refZ):
+    //   screenSize = worldSize * (projScale / refZ)
+    //
+    // For true perspective to match at that same distance:
+    //   screenSize = worldSize * (height / (2 * tan(fov/2))) / distance
+    //
+    // Setting them equal when cz = refZ:
+    //   projScale / refZ = height / (2 * tan(fov/2) * distance)
+    //   tan(fov/2) = height * refZ / (2 * projScale * distance)
+    //
+    // Since we're using the viewport distance (≈ refZ), this simplifies to:
+    //   tan(fov/2) = height / (2 * projScale)
+    // =========================================================================
+    
+    var tanHalfFov = mainCanvasHeight / (2 * projScale);
     var fov = 2 * Math.atan(tanHalfFov) * (180 / Math.PI);
     
-    // The hybrid projection adds some "orthographic" feel, making objects appear
-    // less distorted at edges. We need to widen the FOV slightly to compensate
-    // for the perspectiveStrength < 1.0 blend
-    // Increased perspectiveAdjust for more perspective depth
-    var perspectiveAdjust = 1.15;  // Higher = more perspective distortion/depth
-    fov = fov * perspectiveAdjust;
+    // Reduce FOV slightly for stronger perspective effect
+    fov = fov * 0.85;
     
-    // Clamp to sensible range - higher FOV = more perspective
-    fov = Math.max(25, Math.min(65, fov));
+    // Scale FOV for render canvas vs main canvas aspect difference
+    var mainAspect = mainCanvasWidth / mainCanvasHeight;
+    var renderAspect = width / height;
     
-    // Near/far planes
-    var near = Math.max(0.1, distance * 0.01);
-    var far = Math.max(near + 100, distance * 8);
-    
-    if (!camera) {
-      camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
-    } else {
-      camera.fov = fov;
-      camera.aspect = aspect;
-      camera.near = near;
-      camera.far = far;
+    // If render is wider than main, we may need to widen the FOV slightly
+    // to fit the same vertical content
+    if (renderAspect > mainAspect) {
+      // Keep same vertical FOV - no adjustment needed
     }
     
-    // Apply camera adjustments: pull back much further, orbit right around center, drop down more
-    // These offsets fine-tune the view to match the 3D area composition
-    var pullBack = distance * 2.5;       // Pull back 250% of distance (doubled from 120%)
-    var orbitAngle = 0.35;               // Rotate right ~20 degrees around center (radians)
-    var dropDown = distance * 0.22;      // Drop down 22% of distance (was 15%)
+    // Clamp FOV to reasonable range  
+    fov = Math.max(25, Math.min(90, fov));
     
-    // Calculate the vector from target to camera
-    var toCamX = camX - targetX;
-    var toCamY = camY - targetY;
-    var toCamZ = camZ - targetZ;
-    var camDist = Math.sqrt(toCamX * toCamX + toCamZ * toCamZ);
+    // Near/far planes
+    var near = Math.max(0.05, actualDist * 0.02);
+    var far = Math.max(near + 500, actualDist * 50);
     
-    // Current angle from target to camera (in XZ plane)
-    var currentAngle = Math.atan2(toCamX, toCamZ);
-    
-    // Apply orbit rotation (rotate camera position around the target point)
-    var newAngle = currentAngle + orbitAngle;
-    var newCamDist = camDist + pullBack;  // Also pull back
-    
-    // New camera position orbited around target
-    camX = targetX + Math.sin(newAngle) * newCamDist;
-    camZ = targetZ + Math.cos(newAngle) * newCamDist;
-    camY = camY - dropDown;
-    
-    // Ensure camera stays above ground (lowered minimum)
-    camY = Math.max(camY, 1.5);
-    
-    // Set adjusted camera position
+    // Create camera
+    camera = new THREE.PerspectiveCamera(fov, aspect, near, far);
     camera.position.set(camX, camY, camZ);
     camera.lookAt(targetX, targetY, targetZ);
     camera.updateProjectionMatrix();
     
-    console.log('[Photoreal] Camera LOCKED to 3D area:', {
+    console.log('[Photoreal] Camera setup complete:', {
+      fov: fov.toFixed(1) + '°',
+      viewportDist: viewportDist.toFixed(2),
+      actualDist: actualDist.toFixed(2),
+      camPos: '(' + camX.toFixed(2) + ', ' + camY.toFixed(2) + ', ' + camZ.toFixed(2) + ')',
+      target: '(' + targetX.toFixed(2) + ', ' + targetY.toFixed(2) + ', ' + targetZ.toFixed(2) + ')',
       projScale: projScale.toFixed(1),
-      perspectiveStrength: perspectiveStrength.toFixed(2),
-      calculatedFOV: fov.toFixed(1) + '°',
-      distance: distance.toFixed(2),
-      camPos: '(' + camX.toFixed(3) + ', ' + camY.toFixed(3) + ', ' + camZ.toFixed(3) + ')',
-      target: '(' + targetX.toFixed(3) + ', ' + targetY.toFixed(3) + ', ' + targetZ.toFixed(3) + ')',
-      cssHeight: cssHeight.toFixed(0),
-      renderSize: width + 'x' + height
+      mainCanvasHeight: mainCanvasHeight.toFixed(0),
+      tanHalfFov: tanHalfFov.toFixed(4)
     });
 
     return camera;
@@ -645,12 +702,27 @@
       stairs: []
     };
 
-    // Gather rooms
-    if (Array.isArray(window.allRooms)) {
-      data.rooms = window.allRooms.map(function(r){
+    // Gather rooms - FORCE fresh read from window.allRooms
+    var rawRooms = window.allRooms;
+    if (Array.isArray(rawRooms) && rawRooms.length > 0) {
+      console.log('[Photoreal] ========== GATHERING FRESH DATA ==========');
+      console.log('[Photoreal] Raw allRooms count:', rawRooms.length);
+      
+      // Log ALL rooms with their current positions
+      rawRooms.forEach(function(r, idx) {
+        console.log('[Photoreal] Room[' + idx + ']:', r.id, 'pos=(' + r.x + ',' + r.z + ') size=(' + r.width + 'x' + r.depth + ') level=' + r.level + ' y=' + (r.y || 'N/A') + ' baseHeight=' + (r.baseHeight || 'N/A'));
+      });
+      
+      data.rooms = rawRooms.map(function(r){
+        // Read Y position from multiple possible sources
+        var yPos = 0;
+        if (typeof r.y === 'number') yPos = r.y;
+        else if (typeof r.baseHeight === 'number') yPos = r.baseHeight;
+        
         return {
           id: r.id,
           x: r.x || 0,
+          y: yPos,
           z: r.z || 0,
           width: r.width || 4,
           depth: r.depth || 4,
@@ -659,6 +731,8 @@
           rotation: r.rotation || 0
         };
       });
+    } else {
+      console.warn('[Photoreal] No rooms found in window.allRooms!');
     }
 
     // Gather wall strips
@@ -826,6 +900,14 @@
 
   function buildSceneGeometry(data, bounds){
     if (!THREE || !sceneRoot) return;
+    
+    console.log('[Photoreal] ========== BUILDING SCENE GEOMETRY ==========');
+    console.log('[Photoreal] Input data:', JSON.stringify({
+      roomCount: data.rooms.length,
+      wallCount: data.walls.length,
+      roofCount: data.roofs.length,
+      bounds: bounds
+    }));
 
     // Store bounds for reference
     sceneBounds = bounds;
@@ -858,14 +940,22 @@
     console.log('[Photoreal] Ground plane:', groundSize, 'x', groundSize, 'at', bounds.cx, bounds.cz);
 
     // Build rooms as concrete boxes
-    data.rooms.forEach(function(room){
+    console.log('[Photoreal] Building', data.rooms.length, 'rooms into scene');
+    data.rooms.forEach(function(room, idx){
       var geom = new THREE.BoxGeometry(room.width, room.height, room.depth);
       var mat = materialFor('wall');
       var mesh = new THREE.Mesh(geom, mat);
       
-      var baseY = room.level * room.height;
-      mesh.position.set(room.x, baseY + room.height / 2, room.z);
-      if (room.rotation) mesh.rotation.y = room.rotation;
+      // Calculate Y position from level OR explicit y/baseHeight
+      var baseY = (room.y || 0) + (room.level * room.height);
+      var posX = room.x;
+      var posY = baseY + room.height / 2;
+      var posZ = room.z;
+      
+      mesh.position.set(posX, posY, posZ);
+      if (room.rotation) mesh.rotation.y = (room.rotation * Math.PI) / 180; // Convert degrees to radians
+      
+      console.log('[Photoreal] Room[' + idx + '] mesh at:', posX.toFixed(2), posY.toFixed(2), posZ.toFixed(2));
       
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -1067,7 +1157,32 @@
   // ─────────────────────────────────────────────────────────────────────────
 
   async function startPhotorealisticRender(){
-    if (state.busy) return;
+    console.log('[Photoreal] ===== NEW RENDER STARTED =====');
+    console.log('[Photoreal] Time:', new Date().toISOString());
+    
+    // CRITICAL DEBUG: Log raw window.allRooms state RIGHT NOW
+    console.log('[Photoreal] DIRECT READ of window.allRooms:');
+    if (window.allRooms && window.allRooms.length > 0) {
+      window.allRooms.forEach(function(r, i) {
+        console.log('[Photoreal]   Room ' + i + ': x=' + r.x + ', z=' + r.z + ', level=' + r.level + ', w=' + r.width + ', d=' + r.depth);
+      });
+    } else {
+      console.warn('[Photoreal]   NO ROOMS FOUND!');
+    }
+    
+    // Also log camera state
+    if (window.camera) {
+      console.log('[Photoreal] DIRECT READ of window.camera:');
+      console.log('[Photoreal]   yaw=' + window.camera.yaw + ', pitch=' + window.camera.pitch + ', distance=' + window.camera.distance);
+      console.log('[Photoreal]   targetX=' + window.camera.targetX + ', targetY=' + window.camera.targetY + ', targetZ=' + window.camera.targetZ);
+    }
+    
+    // Reset busy state if stuck (safety valve)
+    if (state.busy) {
+      console.warn('[Photoreal] Resetting stuck busy state');
+      state.busy = false;
+    }
+    
     state.renderStarted = true;
     setBusy(true);
     setLoading(true, 'Loading renderer…');
@@ -1111,9 +1226,18 @@
       setStatus('Building photorealistic 3D geometry…', 'info');
       await delay(50);
 
-      // Step 4: Gather project data and compute bounds
+      // Step 4: Gather project data and compute bounds (FRESH each render)
       var projectData = gatherProjectData();
       var bounds = computeBounds(projectData);
+      
+      console.log('[Photoreal] Project data gathered:', {
+        rooms: projectData.rooms.length,
+        walls: projectData.walls.length,
+        roofs: projectData.roofs.length,
+        pools: projectData.pools.length,
+        garages: projectData.garages.length
+      });
+      console.log('[Photoreal] Bounds computed:', bounds);
       
       // Step 5: Build scene geometry with PBR materials (pass bounds for ground sizing)
       buildSceneGeometry(projectData, bounds);
@@ -1256,10 +1380,7 @@
   // GLOBAL EXPORTS
   // ─────────────────────────────────────────────────────────────────────────
 
-  window.showVisualize = function(){
-    if (!state.initialized) init();
-    showVisualize();
-  };
+  window.showVisualize = showVisualize;
   window.hideVisualize = hideVisualize;
   window.startPhotorealisticRender = startPhotorealisticRender;
 
