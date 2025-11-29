@@ -194,32 +194,44 @@
       var sceneWidth = bounds.width || 10;
       var sceneDepth = bounds.depth || 10;
       var sceneHeight = bounds.height || 3;
-      var maxDim = Math.max(sceneWidth, sceneDepth, sceneHeight);
       
-      // Scale distance based on 3D area distance - use larger multiplier for better framing
-      var viewDist = this.distance * 3.5;
+      // Calculate distance that ensures entire scene is visible
+      // Use scene diagonal for better framing of multi-room layouts
+      var sceneDiagonal = Math.sqrt(sceneWidth * sceneWidth + sceneDepth * sceneDepth);
       
-      // Minimum distance to ensure object isn't too close
-      var minDist = maxDim * 3.5;
-      viewDist = Math.max(minDist, viewDist);
+      // Base distance on scene size - ensure camera is far enough to see everything
+      var baseFov = 55; // degrees
+      var fovRad = baseFov * Math.PI / 180;
       
-      // Calculate pitch component
-      var sp = Math.sin(this.pitch);
-      var cp = Math.cos(this.pitch);
+      // Distance needed to fit scene in view (using FOV geometry)
+      var requiredDist = (sceneDiagonal / 2) / Math.tan(fovRad / 2);
       
-      // Use EXACT 45 degree angle for perfect symmetry
-      var yaw = Math.PI / 4;  // Exactly 45 degrees
-      var cy = Math.cos(yaw);  // = 0.7071...
-      var sy = Math.sin(yaw);  // = 0.7071...
+      // Add padding for comfortable framing (1.5x to ensure nothing is cropped)
+      var minDist = requiredDist * 1.5;
       
-      // Camera offset from center (spherical coordinates)
-      // Both X and Z use the same factor (sy = cy = 0.707)
-      var camX = centerX - sy * cp * viewDist;
-      var camZ = centerZ - cy * cp * viewDist;
+      // Use user's zoom but ensure minimum distance for scene visibility
+      var viewDist = Math.max(this.distance * 1.0, minDist);
       
-      // Vertical offset with dampening when looking down
-      var verticalScale = (sp < 0) ? 0.4 : 1.0;
-      var camY = centerY - sp * viewDist * verticalScale;
+      // Use the EXACT same math as engine3d.js for camera positioning
+      // This matches the 3D viewport exactly
+      var yaw = this.yaw;
+      var pitch = this.pitch;
+      
+      var cy = Math.cos(yaw);
+      var sy = Math.sin(yaw);
+      var cp = Math.cos(pitch);
+      var sp = Math.sin(pitch);
+      
+      // Forward direction - EXACTLY as in engine3d.js: fwd = [sy*cp, sp, cy*cp]
+      var fwdX = sy * cp;
+      var fwdY = sp;
+      var fwdZ = cy * cp;
+      
+      // Camera position = target - forward * distance (same as engine3d.js)
+      var verticalScale = (fwdY < 0) ? 0.6 : 1.0; // Match engine3d.js vertical dampening
+      var camX = centerX - fwdX * viewDist;
+      var camY = centerY - fwdY * viewDist * verticalScale;
+      var camZ = centerZ - fwdZ * viewDist;
       
       // Ensure camera is above ground
       camY = Math.max(sceneHeight * 0.3, camY);
@@ -227,6 +239,11 @@
       // Set camera position
       threeCamera.position.set(camX, camY, camZ);
       
+      // Look at scene center - this is where the flip might happen
+      // Three.js default is -Z forward, but our scene uses +Z forward
+      // So we need to look at the target point which Three.js handles correctly
+      threeCamera.up.set(0, 1, 0);
+      threeCamera.lookAt(centerX, centerY, centerZ);
       // Look at scene center
       threeCamera.up.set(0, 1, 0);
       threeCamera.lookAt(centerX, centerY, centerZ);
@@ -242,7 +259,7 @@
       threeCamera.aspect = aspect;
       threeCamera.updateProjectionMatrix();
       
-      // Clear any previous view offset - don't apply ultra-wide correction as it causes off-center issues
+      // Clear any previous view offset
       threeCamera.clearViewOffset();
       
       console.log('[CameraTracker] Camera setup:', {
@@ -250,7 +267,7 @@
         lookAt: '(' + centerX.toFixed(2) + ', ' + centerY.toFixed(2) + ', ' + centerZ.toFixed(2) + ')',
         viewDist: viewDist.toFixed(2),
         yaw: (yaw * 180 / Math.PI).toFixed(1) + '°',
-        pitch: (this.pitch * 180 / Math.PI).toFixed(1) + '°',
+        pitch: (pitch * 180 / Math.PI).toFixed(1) + '°',
         aspect: aspect.toFixed(2),
         fov: threeCamera.fov.toFixed(1) + '°'
       });
@@ -259,6 +276,128 @@
   
   // Export camera tracker for debugging
   window.cameraTracker = cameraTracker;
+
+  // =========================================================================
+  // AUTO-UPDATE SYSTEM
+  // Watches for changes in the 3D scene and triggers debounced re-render
+  // =========================================================================
+  var autoUpdateDebounceTimer = null;
+  var AUTO_UPDATE_DELAY = 500; // ms delay before re-rendering after changes
+  var lastSceneHash = '';
+  
+  function computeSceneHash() {
+    // Create a hash of all scene data to detect changes
+    var parts = [];
+    
+    // Rooms
+    if (Array.isArray(window.allRooms)) {
+      window.allRooms.forEach(function(r) {
+        parts.push('R:' + r.id + ':' + r.x + ',' + r.z + ',' + r.width + ',' + r.depth + ',' + r.level);
+      });
+    }
+    
+    // Walls
+    if (Array.isArray(window.wallStrips)) {
+      window.wallStrips.forEach(function(w, i) {
+        parts.push('W:' + i + ':' + (w.x0||0) + ',' + (w.z0||0) + '-' + (w.x1||0) + ',' + (w.z1||0));
+      });
+    }
+    
+    // Garages
+    if (Array.isArray(window.garageComponents)) {
+      window.garageComponents.forEach(function(g) {
+        parts.push('G:' + g.id + ':' + (g.x||0) + ',' + (g.z||0) + ',' + (g.width||0) + ',' + (g.depth||0));
+      });
+    }
+    
+    // Pergolas
+    if (Array.isArray(window.pergolaComponents)) {
+      window.pergolaComponents.forEach(function(p) {
+        parts.push('P:' + p.id + ':' + (p.x||0) + ',' + (p.z||0) + ',' + (p.width||0) + ',' + (p.depth||0));
+      });
+    }
+    
+    // Pools
+    if (Array.isArray(window.poolComponents)) {
+      window.poolComponents.forEach(function(p) {
+        parts.push('PL:' + p.id + ':' + (p.x||0) + ',' + (p.z||0) + ',' + (p.width||0) + ',' + (p.depth||0));
+      });
+    }
+    
+    // Roofs
+    if (Array.isArray(window.roofComponents)) {
+      window.roofComponents.forEach(function(r) {
+        parts.push('RF:' + r.id + ':' + (r.x||0) + ',' + (r.z||0) + ',' + (r.width||0) + ',' + (r.depth||0));
+      });
+    }
+    
+    // Balconies
+    if (Array.isArray(window.balconyComponents)) {
+      window.balconyComponents.forEach(function(b) {
+        parts.push('B:' + b.id + ':' + (b.x||0) + ',' + (b.z||0));
+      });
+    }
+    
+    // Stairs
+    if (Array.isArray(window.stairsComponents)) {
+      window.stairsComponents.forEach(function(s) {
+        parts.push('S:' + s.id + ':' + (s.x||0) + ',' + (s.z||0));
+      });
+    }
+    
+    // Camera state
+    if (window.camera) {
+      parts.push('CAM:' + Math.round(window.camera.yaw * 100) + ',' + Math.round(window.camera.pitch * 100) + ',' + Math.round(window.camera.distance));
+    }
+    
+    return parts.join('|');
+  }
+  
+  function checkForSceneChanges() {
+    if (!state.panel || !state.panel.classList.contains('visible')) return;
+    if (state.busy) return;
+    
+    var currentHash = computeSceneHash();
+    if (currentHash !== lastSceneHash) {
+      console.log('[Photoreal] Scene change detected, scheduling re-render');
+      lastSceneHash = currentHash;
+      
+      // Clear previous timer
+      if (autoUpdateDebounceTimer) {
+        clearTimeout(autoUpdateDebounceTimer);
+      }
+      
+      // Schedule new render
+      autoUpdateDebounceTimer = setTimeout(function() {
+        if (state.panel && state.panel.classList.contains('visible') && !state.busy) {
+          console.log('[Photoreal] Auto-updating render due to scene changes');
+          startPhotorealisticRender();
+        }
+      }, AUTO_UPDATE_DELAY);
+    }
+  }
+  
+  // Poll for changes when panel is open (more reliable than trying to hook all change points)
+  var sceneWatcherInterval = null;
+  
+  function startSceneWatcher() {
+    if (sceneWatcherInterval) return;
+    lastSceneHash = computeSceneHash();
+    sceneWatcherInterval = setInterval(checkForSceneChanges, 200); // Check 5 times per second
+    console.log('[Photoreal] Scene watcher started');
+  }
+  
+  function stopSceneWatcher() {
+    if (sceneWatcherInterval) {
+      clearInterval(sceneWatcherInterval);
+      sceneWatcherInterval = null;
+      console.log('[Photoreal] Scene watcher stopped');
+    }
+    if (autoUpdateDebounceTimer) {
+      clearTimeout(autoUpdateDebounceTimer);
+      autoUpdateDebounceTimer = null;
+    }
+  }
 
   var state = {
     initialized: false,
@@ -340,6 +479,9 @@
     state.busy = false; // Reset busy state to allow re-render
     setStatus('Initializing photorealistic renderer…', 'info');
     
+    // Start watching for scene changes
+    startSceneWatcher();
+    
     if (wasAlreadyVisible) {
       // Panel already open - start render immediately
       console.log('[Photoreal] Panel already visible, triggering immediate fresh render');
@@ -356,6 +498,10 @@
 
   function hideVisualize(){
     if (!state.panel) return;
+    
+    // Stop watching for scene changes
+    stopSceneWatcher();
+    
     state.panel.classList.remove('visible');
     document.body.classList.remove('visualize-open');
     state.renderStarted = false;
@@ -473,8 +619,11 @@
     scene.background = new THREE.Color(0xffffff);
     
     // Create fresh scene root
+    // Mirror on Z axis to match Three.js camera convention
+    // (Three.js camera looks down -Z by default, our engine uses +Z as forward)
     sceneRoot = new THREE.Group();
     sceneRoot.name = 'PhotorealSceneRoot';
+    sceneRoot.scale.z = -1;
     scene.add(sceneRoot);
     
     // Clear lights array for fresh lighting setup
@@ -1443,6 +1592,18 @@
   window.showVisualize = showVisualize;
   window.hideVisualize = hideVisualize;
   window.startPhotorealisticRender = startPhotorealisticRender;
+  
+  // Export function to check if photoreal panel is open (for external triggers)
+  window.isPhotorealPanelOpen = function() {
+    return state.panel && state.panel.classList.contains('visible');
+  };
+  
+  // Export function to manually notify of scene changes (alternative to polling)
+  window.notifyPhotorealSceneChanged = function() {
+    if (state.panel && state.panel.classList.contains('visible')) {
+      checkForSceneChanges();
+    }
+  };
 
   document.addEventListener('DOMContentLoaded', init);
 })();
