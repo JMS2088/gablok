@@ -185,12 +185,13 @@
     applyToRenderCamera: function(threeCamera, bounds, renderWidth, renderHeight) {
       if (!threeCamera || !THREE) return;
       
-      // Use scene bounds to calculate camera position
-      var centerX = bounds.cx || 0;
-      var centerY = bounds.cy || ((bounds.height || 3) / 2);
-      var centerZ = bounds.cz || 0;
+      // Use the CAPTURED camera target, not the scene bounds center!
+      // This ensures we look at the same point as the 3D viewport
+      var centerX = this.targetX;
+      var centerY = this.targetY;
+      var centerZ = this.targetZ;
       
-      // Get scene dimensions
+      // Get scene dimensions for distance calculation only
       var sceneWidth = bounds.width || 10;
       var sceneDepth = bounds.depth || 10;
       var sceneHeight = bounds.height || 3;
@@ -206,11 +207,16 @@
       // Distance needed to fit scene in view (using FOV geometry)
       var requiredDist = (sceneDiagonal / 2) / Math.tan(fovRad / 2);
       
-      // Add padding for comfortable framing (1.5x to ensure nothing is cropped)
-      var minDist = requiredDist * 1.5;
+      // Only enforce minimum distance if user is zoomed in too close
+      // But keep the camera at a similar relative position to what the user set
+      // Scale factor: how much the photoreal view needs to zoom out vs 3D view
+      var minDist = requiredDist * 1.2; // Reduced from 1.5 - less aggressive padding
       
-      // Use user's zoom but ensure minimum distance for scene visibility
-      var viewDist = Math.max(this.distance * 1.0, minDist);
+      // Use user's actual distance, but scale proportionally if we need to zoom out
+      var viewDist = this.distance;
+      if (viewDist < minDist) {
+        viewDist = minDist;
+      }
       
       // Use the EXACT same math as engine3d.js for camera positioning
       // This matches the 3D viewport exactly
@@ -236,17 +242,17 @@
       // Ensure camera is above ground
       camY = Math.max(sceneHeight * 0.3, camY);
       
-      // Set camera position
-      threeCamera.position.set(camX, camY, camZ);
+      // Since sceneRoot has scale.x = -1, we need to negate camera X and lookAt X
+      // to view the mirrored scene correctly
+      var mirrorCamX = -camX;
+      var mirrorLookX = -centerX;
       
-      // Look at scene center - this is where the flip might happen
-      // Three.js default is -Z forward, but our scene uses +Z forward
-      // So we need to look at the target point which Three.js handles correctly
+      // Set camera position
+      threeCamera.position.set(mirrorCamX, camY, camZ);
+      
+      // Look at scene center (also mirrored on X)
       threeCamera.up.set(0, 1, 0);
-      threeCamera.lookAt(centerX, centerY, centerZ);
-      // Look at scene center
-      threeCamera.up.set(0, 1, 0);
-      threeCamera.lookAt(centerX, centerY, centerZ);
+      threeCamera.lookAt(mirrorLookX, centerY, centerZ);
       
       // Calculate FOV based on distance
       var baseFov = 55;
@@ -263,8 +269,8 @@
       threeCamera.clearViewOffset();
       
       console.log('[CameraTracker] Camera setup:', {
-        camPos: '(' + camX.toFixed(2) + ', ' + camY.toFixed(2) + ', ' + camZ.toFixed(2) + ')',
-        lookAt: '(' + centerX.toFixed(2) + ', ' + centerY.toFixed(2) + ', ' + centerZ.toFixed(2) + ')',
+        camPos: '(' + mirrorCamX.toFixed(2) + ', ' + camY.toFixed(2) + ', ' + camZ.toFixed(2) + ')',
+        lookAt: '(' + mirrorLookX.toFixed(2) + ', ' + centerY.toFixed(2) + ', ' + centerZ.toFixed(2) + ')',
         viewDist: viewDist.toFixed(2),
         yaw: (yaw * 180 / Math.PI).toFixed(1) + '°',
         pitch: (pitch * 180 / Math.PI).toFixed(1) + '°',
@@ -619,11 +625,11 @@
     scene.background = new THREE.Color(0xffffff);
     
     // Create fresh scene root
-    // Mirror on Z axis to match Three.js camera convention
-    // (Three.js camera looks down -Z by default, our engine uses +Z as forward)
+    // Mirror on X axis to match engine3d.js coordinate handedness
+    // (engine3d uses left-handed coordinates, Three.js uses right-handed)
     sceneRoot = new THREE.Group();
     sceneRoot.name = 'PhotorealSceneRoot';
-    sceneRoot.scale.z = -1;
+    sceneRoot.scale.x = -1;
     scene.add(sceneRoot);
     
     // Clear lights array for fresh lighting setup
