@@ -391,7 +391,7 @@
       // Scale by 0.9 for distance, Y scale for vertical movement
       var distScale = 1.1;
       var yScale = 0.2;  // Adjusted to match 3D area Y movement
-      var heightOffset = 3.0;  // Raise camera to look down more at the object
+      var heightOffset = 1.0;  // Raise camera to look down more at the object
       
       // Calculate XZ distance and push back proportionally to height to maintain same apparent distance
       var xzDist = Math.sqrt(dirX * dirX + dirZ * dirZ);
@@ -460,7 +460,7 @@
     var fov = 2 * Math.atan(tanHalfFov) * (180 / Math.PI);
     
     // Increase FOV massively for much stronger perspective effect to match 3D area
-    fov = fov * 22.0;
+    fov = fov * 28.0;
     
     // Scale FOV for render canvas vs main canvas aspect difference
     var mainAspect = mainCanvasWidth / mainCanvasHeight;
