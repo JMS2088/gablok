@@ -98,7 +98,7 @@
   }
 
   // Unified global asset version (overrides scattered per-file versions)
-  var GLOBAL_VERSION = window.__ASSET_VERSION || '20251121-9';
+  var GLOBAL_VERSION = window.__ASSET_VERSION || '20251129-1';
   function withV(path){
     // Remove any existing v= or gv= param then append unified param for hard cache bust
     try {

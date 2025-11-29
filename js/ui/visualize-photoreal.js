@@ -186,9 +186,8 @@
       if (!threeCamera || !THREE) return;
       
       // Use scene bounds to calculate camera position
-      // bounds contains: cx, cz (center), width, depth, height, minX, maxX, minZ, maxZ
       var centerX = bounds.cx || 0;
-      var centerY = (bounds.height || 3) / 2;  // Center height of building
+      var centerY = bounds.cy || ((bounds.height || 3) / 2);
       var centerZ = bounds.cz || 0;
       
       // Get scene dimensions
@@ -197,72 +196,62 @@
       var sceneHeight = bounds.height || 3;
       var maxDim = Math.max(sceneWidth, sceneDepth, sceneHeight);
       
-      // Use the actual camera distance from 3D area
-      // Scale up the distance significantly to pull camera back further
-      // The 3D area uses hybrid projection which compresses depth
-      // Real perspective needs much more distance to look similar
-      var viewDist = this.distance * 3.0;  // Scale up distance by 3x
+      // Scale distance based on 3D area distance
+      var viewDist = this.distance * 2.5;
       
-      // Ensure minimum distance so camera doesn't clip into object
-      var minDist = maxDim * 2.5;  // At least 2.5x object size away
+      // Minimum distance to prevent clipping
+      var minDist = maxDim * 1.5;
       viewDist = Math.max(minDist, viewDist);
       
-      console.log('[CameraTracker] Scene info:', {
-        sceneWidth: sceneWidth.toFixed(2),
-        sceneDepth: sceneDepth.toFixed(2),
-        sceneHeight: sceneHeight.toFixed(2),
-        maxDim: maxDim.toFixed(2),
-        capturedDistance: this.distance.toFixed(2),
-        viewDist: viewDist.toFixed(2)
-      });
+      // Calculate pitch component
+      var sp = Math.sin(this.pitch);
+      var cp = Math.cos(this.pitch);
       
-      var cy = Math.cos(this.yaw), sy = Math.sin(this.yaw);
-      var cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
+      // Use EXACT 45 degree angle for perfect symmetry
+      var yaw = Math.PI / 4;  // Exactly 45 degrees
+      var cy = Math.cos(yaw);  // = 0.7071...
+      var sy = Math.sin(yaw);  // = 0.7071...
       
-      // Horizontal offset to center the object after flip
-      // Negative value shifts object left in the render
-      var xCenterOffset = -8.0;
-      
-      // Camera position: offset from center based on yaw/pitch
-      // NEGATE X and Z to match 3D area coordinate system (camera on opposite side)
-      var camX = centerX - sy * cp * viewDist + xCenterOffset;
-      
-      // Apply vertical scale like camera.js does - reduce vertical movement when looking down
-      // This keeps the camera lower and matches the 3D area view better
-      var verticalScale = (sp < 0) ? 0.4 : 1.0;  // Reduce height when looking down (negative pitch)
-      var camY = centerY - sp * viewDist * verticalScale;
-      
+      // Camera offset from center (spherical coordinates)
+      // Both X and Z use the same factor (sy = cy = 0.707)
+      var camX = centerX - sy * cp * viewDist;
       var camZ = centerZ - cy * cp * viewDist;
       
-      // Ensure camera is above ground but not too high
+      // Vertical offset with dampening when looking down
+      var verticalScale = (sp < 0) ? 0.4 : 1.0;
+      var camY = centerY - sp * viewDist * verticalScale;
+      
+      // Ensure camera is above ground
       camY = Math.max(sceneHeight * 0.3, camY);
       
       // Set camera position
       threeCamera.position.set(camX, camY, camZ);
       
-      // Look at scene center with same X offset to keep object centered
+      // Look at scene center
       threeCamera.up.set(0, 1, 0);
-      threeCamera.lookAt(centerX + xCenterOffset, centerY, centerZ);
+      threeCamera.lookAt(centerX, centerY, centerZ);
       
-      // Use wider FOV for more perspective effect
-      // Wider FOV = more perspective distortion, objects look smaller/further
-      // 60-75 degrees gives nice architectural perspective
-      var baseFov = 65;
+      // Calculate FOV based on distance
+      var baseFov = 55;
+      if (this.distance < 10) baseFov = 45;
+      else if (this.distance > 50) baseFov = 65;
       threeCamera.fov = baseFov;
       
-      // Update aspect ratio
+      // Update aspect ratio and projection
       threeCamera.aspect = renderWidth / renderHeight;
-      
-      // Update projection matrix
       threeCamera.updateProjectionMatrix();
       
-      console.log('[CameraTracker] Applied to render camera:', {
-        sceneCenter: '(' + centerX.toFixed(2) + ', ' + centerY.toFixed(2) + ', ' + centerZ.toFixed(2) + ')',
+      // Clear any view offset
+      threeCamera.clearViewOffset();
+      
+      console.log('[CameraTracker] v2 Camera setup:', {
         camPos: '(' + camX.toFixed(2) + ', ' + camY.toFixed(2) + ', ' + camZ.toFixed(2) + ')',
+        lookAt: '(' + centerX.toFixed(2) + ', ' + centerY.toFixed(2) + ', ' + centerZ.toFixed(2) + ')',
         viewDist: viewDist.toFixed(2),
-        fov: threeCamera.fov.toFixed(1) + '°',
-        yaw: (this.yaw * 180 / Math.PI).toFixed(1) + '°',
-        pitch: (this.pitch * 180 / Math.PI).toFixed(1) + '°'
+        yaw: '45.0° (forced)',
+        xOffset: (camX - centerX).toFixed(2),
+        zOffset: (camZ - centerZ).toFixed(2),
+        fov: threeCamera.fov.toFixed(1) + '°'
       });
     }
   };
@@ -907,6 +896,10 @@
       return { cx: 0, cy: 0, cz: 0, width: 20, depth: 20, height: 5, span: 20, minX: -10, maxX: 10, minZ: -10, maxZ: 10 };
     }
 
+    // Store unpaded center for reference
+    var unpadCx = (minX + maxX) / 2;
+    var unpadCz = (minZ + maxZ) / 2;
+
     // Add padding around the scene for edge-to-edge framing
     var padding = 2;
     minX -= padding;
@@ -916,11 +909,22 @@
 
     var width = maxX - minX;
     var depth = maxZ - minZ;
+    
+    // Center should be the same with or without padding
+    var cx = (minX + maxX) / 2;
+    var cz = (minZ + maxZ) / 2;
+    
+    console.log('[Photoreal] Bounds calculation:', {
+      unpadCenter: '(' + unpadCx.toFixed(2) + ', ' + unpadCz.toFixed(2) + ')',
+      paddedCenter: '(' + cx.toFixed(2) + ', ' + cz.toFixed(2) + ')',
+      minX: minX.toFixed(2), maxX: maxX.toFixed(2),
+      minZ: minZ.toFixed(2), maxZ: maxZ.toFixed(2)
+    });
 
     return {
-      cx: (minX + maxX) / 2,
+      cx: cx,
       cy: maxY / 2,
-      cz: (minZ + maxZ) / 2,
+      cz: cz,
       width: width,
       depth: depth,
       height: maxY,
