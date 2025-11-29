@@ -366,7 +366,7 @@
     // Offset X to shift object in render
     // (positive offset lowers the view because camera looks down at target)
     var targetX, targetY, targetZ;
-    var xOffset = 19.0;  // Shift target - reduced by 1 to track camera right
+    var xOffset = 30.0;  // Shift target - reduced by 1 to track camera right
     if (viewportTarget && viewportTarget.length === 3) {
       targetX = viewportTarget[0] + xOffset;
       targetY = viewportTarget[1] + 2.0;  // Raise the target to lower the view
@@ -380,7 +380,7 @@
     // CAMERA POSITION: Use actual viewport camera position, just scale for distance
     var camX, camY, camZ;
     if (viewportCam && viewportCam.length === 3) {
-      // Get the direction from target to camera
+      // Get the direction from target to camera (XZ plane only for horizontal distance)
       var dirX = viewportCam[0] - targetX;
       var dirY = viewportCam[1] - targetY;
       var dirZ = viewportCam[2] - targetZ;
@@ -388,18 +388,26 @@
       // Flip Z instead of X to flip the view horizontally
       dirZ = -dirZ;
       
-      // Scale by 0.9 for distance, Y scale for vertical movement
-      var distScale = 1.1;
-      var yScale = 0.2;  // Adjusted to match 3D area Y movement
-      var heightOffset = 1.0;  // Raise camera to look down more at the object
-      
-      // Calculate XZ distance and push back proportionally to height to maintain same apparent distance
+      // Calculate XZ distance - this should stay CONSTANT regardless of pitch
       var xzDist = Math.sqrt(dirX * dirX + dirZ * dirZ);
-      var pushBackFactor = 1.0 + (heightOffset / Math.max(1, xzDist)) * 0.3;
       
-      camX = targetX + dirX * distScale * pushBackFactor;
-      camY = targetY + dirY * yScale + heightOffset;
-      camZ = targetZ + dirZ * distScale * pushBackFactor;
+      // Normalize XZ direction to maintain constant horizontal distance
+      var xzLen = Math.max(0.01, xzDist);
+      var normDirX = dirX / xzLen;
+      var normDirZ = dirZ / xzLen;
+      
+      // Fixed horizontal distance from object
+      var fixedXZDist = 1.1 * 4.0;  // distScale * base distance
+      
+      // XZ position: fixed distance, only direction changes with yaw
+      camX = targetX + normDirX * fixedXZDist;
+      camZ = targetZ + normDirZ * fixedXZDist;
+      
+      // Y position: Use viewport camera Y directly with increased scale for more vertical movement
+      // The camera should rise significantly when looking down
+      var yScale = 2.1;  // Increased to make camera go higher when pitched down
+      var heightOffset = 2.0;  // Base height above target
+      camY = heightOffset + viewportCam[1] * yScale;
       
       console.log('[Photoreal] Using viewport cam pos:', viewportCam, '-> scaled:', [camX.toFixed(2), camY.toFixed(2), camZ.toFixed(2)]);
     } else {
