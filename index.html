@@ -409,7 +409,73 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 			</section>
 			<section id="account-view-settings" style="display:none">
 				<h2>Settings</h2>
-				<p>App settings will appear here.</p>
+				
+				<!-- LLM / AI API Settings for Image Generation -->
+				<div class="settings-group">
+					<h3>AI Image Generation</h3>
+					<p class="settings-hint">Connect your own AI/LLM API for enhanced image generation features.</p>
+					
+					<div class="settings-row">
+						<label for="llm-provider">AI Provider</label>
+						<select id="llm-provider">
+							<option value="">-- Select Provider --</option>
+							<option value="openai">OpenAI (ChatGPT / DALL-E)</option>
+							<option value="anthropic">Anthropic (Claude)</option>
+							<option value="google">Google (Gemini)</option>
+							<option value="xai">xAI (Grok)</option>
+							<option value="stability">Stability AI</option>
+							<option value="midjourney">Midjourney</option>
+							<option value="freepik">Freepik (Mystic / Flux)</option>
+						</select>
+					</div>
+					
+					<div class="settings-row">
+						<label for="llm-api-key">API Key</label>
+						<div class="input-with-toggle">
+							<input id="llm-api-key" type="password" placeholder="Enter your API key" autocomplete="off" />
+							<button id="llm-key-toggle" type="button" class="icon-btn" title="Show/Hide">👁</button>
+						</div>
+					</div>
+					
+					<div class="settings-row" id="llm-model-row">
+						<label for="llm-model">Model</label>
+						<select id="llm-model">
+							<option value="">-- Select Model --</option>
+						</select>
+					</div>
+					
+					<div class="settings-row" id="llm-endpoint-row" style="display:none;">
+						<label for="llm-endpoint">Custom Endpoint (Optional)</label>
+						<input id="llm-endpoint" type="url" placeholder="https://api.example.com/v1" />
+					</div>
+					
+					<div class="settings-row">
+						<label for="llm-org-id">Organization ID (Optional)</label>
+						<input id="llm-org-id" type="text" placeholder="org-xxxxx" />
+					</div>
+					
+					<div class="settings-actions">
+						<button id="llm-test-connection" type="button" class="secondary">Test Connection</button>
+						<button id="llm-save-settings" type="button">Save API Settings</button>
+					</div>
+					<div id="llm-status" class="settings-status"></div>
+				</div>
+				
+				<!-- General App Settings -->
+				<div class="settings-group">
+					<h3>General</h3>
+					<div class="settings-row">
+						<label for="settings-units">Measurement Units</label>
+						<select id="settings-units">
+							<option value="metric">Metric (meters)</option>
+							<option value="imperial">Imperial (feet)</option>
+						</select>
+					</div>
+					<div class="settings-row">
+						<label for="settings-autosave">Auto-save Projects</label>
+						<input id="settings-autosave" type="checkbox" checked />
+					</div>
+				</div>
 			</section>
 			<section id="account-view-payments" style="display:none">
 				<h2>Payments</h2>

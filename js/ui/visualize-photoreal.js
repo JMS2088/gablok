@@ -35,45 +35,45 @@
   var PHOTO_CAPTION_ID = 'visualize-photo-caption';
   var PHOTO_CLOSE_ID = 'visualize-photo-close';
 
-  // Photorealistic PBR material palette - Realistic daytime scene with proper shadows and reflections
+  // Photorealistic PBR material palette - Using MeshStandardMaterial/MeshPhysicalMaterial properties
   var MATERIAL_PALETTE = {
-    // Concrete surfaces (walls, rooms) - lighter grey tint to show texture
+    // Concrete surfaces (walls, rooms) - light matte concrete
     concrete: {
-      color: 0xe8e8e8,        // Lighter grey - lets texture color show through
-      roughness: 0.92,
-      metalness: 0.0,
-      envMapIntensity: 0.4,   // Reduced reflections to show texture
+      color: 0xe8e8e8,        // Light grey concrete
+      roughness: 0.95,        // Very rough matte concrete - not shiny
+      metalness: 0.0,         // Dielectric (non-metallic)
+      envMapIntensity: 0.08,  // Very minimal reflections - concrete is matte
       bumpScale: 0.025,
       textureRepeat: 2.0,
       normalScale: 0.20,
-      aoIntensity: 0.9         // Strong ambient occlusion for shadows
+      aoIntensity: 1.0        // Full AO for soft corner/junction shadows
     },
-    // Exterior concrete massing - lighter grey to show texture
+    // Exterior concrete massing - light matte concrete
     wall: {
-      color: 0xe8e8e8,        // Lighter grey - lets texture color show through
-      roughness: 0.90,
-      metalness: 0.0,
-      envMapIntensity: 0.4,   // Reduced reflections to show texture
+      color: 0xe8e8e8,        // Light grey concrete
+      roughness: 0.92,        // Very rough - matte concrete finish
+      metalness: 0.0,         // Dielectric (non-metallic)
+      envMapIntensity: 0.08,  // Very minimal reflections - concrete is matte
       bumpScale: 0.030,
       textureRepeat: 2.5,
       normalScale: 0.25,
-      aoIntensity: 0.95,
+      aoIntensity: 1.0,       // Full AO for soft corner/junction shadows
       clearcoat: 0.0,
       clearcoatRoughness: 0.7
     },
-    // Glass surfaces - reflective blue-tinted glass
+    // Glass surfaces - M_Architectural_Glass_Clear (MeshPhysicalMaterial)
     glass: {
-      color: 0xc8e0f0,        // Light blue tint - visible in reflections
-      roughness: 0.02,
-      metalness: 0.1,
-      transmission: 0.88,
-      thickness: 0.5,
-      ior: 1.52,
-      clearcoat: 0.9,
-      clearcoatRoughness: 0.01,
-      envMapIntensity: 1.8,    // Strong reflections
-      reflectivity: 0.7,
-      specularIntensity: 0.8,
+      color: 0xffffff,        // White base - transmission handles transparency
+      roughness: 0.05,        // Very smooth glass per spec
+      metalness: 0.0,         // Dielectric
+      transmission: 1.0,      // Full transparency per spec
+      thickness: 0.03,        // Glass thickness 0.03m per spec
+      ior: 1.5,               // Glass IOR per spec
+      clearcoat: 1.0,         // Full clearcoat for surface reflections
+      clearcoatRoughness: 0.0,
+      envMapIntensity: 1.8,   // Strong environment reflections for HDRI
+      reflectivity: 0.5,
+      specularIntensity: 1.0,
       sheen: 0.0,
       sheenColor: 0xffffff
     },
@@ -89,18 +89,18 @@
       clearcoatRoughness: 0.01,
       envMapIntensity: 1.5
     },
-    // Flat roof - light grey with realistic finish
+    // Flat roof - light matte surface
     roof: {
-      color: 0xe8e4e0,        // Light warm grey - not pure white
-      roughness: 0.50,
+      color: 0xf5f5f5,        // Light grey-white
+      roughness: 0.7,         // Matte finish
       metalness: 0.0,
-      envMapIntensity: 0.5,   // Reduced reflections
-      clearcoat: 0.2,
-      clearcoatRoughness: 0.3,
-      bumpScale: 0.010,
-      normalScale: 0.10,
-      aoIntensity: 0.6,
-      noTexture: true         // No texture for roof
+      envMapIntensity: 0.1,   // Minimal reflections
+      clearcoat: 0.0,
+      clearcoatRoughness: 0.5,
+      bumpScale: 0.0,
+      normalScale: 0.0,
+      aoIntensity: 1.0,       // Full AO for junction shadows
+      noTexture: true
     },
     // Roof edge trim - grey keylines with subtle sheen
     roofEdge: {
@@ -112,16 +112,16 @@
       clearcoatRoughness: 0.12,
       aoIntensity: 0.7
     },
-    // Ground/path - light grey floor
+    // Ground/path - neutral light grey floor (no blue tint, dielectric material)
     ground: {
-      color: 0xf5f5f5,        // Light grey floor
-      roughness: 0.60,
-      metalness: 0.0,
-      envMapIntensity: 0.3,
+      color: 0xf2f2f2,        // Neutral light grey floor
+      roughness: 0.65,        // Slightly rough concrete/paving
+      metalness: 0.0,         // Dielectric (non-metallic)
+      envMapIntensity: 0.15,  // Minimal reflections
       bumpScale: 0.0,
       textureRepeat: 0,
       normalScale: 0.0,
-      aoIntensity: 0.25,
+      aoIntensity: 0.1,
       noTexture: true
     },
     // Pergola wood - warm natural tones with grain
@@ -135,25 +135,25 @@
       bumpScale: 0.025,
       aoIntensity: 0.75
     },
-    // Garage door metal - brushed aluminum look
+    // Garage door metal - brushed aluminum (metalness 1.0 for metals)
     garage: {
-      color: 0x707078,
-      roughness: 0.32,
-      metalness: 0.88,
-      envMapIntensity: 1.8,
-      clearcoat: 0.35,
-      clearcoatRoughness: 0.20,
-      aoIntensity: 0.65
+      color: 0x909098,        // Aluminum grey
+      roughness: 0.35,        // Brushed finish
+      metalness: 1.0,         // Full metallic
+      envMapIntensity: 1.5,   // Strong environment reflections
+      clearcoat: 0.2,
+      clearcoatRoughness: 0.3,
+      aoIntensity: 0.6
     },
-    // Balcony railing - polished dark metal
+    // Balcony railing - polished metal (metalness 1.0)
     balcony: {
-      color: 0x303038,
-      roughness: 0.18,
-      metalness: 0.95,
-      envMapIntensity: 2.2,
-      clearcoat: 0.5,
-      clearcoatRoughness: 0.08,
-      aoIntensity: 0.7
+      color: 0x404048,        // Dark metal
+      roughness: 0.15,        // Polished finish
+      metalness: 1.0,         // Full metallic
+      envMapIntensity: 2.0,   // Strong reflections
+      clearcoat: 0.6,
+      clearcoatRoughness: 0.05,
+      aoIntensity: 0.65
     },
     // Stairs - natural concrete with texture
     stairs: {
@@ -167,15 +167,15 @@
       clearcoatRoughness: 0.5,
       aoIntensity: 0.8
     },
-    // Window frame - medium grey aluminium finish
+    // Window/door frame - M_Aluminium_Dark_Matte (brushed metal finish)
     windowFrame: {
-      color: 0xb0b0ae,        // Medium grey - visible against walls
-      roughness: 0.28,
-      metalness: 0.15,
-      envMapIntensity: 1.4,
-      clearcoat: 0.6,
-      clearcoatRoughness: 0.15,
-      aoIntensity: 0.7
+      color: 0x2a2a2e,        // Dark aluminium per spec
+      roughness: 0.4,         // Brushed metal finish per spec
+      metalness: 1.0,         // Full metallic per spec
+      envMapIntensity: 1.8,   // Strong HDRI reflections
+      clearcoat: 0.15,
+      clearcoatRoughness: 0.3,
+      aoIntensity: 0.6
     },
     // Door panel - rich wood with varnish
     door: {
@@ -194,14 +194,14 @@
   var textureCache = {};
   var textureLoader = null;
 
-  // Architectural lighting presets - soft daytime lighting to prevent bleaching
+  // Architectural lighting presets - soft diffused lighting
   var LIGHTING_PRESETS = [
-    { name: 'Golden Hour', sunColor: 0xffd4a0, intensity: 1.5, angle: 18, warmth: 0.18, shadowSoftness: 3, ambientIntensity: 0.55, fillIntensity: 0.55, contrast: 1.0 },
-    { name: 'Midday', sunColor: 0xfff8f0, intensity: 1.8, angle: 55, warmth: 0.02, shadowSoftness: 2.5, ambientIntensity: 0.55, fillIntensity: 0.60, contrast: 0.98 },
-    { name: 'Overcast', sunColor: 0xe8f0f8, intensity: 1.3, angle: 45, warmth: -0.05, shadowSoftness: 10, ambientIntensity: 0.70, fillIntensity: 0.75, contrast: 0.92 },
-    { name: 'Studio', sunColor: 0xfff8f4, intensity: 1.5, angle: 35, warmth: 0.03, shadowSoftness: 4, ambientIntensity: 0.60, fillIntensity: 0.65, contrast: 0.95 },
-    { name: 'Dramatic', sunColor: 0xffd080, intensity: 2.0, angle: 12, warmth: 0.22, shadowSoftness: 2, ambientIntensity: 0.45, fillIntensity: 0.50, contrast: 1.05 },
-    { name: 'Cool Evening', sunColor: 0xd8e8ff, intensity: 1.4, angle: 25, warmth: -0.10, shadowSoftness: 5, ambientIntensity: 0.60, fillIntensity: 0.65, contrast: 0.95 }
+    { name: 'Golden Hour', sunColor: 0xffd4a0, intensity: 1.2, angle: 18, warmth: 0.18, shadowSoftness: 6, ambientIntensity: 0.65, fillIntensity: 0.65, contrast: 0.95 },
+    { name: 'Midday', sunColor: 0xfff8f0, intensity: 1.4, angle: 55, warmth: 0.02, shadowSoftness: 5, ambientIntensity: 0.65, fillIntensity: 0.70, contrast: 0.95 },
+    { name: 'Overcast', sunColor: 0xe8f0f8, intensity: 1.0, angle: 45, warmth: -0.05, shadowSoftness: 12, ambientIntensity: 0.80, fillIntensity: 0.80, contrast: 0.90 },
+    { name: 'Studio', sunColor: 0xfff8f4, intensity: 1.2, angle: 35, warmth: 0.03, shadowSoftness: 8, ambientIntensity: 0.70, fillIntensity: 0.75, contrast: 0.92 },
+    { name: 'Dramatic', sunColor: 0xffd080, intensity: 1.6, angle: 12, warmth: 0.22, shadowSoftness: 4, ambientIntensity: 0.55, fillIntensity: 0.60, contrast: 1.0 },
+    { name: 'Cool Evening', sunColor: 0xd8e8ff, intensity: 1.1, angle: 25, warmth: -0.10, shadowSoftness: 8, ambientIntensity: 0.70, fillIntensity: 0.75, contrast: 0.92 }
   ];
 
   // Three.js renderer state
@@ -857,16 +857,16 @@
 
     // High DPI rendering for sharper details
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2.5));
-    renderer.setClearColor(0xf8f9fb, 1);
+    renderer.setClearColor(0xfafafa, 1);  // Bright background
     renderer.outputColorSpace = THREE.SRGBColorSpace || THREE.sRGBEncoding;
     
     // Tone mapping for natural look
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;  // Neutral exposure
+    renderer.toneMappingExposure = 1.5;  // Balanced exposure for indoor/outdoor
 
-    // High quality shadows with better filtering
+    // High quality shadows with soft filtering (PCFSoft recommended for realism)
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.VSMShadowMap;  // Variance Shadow Maps for softer shadows
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;  // Softer, more realistic shadows
     renderer.shadowMap.autoUpdate = true;
     
     // Enable physically correct lighting for realistic falloff
@@ -909,21 +909,21 @@
     renderPass = new THREE.RenderPass(scene, camera);
     composer.addPass(renderPass);
 
-    // SSAO pass for ambient occlusion (soft shadows in corners and crevices)
-    // Enhanced parameters for N8AO-style quality
+    // SSAO pass for soft ambient occlusion - corners and roof-wall junctions
+    // Large radius and many samples for ultra-soft gradient shadows
     if (THREE.SSAOPass) {
       try {
         ssaoPass = new THREE.SSAOPass(scene, camera, width, height);
-        ssaoPass.kernelRadius = 24;       // Larger AO radius for softer shadows
-        ssaoPass.minDistance = 0.002;     // Min distance for AO detection
-        ssaoPass.maxDistance = 0.15;      // Max distance - captures more depth
+        ssaoPass.kernelRadius = 32;       // Large radius for soft diffused shadows
+        ssaoPass.minDistance = 0.001;     // Detect close surfaces
+        ssaoPass.maxDistance = 0.25;      // Extended range for gentle gradients
         ssaoPass.output = THREE.SSAOPass.OUTPUT_Default;
         // Additional quality settings if available
         if (ssaoPass.kernelSize !== undefined) {
-          ssaoPass.kernelSize = 32;       // More samples for smoother result
+          ssaoPass.kernelSize = 48;       // Many samples for ultra-smooth
         }
         composer.addPass(ssaoPass);
-        console.log('[Photoreal] Enhanced SSAO pass added');
+        console.log('[Photoreal] Soft SSAO pass added for junction shadows');
       } catch(e) {
         console.log('[Photoreal] SSAO pass failed:', e.message);
       }
@@ -1254,31 +1254,35 @@
     
     // Ensure span is reasonable for shadow calculations
     var effectiveSpan = Math.max(span, 10);
-    var shadowSoftness = preset.shadowSoftness || 3;
-    var ambientIntensity = preset.ambientIntensity || 0.45;
+    var shadowSoftness = (preset.shadowSoftness || 3) * 1.5;  // Extra soft shadows
+    // Higher ambient for bright diffused feel
+    var ambientIntensity = (preset.ambientIntensity || 0.45) * 0.8;
     var fillIntensity = preset.fillIntensity || 0.6;
 
-    // 1. Ambient base - subtle base illumination
-    var ambient = new THREE.AmbientLight(0xf0f4f8, ambientIntensity);
+    // 1. Ambient base - bright diffused illumination
+    var ambient = new THREE.AmbientLight(0xffffff, ambientIntensity * 1.5);
     scene.add(ambient);
     lights.push(ambient);
 
-    // 2. Hemisphere light for sky/ground color bounce - enhanced
-    var skyColor = new THREE.Color(0xb8d4f0);  // Cooler sky
-    var groundColor = new THREE.Color(0x907050);  // Warmer ground bounce
+    // 2. Hemisphere light - bright sky, subtle ground bounce
+    var skyColor = new THREE.Color(0xffffff);  // Bright white sky
+    var groundColor = new THREE.Color(0xf0ebe5);  // Warm neutral ground bounce
     if (preset.warmth > 0) {
-      skyColor.lerp(new THREE.Color(0xfff0d0), preset.warmth);
+      skyColor.lerp(new THREE.Color(0xfff8f0), preset.warmth);
+      groundColor.lerp(new THREE.Color(0xf0e0d0), preset.warmth);
     } else if (preset.warmth < 0) {
-      skyColor.lerp(new THREE.Color(0xa0c0e0), -preset.warmth);
+      skyColor.lerp(new THREE.Color(0xf8f8ff), -preset.warmth * 0.3);
     }
-    var hemi = new THREE.HemisphereLight(skyColor, groundColor, 0.65);
+    var hemi = new THREE.HemisphereLight(skyColor, groundColor, 0.6);  // Brighter hemisphere
     hemi.position.set(centerX, centerY + effectiveSpan * 5, centerZ);
     scene.add(hemi);
     lights.push(hemi);
 
-    // 3. Key light (sun) - main shadow caster with high quality shadows
+    // 3. Key light (sun) - soft diffused main light
     var sunAngleRad = (preset.angle || 45) * Math.PI / 180;
-    var keyLight = new THREE.DirectionalLight(preset.sunColor || 0xffffff, preset.intensity || 1.8);
+    // Moderate intensity - most light comes from diffused environment
+    var sunIntensity = (preset.intensity || 1.8) * 1.8;
+    var keyLight = new THREE.DirectionalLight(preset.sunColor || 0xffffff, sunIntensity);
     keyLight.position.set(
       centerX + effectiveSpan * 4 * Math.cos(sunAngleRad),
       centerY + effectiveSpan * 6,
@@ -1286,11 +1290,11 @@
     );
     keyLight.target.position.set(centerX, centerY * 0.3, centerZ);
     keyLight.castShadow = true;
-    keyLight.shadow.mapSize.set(4096, 4096);  // High resolution shadows
-    keyLight.shadow.bias = -0.0002;
-    keyLight.shadow.normalBias = 0.04;
-    keyLight.shadow.radius = shadowSoftness;
-    keyLight.shadow.blurSamples = 25;  // Very soft shadow edges
+    keyLight.shadow.mapSize.set(4096, 4096);  // High resolution for soft gradients
+    keyLight.shadow.bias = -0.0001;
+    keyLight.shadow.normalBias = 0.02;
+    keyLight.shadow.radius = shadowSoftness * 3;  // Very soft gradient shadows
+    keyLight.shadow.blurSamples = 48;  // Many samples for ultra-smooth gradients
 
     // Shadow camera covers entire scene with padding
     var shadowExtent = effectiveSpan * 5;
@@ -1306,10 +1310,11 @@
     lights.push(keyLight);
     lights.push(keyLight.target);
 
-    // 4. Fill light - cooler tone from opposite side for depth
-    var fillColor = new THREE.Color(0xc8e0f8);
-    if (preset.warmth > 0) fillColor.lerp(new THREE.Color(0xf8e8d8), preset.warmth * 0.5);
-    var fillLight = new THREE.DirectionalLight(fillColor, fillIntensity * 0.9);
+    // 4. Fill light - neutral warm tone from opposite side (no blue tint)
+    var fillColor = new THREE.Color(0xfff8f4);  // Warm white fill
+    if (preset.warmth > 0) fillColor.lerp(new THREE.Color(0xfff0e0), preset.warmth * 0.5);
+    if (preset.warmth < 0) fillColor.lerp(new THREE.Color(0xf8f8ff), -preset.warmth * 0.2);
+    var fillLight = new THREE.DirectionalLight(fillColor, fillIntensity * 0.85);
     fillLight.position.set(centerX - effectiveSpan * 3.5, centerY + effectiveSpan * 2.5, centerZ - effectiveSpan * 2.5);
     fillLight.target.position.set(centerX, centerY * 0.4, centerZ);
     fillLight.castShadow = false;
@@ -1391,18 +1396,18 @@
       return Promise.resolve(envRT.texture);
     }
 
-    // Create enhanced procedural HDR-like studio environment
+    // Create bright diffused environment - soft multi-directional lighting
     pmremGenerator = new THREE.PMREMGenerator(renderer);
     pmremGenerator.compileEquirectangularShader();
 
     var studio = new THREE.Scene();
     
-    // Lighter grey studio background
-    var skyColor = new THREE.Color(0xf0f0f0);  // Lighter grey
-    var groundColor = new THREE.Color(0xf5f5f5);  // Light grey ground
-    studio.background = new THREE.Color(0xf5f5f5);  // Light grey
+    // Bright diffused sky background
+    var skyColor = new THREE.Color(0xfafafa);  // Very light grey sky
+    var groundColor = new THREE.Color(0xf5f5f5);  // Light ground
+    studio.background = new THREE.Color(0xfafafa);  // Bright background
 
-    // Add light emitters for environment reflections - studio lighting
+    // Add light emitters for soft diffused environment reflections
     function addEmitter(w, h, pos, rot, color, intensity){
       var c = new THREE.Color(color || 0xffffff);
       c.multiplyScalar(intensity || 1);
@@ -1413,33 +1418,36 @@
       studio.add(plane);
     }
     
-    // Main sun area - softer sun to prevent bleaching
-    addEmitter(100, 100, new THREE.Vector3(100, 120, 80), { x: -Math.PI/3, y: Math.PI/5 }, 0xffffff, 2.8);
+    // Large soft overhead light - main diffused illumination from above
+    addEmitter(400, 400, new THREE.Vector3(0, 200, 0), { x: Math.PI/2, y: 0 }, 0xffffff, 2.0);
     
-    // Soft overhead fill from zenith
-    addEmitter(180, 180, new THREE.Vector3(0, 180, 0), { x: Math.PI/2, y: 0 }, 0xf0f0f0, 1.6);
+    // Soft sun (not harsh) - provides gentle directional bias
+    addEmitter(120, 120, new THREE.Vector3(80, 160, 60), { x: -Math.PI/3.5, y: Math.PI/6 }, 0xfffef8, 1.8);
     
-    // Cool fill from opposite side
-    addEmitter(120, 120, new THREE.Vector3(-90, 100, 40), { x: -Math.PI/3.5, y: -Math.PI/4 }, 0xe8e8e8, 1.2);
+    // Multiple soft fill lights from different directions for diffused feel
+    addEmitter(200, 200, new THREE.Vector3(-80, 140, 60), { x: -Math.PI/4, y: -Math.PI/5 }, 0xffffff, 1.2);
+    addEmitter(200, 200, new THREE.Vector3(60, 140, -80), { x: -Math.PI/4, y: Math.PI/3 }, 0xffffff, 1.2);
+    addEmitter(200, 200, new THREE.Vector3(-60, 140, -60), { x: -Math.PI/4, y: -Math.PI/3 }, 0xffffff, 1.0);
     
-    // Horizon glow - neutral
-    addEmitter(250, 80, new THREE.Vector3(0, 30, 140), { x: Math.PI/8, y: 0 }, 0xf0f0f0, 1.0);
+    // Horizon wrap-around - soft light from all sides
+    addEmitter(400, 100, new THREE.Vector3(0, 60, 150), { x: Math.PI/12, y: 0 }, 0xffffff, 1.0);
+    addEmitter(400, 100, new THREE.Vector3(0, 60, -150), { x: -Math.PI/12, y: Math.PI }, 0xffffff, 0.9);
+    addEmitter(100, 400, new THREE.Vector3(150, 60, 0), { x: 0, y: -Math.PI/2 }, 0xffffff, 0.9);
+    addEmitter(100, 400, new THREE.Vector3(-150, 60, 0), { x: 0, y: Math.PI/2 }, 0xffffff, 0.9);
     
-    // Ground reflection (light grey bounce)
-    addEmitter(220, 220, new THREE.Vector3(0, -40, 0), { x: Math.PI/2, y: 0 }, 0xf0f0f0, 1.2);
+    // Ground bounce - soft upward fill
+    addEmitter(350, 350, new THREE.Vector3(0, -20, 0), { x: Math.PI/2, y: 0 }, 0xf5f5f5, 1.2);
     
-    // Back light for rim/separation - softer
-    addEmitter(80, 100, new THREE.Vector3(-80, 90, -100), { x: -Math.PI/5, y: -Math.PI/3 }, 0xf8f8f8, 1.0);
-    addEmitter(80, 100, new THREE.Vector3(80, 90, -80), { x: -Math.PI/5, y: Math.PI/3 }, 0xfff8f0, 0.9);
-    
-    // Sky dome with gradient - lighter grey gradient
+    // Sky dome - bright diffused sky
     var skyGeom = new THREE.SphereGeometry(200, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
-    // Create gradient material using vertex colors for neutral studio
+    // Create gradient material - subtle gradient, mostly bright
     var skyPositions = skyGeom.attributes.position;
     var skyColors = new Float32Array(skyPositions.count * 3);
-    var zenithColor = new THREE.Color(0xeeeeee);   // Lighter grey at top
-    var midColor = new THREE.Color(0xf4f4f4);      // Very light grey
-    var horizonColor = new THREE.Color(0xfafafa);  // Almost white at horizon
+    var zenithColor = new THREE.Color(0xf5f5f5);   // Light at top
+    var midColor = new THREE.Color(0xfafafa);      // Brighter
+    var horizonColor = new THREE.Color(0xffffff);  // White at horizon
+    var midColor = new THREE.Color(0xffffff);      // Pure white
+    var horizonColor = new THREE.Color(0xffffff);  // Pure white at horizon
     for (var i = 0; i < skyPositions.count; i++) {
       var y = skyPositions.getY(i);
       var t = Math.max(0, y / 200);  // 0 at horizon, 1 at zenith
@@ -2039,6 +2047,97 @@
           }
         }
         
+        // Add door panel and frame for doors
+        if (op.type === 'door') {
+          var doorWidth = op.end - op.start;
+          var doorHeight = op.height;
+          var doorCenterX = op.start + doorWidth / 2; // Local X from wall start
+          var doorCenterY = baseY + doorHeight / 2;
+          var frameThickness = 0.06; // 60mm thick frames
+          var doorThickness = 0.045; // 45mm door panel
+          
+          // Door panel - dark wooden material
+          var doorMat = materialFor('door');
+          var doorGeom = new THREE.BoxGeometry(doorWidth - frameThickness * 2, doorHeight - frameThickness, doorThickness);
+          var doorMesh = new THREE.Mesh(doorGeom, doorMat);
+          doorMesh.position.set(doorCenterX, doorCenterY - frameThickness / 2, wallThickness * 0.3);
+          doorMesh.castShadow = true;
+          doorMesh.receiveShadow = true;
+          doorMesh.name = 'DoorPanel';
+          wallGroup.add(doorMesh);
+          
+          // Door frame - dark aluminium to match windows
+          var frameMat = materialFor('windowFrame');
+          
+          // Top frame
+          var topFrame = new THREE.Mesh(
+            new THREE.BoxGeometry(doorWidth + frameThickness, frameThickness, wallThickness * 0.7),
+            frameMat
+          );
+          topFrame.position.set(doorCenterX, baseY + doorHeight - frameThickness / 2, 0);
+          topFrame.castShadow = true;
+          topFrame.receiveShadow = true;
+          wallGroup.add(topFrame);
+          
+          // Left frame
+          var leftFrame = new THREE.Mesh(
+            new THREE.BoxGeometry(frameThickness, doorHeight, wallThickness * 0.7),
+            frameMat
+          );
+          leftFrame.position.set(doorCenterX - doorWidth / 2 + frameThickness / 2, doorCenterY, 0);
+          leftFrame.castShadow = true;
+          leftFrame.receiveShadow = true;
+          wallGroup.add(leftFrame);
+          
+          // Right frame
+          var rightFrame = new THREE.Mesh(
+            new THREE.BoxGeometry(frameThickness, doorHeight, wallThickness * 0.7),
+            frameMat
+          );
+          rightFrame.position.set(doorCenterX + doorWidth / 2 - frameThickness / 2, doorCenterY, 0);
+          rightFrame.castShadow = true;
+          rightFrame.receiveShadow = true;
+          wallGroup.add(rightFrame);
+          
+          // Door threshold (bottom sill) - slightly raised
+          var threshold = new THREE.Mesh(
+            new THREE.BoxGeometry(doorWidth + frameThickness * 2, 0.025, wallThickness * 1.1),
+            frameMat
+          );
+          threshold.position.set(doorCenterX, baseY + 0.0125, 0);
+          threshold.castShadow = true;
+          threshold.receiveShadow = true;
+          wallGroup.add(threshold);
+          
+          // Door handle - metallic cylinder on right side
+          var handleMat = new THREE.MeshPhysicalMaterial({
+            color: 0x888888,
+            metalness: 0.95,
+            roughness: 0.25,
+            envMapIntensity: 1.2
+          });
+          
+          // Handle bar - horizontal lever
+          var handleBar = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.015, 0.015, 0.12, 12),
+            handleMat
+          );
+          handleBar.rotation.z = Math.PI / 2;
+          handleBar.position.set(doorCenterX + doorWidth / 2 - 0.15, baseY + doorHeight * 0.45, wallThickness * 0.3 + doorThickness / 2 + 0.06);
+          handleBar.castShadow = true;
+          wallGroup.add(handleBar);
+          
+          // Handle escutcheon (backing plate)
+          var escutcheon = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.025, 0.025, 0.015, 16),
+            handleMat
+          );
+          escutcheon.rotation.x = Math.PI / 2;
+          escutcheon.position.set(doorCenterX + doorWidth / 2 - 0.15, baseY + doorHeight * 0.45, wallThickness * 0.3 + doorThickness / 2 + 0.01);
+          escutcheon.castShadow = true;
+          wallGroup.add(escutcheon);
+        }
+        
         currentX = op.end;
       });
       
@@ -2050,7 +2149,8 @@
       sceneRoot.add(wallGroup);
     });
 
-    // Build roofs - off-white flat roofs with light grey keyline edges
+    // Build roofs - solid roofs with proper shadow casting
+    // Roofs cast shadows underneath onto walls and ground
     data.roofs.forEach(function(roof, idx){
       var roofWidth = roof.width + 0.5;
       var roofDepth = roof.depth + 0.5;
@@ -2058,17 +2158,29 @@
       var edgeThickness = 0.06;  // Keyline thickness
       var edgeHeight = 0.04;     // Raised keyline height
       
-      // Main roof surface - off-white
+      // Main roof surface - solid geometry that casts shadows
       var geom = new THREE.BoxGeometry(roofWidth, roofHeight, roofDepth, 2, 1, 2);
       var mat = materialFor('roof', roofWidth, roofDepth);
       var mesh = new THREE.Mesh(geom, mat);
       
       var roofY = (roof.baseHeight || 3) + roofHeight / 2;
       mesh.position.set(roof.x, roofY, roof.z);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
+      mesh.castShadow = true;    // Roof casts shadows onto walls/ground below
+      mesh.receiveShadow = true; // Roof receives shadows from other objects
       mesh.name = 'Roof_' + idx;
       sceneRoot.add(mesh);
+      
+      // Add a soffit (underside plane) to receive shadows under the roof overhang
+      // Uses roof material (smooth white, no texture)
+      var soffitGeom = new THREE.PlaneGeometry(roofWidth, roofDepth);
+      var soffitMat = materialFor('roof', roofWidth, roofDepth);  // Use smooth roof material
+      var soffit = new THREE.Mesh(soffitGeom, soffitMat);
+      soffit.rotation.x = Math.PI / 2;  // Face downward
+      soffit.position.set(roof.x, roofY - roofHeight / 2 - 0.01, roof.z);
+      soffit.receiveShadow = true;  // Receives shadows
+      soffit.castShadow = false;    // Doesn't cast (it's under the roof)
+      soffit.name = 'Soffit_' + idx;
+      sceneRoot.add(soffit);
       
       // Add light grey keyline trim around the entire roof perimeter
       // Position keylines slightly above roof surface so they're visible
