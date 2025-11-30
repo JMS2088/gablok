@@ -358,6 +358,94 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 					<button id="visualize-generate">Re-Render</button>
 					<button id="visualize-download" class="secondary">Download PNG</button>
 				</div>
+				
+				<!-- AI Enhancement Panel - shown when LLM is configured -->
+				<div id="visualize-ai-panel" class="visualize-ai-panel" style="display:none;">
+					<div class="visualize-ai-header">
+						<span class="visualize-ai-title">🤖 AI Enhancement</span>
+						<span id="visualize-ai-provider" class="visualize-ai-badge"></span>
+					</div>
+					
+					<div class="visualize-ai-section">
+						<label for="visualize-ai-style">Style Preset</label>
+						<select id="visualize-ai-style">
+							<option value="">-- Select Style --</option>
+							<option value="photorealistic">Photorealistic</option>
+							<option value="architectural">Architectural Visualization</option>
+							<option value="modern-luxury">Modern Luxury</option>
+							<option value="scandinavian">Scandinavian Minimal</option>
+							<option value="industrial">Industrial Loft</option>
+							<option value="tropical">Tropical Resort</option>
+							<option value="evening">Evening Ambiance</option>
+							<option value="magazine">Magazine Cover</option>
+						</select>
+					</div>
+					
+					<div class="visualize-ai-section">
+						<label for="visualize-ai-prompt">Custom Prompt</label>
+						<textarea id="visualize-ai-prompt" rows="3" placeholder="Describe the look you want... e.g., 'warm sunset lighting, lush garden, modern furniture'"></textarea>
+					</div>
+					
+					<div class="visualize-ai-section">
+						<label>Enhancement Options</label>
+						<div class="visualize-ai-options">
+							<label class="visualize-ai-checkbox">
+								<input type="checkbox" id="visualize-ai-landscaping" checked />
+								<span>Add Landscaping</span>
+							</label>
+							<label class="visualize-ai-checkbox">
+								<input type="checkbox" id="visualize-ai-furniture" />
+								<span>Interior Furniture</span>
+							</label>
+							<label class="visualize-ai-checkbox">
+								<input type="checkbox" id="visualize-ai-people" />
+								<span>Add People</span>
+							</label>
+							<label class="visualize-ai-checkbox">
+								<input type="checkbox" id="visualize-ai-vehicles" />
+								<span>Add Vehicles</span>
+							</label>
+							<label class="visualize-ai-checkbox">
+								<input type="checkbox" id="visualize-ai-weather" />
+								<span>Weather Effects</span>
+							</label>
+							<label class="visualize-ai-checkbox">
+								<input type="checkbox" id="visualize-ai-hdr" checked />
+								<span>HDR Lighting</span>
+							</label>
+						</div>
+					</div>
+					
+					<div class="visualize-ai-section">
+						<label for="visualize-ai-quality">Output Quality</label>
+						<select id="visualize-ai-quality">
+							<option value="draft">Draft (Fast)</option>
+							<option value="standard" selected>Standard</option>
+							<option value="high">High Quality</option>
+							<option value="ultra">Ultra (Slow)</option>
+						</select>
+					</div>
+					
+					<div class="visualize-ai-actions">
+						<button id="visualize-ai-enhance" type="button">✨ Enhance with AI</button>
+						<button id="visualize-ai-variations" type="button" class="secondary">Generate Variations</button>
+					</div>
+					
+					<div id="visualize-ai-status" class="visualize-ai-status"></div>
+					
+					<!-- AI Generated Results -->
+					<div id="visualize-ai-results" class="visualize-ai-results" style="display:none;">
+						<label>AI Generated Images</label>
+						<div id="visualize-ai-gallery" class="visualize-ai-gallery"></div>
+					</div>
+				</div>
+				
+				<!-- Link to configure AI if not set up - visible by default -->
+				<div id="visualize-ai-setup" class="visualize-ai-setup">
+					<p>🔌 Connect an AI provider for photorealistic enhancements</p>
+					<button id="visualize-ai-configure" type="button" class="secondary">Configure AI Settings</button>
+				</div>
+				
 				<div class="visualize-control-row visualize-gallery-row" style="display:none;">
 					<span class="visualize-subtitle">Your Design Views</span>
 					<div id="visualize-gallery" class="visualize-gallery-grid">

@@ -299,6 +299,150 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             # Client closed connection (e.g., gateway timed out and dropped it)
             return
 
+    def _handle_ai_generate(self, data):
+        """Proxy AI image generation requests to external APIs."""
+        import urllib.request
+        import urllib.error
+        import ssl
+        
+        provider = data.get('provider', '')
+        api_key = data.get('apiKey', '')
+        model = data.get('model', '')
+        prompt = data.get('prompt', '')
+        endpoint = data.get('endpoint', '')
+        quality = data.get('quality', {})
+        
+        if not provider or not api_key:
+            return {'error': 'Missing provider or API key'}
+        
+        # Create SSL context that doesn't verify (for dev environments)
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        
+        headers = {}
+        body = {}
+        url = ''
+        
+        if provider == 'openai':
+            url = (endpoint or 'https://api.openai.com/v1') + '/images/generations'
+            headers = {
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            }
+            size = '1024x1024'
+            if quality.get('width', 0) >= 1792:
+                size = '1792x1024'
+            body = {
+                'model': model or 'dall-e-3',
+                'prompt': prompt,
+                'n': 1,
+                'size': size,
+                'quality': 'hd' if quality.get('steps', 30) > 35 else 'standard'
+            }
+        
+        elif provider == 'stability':
+            model_id = model or 'stable-diffusion-xl-1024-v1-0'
+            url = (endpoint or 'https://api.stability.ai/v1') + f'/generation/{model_id}/text-to-image'
+            headers = {
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+            body = {
+                'text_prompts': [{'text': prompt, 'weight': 1}],
+                'cfg_scale': 7,
+                'height': min(quality.get('height', 1024), 1024),
+                'width': min(quality.get('width', 1024), 1024),
+                'steps': quality.get('steps', 30),
+                'samples': 1
+            }
+        
+        elif provider == 'freepik':
+            url = (endpoint or 'https://api.freepik.com/v1') + '/ai/text-to-image'
+            headers = {
+                'x-freepik-api-key': api_key,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+            body = {
+                'prompt': prompt,
+                'negative_prompt': 'blurry, distorted, low quality, watermark, text',
+                'guidance_scale': 7.5,
+                'num_inference_steps': quality.get('steps', 30),
+                'num_images': 1
+            }
+            if model:
+                body['model'] = model
+        
+        elif provider == 'google':
+            model_id = model or 'imagen-3'
+            url = (endpoint or 'https://generativelanguage.googleapis.com/v1') + f'/models/{model_id}:predict?key={api_key}'
+            headers = {'Content-Type': 'application/json'}
+            body = {
+                'instances': [{'prompt': prompt}],
+                'parameters': {
+                    'sampleCount': 1,
+                    'aspectRatio': '16:9' if quality.get('width', 0) > quality.get('height', 0) else '1:1'
+                }
+            }
+        
+        else:
+            return {'error': f'Provider {provider} not supported'}
+        
+        # Make the request
+        try:
+            req_data = json.dumps(body).encode('utf-8')
+            req = urllib.request.Request(url, data=req_data, headers=headers, method='POST')
+            
+            with urllib.request.urlopen(req, timeout=120, context=ctx) as resp:
+                resp_data = json.loads(resp.read().decode('utf-8'))
+                
+                # Normalize response format
+                images = []
+                
+                if provider == 'openai':
+                    for img in resp_data.get('data', []):
+                        if img.get('url'):
+                            images.append(img['url'])
+                        elif img.get('b64_json'):
+                            images.append('data:image/png;base64,' + img['b64_json'])
+                
+                elif provider == 'stability':
+                    for art in resp_data.get('artifacts', []):
+                        if art.get('base64'):
+                            images.append('data:image/png;base64,' + art['base64'])
+                
+                elif provider == 'freepik':
+                    if resp_data.get('data'):
+                        for img in resp_data['data']:
+                            if img.get('url'):
+                                images.append(img['url'])
+                            elif img.get('base64'):
+                                images.append('data:image/png;base64,' + img['base64'])
+                    elif resp_data.get('image'):
+                        images.append(resp_data['image'])
+                    elif resp_data.get('url'):
+                        images.append(resp_data['url'])
+                
+                elif provider == 'google':
+                    for pred in resp_data.get('predictions', []):
+                        if pred.get('bytesBase64Encoded'):
+                            images.append('data:image/png;base64,' + pred['bytesBase64Encoded'])
+                
+                return {'images': images, 'provider': provider}
+                
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode('utf-8') if e.fp else ''
+            try:
+                error_json = json.loads(error_body)
+                error_msg = error_json.get('error', {}).get('message') or error_json.get('message') or str(error_json)
+            except:
+                error_msg = error_body or str(e)
+            return {'error': f'API error ({e.code}): {error_msg}'}
+        except Exception as e:
+            return {'error': str(e)}
+
     def do_POST(self):
         # Normalize/redirect bad forwarded host pattern before handling
         if self._maybe_redirect_host():
@@ -391,6 +535,22 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({ 'error': 'photoreal-render-failed', 'message': str(exc) }).encode('utf-8'))
             return
+        
+        # AI Image Generation Proxy endpoint
+        if path == '/api/ai/generate':
+            try:
+                result = self._handle_ai_generate(data)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode('utf-8'))
+            except Exception as exc:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(json.dumps({ 'error': 'ai-generate-failed', 'message': str(exc) }).encode('utf-8'))
+            return
+        
         # Fallback to default handler for other POSTs
         # Unknown POST route
         self.send_response(404)

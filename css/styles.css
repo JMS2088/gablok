@@ -1250,6 +1250,183 @@
     border: 1px solid #b8daff; 
   }
 
+  /* Visualize AI Enhancement Panel */
+  .visualize-ai-panel {
+    margin-top: 20px;
+    padding: 16px;
+    background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%);
+    border: 1px solid #d0d8f0;
+    border-radius: 10px;
+  }
+  .visualize-ai-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #d0d8f0;
+  }
+  .visualize-ai-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+  }
+  .visualize-ai-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    background: #007acc;
+    color: #fff;
+    border-radius: 12px;
+    text-transform: uppercase;
+  }
+  .visualize-ai-section {
+    margin-bottom: 14px;
+  }
+  .visualize-ai-section > label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: #555;
+    margin-bottom: 6px;
+  }
+  .visualize-ai-section select,
+  .visualize-ai-section textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #c8d0e0;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .visualize-ai-section select:focus,
+  .visualize-ai-section textarea:focus {
+    outline: none;
+    border-color: #007acc;
+    box-shadow: 0 0 0 3px rgba(0,122,204,0.12);
+  }
+  .visualize-ai-section textarea {
+    resize: vertical;
+    min-height: 60px;
+  }
+  .visualize-ai-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .visualize-ai-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #444;
+    cursor: pointer;
+  }
+  .visualize-ai-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+  }
+  .visualize-ai-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .visualize-ai-actions button {
+    flex: 1;
+    padding: 10px 14px;
+    font-size: 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .visualize-ai-actions button:first-child {
+    background: linear-gradient(135deg, #007acc 0%, #005a9e 100%);
+    color: #fff;
+    border: none;
+    font-weight: 500;
+  }
+  .visualize-ai-actions button:first-child:hover {
+    background: linear-gradient(135deg, #0088e0 0%, #006ab8 100%);
+    box-shadow: 0 4px 12px rgba(0,122,204,0.3);
+  }
+  .visualize-ai-actions button:first-child:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+  .visualize-ai-status {
+    margin-top: 12px;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    display: none;
+  }
+  .visualize-ai-status.loading {
+    display: block;
+    background: #e8f4fd;
+    color: #0066b3;
+    border: 1px solid #b8daff;
+  }
+  .visualize-ai-status.success {
+    display: block;
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+  }
+  .visualize-ai-status.error {
+    display: block;
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+  }
+  .visualize-ai-results {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #d0d8f0;
+  }
+  .visualize-ai-results > label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: #555;
+    margin-bottom: 10px;
+  }
+  .visualize-ai-gallery {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .visualize-ai-gallery img {
+    width: 100%;
+    aspect-ratio: 16/10;
+    object-fit: cover;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  .visualize-ai-gallery img:hover {
+    border-color: #007acc;
+    transform: scale(1.02);
+  }
+  .visualize-ai-setup {
+    margin-top: 20px;
+    padding: 16px;
+    background: #f8f9fa;
+    border: 1px dashed #ced4da;
+    border-radius: 8px;
+    text-align: center;
+  }
+  .visualize-ai-setup p {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 12px;
+  }
+  .visualize-ai-setup button {
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+
   .admin-inline { display: flex; flex-wrap: wrap; gap: 24px; }
   .admin-column { flex: 1 1 300px; min-width: 280px; }
   .admin-column h3 { margin: 4px 0 8px; font-size: 15px; }

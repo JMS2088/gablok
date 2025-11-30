@@ -678,6 +678,9 @@
     if (state.photoViewer) {
       state.photoViewer.addEventListener('click', function(ev){ if (ev.target === state.photoViewer) closePhotoViewer(); });
     }
+    
+    // Wire AI enhancement controls
+    wireAIControls();
   }
 
   function showVisualize(){
@@ -690,6 +693,13 @@
     
     state.panel.classList.add('visible');
     document.body.classList.add('visualize-open');
+    
+    // Update AI panel visibility based on LLM settings
+    // Call immediately and also after a short delay to handle late initialization
+    updateAIPanelVisibility();
+    setTimeout(function() {
+      updateAIPanelVisibility();
+    }, 500);
     
     // ALWAYS reset and trigger fresh render
     state.renderStarted = false;
@@ -2060,7 +2070,7 @@
           var doorMat = materialFor('door');
           var doorGeom = new THREE.BoxGeometry(doorWidth - frameThickness * 2, doorHeight - frameThickness, doorThickness);
           var doorMesh = new THREE.Mesh(doorGeom, doorMat);
-          doorMesh.position.set(doorCenterX, doorCenterY - frameThickness / 2, wallThickness * 0.3);
+          doorMesh.position.set(doorCenterX, doorCenterY - frameThickness / 2, wallThickness * 0.3 + doorThickness / 2);
           doorMesh.castShadow = true;
           doorMesh.receiveShadow = true;
           doorMesh.name = 'DoorPanel';
@@ -2712,6 +2722,363 @@
       return createEnvironment();
     }
   };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // AI ENHANCEMENT INTEGRATION
+  // ─────────────────────────────────────────────────────────────────────────
+  
+  var AI_STYLE_PROMPTS = {
+    'photorealistic': 'ultra photorealistic, architectural photography, professional real estate photo, natural lighting, sharp details, 8k resolution',
+    'architectural': 'architectural visualization, professional render, clean lines, studio lighting, modern design magazine quality',
+    'modern-luxury': 'luxury modern architecture, high-end interior design, marble and glass, ambient lighting, vogue living style',
+    'scandinavian': 'scandinavian minimal design, light wood, white walls, hygge atmosphere, soft natural light, cozy modern',
+    'industrial': 'industrial loft style, exposed brick, steel beams, edison bulbs, urban warehouse aesthetic',
+    'tropical': 'tropical resort architecture, lush greenery, palm trees, infinity pool, paradise island, golden hour',
+    'evening': 'evening twilight photography, blue hour, warm interior lights glowing, dramatic sky, architectural dusk shot',
+    'magazine': 'architectural digest cover photo, award winning design, perfect composition, editorial quality lighting'
+  };
+  
+  var aiState = {
+    configured: false,
+    provider: null,
+    apiKey: null,
+    model: null,
+    endpoint: null,
+    generating: false,
+    results: []
+  };
+  
+  function checkAIConfiguration() {
+    console.log('[AI] Checking AI configuration...');
+    if (typeof window.getLLMSettings !== 'function') {
+      console.log('[AI] getLLMSettings not available');
+      return false;
+    }
+    
+    var settings = window.getLLMSettings();
+    console.log('[AI] Settings from localStorage:', JSON.stringify(settings));
+    if (settings && settings.provider && settings.apiKey) {
+      aiState.configured = true;
+      aiState.provider = settings.provider;
+      aiState.apiKey = settings.apiKey;
+      aiState.model = settings.model;
+      aiState.endpoint = settings.endpoint;
+      console.log('[AI] Configured with provider:', aiState.provider);
+      return true;
+    }
+    
+    aiState.configured = false;
+    console.log('[AI] Not configured - missing provider or apiKey');
+    return false;
+  }
+  
+  function updateAIPanelVisibility() {
+    console.log('[AI] Updating panel visibility...');
+    var aiPanel = document.getElementById('visualize-ai-panel');
+    var aiSetup = document.getElementById('visualize-ai-setup');
+    var providerBadge = document.getElementById('visualize-ai-provider');
+    
+    console.log('[AI] Panel elements:', { aiPanel: !!aiPanel, aiSetup: !!aiSetup, providerBadge: !!providerBadge });
+    
+    if (checkAIConfiguration()) {
+      console.log('[AI] Showing AI panel');
+      if (aiPanel) aiPanel.style.display = 'block';
+      if (aiSetup) aiSetup.style.display = 'none';
+      if (providerBadge) {
+        var providerNames = {
+          'openai': 'OpenAI',
+          'anthropic': 'Claude',
+          'google': 'Gemini',
+          'xai': 'Grok',
+          'stability': 'Stability',
+          'midjourney': 'Midjourney',
+          'freepik': 'Freepik'
+        };
+        providerBadge.textContent = providerNames[aiState.provider] || aiState.provider;
+      }
+    } else {
+      console.log('[AI] Hiding AI panel, showing setup');
+      if (aiPanel) aiPanel.style.display = 'none';
+      if (aiSetup) aiSetup.style.display = 'block';
+    }
+  }
+  
+  function buildAIPrompt() {
+    var styleSelect = document.getElementById('visualize-ai-style');
+    var customPrompt = document.getElementById('visualize-ai-prompt');
+    var style = styleSelect ? styleSelect.value : '';
+    var custom = customPrompt ? customPrompt.value.trim() : '';
+    
+    var parts = ['modern residential building exterior'];
+    
+    // Add style preset
+    if (style && AI_STYLE_PROMPTS[style]) {
+      parts.push(AI_STYLE_PROMPTS[style]);
+    }
+    
+    // Add custom prompt
+    if (custom) {
+      parts.push(custom);
+    }
+    
+    // Add enhancement options
+    var options = [];
+    if (document.getElementById('visualize-ai-landscaping')?.checked) {
+      options.push('beautiful landscaping, manicured lawn, garden plants');
+    }
+    if (document.getElementById('visualize-ai-furniture')?.checked) {
+      options.push('stylish interior furniture visible through windows');
+    }
+    if (document.getElementById('visualize-ai-people')?.checked) {
+      options.push('people enjoying the space');
+    }
+    if (document.getElementById('visualize-ai-vehicles')?.checked) {
+      options.push('luxury car in driveway');
+    }
+    if (document.getElementById('visualize-ai-weather')?.checked) {
+      options.push('atmospheric weather effects');
+    }
+    if (document.getElementById('visualize-ai-hdr')?.checked) {
+      options.push('HDR lighting, high dynamic range');
+    }
+    
+    if (options.length > 0) {
+      parts.push(options.join(', '));
+    }
+    
+    return parts.join(', ');
+  }
+  
+  function getQualitySettings() {
+    var qualitySelect = document.getElementById('visualize-ai-quality');
+    var quality = qualitySelect ? qualitySelect.value : 'standard';
+    
+    var settings = {
+      'draft': { width: 512, height: 512, steps: 20 },
+      'standard': { width: 1024, height: 1024, steps: 30 },
+      'high': { width: 1536, height: 1024, steps: 40 },
+      'ultra': { width: 2048, height: 1536, steps: 50 }
+    };
+    
+    return settings[quality] || settings.standard;
+  }
+  
+  function setAIStatus(message, type) {
+    var status = document.getElementById('visualize-ai-status');
+    if (!status) return;
+    
+    status.className = 'visualize-ai-status ' + (type || '');
+    status.textContent = message;
+    status.style.display = message ? 'block' : 'none';
+  }
+  
+  function captureCurrentRender() {
+    // Capture current Three.js render as base image
+    if (!renderer) return null;
+    
+    try {
+      return renderer.domElement.toDataURL('image/png');
+    } catch (e) {
+      console.warn('[AI] Failed to capture render:', e);
+      return null;
+    }
+  }
+  
+  // Unified AI generation through backend proxy (avoids CORS issues)
+  async function generateViaProxy(prompt, quality, baseImage) {
+    var response = await fetch('/api/ai/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: aiState.provider,
+        apiKey: aiState.apiKey,
+        model: aiState.model,
+        endpoint: aiState.endpoint,
+        prompt: prompt,
+        quality: quality,
+        baseImage: baseImage
+      })
+    });
+    
+    if (!response.ok) {
+      var err = await response.json().catch(function() { return {}; });
+      throw new Error(err.message || err.error || 'API error: ' + response.status);
+    }
+    
+    var data = await response.json();
+    
+    if (data.error) {
+      throw new Error(data.error);
+    }
+    
+    return data.images || [];
+  }
+  
+  async function enhanceWithAI() {
+    if (aiState.generating) return;
+    if (!aiState.configured) {
+      setAIStatus('Please configure AI settings first', 'error');
+      return;
+    }
+    
+    aiState.generating = true;
+    var enhanceBtn = document.getElementById('visualize-ai-enhance');
+    if (enhanceBtn) enhanceBtn.disabled = true;
+    
+    setAIStatus('Generating photorealistic enhancement...', 'loading');
+    
+    try {
+      var prompt = buildAIPrompt();
+      var quality = getQualitySettings();
+      var baseImage = captureCurrentRender();
+      
+      console.log('[AI] Generating with prompt:', prompt);
+      console.log('[AI] Provider:', aiState.provider, 'Model:', aiState.model);
+      
+      var images = await generateViaProxy(prompt, quality, baseImage);
+      
+      if (images.length > 0) {
+        aiState.results = images;
+        displayAIResults(images);
+        setAIStatus('Generated ' + images.length + ' image(s) successfully!', 'success');
+      } else {
+        throw new Error('No images returned from API');
+      }
+      
+    } catch (err) {
+      console.error('[AI] Enhancement error:', err);
+      setAIStatus('Error: ' + err.message, 'error');
+    } finally {
+      aiState.generating = false;
+      if (enhanceBtn) enhanceBtn.disabled = false;
+    }
+  }
+  
+  async function generateVariations() {
+    if (aiState.generating) return;
+    if (!aiState.configured) {
+      setAIStatus('Please configure AI settings first', 'error');
+      return;
+    }
+    
+    // Generate 4 variations with slight prompt modifications
+    aiState.generating = true;
+    var variationsBtn = document.getElementById('visualize-ai-variations');
+    if (variationsBtn) variationsBtn.disabled = true;
+    
+    setAIStatus('Generating variations...', 'loading');
+    
+    try {
+      var basePrompt = buildAIPrompt();
+      var quality = getQualitySettings();
+      quality.steps = Math.min(quality.steps, 25); // Faster for variations
+      
+      var variations = [
+        basePrompt + ', morning light',
+        basePrompt + ', afternoon sun',
+        basePrompt + ', overcast sky, soft shadows',
+        basePrompt + ', golden hour, warm tones'
+      ];
+      
+      var allImages = [];
+      
+      for (var i = 0; i < variations.length; i++) {
+        setAIStatus('Generating variation ' + (i + 1) + ' of ' + variations.length + '...', 'loading');
+        
+        var images = await generateViaProxy(variations[i], quality, null);
+        
+        if (images.length > 0) {
+          allImages.push(images[0]);
+        }
+      }
+      
+      if (allImages.length > 0) {
+        aiState.results = allImages;
+        displayAIResults(allImages);
+        setAIStatus('Generated ' + allImages.length + ' variations!', 'success');
+      }
+      
+    } catch (err) {
+      console.error('[AI] Variations error:', err);
+      setAIStatus('Error: ' + err.message, 'error');
+    } finally {
+      aiState.generating = false;
+      if (variationsBtn) variationsBtn.disabled = false;
+    }
+  }
+  
+  function displayAIResults(images) {
+    var resultsDiv = document.getElementById('visualize-ai-results');
+    var galleryDiv = document.getElementById('visualize-ai-gallery');
+    
+    if (!resultsDiv || !galleryDiv) return;
+    
+    resultsDiv.style.display = 'block';
+    galleryDiv.innerHTML = '';
+    
+    images.forEach(function(imgSrc, idx) {
+      var img = document.createElement('img');
+      img.src = imgSrc;
+      img.alt = 'AI Generated Image ' + (idx + 1);
+      img.title = 'Click to view full size';
+      img.addEventListener('click', function() {
+        openAIImageViewer(imgSrc);
+      });
+      galleryDiv.appendChild(img);
+    });
+  }
+  
+  function openAIImageViewer(imgSrc) {
+    // Use the existing photo viewer
+    if (state.photoViewer && state.photoImg) {
+      state.photoImg.src = imgSrc;
+      if (state.photoCaption) {
+        state.photoCaption.textContent = 'AI Enhanced Render';
+      }
+      state.photoViewer.classList.add('visible');
+    }
+  }
+  
+  function wireAIControls() {
+    console.log('[AI] Wiring AI controls...');
+    
+    // Enhance button
+    var enhanceBtn = document.getElementById('visualize-ai-enhance');
+    console.log('[AI] Enhance button:', !!enhanceBtn);
+    if (enhanceBtn && !enhanceBtn.__wired) {
+      enhanceBtn.__wired = true;
+      enhanceBtn.addEventListener('click', enhanceWithAI);
+    }
+    
+    // Variations button
+    var variationsBtn = document.getElementById('visualize-ai-variations');
+    console.log('[AI] Variations button:', !!variationsBtn);
+    if (variationsBtn && !variationsBtn.__wired) {
+      variationsBtn.__wired = true;
+      variationsBtn.addEventListener('click', generateVariations);
+    }
+    
+    // Configure button (opens settings)
+    var configureBtn = document.getElementById('visualize-ai-configure');
+    console.log('[AI] Configure button:', !!configureBtn);
+    if (configureBtn && !configureBtn.__wired) {
+      configureBtn.__wired = true;
+      configureBtn.addEventListener('click', function() {
+        hideVisualize();
+        if (typeof window.showAccount === 'function') {
+          window.showAccount();
+          // Switch to settings view after a brief delay
+          setTimeout(function() {
+            var settingsBtn = document.querySelector('[data-view="settings"]');
+            if (settingsBtn) settingsBtn.click();
+          }, 300);
+        }
+      });
+    }
+    
+    // Update panel visibility when settings change
+    updateAIPanelVisibility();
+  }
 
   document.addEventListener('DOMContentLoaded', init);
 })();
