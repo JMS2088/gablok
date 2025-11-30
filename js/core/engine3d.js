@@ -6,7 +6,7 @@
   // Ensure default window glass attributes before any render pass so openings always render as translucent blue
   try {
     if (typeof window.__windowGlassColor === 'undefined' || !window.__windowGlassColor) {
-      window.__windowGlassColor = 'rgba(37,99,235,0.35)';
+      window.__windowGlassColor = 'rgba(56,189,248,0.55)'; // Sky blue, more visible
     }
     if (typeof window.__windowGlassThickness !== 'number' || !(window.__windowGlassThickness > 0)) {
       window.__windowGlassThickness = 0.03; // meters
@@ -150,7 +150,7 @@
       if (m === 'solid') { window.__showCornerCodes = true; }
       else { window.__showCornerCodes = false; }
       // Force window glass attributes to the design-system defaults whenever mode changes
-      window.__windowGlassColor = 'rgba(37,99,235,0.35)';
+      window.__windowGlassColor = 'rgba(56,189,248,0.55)'; // Sky blue, more visible
       if (typeof window.__windowGlassThickness !== 'number' || window.__windowGlassThickness <= 0) {
         window.__windowGlassThickness = 0.03;
       }
@@ -1796,18 +1796,25 @@
             glassThickness: openingGlassThickness
           });
         }
-        // Enforce presence of wall segments below and above each window.
-        // If sill is extremely small (<15cm) promote to a default sill band.
-        // If window height would consume entire wall, trim to leave at least 0.25m top band.
+        // Wall height for opening calculations
         var wallH = stripTopY - baseY;
+        // Check if this is explicitly a floor-to-ceiling window (sillM was set to 0 and heightM matches wallHeight)
+        var isFloorToCeiling = isWindow && op.sillM === 0 && oH >= wallH - 0.1;
+        // Enforce presence of wall segments below and above each window (except floor-to-ceiling).
+        // If sill is extremely small (<15cm) and not explicitly floor-to-ceiling, promote to a default sill band.
+        // If window height would consume entire wall, trim to leave at least 0.15m top band.
         var sillAdj = sill;
-        if (isWindow) {
+        if (isWindow && !isFloorToCeiling) {
           if (sillAdj < 0.15) sillAdj = Math.min(0.9, Math.max(0.3, wallH * 0.3)); // adaptive but capped at 0.9m
           if (oH > wallH - 0.30) oH = wallH - 0.30; // leave 30cm top band
           if (oH < 0.30) oH = Math.min(1.5, wallH - 0.30); // ensure reasonable min height
+        } else if (isFloorToCeiling) {
+          // Floor-to-ceiling: keep sill at 0, but leave a tiny top margin (5cm) for visual framing
+          sillAdj = 0;
+          oH = Math.min(oH, wallH - 0.05);
         }
         var y0 = baseY + (isWindow ? sillAdj : sill);
-        var y1 = Math.min(y0 + oH, stripTopY - (isWindow ? 0.05 : 0)); // leave tiny margin for window recess
+        var y1 = Math.min(y0 + oH, stripTopY - (isWindow ? 0.02 : 0)); // leave tiny margin for window recess
         // endpoints along the strip (fallback to full segment if not provided)
         var x0o = (op.x0!=null? op.x0 : x0), z0o = (op.z0!=null? op.z0 : z0);
         var x1o = (op.x1!=null? op.x1 : x1), z1o = (op.z1!=null? op.z1 : z1);
@@ -2065,13 +2072,13 @@
       drawCornerLabel(pDt, 8, '8');
       // Draw translucent blue glass for windows (center plane only)
       // Design-system translucent blue for glass; configurable via window.__windowGlassColor
-      var glassFill = (window.__windowGlassColor) ? window.__windowGlassColor : 'rgba(37,99,235,0.35)';
-      var glassStroke = onLevel ? 'rgba(29,78,216,0.80)' : 'rgba(29,78,216,0.70)';
+      var glassFill = (window.__windowGlassColor) ? window.__windowGlassColor : 'rgba(56,189,248,0.55)';
+      var glassStroke = onLevel ? 'rgba(14,165,233,0.90)' : 'rgba(14,165,233,0.75)';
       function drawGlassQuad(Q){
         ctx.beginPath();
         ctx.moveTo(Q[0].x,Q[0].y); ctx.lineTo(Q[1].x,Q[1].y); ctx.lineTo(Q[2].x,Q[2].y); ctx.lineTo(Q[3].x,Q[3].y); ctx.closePath();
         ctx.fillStyle = glassFill; ctx.fill();
-        ctx.strokeStyle = glassStroke; ctx.lineWidth = onLevel ? 1.6 : 1.1; ctx.stroke();
+        ctx.strokeStyle = glassStroke; ctx.lineWidth = onLevel ? 2.0 : 1.4; ctx.stroke();
       }
       if (glassRects.length){
         for (var gi=0; gi<glassRects.length; gi++){

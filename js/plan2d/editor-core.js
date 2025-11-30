@@ -895,7 +895,15 @@
                 // Clamp opening to avoid full 0-length collapse on tiny walls
                 if(Math.abs(t1 - t0) < 0.01){ var mid=(t0+t1)/2; t0=Math.max(0, mid-0.005); t1=Math.min(1, mid+0.005); }
                 var el = { type: (__plan2d.tool==='door' ? 'door':'window'), host: near.index, t0: t0, t1: t1, thickness: (__plan2d.tool==='door'? (__plan2d.doorWidthM||0.92): (__plan2d.wallThicknessM||0.30)), level:(typeof window.currentFloor==='number'? window.currentFloor:0) };
-                if(__plan2d.tool==='door'){ el.meta={hinge:'left',swing:'in'}; }
+                // Set sillM and heightM for windows and doors
+                if(__plan2d.tool==='window'){
+                  el.sillM = (__plan2d.windowSillM || 1.0);
+                  el.heightM = (__plan2d.windowHeightM || 1.5);
+                } else if(__plan2d.tool==='door'){
+                  el.sillM = 0;
+                  el.heightM = (__plan2d.doorHeightM || 2.0);
+                  el.meta={hinge:'left',swing:'in'};
+                }
                 // Merge logic for window expansion: if placing a window and an existing window on the same wall overlaps or touches
                 if(__plan2d.tool==='window'){
                   try {

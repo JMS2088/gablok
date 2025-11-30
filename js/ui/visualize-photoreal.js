@@ -48,15 +48,18 @@
       bumpScale: 0.02,
       textureRepeat: 3.0
     },
-    // Glass surfaces
+    // Glass surfaces - blue tinted architectural glass
     glass: {
-      color: 0xffffff,
-      roughness: 0.0,
-      metalness: 0.1,
-      transmission: 0.98,
+      color: 0x88bbdd,        // Blue tint for visibility
+      roughness: 0.05,
+      metalness: 0.2,
+      transmission: 0.85,      // Slightly less transparent for visibility
       thickness: 0.5,
       ior: 1.52,
-      clearcoat: 1.0
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.0,
+      envMapIntensity: 1.5,    // Strong reflections
+      reflectivity: 0.9
     },
     // Pool water
     pool: {
@@ -123,6 +126,15 @@
       metalness: 0.05,
       envMapIntensity: 0.7,
       bumpScale: 0.01
+    },
+    // Window frame - white painted wood (thicker 50mm frames)
+    windowFrame: {
+      color: 0xffffff,        // White paint
+      roughness: 0.25,        // Smooth painted finish
+      metalness: 0.0,         // Wood/paint is non-metallic
+      envMapIntensity: 1.0,
+      clearcoat: 0.5,         // Good sheen from paint
+      clearcoatRoughness: 0.2
     }
   };
 
@@ -1042,9 +1054,54 @@
       console.warn('[Photoreal] No rooms found in window.allRooms!');
     }
 
-    // Gather wall strips
+    // Gather wall strips with their openings (windows/doors)
+    // Skip walls that are part of room perimeters (rooms are already solid boxes)
+    // Only include walls that have openings OR are standalone (not from room perimeters)
     if (Array.isArray(window.wallStrips)) {
-      data.walls = window.wallStrips.map(function(w){
+      // Build a set of room perimeter edges to filter out
+      var roomEdges = {};
+      if (Array.isArray(rawRooms)) {
+        rawRooms.forEach(function(r) {
+          if (!r) return;
+          var hw = (r.width || 4) / 2;
+          var hd = (r.depth || 4) / 2;
+          var cx = r.x || 0;
+          var cz = r.z || 0;
+          var lv = r.level || 0;
+          // 4 edges of the room bbox
+          var edges = [
+            [cx - hw, cz - hd, cx + hw, cz - hd], // front
+            [cx + hw, cz - hd, cx + hw, cz + hd], // right
+            [cx + hw, cz + hd, cx - hw, cz + hd], // back
+            [cx - hw, cz + hd, cx - hw, cz - hd]  // left
+          ];
+          edges.forEach(function(e) {
+            var key = lv + ':' + [e[0], e[1], e[2], e[3]].map(function(v) { return Math.round(v * 100); }).join(',');
+            var keyRev = lv + ':' + [e[2], e[3], e[0], e[1]].map(function(v) { return Math.round(v * 100); }).join(',');
+            roomEdges[key] = true;
+            roomEdges[keyRev] = true;
+          });
+        });
+      }
+      
+      data.walls = window.wallStrips.filter(function(w) {
+        if (!w) return false;
+        // Always include walls with openings (we need to render windows/doors)
+        if (Array.isArray(w.openings) && w.openings.length > 0) return true;
+        // Skip walls that match room perimeter edges (they're already rendered as room boxes)
+        var x0 = w.x0 || 0, z0 = w.z0 || 0, x1 = w.x1 || 0, z1 = w.z1 || 0;
+        var lv = w.level || 0;
+        var key = lv + ':' + [x0, z0, x1, z1].map(function(v) { return Math.round(v * 100); }).join(',');
+        if (roomEdges[key]) return false;
+        // Include standalone walls
+        return true;
+      }).map(function(w){
+        // Check if this wall is a room perimeter edge
+        var x0 = w.x0 || 0, z0 = w.z0 || 0, x1 = w.x1 || 0, z1 = w.z1 || 0;
+        var lv = w.level || 0;
+        var key = lv + ':' + [x0, z0, x1, z1].map(function(v) { return Math.round(v * 100); }).join(',');
+        var isRoomPerimeter = !!roomEdges[key];
+        
         return {
           x0: w.x0 || w.start?.x || 0,
           z0: w.z0 || w.start?.z || 0,
@@ -1052,7 +1109,9 @@
           z1: w.z1 || w.end?.z || 0,
           height: w.height || 3,
           thickness: w.thickness || 0.25,
-          level: w.level || 0
+          level: w.level || 0,
+          openings: Array.isArray(w.openings) ? w.openings : [],
+          isRoomPerimeter: isRoomPerimeter
         };
       });
     }
@@ -1310,28 +1369,217 @@
       sceneRoot.add(plinth);
     });
 
-    // Build wall strips with improved materials
-    data.walls.forEach(function(wall){
+    // Build wall strips with windows and doors
+    data.walls.forEach(function(wall, wallIdx){
       var dx = wall.x1 - wall.x0;
       var dz = wall.z1 - wall.z0;
       var length = Math.sqrt(dx * dx + dz * dz);
       if (length < 0.1) return;
 
-      var geom = new THREE.BoxGeometry(length, wall.height, wall.thickness, 4, 4, 1);
-      var mat = materialFor('wall', length, wall.height);
-      var mesh = new THREE.Mesh(geom, mat);
-
       var cx = (wall.x0 + wall.x1) / 2;
       var cz = (wall.z0 + wall.z1) / 2;
       var baseY = (wall.level || 0) * wall.height;
       var angle = Math.atan2(dz, dx);
-
-      mesh.position.set(cx, baseY + wall.height / 2, cz);
-      mesh.rotation.y = -angle;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      mesh.name = 'Wall';
-      sceneRoot.add(mesh);
+      var wallHeight = wall.height || 3;
+      var wallThickness = wall.thickness || 0.25;
+      var openings = wall.openings || [];
+      
+      // Check if this wall is part of a room perimeter
+      var isRoomWall = wall.isRoomPerimeter === true;
+      
+      // If no openings and not a room wall, build simple wall
+      if (openings.length === 0) {
+        var geom = new THREE.BoxGeometry(length, wallHeight, wallThickness, 4, 4, 1);
+        var mat = materialFor('wall', length, wallHeight);
+        var mesh = new THREE.Mesh(geom, mat);
+        mesh.position.set(cx, baseY + wallHeight / 2, cz);
+        mesh.rotation.y = -angle;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.name = 'Wall_' + wallIdx;
+        sceneRoot.add(mesh);
+        return;
+      }
+      
+      // Build wall segments around openings
+      // First, calculate opening positions along wall in local coordinates
+      var wallDir = { x: dx / length, z: dz / length };
+      var sortedOpenings = [];
+      
+      openings.forEach(function(op, opIdx) {
+        if (!op) return;
+        // Calculate opening position along wall length (0 to length)
+        var opX0 = op.x0 !== undefined ? op.x0 : wall.x0;
+        var opZ0 = op.z0 !== undefined ? op.z0 : wall.z0;
+        var opX1 = op.x1 !== undefined ? op.x1 : wall.x1;
+        var opZ1 = op.z1 !== undefined ? op.z1 : wall.z1;
+        
+        // Project onto wall direction
+        var t0 = ((opX0 - wall.x0) * wallDir.x + (opZ0 - wall.z0) * wallDir.z);
+        var t1 = ((opX1 - wall.x0) * wallDir.x + (opZ1 - wall.z0) * wallDir.z);
+        if (t0 > t1) { var tmp = t0; t0 = t1; t1 = tmp; }
+        
+        var sillM = op.sillM !== undefined ? op.sillM : 0.9;
+        var heightM = op.heightM !== undefined ? op.heightM : 1.5;
+        var isDoor = op.type === 'door';
+        
+        if (isDoor) {
+          sillM = 0;
+          heightM = op.heightM !== undefined ? op.heightM : 2.1;
+        }
+        
+        sortedOpenings.push({
+          start: Math.max(0, t0),
+          end: Math.min(length, t1),
+          sill: sillM,
+          height: heightM,
+          type: op.type || 'window',
+          idx: opIdx
+        });
+      });
+      
+      // Sort openings by start position
+      sortedOpenings.sort(function(a, b) { return a.start - b.start; });
+      
+      // Build wall group - position at wall start, not center, for easier local coords
+      var wallGroup = new THREE.Group();
+      wallGroup.position.set(wall.x0, 0, wall.z0);
+      wallGroup.rotation.y = -angle;
+      wallGroup.name = 'WallGroup_' + wallIdx;
+      
+      // Helper to add wall segment (only for standalone walls, not room perimeters)
+      function addWallSegment(startX, endX, startY, endY) {
+        // Skip wall segments for room perimeter walls - room boxes already have the solid walls
+        if (isRoomWall) return;
+        
+        var segWidth = endX - startX;
+        var segHeight = endY - startY;
+        if (segWidth < 0.01 || segHeight < 0.01) return;
+        
+        var geom = new THREE.BoxGeometry(segWidth, segHeight, wallThickness, 2, 2, 1);
+        var mat = materialFor('wall', segWidth, segHeight);
+        var mesh = new THREE.Mesh(geom, mat);
+        
+        var localX = startX + segWidth / 2;
+        var localY = baseY + startY + segHeight / 2;
+        mesh.position.set(localX, localY, 0);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        wallGroup.add(mesh);
+      }
+      
+      // Build wall with openings
+      var currentX = 0;
+      
+      sortedOpenings.forEach(function(op) {
+        // Wall segment before opening
+        if (op.start > currentX + 0.01) {
+          addWallSegment(currentX, op.start, 0, wallHeight);
+        }
+        
+        // Wall below opening (sill)
+        if (op.sill > 0.01) {
+          addWallSegment(op.start, op.end, 0, op.sill);
+        }
+        
+        // Wall above opening
+        var topOfOpening = op.sill + op.height;
+        if (topOfOpening < wallHeight - 0.01) {
+          addWallSegment(op.start, op.end, topOfOpening, wallHeight);
+        }
+        
+        // Add window glass and frame for windows
+        if (op.type === 'window') {
+          var winWidth = op.end - op.start;
+          var winHeight = op.height;
+          var winCenterX = op.start + winWidth / 2; // Local X from wall start
+          var winCenterY = baseY + op.sill + winHeight / 2;
+          var frameThickness = 0.05; // 50mm thick frames
+          
+          // Glass pane - blue tinted with reflections
+          var glassMat = materialFor('glass');
+          var glassGeom = new THREE.BoxGeometry(winWidth - frameThickness * 2, winHeight - frameThickness * 2, 0.006);
+          var glassMesh = new THREE.Mesh(glassGeom, glassMat);
+          glassMesh.position.set(winCenterX, winCenterY, 0);
+          glassMesh.name = 'WindowGlass';
+          glassMesh.renderOrder = 1; // Render glass after opaque objects
+          wallGroup.add(glassMesh);
+          
+          // Window frame - white wood
+          var frameMat = materialFor('windowFrame');
+          
+          // Top frame - 50mm thick
+          var topFrame = new THREE.Mesh(
+            new THREE.BoxGeometry(winWidth + frameThickness, frameThickness, wallThickness * 0.7),
+            frameMat
+          );
+          topFrame.position.set(winCenterX, winCenterY + winHeight / 2 - frameThickness / 2, 0);
+          topFrame.castShadow = true;
+          topFrame.receiveShadow = true;
+          wallGroup.add(topFrame);
+          
+          // Bottom frame (sill) - 50mm thick, slightly deeper
+          var bottomFrame = new THREE.Mesh(
+            new THREE.BoxGeometry(winWidth + frameThickness * 2, frameThickness * 1.5, wallThickness * 0.9),
+            frameMat
+          );
+          bottomFrame.position.set(winCenterX, winCenterY - winHeight / 2 + frameThickness / 2, wallThickness * 0.15);
+          bottomFrame.castShadow = true;
+          bottomFrame.receiveShadow = true;
+          wallGroup.add(bottomFrame);
+          
+          // Left frame - 50mm thick
+          var leftFrame = new THREE.Mesh(
+            new THREE.BoxGeometry(frameThickness, winHeight, wallThickness * 0.7),
+            frameMat
+          );
+          leftFrame.position.set(winCenterX - winWidth / 2 + frameThickness / 2, winCenterY, 0);
+          leftFrame.castShadow = true;
+          leftFrame.receiveShadow = true;
+          wallGroup.add(leftFrame);
+          
+          // Right frame - 50mm thick
+          var rightFrame = new THREE.Mesh(
+            new THREE.BoxGeometry(frameThickness, winHeight, wallThickness * 0.7),
+            frameMat
+          );
+          rightFrame.position.set(winCenterX + winWidth / 2 - frameThickness / 2, winCenterY, 0);
+          rightFrame.castShadow = true;
+          rightFrame.receiveShadow = true;
+          wallGroup.add(rightFrame);
+          
+          // Center mullion for larger windows
+          if (winWidth > 1.2) {
+            var mullion = new THREE.Mesh(
+              new THREE.BoxGeometry(frameThickness, winHeight - frameThickness * 2, wallThickness * 0.5),
+              frameMat
+            );
+            mullion.position.set(winCenterX, winCenterY, 0);
+            mullion.castShadow = true;
+            wallGroup.add(mullion);
+          }
+          
+          // Horizontal transom bar for taller windows
+          if (winHeight > 1.5) {
+            var transom = new THREE.Mesh(
+              new THREE.BoxGeometry(winWidth - frameThickness * 2, frameThickness * 0.6, wallThickness * 0.4),
+              frameMat
+            );
+            transom.position.set(winCenterX, winCenterY, 0);
+            transom.castShadow = true;
+            wallGroup.add(transom);
+          }
+        }
+        
+        currentX = op.end;
+      });
+      
+      // Wall segment after last opening
+      if (currentX < length - 0.01) {
+        addWallSegment(currentX, length, 0, wallHeight);
+      }
+      
+      sceneRoot.add(wallGroup);
     });
 
     // Build roofs - white plastic flat roofs with edge trim
