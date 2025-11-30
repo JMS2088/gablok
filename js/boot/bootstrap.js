@@ -1,6 +1,23 @@
 // Orchestrated loader that keeps the splash visible and loads all modules before starting the app
 (function(){
   if (window.__bootstrapLoaded) return; window.__bootstrapLoaded = true;
+  
+  // Clear all Gablok project data on fresh page load for a clean start
+  // Only preserve user preferences (NOT design data)
+  (function(){
+    try {
+      var keysToRemove = [
+        'gablok_project',
+        'gablok_plan2dDrafts_v1',
+        'gablok_rtTrace_v1'
+      ];
+      for (var i = 0; i < keysToRemove.length; i++) {
+        try { localStorage.removeItem(keysToRemove[i]); } catch(_e) {}
+      }
+      console.log('[Bootstrap] Cleared project cache for fresh start');
+    } catch(_eClear) {}
+  })();
+  
   // Gate startup until boot completes
   window.__requireBoot = true;
   window.__renderingEnabled = false; // Prevent rendering until splash ready

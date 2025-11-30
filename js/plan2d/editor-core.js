@@ -1463,9 +1463,111 @@
   function plan2dExport(){ try{ var data=JSON.stringify(__plan2d.elements); var blob=new Blob([data],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='plan2d.json'; a.click(); URL.revokeObjectURL(a.href); if(updateStatus) updateStatus('2D plan exported'); }catch(e){ try{ updateStatus && updateStatus('Export failed'); }catch(_){} } }
   window.plan2dExport = window.plan2dExport || plan2dExport;
   // Clear ------------------------------------------------------------------
-  function plan2dClear(){ try { __plan2d.elements=[]; __plan2d.selectedIndex=-1; __plan2d.chainActive=false; __plan2d.chainPoints=[]; try{ var f=(typeof window.currentFloor==='number'? window.currentFloor:0); if(__plan2d.__deletedRoomEdges && __plan2d.__deletedRoomEdges[f]) delete __plan2d.__deletedRoomEdges[f]; }catch(_cl){} plan2dDraw(); plan2dEdited(); updateStatus && updateStatus('2D plan cleared'); } catch(e){ /* ignore */ } }
+  function plan2dClear(){ 
+    try { 
+      // Clear 2D plan elements
+      __plan2d.elements=[]; 
+      __plan2d.selectedIndex=-1; 
+      __plan2d.chainActive=false; 
+      __plan2d.chainPoints=[]; 
+      try{ var f=(typeof window.currentFloor==='number'? window.currentFloor:0); if(__plan2d.__deletedRoomEdges && __plan2d.__deletedRoomEdges[f]) delete __plan2d.__deletedRoomEdges[f]; }catch(_cl){} 
+      
+      // Clear 3D area - all rooms, walls, and components
+      try {
+        if (Array.isArray(window.allRooms)) window.allRooms.length = 0;
+        if (Array.isArray(window.wallStrips)) window.wallStrips.length = 0;
+        if (Array.isArray(window.stairsComponents)) window.stairsComponents.length = 0;
+        if (Array.isArray(window.pergolaComponents)) window.pergolaComponents.length = 0;
+        if (Array.isArray(window.garageComponents)) window.garageComponents.length = 0;
+        if (Array.isArray(window.poolComponents)) window.poolComponents.length = 0;
+        if (Array.isArray(window.roofComponents)) window.roofComponents.length = 0;
+        if (Array.isArray(window.balconyComponents)) window.balconyComponents.length = 0;
+        if (Array.isArray(window.furnitureItems)) window.furnitureItems.length = 0;
+        window.stairsComponent = null;
+        window.selectedRoomId = null;
+        window.selectedWallStripIndex = -1;
+      } catch(_e3d) {}
+      
+      // Clear 2D drafts for current floor
+      try {
+        var floor = (typeof window.currentFloor === 'number' ? window.currentFloor : 0);
+        if (window.__plan2dDrafts) {
+          window.__plan2dDrafts[floor] = null;
+        }
+      } catch(_eDraft) {}
+      
+      // Trigger 3D re-render
+      try { if (typeof window.renderLoop === 'function') window.renderLoop(); } catch(_eRender) {}
+      
+      plan2dDraw(); 
+      plan2dEdited(); 
+      updateStatus && updateStatus('Plan cleared (2D & 3D)'); 
+    } catch(e){ /* ignore */ } 
+  }
   window.plan2dClear = window.plan2dClear || plan2dClear;
   // Import -----------------------------------------------------------------
-  function plan2dImport(data){ try { if(typeof data==='string'){ data = JSON.parse(data); } if(Array.isArray(data)){ __plan2d.elements = JSON.parse(JSON.stringify(data)); __plan2d.selectedIndex=-1; plan2dDraw(); plan2dEdited(); updateStatus && updateStatus('2D plan imported'); return true; } } catch(e){ try{ updateStatus && updateStatus('Import failed'); }catch(_){} } return false; }
+  function plan2dImport(data){ 
+    try { 
+      if(typeof data==='string'){ data = JSON.parse(data); } 
+      
+      var elements = null;
+      var floor = (typeof window.currentFloor === 'number' ? window.currentFloor : 0);
+      
+      // Case 1: Raw array of elements (old 2D export format)
+      if(Array.isArray(data)){ 
+        elements = data;
+      }
+      // Case 2: Full project JSON from 3D export (has plan2d.drafts)
+      else if(data && typeof data === 'object' && data.plan2d && data.plan2d.drafts) {
+        var drafts = data.plan2d.drafts;
+        // Try current floor first, then floor 0
+        if(drafts[floor] && Array.isArray(drafts[floor].elements)) {
+          elements = drafts[floor].elements;
+        } else if(drafts[0] && Array.isArray(drafts[0].elements)) {
+          elements = drafts[0].elements;
+        } else if(drafts['0'] && Array.isArray(drafts['0'].elements)) {
+          elements = drafts['0'].elements;
+        }
+        // Also restore other project data to 3D if present
+        try {
+          if(Array.isArray(data.rooms) && typeof window.restoreProject === 'function') {
+            window.restoreProject(JSON.stringify(data));
+            updateStatus && updateStatus('Full project imported (2D & 3D)');
+          }
+        } catch(_e3d) {}
+      }
+      // Case 3: Object with elements property (alternative format)
+      else if(data && typeof data === 'object' && Array.isArray(data.elements)) {
+        elements = data.elements;
+      }
+      // Case 4: Check if it has rooms/wallStrips but no plan2d (older 3D export)
+      else if(data && typeof data === 'object' && (Array.isArray(data.rooms) || Array.isArray(data.wallStrips))) {
+        // This is a 3D project file without 2D drafts - we can still load it to 3D
+        try {
+          if(typeof window.restoreProject === 'function') {
+            window.restoreProject(JSON.stringify(data));
+            updateStatus && updateStatus('3D project imported');
+            return true;
+          }
+        } catch(_e3d) {}
+      }
+      
+      if(elements && Array.isArray(elements)) {
+        __plan2d.elements = JSON.parse(JSON.stringify(elements)); 
+        __plan2d.selectedIndex=-1; 
+        plan2dDraw(); 
+        plan2dEdited(); 
+        updateStatus && updateStatus('2D plan imported'); 
+        return true; 
+      }
+      
+      updateStatus && updateStatus('Import failed - no valid plan data found');
+      return false;
+    } catch(e){ 
+      console.error('plan2dImport error:', e);
+      try{ updateStatus && updateStatus('Import failed'); }catch(_){} 
+      return false; 
+    } 
+  }
   window.plan2dImport = window.plan2dImport || plan2dImport;
 })();
