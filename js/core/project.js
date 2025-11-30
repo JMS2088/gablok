@@ -120,12 +120,48 @@
 
   /**
    * Restore project state from a JSON string.
+   * Handles both full project format and 2D plan export format.
    * @param {string} json - JSON representation of the project
    */
   function restoreProject(json) {
     try {
       var data = JSON.parse(json);
       if (!data) return;
+      
+      // Case 1: Raw array of 2D elements (from plan2dExport)
+      // Detected by: array with objects having 'type' like 'wall', 'room', 'door', 'window'
+      if (Array.isArray(data) && data.length > 0) {
+        var firstItem = data[0];
+        if (firstItem && (firstItem.type === 'wall' || firstItem.type === 'room' || 
+            firstItem.type === 'door' || firstItem.type === 'window' || firstItem.type === 'rect')) {
+          // This is a 2D elements array - delegate to plan2dImport
+          console.log('[restoreProject] Detected 2D elements array, delegating to plan2dImport');
+          if (typeof window.plan2dImport === 'function') {
+            window.plan2dImport(data);
+            updateStatus && updateStatus('2D plan imported - Apply to create 3D');
+            return;
+          } else {
+            updateStatus && updateStatus('2D import not loaded - open 2D editor first');
+            return;
+          }
+        }
+      }
+      
+      // Case 2: Object with elements array (alternative 2D format)
+      if (data && typeof data === 'object' && Array.isArray(data.elements) && !data.rooms) {
+        var firstEl = data.elements[0];
+        if (firstEl && (firstEl.type === 'wall' || firstEl.type === 'room' || 
+            firstEl.type === 'door' || firstEl.type === 'window' || firstEl.type === 'rect')) {
+          console.log('[restoreProject] Detected 2D elements object, delegating to plan2dImport');
+          if (typeof window.plan2dImport === 'function') {
+            window.plan2dImport(data.elements);
+            updateStatus && updateStatus('2D plan imported - Apply to create 3D');
+            return;
+          }
+        }
+      }
+      
+      // Case 3: Full project format (has rooms, wallStrips, etc.)
       camera = Object.assign(camera, data.camera || {});
       allRooms = Array.isArray(data.rooms) ? data.rooms : [];
       wallStrips = Array.isArray(data.wallStrips) ? data.wallStrips : [];

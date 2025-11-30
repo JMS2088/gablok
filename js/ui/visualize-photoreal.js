@@ -35,148 +35,158 @@
   var PHOTO_CAPTION_ID = 'visualize-photo-caption';
   var PHOTO_CLOSE_ID = 'visualize-photo-close';
 
-  // Photorealistic PBR material palette - ENHANCED with better tonal variation
+  // Photorealistic PBR material palette - Realistic daytime scene with proper shadows and reflections
   var MATERIAL_PALETTE = {
-    // Concrete surfaces (walls, rooms) - with texture support and subtle tonal shifts
+    // Concrete surfaces (walls, rooms) - lighter grey tint to show texture
     concrete: {
-      color: 0xd8d8d0,        // Warmer light gray with subtle yellow undertone
-      roughness: 0.82,
-      metalness: 0.02,
-      envMapIntensity: 1.0,
-      bumpScale: 0.018,
-      textureRepeat: 2.0,
-      normalScale: 0.15,
-      aoIntensity: 0.8
-    },
-    // Exterior concrete massing - darker with more character
-    wall: {
-      color: 0x8a8a82,        // Medium architectural concrete with warm undertone
-      roughness: 0.72,
-      metalness: 0.04,
-      envMapIntensity: 1.1,
+      color: 0xe8e8e8,        // Lighter grey - lets texture color show through
+      roughness: 0.92,
+      metalness: 0.0,
+      envMapIntensity: 0.4,   // Reduced reflections to show texture
       bumpScale: 0.025,
-      textureRepeat: 3.0,
-      normalScale: 0.2,
-      aoIntensity: 0.9,
-      clearcoat: 0.15,
-      clearcoatRoughness: 0.6
+      textureRepeat: 2.0,
+      normalScale: 0.20,
+      aoIntensity: 0.9         // Strong ambient occlusion for shadows
     },
-    // Glass surfaces - blue tinted architectural glass with strong reflections
+    // Exterior concrete massing - lighter grey to show texture
+    wall: {
+      color: 0xe8e8e8,        // Lighter grey - lets texture color show through
+      roughness: 0.90,
+      metalness: 0.0,
+      envMapIntensity: 0.4,   // Reduced reflections to show texture
+      bumpScale: 0.030,
+      textureRepeat: 2.5,
+      normalScale: 0.25,
+      aoIntensity: 0.95,
+      clearcoat: 0.0,
+      clearcoatRoughness: 0.7
+    },
+    // Glass surfaces - reflective blue-tinted glass
     glass: {
-      color: 0x7db8d8,        // Cooler blue tint
+      color: 0xc8e0f0,        // Light blue tint - visible in reflections
       roughness: 0.02,
-      metalness: 0.25,
-      transmission: 0.82,      // Slightly less transparent for visibility
-      thickness: 0.6,
+      metalness: 0.1,
+      transmission: 0.88,
+      thickness: 0.5,
       ior: 1.52,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.0,
-      envMapIntensity: 2.0,    // Very strong reflections
-      reflectivity: 0.95,
-      specularIntensity: 1.5,
-      sheen: 0.2,
-      sheenColor: 0xaaddff
+      clearcoat: 0.9,
+      clearcoatRoughness: 0.01,
+      envMapIntensity: 1.8,    // Strong reflections
+      reflectivity: 0.7,
+      specularIntensity: 0.8,
+      sheen: 0.0,
+      sheenColor: 0xffffff
     },
-    // Pool water - deeper blue with caustics simulation
+    // Pool water - natural blue-green water
     pool: {
-      color: 0x1878B8,
+      color: 0x2890b0,        // Deep pool blue
       roughness: 0.01,
-      metalness: 0.15,
-      transmission: 0.92,
+      metalness: 0.1,
+      transmission: 0.85,
       thickness: 2.5,
       ior: 1.33,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.0,
-      envMapIntensity: 1.8
+      clearcoat: 0.95,
+      clearcoatRoughness: 0.01,
+      envMapIntensity: 1.5
     },
-    // Flat roof - white/light gray plastic with realistic finish
+    // Flat roof - light grey with realistic finish
     roof: {
-      color: 0xf2f2f0,        // White/very light gray with warmth
-      roughness: 0.32,        // Smooth plastic finish
-      metalness: 0.02,
-      envMapIntensity: 1.4,
-      clearcoat: 0.7,         // Strong plastic sheen
-      clearcoatRoughness: 0.15,
-      bumpScale: 0.008,
-      normalScale: 0.08
-    },
-    // Roof edge trim - subtle shadow line accent
-    roofEdge: {
-      color: 0xe0e0de,        // Slightly darker edge
-      roughness: 0.28,
-      metalness: 0.08,
-      envMapIntensity: 1.2,
-      clearcoat: 0.6,
-      clearcoatRoughness: 0.12
-    },
-    // Ground/path - textured ground with variation
-    ground: {
-      color: 0xc8ccd0,        // Cool grey ground
-      roughness: 0.88,
-      metalness: 0.01,
-      envMapIntensity: 0.5,
-      bumpScale: 0.008,
-      textureRepeat: 25.0,
-      normalScale: 0.12,
-      aoIntensity: 1.0
-    },
-    // Pergola wood - warm natural tones
-    pergola: {
-      color: 0x7a5812,        // Warmer wood color
-      roughness: 0.65,
+      color: 0xe8e4e0,        // Light warm grey - not pure white
+      roughness: 0.50,
       metalness: 0.0,
-      envMapIntensity: 0.6,
-      clearcoat: 0.25,
-      clearcoatRoughness: 0.4,
-      bumpScale: 0.02
+      envMapIntensity: 0.5,   // Reduced reflections
+      clearcoat: 0.2,
+      clearcoatRoughness: 0.3,
+      bumpScale: 0.010,
+      normalScale: 0.10,
+      aoIntensity: 0.6,
+      noTexture: true         // No texture for roof
+    },
+    // Roof edge trim - grey keylines with subtle sheen
+    roofEdge: {
+      color: 0xa8a8a6,        // Medium grey - visible contrast
+      roughness: 0.30,
+      metalness: 0.08,
+      envMapIntensity: 1.3,
+      clearcoat: 0.45,
+      clearcoatRoughness: 0.12,
+      aoIntensity: 0.7
+    },
+    // Ground/path - light grey floor
+    ground: {
+      color: 0xf5f5f5,        // Light grey floor
+      roughness: 0.60,
+      metalness: 0.0,
+      envMapIntensity: 0.3,
+      bumpScale: 0.0,
+      textureRepeat: 0,
+      normalScale: 0.0,
+      aoIntensity: 0.25,
+      noTexture: true
+    },
+    // Pergola wood - warm natural tones with grain
+    pergola: {
+      color: 0x8b6914,        // Rich wood color
+      roughness: 0.60,
+      metalness: 0.0,
+      envMapIntensity: 0.8,
+      clearcoat: 0.30,
+      clearcoatRoughness: 0.35,
+      bumpScale: 0.025,
+      aoIntensity: 0.75
     },
     // Garage door metal - brushed aluminum look
     garage: {
-      color: 0x606068,
-      roughness: 0.35,
-      metalness: 0.85,
-      envMapIntensity: 1.5,
-      clearcoat: 0.3,
-      clearcoatRoughness: 0.25
+      color: 0x707078,
+      roughness: 0.32,
+      metalness: 0.88,
+      envMapIntensity: 1.8,
+      clearcoat: 0.35,
+      clearcoatRoughness: 0.20,
+      aoIntensity: 0.65
     },
     // Balcony railing - polished dark metal
     balcony: {
-      color: 0x2a2a30,
-      roughness: 0.22,
-      metalness: 0.92,
-      envMapIntensity: 1.8,
-      clearcoat: 0.4,
-      clearcoatRoughness: 0.1
-    },
-    // Stairs - smooth concrete
-    stairs: {
-      color: 0xa8a8a0,
-      roughness: 0.75,
-      metalness: 0.06,
-      envMapIntensity: 0.85,
-      bumpScale: 0.012,
-      normalScale: 0.1,
-      clearcoat: 0.2,
-      clearcoatRoughness: 0.5
-    },
-    // Window frame - white painted wood (thicker 50mm frames)
-    windowFrame: {
-      color: 0xfafafa,        // Clean white paint
-      roughness: 0.20,        // Smooth painted finish
-      metalness: 0.02,
-      envMapIntensity: 1.2,
-      clearcoat: 0.65,        // Strong sheen from paint
-      clearcoatRoughness: 0.15
-    },
-    // Door panel - wood grain with varnish
-    door: {
-      color: 0x654321,        // Rich wood brown
-      roughness: 0.45,
-      metalness: 0.0,
-      envMapIntensity: 0.8,
+      color: 0x303038,
+      roughness: 0.18,
+      metalness: 0.95,
+      envMapIntensity: 2.2,
       clearcoat: 0.5,
-      clearcoatRoughness: 0.25,
-      bumpScale: 0.015
+      clearcoatRoughness: 0.08,
+      aoIntensity: 0.7
+    },
+    // Stairs - natural concrete with texture
+    stairs: {
+      color: 0xb8b4b0,        // Medium concrete
+      roughness: 0.82,
+      metalness: 0.02,
+      envMapIntensity: 0.9,
+      bumpScale: 0.015,
+      normalScale: 0.12,
+      clearcoat: 0.08,
+      clearcoatRoughness: 0.5,
+      aoIntensity: 0.8
+    },
+    // Window frame - medium grey aluminium finish
+    windowFrame: {
+      color: 0xb0b0ae,        // Medium grey - visible against walls
+      roughness: 0.28,
+      metalness: 0.15,
+      envMapIntensity: 1.4,
+      clearcoat: 0.6,
+      clearcoatRoughness: 0.15,
+      aoIntensity: 0.7
+    },
+    // Door panel - rich wood with varnish
+    door: {
+      color: 0x5a3a1a,        // Dark rich wood brown
+      roughness: 0.40,
+      metalness: 0.0,
+      envMapIntensity: 1.0,
+      clearcoat: 0.55,
+      clearcoatRoughness: 0.20,
+      bumpScale: 0.020,
+      aoIntensity: 0.75
     }
   };
 
@@ -184,14 +194,14 @@
   var textureCache = {};
   var textureLoader = null;
 
-  // Architectural lighting presets - enhanced with more dramatic options
+  // Architectural lighting presets - soft daytime lighting to prevent bleaching
   var LIGHTING_PRESETS = [
-    { name: 'Golden Hour', sunColor: 0xffe8c8, intensity: 2.8, angle: 12, warmth: 0.20, shadowSoftness: 3, ambientIntensity: 0.35, fillIntensity: 0.5, contrast: 1.2 },
-    { name: 'Midday', sunColor: 0xffffff, intensity: 3.2, angle: 65, warmth: 0.0, shadowSoftness: 1.5, ambientIntensity: 0.5, fillIntensity: 0.65, contrast: 1.0 },
-    { name: 'Overcast', sunColor: 0xe0eaf4, intensity: 1.8, angle: 50, warmth: -0.05, shadowSoftness: 5, ambientIntensity: 0.65, fillIntensity: 0.8, contrast: 0.85 },
-    { name: 'Studio', sunColor: 0xfff8f0, intensity: 2.5, angle: 38, warmth: 0.05, shadowSoftness: 2.5, ambientIntensity: 0.45, fillIntensity: 0.6, contrast: 1.1 },
-    { name: 'Dramatic', sunColor: 0xffd4a0, intensity: 3.5, angle: 8, warmth: 0.25, shadowSoftness: 2, ambientIntensity: 0.25, fillIntensity: 0.35, contrast: 1.4 },
-    { name: 'Cool Evening', sunColor: 0xc8d8f0, intensity: 2.0, angle: 20, warmth: -0.1, shadowSoftness: 4, ambientIntensity: 0.4, fillIntensity: 0.55, contrast: 1.15 }
+    { name: 'Golden Hour', sunColor: 0xffd4a0, intensity: 1.5, angle: 18, warmth: 0.18, shadowSoftness: 3, ambientIntensity: 0.55, fillIntensity: 0.55, contrast: 1.0 },
+    { name: 'Midday', sunColor: 0xfff8f0, intensity: 1.8, angle: 55, warmth: 0.02, shadowSoftness: 2.5, ambientIntensity: 0.55, fillIntensity: 0.60, contrast: 0.98 },
+    { name: 'Overcast', sunColor: 0xe8f0f8, intensity: 1.3, angle: 45, warmth: -0.05, shadowSoftness: 10, ambientIntensity: 0.70, fillIntensity: 0.75, contrast: 0.92 },
+    { name: 'Studio', sunColor: 0xfff8f4, intensity: 1.5, angle: 35, warmth: 0.03, shadowSoftness: 4, ambientIntensity: 0.60, fillIntensity: 0.65, contrast: 0.95 },
+    { name: 'Dramatic', sunColor: 0xffd080, intensity: 2.0, angle: 12, warmth: 0.22, shadowSoftness: 2, ambientIntensity: 0.45, fillIntensity: 0.50, contrast: 1.05 },
+    { name: 'Cool Evening', sunColor: 0xd8e8ff, intensity: 1.4, angle: 25, warmth: -0.10, shadowSoftness: 5, ambientIntensity: 0.60, fillIntensity: 0.65, contrast: 0.95 }
   ];
 
   // Three.js renderer state
@@ -202,6 +212,118 @@
   var lights = [];
   var pmremGenerator = null;
   var envRT = null;
+  
+  // HDR environment loading state
+  var hdrLoader = null;
+  var currentHDRPath = null;
+  
+  // Fabric.js dynamic texture integration
+  var fabricCanvasTextures = {};
+  
+  /**
+   * Load an HDR environment map for realistic reflections and ambient lighting
+   * @param {string} hdrPath - Path to .hdr or .exr file
+   * @returns {Promise} Resolves with the environment texture
+   */
+  function loadHDREnvironment(hdrPath) {
+    if (!renderer || !THREE) return Promise.resolve(null);
+    
+    // Check if RGBELoader is available (for .hdr files)
+    if (!THREE.RGBELoader) {
+      console.log('[Photoreal] RGBELoader not available, using procedural environment');
+      return createEnvironment();
+    }
+    
+    return new Promise(function(resolve, reject) {
+      if (!hdrLoader) {
+        hdrLoader = new THREE.RGBELoader();
+        hdrLoader.setDataType(THREE.HalfFloatType);
+      }
+      
+      console.log('[Photoreal] Loading HDR environment:', hdrPath);
+      
+      hdrLoader.load(hdrPath, function(texture) {
+        // Generate PMREM from HDR for environment and reflections
+        if (!pmremGenerator) {
+          pmremGenerator = new THREE.PMREMGenerator(renderer);
+          pmremGenerator.compileEquirectangularShader();
+        }
+        
+        envRT = pmremGenerator.fromEquirectangular(texture);
+        scene.environment = envRT.texture;
+        scene.background = envRT.texture;  // Optional: use HDR as background
+        
+        texture.dispose();  // Original texture no longer needed
+        currentHDRPath = hdrPath;
+        
+        console.log('[Photoreal] HDR environment loaded successfully');
+        resolve(envRT.texture);
+      }, undefined, function(err) {
+        console.warn('[Photoreal] Failed to load HDR:', err);
+        // Fallback to procedural environment
+        createEnvironment().then(resolve);
+      });
+    });
+  }
+  
+  /**
+   * Create a texture from a Fabric.js canvas for dynamic 2D content
+   * @param {fabric.Canvas} fabricCanvas - The Fabric.js canvas instance
+   * @param {string} textureId - Unique identifier for caching
+   * @returns {THREE.CanvasTexture} The texture for use on 3D materials
+   */
+  function createFabricTexture(fabricCanvas, textureId) {
+    if (!THREE || !fabricCanvas) return null;
+    
+    // Get the underlying HTML canvas element
+    var htmlCanvas = fabricCanvas.getElement ? fabricCanvas.getElement() : fabricCanvas;
+    
+    // Create or update the texture
+    if (fabricCanvasTextures[textureId]) {
+      fabricCanvasTextures[textureId].needsUpdate = true;
+      return fabricCanvasTextures[textureId];
+    }
+    
+    var texture = new THREE.CanvasTexture(htmlCanvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = false;  // Canvas textures don't need mipmaps
+    
+    fabricCanvasTextures[textureId] = texture;
+    console.log('[Photoreal] Created Fabric.js texture:', textureId);
+    
+    return texture;
+  }
+  
+  /**
+   * Update a Fabric.js texture after canvas changes
+   * @param {string} textureId - The texture identifier
+   */
+  function updateFabricTexture(textureId) {
+    if (fabricCanvasTextures[textureId]) {
+      fabricCanvasTextures[textureId].needsUpdate = true;
+    }
+  }
+  
+  /**
+   * Apply a Fabric.js texture to a material
+   * @param {THREE.Material} material - The material to apply texture to
+   * @param {string} textureId - The Fabric texture identifier
+   * @param {string} mapType - 'map', 'bumpMap', 'normalMap', etc.
+   */
+  function applyFabricTextureToMaterial(material, textureId, mapType) {
+    var texture = fabricCanvasTextures[textureId];
+    if (!texture || !material) return;
+    
+    mapType = mapType || 'map';
+    material[mapType] = texture;
+    material.needsUpdate = true;
+    
+    console.log('[Photoreal] Applied Fabric texture to material:', mapType);
+  }
 
   // =========================================================================
   // CAMERA TRACKING SYSTEM
@@ -738,9 +860,9 @@
     renderer.setClearColor(0xf8f9fb, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace || THREE.sRGBEncoding;
     
-    // Enhanced tone mapping for better dynamic range
+    // Tone mapping for natural look
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;  // Slightly brighter for punch
+    renderer.toneMappingExposure = 1.0;  // Neutral exposure
 
     // High quality shadows with better filtering
     renderer.shadowMap.enabled = true;
@@ -788,28 +910,33 @@
     composer.addPass(renderPass);
 
     // SSAO pass for ambient occlusion (soft shadows in corners and crevices)
+    // Enhanced parameters for N8AO-style quality
     if (THREE.SSAOPass) {
       try {
         ssaoPass = new THREE.SSAOPass(scene, camera, width, height);
-        ssaoPass.kernelRadius = 16;       // AO radius
-        ssaoPass.minDistance = 0.005;     // Min distance for AO
-        ssaoPass.maxDistance = 0.1;       // Max distance for AO
+        ssaoPass.kernelRadius = 24;       // Larger AO radius for softer shadows
+        ssaoPass.minDistance = 0.002;     // Min distance for AO detection
+        ssaoPass.maxDistance = 0.15;      // Max distance - captures more depth
         ssaoPass.output = THREE.SSAOPass.OUTPUT_Default;
+        // Additional quality settings if available
+        if (ssaoPass.kernelSize !== undefined) {
+          ssaoPass.kernelSize = 32;       // More samples for smoother result
+        }
         composer.addPass(ssaoPass);
-        console.log('[Photoreal] SSAO pass added');
+        console.log('[Photoreal] Enhanced SSAO pass added');
       } catch(e) {
         console.log('[Photoreal] SSAO pass failed:', e.message);
       }
     }
 
-    // Bloom pass for highlights and glow
+    // Bloom pass for highlights and glow - very subtle
     if (THREE.UnrealBloomPass) {
       try {
         bloomPass = new THREE.UnrealBloomPass(
           new THREE.Vector2(width, height),
-          0.3,    // strength - subtle bloom
-          0.4,    // radius
-          0.85    // threshold - only bright areas bloom
+          0.12,   // strength - very subtle bloom
+          0.3,    // radius
+          0.92    // threshold - only very bright areas bloom
         );
         composer.addPass(bloomPass);
         console.log('[Photoreal] Bloom pass added');
@@ -825,10 +952,10 @@
         var colorGradeShader = {
           uniforms: {
             tDiffuse: { value: null },
-            contrast: { value: 1.08 },
-            saturation: { value: 1.1 },
-            brightness: { value: 1.02 },
-            vignette: { value: 0.25 }
+            contrast: { value: 1.0 },      // No contrast adjustment
+            saturation: { value: 1.0 },    // No saturation boost  
+            brightness: { value: 1.0 },
+            vignette: { value: 0.05 }      // Very subtle vignette
           },
           vertexShader: [
             'varying vec2 vUv;',
@@ -898,7 +1025,7 @@
     
     // Create fresh scene
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xffffff);
+    scene.background = new THREE.Color(0xe8e8e8);  // Faded light grey background
     
     // Create fresh scene root
     // Mirror on X axis to match engine3d.js coordinate handedness
@@ -1053,8 +1180,8 @@
       side: THREE.FrontSide
     };
     
-    // Add texture for concrete-like materials
-    if (kind === 'wall' || kind === 'concrete' || kind === 'ground' || kind === 'stairs' || kind === 'pergola' || kind === 'door') {
+    // Add texture for concrete-like materials (skip if noTexture flag is set)
+    if (!spec.noTexture && (kind === 'wall' || kind === 'concrete' || kind === 'stairs' || kind === 'pergola' || kind === 'door')) {
       var texture = loadConcreteTexture(repeatX, repeatY);
       if (texture) {
         matConfig.map = texture;
@@ -1151,7 +1278,7 @@
 
     // 3. Key light (sun) - main shadow caster with high quality shadows
     var sunAngleRad = (preset.angle || 45) * Math.PI / 180;
-    var keyLight = new THREE.DirectionalLight(preset.sunColor || 0xffffff, preset.intensity || 2.5);
+    var keyLight = new THREE.DirectionalLight(preset.sunColor || 0xffffff, preset.intensity || 1.8);
     keyLight.position.set(
       centerX + effectiveSpan * 4 * Math.cos(sunAngleRad),
       centerY + effectiveSpan * 6,
@@ -1160,10 +1287,10 @@
     keyLight.target.position.set(centerX, centerY * 0.3, centerZ);
     keyLight.castShadow = true;
     keyLight.shadow.mapSize.set(4096, 4096);  // High resolution shadows
-    keyLight.shadow.bias = -0.0001;
-    keyLight.shadow.normalBias = 0.03;
+    keyLight.shadow.bias = -0.0002;
+    keyLight.shadow.normalBias = 0.04;
     keyLight.shadow.radius = shadowSoftness;
-    keyLight.shadow.blurSamples = 16;  // Softer shadow edges
+    keyLight.shadow.blurSamples = 25;  // Very soft shadow edges
 
     // Shadow camera covers entire scene with padding
     var shadowExtent = effectiveSpan * 5;
@@ -1270,12 +1397,12 @@
 
     var studio = new THREE.Scene();
     
-    // Gradient sky background for more natural reflections
-    var skyColor = new THREE.Color(0xdbe8f4);
-    var groundColor = new THREE.Color(0xf4f0ec);
-    studio.background = new THREE.Color(0xf8f9fa);
+    // Lighter grey studio background
+    var skyColor = new THREE.Color(0xf0f0f0);  // Lighter grey
+    var groundColor = new THREE.Color(0xf5f5f5);  // Light grey ground
+    studio.background = new THREE.Color(0xf5f5f5);  // Light grey
 
-    // Add light emitters for environment reflections - more nuanced
+    // Add light emitters for environment reflections - studio lighting
     function addEmitter(w, h, pos, rot, color, intensity){
       var c = new THREE.Color(color || 0xffffff);
       c.multiplyScalar(intensity || 1);
@@ -1286,26 +1413,51 @@
       studio.add(plane);
     }
     
-    // Main key light reflection (sun area)
-    addEmitter(120, 120, new THREE.Vector3(90, 100, 90), { x: -Math.PI/3, y: Math.PI/4 }, 0xfffef8, 4.5);
+    // Main sun area - softer sun to prevent bleaching
+    addEmitter(100, 100, new THREE.Vector3(100, 120, 80), { x: -Math.PI/3, y: Math.PI/5 }, 0xffffff, 2.8);
+    
+    // Soft overhead fill from zenith
+    addEmitter(180, 180, new THREE.Vector3(0, 180, 0), { x: Math.PI/2, y: 0 }, 0xf0f0f0, 1.6);
     
     // Cool fill from opposite side
-    addEmitter(100, 100, new THREE.Vector3(-85, 90, 50), { x: -Math.PI/3.5, y: -Math.PI/4 }, 0xe8f4ff, 2.5);
+    addEmitter(120, 120, new THREE.Vector3(-90, 100, 40), { x: -Math.PI/3.5, y: -Math.PI/4 }, 0xe8e8e8, 1.2);
     
-    // Back light area
-    addEmitter(90, 90, new THREE.Vector3(10, 90, -95), { x: Math.PI/3.5, y: 0 }, 0xfff8f0, 3.0);
+    // Horizon glow - neutral
+    addEmitter(250, 80, new THREE.Vector3(0, 30, 140), { x: Math.PI/8, y: 0 }, 0xf0f0f0, 1.0);
     
-    // Ground reflection (warm bounce)
-    addEmitter(200, 200, new THREE.Vector3(0, -30, 0), { x: Math.PI/2, y: 0 }, 0xf8f0e8, 1.5);
+    // Ground reflection (light grey bounce)
+    addEmitter(220, 220, new THREE.Vector3(0, -40, 0), { x: Math.PI/2, y: 0 }, 0xf0f0f0, 1.2);
     
-    // Subtle side accents
-    addEmitter(60, 80, new THREE.Vector3(-100, 50, -30), { x: -Math.PI/5, y: -Math.PI/3 }, 0xf0f8ff, 1.8);
-    addEmitter(60, 80, new THREE.Vector3(100, 50, -50), { x: -Math.PI/5, y: Math.PI/3 }, 0xfff4e8, 1.8);
+    // Back light for rim/separation - softer
+    addEmitter(80, 100, new THREE.Vector3(-80, 90, -100), { x: -Math.PI/5, y: -Math.PI/3 }, 0xf8f8f8, 1.0);
+    addEmitter(80, 100, new THREE.Vector3(80, 90, -80), { x: -Math.PI/5, y: Math.PI/3 }, 0xfff8f0, 0.9);
     
-    // Sky dome simulation - gradient from horizon to zenith
-    var skyGeom = new THREE.SphereGeometry(200, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+    // Sky dome with gradient - lighter grey gradient
+    var skyGeom = new THREE.SphereGeometry(200, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+    // Create gradient material using vertex colors for neutral studio
+    var skyPositions = skyGeom.attributes.position;
+    var skyColors = new Float32Array(skyPositions.count * 3);
+    var zenithColor = new THREE.Color(0xeeeeee);   // Lighter grey at top
+    var midColor = new THREE.Color(0xf4f4f4);      // Very light grey
+    var horizonColor = new THREE.Color(0xfafafa);  // Almost white at horizon
+    for (var i = 0; i < skyPositions.count; i++) {
+      var y = skyPositions.getY(i);
+      var t = Math.max(0, y / 200);  // 0 at horizon, 1 at zenith
+      var c = new THREE.Color();
+      if (t < 0.3) {
+        // Horizon to mid - light to bright blue
+        c.lerpColors(horizonColor, midColor, t / 0.3);
+      } else {
+        // Mid to zenith - bright to deep blue
+        c.lerpColors(midColor, zenithColor, (t - 0.3) / 0.7);
+      }
+      skyColors[i * 3] = c.r;
+      skyColors[i * 3 + 1] = c.g;
+      skyColors[i * 3 + 2] = c.b;
+    }
+    skyGeom.setAttribute('color', new THREE.BufferAttribute(skyColors, 3));
     var skyMat = new THREE.MeshBasicMaterial({
-      color: 0xd0e4f8,
+      vertexColors: true,
       side: THREE.BackSide
     });
     var sky = new THREE.Mesh(skyGeom, skyMat);
@@ -1898,14 +2050,15 @@
       sceneRoot.add(wallGroup);
     });
 
-    // Build roofs - white plastic flat roofs with edge trim
+    // Build roofs - off-white flat roofs with light grey keyline edges
     data.roofs.forEach(function(roof, idx){
       var roofWidth = roof.width + 0.5;
       var roofDepth = roof.depth + 0.5;
       var roofHeight = roof.height || 0.25;
-      var edgeThickness = 0.08;
+      var edgeThickness = 0.06;  // Keyline thickness
+      var edgeHeight = 0.04;     // Raised keyline height
       
-      // Main roof surface - white plastic
+      // Main roof surface - off-white
       var geom = new THREE.BoxGeometry(roofWidth, roofHeight, roofDepth, 2, 1, 2);
       var mat = materialFor('roof', roofWidth, roofDepth);
       var mesh = new THREE.Mesh(geom, mat);
@@ -1917,45 +2070,47 @@
       mesh.name = 'Roof_' + idx;
       sceneRoot.add(mesh);
       
-      // Add edge trim around the roof perimeter
+      // Add light grey keyline trim around the entire roof perimeter
+      // Position keylines slightly above roof surface so they're visible
+      var keylineY = roofY + roofHeight / 2 + edgeHeight / 2;
       var edgeMat = materialFor('roofEdge');
       
-      // Front edge
+      // Front edge keyline
       var frontEdge = new THREE.Mesh(
-        new THREE.BoxGeometry(roofWidth + edgeThickness * 2, roofHeight + 0.05, edgeThickness),
+        new THREE.BoxGeometry(roofWidth + edgeThickness * 2, edgeHeight, edgeThickness),
         edgeMat
       );
-      frontEdge.position.set(roof.x, roofY, roof.z + roofDepth / 2 + edgeThickness / 2);
+      frontEdge.position.set(roof.x, keylineY, roof.z + roofDepth / 2);
       frontEdge.castShadow = true;
       frontEdge.receiveShadow = true;
       sceneRoot.add(frontEdge);
       
-      // Back edge
+      // Back edge keyline
       var backEdge = new THREE.Mesh(
-        new THREE.BoxGeometry(roofWidth + edgeThickness * 2, roofHeight + 0.05, edgeThickness),
+        new THREE.BoxGeometry(roofWidth + edgeThickness * 2, edgeHeight, edgeThickness),
         edgeMat
       );
-      backEdge.position.set(roof.x, roofY, roof.z - roofDepth / 2 - edgeThickness / 2);
+      backEdge.position.set(roof.x, keylineY, roof.z - roofDepth / 2);
       backEdge.castShadow = true;
       backEdge.receiveShadow = true;
       sceneRoot.add(backEdge);
       
-      // Left edge
+      // Left edge keyline
       var leftEdge = new THREE.Mesh(
-        new THREE.BoxGeometry(edgeThickness, roofHeight + 0.05, roofDepth),
+        new THREE.BoxGeometry(edgeThickness, edgeHeight, roofDepth + edgeThickness * 2),
         edgeMat
       );
-      leftEdge.position.set(roof.x - roofWidth / 2 - edgeThickness / 2, roofY, roof.z);
+      leftEdge.position.set(roof.x - roofWidth / 2, keylineY, roof.z);
       leftEdge.castShadow = true;
       leftEdge.receiveShadow = true;
       sceneRoot.add(leftEdge);
       
-      // Right edge
+      // Right edge keyline
       var rightEdge = new THREE.Mesh(
-        new THREE.BoxGeometry(edgeThickness, roofHeight + 0.05, roofDepth),
+        new THREE.BoxGeometry(edgeThickness, edgeHeight, roofDepth + edgeThickness * 2),
         edgeMat
       );
-      rightEdge.position.set(roof.x + roofWidth / 2 + edgeThickness / 2, roofY, roof.z);
+      rightEdge.position.set(roof.x + roofWidth / 2, keylineY, roof.z);
       rightEdge.castShadow = true;
       rightEdge.receiveShadow = true;
       sceneRoot.add(rightEdge);
@@ -2398,6 +2553,51 @@
   window.notifyPhotorealSceneChanged = function() {
     if (state.panel && state.panel.classList.contains('visible')) {
       checkForSceneChanges();
+    }
+  };
+  
+  // ─────────────────────────────────────────────────────────────────────────
+  // ADVANCED API - HDR Environment and Fabric.js Integration
+  // ─────────────────────────────────────────────────────────────────────────
+  
+  /**
+   * Photoreal Advanced API
+   * Provides access to HDR environment loading and Fabric.js texture integration
+   * 
+   * Usage:
+   *   // Load an HDR environment map
+   *   window.PhotorealAPI.loadHDR('assets/studio_small.hdr');
+   *   
+   *   // Create texture from Fabric.js canvas
+   *   var texture = window.PhotorealAPI.createFabricTexture(myFabricCanvas, 'logo-texture');
+   *   
+   *   // Update texture after Fabric.js changes
+   *   myFabricCanvas.on('object:modified', function() {
+   *     window.PhotorealAPI.updateFabricTexture('logo-texture');
+   *   });
+   */
+  window.PhotorealAPI = {
+    // HDR Environment
+    loadHDR: loadHDREnvironment,
+    
+    // Fabric.js Integration
+    createFabricTexture: createFabricTexture,
+    updateFabricTexture: updateFabricTexture,
+    applyFabricTextureToMaterial: applyFabricTextureToMaterial,
+    
+    // Get current renderer state
+    getRenderer: function() { return renderer; },
+    getScene: function() { return scene; },
+    getCamera: function() { return camera; },
+    
+    // Material palette access
+    getMaterialPalette: function() { return MATERIAL_PALETTE; },
+    getLightingPresets: function() { return LIGHTING_PRESETS; },
+    
+    // Force environment regeneration
+    regenerateEnvironment: function() {
+      envRT = null;
+      return createEnvironment();
     }
   };
 

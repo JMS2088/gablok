@@ -1460,7 +1460,28 @@
   window.closePlan2DModal = closePlan2DModal;
 
   // Export -----------------------------------------------------------------
-  function plan2dExport(){ try{ var data=JSON.stringify(__plan2d.elements); var blob=new Blob([data],{type:'application/json'}); var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='plan2d.json'; a.click(); URL.revokeObjectURL(a.href); if(updateStatus) updateStatus('2D plan exported'); }catch(e){ try{ updateStatus && updateStatus('Export failed'); }catch(_){} } }
+  function plan2dExport(){ 
+    try { 
+      // Export 2D plan with metadata wrapper for better compatibility
+      var exportData = {
+        format: 'gablok-2d-plan',
+        version: '1.0',
+        floor: (typeof window.currentFloor === 'number' ? window.currentFloor : 0),
+        exportedAt: new Date().toISOString(),
+        elements: __plan2d.elements
+      };
+      var data = JSON.stringify(exportData, null, 2); 
+      var blob = new Blob([data], {type:'application/json'}); 
+      var a = document.createElement('a'); 
+      a.href = URL.createObjectURL(blob); 
+      a.download = 'plan2d.json'; 
+      a.click(); 
+      URL.revokeObjectURL(a.href); 
+      if(updateStatus) updateStatus('2D plan exported'); 
+    } catch(e) { 
+      try { updateStatus && updateStatus('Export failed'); } catch(_) {} 
+    } 
+  }
   window.plan2dExport = window.plan2dExport || plan2dExport;
   // Clear ------------------------------------------------------------------
   function plan2dClear(){ 

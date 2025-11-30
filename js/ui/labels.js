@@ -24,12 +24,12 @@
       window.__labelsHidden = !window.__labelsHidden;
       var body = document.body; if(!body) return;
       body.classList.toggle('hide-labels', window.__labelsHidden);
-      // Force labels redraw removal if hiding
+      // Force labels redraw removal if hiding, but still trigger updateLabels to draw handles
       if(window.__labelsHidden){
         var c = document.getElementById('labels-3d'); if(c){ while(c.firstChild) c.removeChild(c.firstChild); }
-      } else {
-        if(typeof window.updateLabels==='function') window.updateLabels();
       }
+      // Always call updateLabels (it will draw handles even when labels are hidden)
+      if(typeof window.updateLabels==='function') window.updateLabels();
       // Update button text if present
       try { var btn=document.getElementById('btn-hide-labels'); if(btn) btn.textContent = window.__labelsHidden? 'Show Labels':'Hide Labels'; }catch(_btxt){}
     }catch(_tLbl){}
@@ -67,9 +67,9 @@
           try { var chkD2 = document.getElementById('chk-corner-debug'); if (chkD2) chkD2.checked = !!prevD; } catch(_eD2) {}
         } catch(_eDbgRestore) {}
       }
-      // Redraw (skip labels if hidden)
+      // Redraw - always call updateLabels (it will draw handles even when labels are hidden)
       try { if(typeof renderLoop==='function') renderLoop(); }catch(_rLoop){}
-      if(!window.__labelsHidden && typeof window.updateLabels==='function') window.updateLabels();
+      if(typeof window.updateLabels==='function') window.updateLabels();
       try { var btn=document.getElementById('btn-clean-view'); if(btn) btn.textContent = window.__cleanViewActive? 'Exit Clean View':'Clean View'; }catch(_btxt2){}
     }catch(_tCV){}
   };
@@ -78,8 +78,13 @@
   window.updateLabels = function updateLabels(){
     try {
       var container = document.getElementById('labels-3d'); if(!container) return;
-  // Respect global hide-labels flag
-  if(window.__labelsHidden){ while(container.firstChild) container.removeChild(container.firstChild); return; }
+  // Respect global hide-labels flag - but still draw handles even if labels are hidden
+  if(window.__labelsHidden){
+    while(container.firstChild) container.removeChild(container.firstChild);
+    // Still draw handles even when labels are hidden (handles are essential for manipulation)
+    try { drawSelectedHandlesUnified(); } catch(_hud){}
+    return;
+  }
       // When the 2D floor plan is active, remove all DOM labels/buttons from the 2D area.
       try {
         if (window.__plan2d && __plan2d.active) {

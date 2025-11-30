@@ -244,7 +244,63 @@ function __wireAppUi(){
   // Actions: file input handlers (JSON/OBJ/PDF/SVG)
   (function(){
     var jsonIn = document.getElementById('upload-file');
-    if(jsonIn){ jsonIn.onchange = async function(e){ try{ var f=e.target.files && e.target.files[0]; if(!f) return; var text = await f.text(); restoreProject && restoreProject(text); renderLoop && renderLoop(); updateStatus && updateStatus('Imported project'); } catch(err){ try{ updateStatus('Import failed'); }catch(_){} } finally { jsonIn.value=''; } }; }
+    if(jsonIn){ 
+      jsonIn.onchange = async function(e){ 
+        try { 
+          var f = e.target.files && e.target.files[0]; 
+          if(!f) return; 
+          var text = await f.text();
+          
+          // Try to parse to detect format
+          var data = null;
+          try { data = JSON.parse(text); } catch(_pe) {}
+          
+          // Check if this is a 2D plan export (array of elements or object with elements)
+          var is2DPlan = false;
+          if (Array.isArray(data) && data.length > 0 && data[0] && 
+              (data[0].type === 'wall' || data[0].type === 'room' || data[0].type === 'rect')) {
+            is2DPlan = true;
+          } else if (data && data.elements && Array.isArray(data.elements) && !data.rooms) {
+            is2DPlan = true;
+          } else if (data && data.format === 'gablok-2d-plan') {
+            is2DPlan = true;
+          }
+          
+          // If it's a 2D plan, ensure 2D editor is loaded first
+          if (is2DPlan) {
+            // Load plan2D modules if needed
+            if (typeof window.plan2dImport !== 'function') {
+              updateStatus && updateStatus('Loading 2D editor…');
+              try {
+                await loadScript('js/plan2d/geom2d.js');
+                await loadScript('js/plan2d/snap.js');
+                await loadScript('js/plan2d/walls.js');
+                await loadScript('js/plan2d/draw.js');
+                await loadScript('js/plan2d/editor-core.js');
+                await loadScript('js/plan2d/editor.js');
+              } catch(_loadErr) {}
+            }
+            
+            // Now try to import via plan2dImport
+            if (typeof window.plan2dImport === 'function') {
+              window.plan2dImport(data);
+              updateStatus && updateStatus('2D plan imported - open Floor Plan to edit');
+              return;
+            }
+          }
+          
+          // Standard project import
+          restoreProject && restoreProject(text); 
+          renderLoop && renderLoop(); 
+          updateStatus && updateStatus('Imported project'); 
+        } catch(err) { 
+          console.error('Import error:', err);
+          try { updateStatus('Import failed'); } catch(_) {} 
+        } finally { 
+          jsonIn.value = ''; 
+        } 
+      }; 
+    }
     var objIn = document.getElementById('upload-obj-file');
     if(objIn){ objIn.onchange = async function(e){ try{ var f=e.target.files && e.target.files[0]; if(!f) return; await f.text(); updateStatus && updateStatus('OBJ import not supported yet'); } catch(err){ try{ updateStatus('OBJ import failed'); }catch(_){} } finally { objIn.value=''; } }; }
     var pdfIn = document.getElementById('upload-pdf-floorplan');
