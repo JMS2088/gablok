@@ -1290,6 +1290,89 @@
           drawCornerCodeAt(x0, yMid, z0);
           drawCornerCodeAt(x1, yMid, z1);
         }
+        
+        // --- Line Mode: Draw doors and windows ---
+        // Render openings (doors/windows) even in line view so they're visible like in solid mode
+        var lineOpenings = Array.isArray(ws.openings) ? ws.openings : [];
+        var stripTopY = baseY + (typeof ws.height === 'number' ? ws.height : 3.0);
+        var wallH = stripTopY - baseY;
+        var glassFillLine = (window.__windowGlassColor) ? window.__windowGlassColor : 'rgba(56,189,248,0.55)';
+        var glassStrokeLine = onLevel ? 'rgba(14,165,233,0.90)' : 'rgba(14,165,233,0.75)';
+        var doorFillLine = onLevel ? 'rgba(234,179,8,0.40)' : 'rgba(234,179,8,0.30)';
+        var doorStrokeLine = onLevel ? 'rgba(234,179,8,0.80)' : 'rgba(234,179,8,0.65)';
+        
+        for (var oi = 0; oi < lineOpenings.length; oi++) {
+          var op = lineOpenings[oi]; if (!op) continue;
+          var isDoor = (op.type === 'door');
+          var isWindow = (op.type === 'window');
+          
+          // Compute sill and height
+          var sill = isDoor ? 0 : (typeof op.sillM === 'number' ? op.sillM : 0.9);
+          var oH = isDoor ? ((typeof op.heightM === 'number') ? op.heightM : 2.04) : (typeof op.heightM === 'number' ? op.heightM : 1.5);
+          
+          // Floor-to-ceiling check
+          var isFloorToCeiling = isWindow && op.sillM === 0 && oH >= wallH - 0.1;
+          
+          // Adjust sill for non-floor-to-ceiling windows
+          var sillAdj = sill;
+          if (isWindow && !isFloorToCeiling) {
+            if (sillAdj < 0.15) sillAdj = Math.min(0.9, Math.max(0.3, wallH * 0.3));
+            if (oH > wallH - 0.30) oH = wallH - 0.30;
+            if (oH < 0.30) oH = Math.min(1.5, wallH - 0.30);
+          } else if (isFloorToCeiling) {
+            sillAdj = 0;
+            oH = Math.min(oH, wallH - 0.05);
+          }
+          
+          var y0 = baseY + (isWindow ? sillAdj : sill);
+          var y1 = Math.min(y0 + oH, stripTopY - (isWindow ? 0.02 : 0));
+          
+          // Opening endpoints
+          var x0o = (op.x0 != null ? op.x0 : x0), z0o = (op.z0 != null ? op.z0 : z0);
+          var x1o = (op.x1 != null ? op.x1 : x1), z1o = (op.z1 != null ? op.z1 : z1);
+          
+          // Project opening corners
+          var opA = project3D(x0o, y0, z0o);
+          var opB = project3D(x1o, y0, z1o);
+          var opC = project3D(x1o, y1, z1o);
+          var opD = project3D(x0o, y1, z0o);
+          
+          if (opA && opB && opC && opD) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(opA.x, opA.y);
+            ctx.lineTo(opB.x, opB.y);
+            ctx.lineTo(opC.x, opC.y);
+            ctx.lineTo(opD.x, opD.y);
+            ctx.closePath();
+            
+            if (isWindow) {
+              // Draw blue glass fill for windows
+              ctx.fillStyle = glassFillLine;
+              ctx.fill();
+              ctx.strokeStyle = glassStrokeLine;
+              ctx.lineWidth = onLevel ? 2.0 : 1.4;
+              ctx.stroke();
+              
+              // Draw frame (outer dark, inner blue accent)
+              ctx.strokeStyle = onLevel ? 'rgba(71,85,105,0.55)' : 'rgba(148,163,184,0.50)';
+              ctx.lineWidth = onLevel ? 2.4 : 1.8;
+              ctx.stroke();
+              ctx.strokeStyle = onLevel ? 'rgba(30,64,175,0.95)' : 'rgba(30,64,175,0.80)';
+              ctx.lineWidth = onLevel ? 1.2 : 0.9;
+              ctx.stroke();
+            } else if (isDoor) {
+              // Draw amber fill for doors
+              ctx.fillStyle = doorFillLine;
+              ctx.fill();
+              ctx.strokeStyle = doorStrokeLine;
+              ctx.lineWidth = onLevel ? 2.0 : 1.6;
+              ctx.stroke();
+            }
+            ctx.restore();
+          }
+        }
+        
         return;
       }
       // Base corners (counter-clockwise)

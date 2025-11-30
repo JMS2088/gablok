@@ -225,7 +225,7 @@
   }
   /* Secondary buttons inside 2D dark context: lighten base for contrast */
   #plan2d-page button.secondary { background:#f8fafc !important; color:#0f172a !important; border:1px solid #cbd5e1 !important; }
-  #plan2d-page button.secondary:hover { background:#0093ff !important; color:#ffffff !important; border-color:#0093ff !important; }
+  #plan2d-page button.secondary:hover { background:#0093ff !important; color:#ffffff !important; border-color:#0093ff !important; box-shadow: 0 0 0 2px rgba(0,147,255,0.45), 0 4px 18px rgba(0,0,0,0.55) !important; }
   /* Clear button destructive hint */
   #plan2d-clear:hover { background:#dc2626 !important; color:#ffffff !important; border-color:#dc2626 !important; box-shadow:0 0 0 2px rgba(220,38,38,0.4), 0 3px 14px rgba(0,0,0,0.55) !important; }
   /* Close button distinct neutral hover (avoid accidental destructive feel) */
