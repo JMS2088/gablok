@@ -77,6 +77,8 @@
         balconies: balconyComponents || [],
         furniture: furnitureItems || [],
         currentFloor: typeof currentFloor === 'number' ? currentFloor : 0,
+        // AI-generated images from visualize panel
+        aiImages: Array.isArray(window.__projectAiImages) ? window.__projectAiImages : [],
         // Persist 2D drafts (per floor) including guides and view so measurements/rulers restore identically
         plan2d: (function(){
           try{
@@ -198,6 +200,8 @@
         }
       }
       currentFloor = typeof data.currentFloor === 'number' ? data.currentFloor : currentFloor;
+      // Restore AI-generated images
+      window.__projectAiImages = Array.isArray(data.aiImages) ? data.aiImages : [];
       // Restore 2D drafts (per floor), including guides and view info
       try{
         if (data.plan2d && data.plan2d.drafts && typeof data.plan2d.drafts === 'object'){

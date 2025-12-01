@@ -437,6 +437,10 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 					<div id="visualize-ai-results" class="visualize-ai-results" style="display:none;">
 						<label>AI Generated Images</label>
 						<div id="visualize-ai-gallery" class="visualize-ai-gallery"></div>
+						<div class="visualize-ai-save-row">
+							<button id="visualize-ai-save" type="button" class="save-btn">💾 Save to Project</button>
+							<span id="visualize-ai-save-status" class="save-status"></span>
+						</div>
 					</div>
 				</div>
 				
@@ -455,6 +459,21 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 
 				<p id="visualize-footnote" class="visualize-footnote"></p>
 			</div>
+		</div>
+	</div>
+</div>
+
+<!-- Unsaved AI Images Confirmation Popup -->
+<div id="visualize-unsaved-popup" class="visualize-unsaved-popup" style="display:none;">
+	<div class="visualize-unsaved-content">
+		<div class="visualize-unsaved-icon">⚠️</div>
+		<h3>Unsaved AI Images</h3>
+		<p>By closing, your AI-generated images will not be saved and will be deleted.</p>
+		<p class="visualize-unsaved-warning">Are you sure you want to close?</p>
+		<div class="visualize-unsaved-actions">
+			<button id="visualize-unsaved-save" type="button" class="primary">💾 Save &amp; Close</button>
+			<button id="visualize-unsaved-discard" type="button" class="danger">🗑️ Discard &amp; Close</button>
+			<button id="visualize-unsaved-cancel" type="button" class="secondary">Cancel</button>
 		</div>
 	</div>
 </div>

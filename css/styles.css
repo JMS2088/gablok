@@ -702,7 +702,7 @@
   /* Controls floating on the right */
   #visualize-controls { 
     position:absolute; top:20px; right:20px; z-index:10;
-    width:min(320px, 100%); max-height:calc(100% - 40px); overflow-y:auto; 
+    width:min(720px, calc(100% - 40px)); max-height:calc(100% - 40px); overflow-y:auto; 
     display:flex; flex-direction:column; gap:20px; padding:22px 20px; 
     background:rgba(255,255,255,0.88); border-radius:18px; 
     box-shadow:0 18px 45px rgba(15,23,42,0.12), inset 0 0 0 1px rgba(226,232,240,0.9); 
@@ -1425,6 +1425,124 @@
   .visualize-ai-setup button {
     padding: 8px 16px;
     font-size: 13px;
+  }
+  
+  /* Save to Project button and status */
+  .visualize-ai-save-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e0e0e0;
+  }
+  .visualize-ai-save-row .save-btn {
+    flex: 0 0 auto;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .visualize-ai-save-row .save-btn:hover {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  }
+  .visualize-ai-save-row .save-status {
+    font-size: 13px;
+    color: #666;
+  }
+  .visualize-ai-save-row .save-status.saved {
+    color: #10b981;
+    font-weight: 600;
+  }
+  
+  /* Unsaved Images Confirmation Popup */
+  .visualize-unsaved-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 20000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(4px);
+  }
+  .visualize-unsaved-content {
+    background: #fff;
+    border-radius: 16px;
+    padding: 32px;
+    max-width: 420px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 25px 60px rgba(15, 23, 42, 0.35);
+    animation: popupSlideIn 0.2s ease;
+  }
+  @keyframes popupSlideIn {
+    from { opacity: 0; transform: scale(0.95) translateY(-10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .visualize-unsaved-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+  .visualize-unsaved-content h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 12px;
+  }
+  .visualize-unsaved-content p {
+    font-size: 14px;
+    color: #475569;
+    margin: 0 0 8px;
+    line-height: 1.5;
+  }
+  .visualize-unsaved-warning {
+    font-weight: 600;
+    color: #dc2626 !important;
+  }
+  .visualize-unsaved-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 24px;
+  }
+  .visualize-unsaved-actions button {
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: none;
+  }
+  .visualize-unsaved-actions button.primary {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #fff;
+  }
+  .visualize-unsaved-actions button.primary:hover {
+    background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  }
+  .visualize-unsaved-actions button.danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: #fff;
+  }
+  .visualize-unsaved-actions button.danger:hover {
+    background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  }
+  .visualize-unsaved-actions button.secondary {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+  }
+  .visualize-unsaved-actions button.secondary:hover {
+    background: #e2e8f0;
   }
 
   .admin-inline { display: flex; flex-wrap: wrap; gap: 24px; }

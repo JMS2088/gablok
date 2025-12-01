@@ -726,6 +726,23 @@
   function hideVisualize(){
     if (!state.panel) return;
     
+    // Check if there are unsaved AI images
+    if (aiState.results && aiState.results.length > 0 && !aiState.saved) {
+      showUnsavedPopup();
+      return; // Don't close yet, wait for user decision
+    }
+    
+    // Actually close the visualize panel
+    doCloseVisualize();
+  }
+  
+  function doCloseVisualize() {
+    if (!state.panel) return;
+    
+    // Clear AI results without saving (user chose to discard or already saved)
+    aiState.results = [];
+    aiState.saved = false;
+    
     // Stop watching for scene changes
     stopSceneWatcher();
     
@@ -734,6 +751,97 @@
     state.renderStarted = false;
     closePhotoViewer();
     disposeRenderer();
+    
+    // Hide AI results panel
+    var resultsDiv = document.getElementById('visualize-ai-results');
+    if (resultsDiv) resultsDiv.style.display = 'none';
+    
+    // Reset save status
+    var saveStatus = document.getElementById('visualize-ai-save-status');
+    if (saveStatus) saveStatus.textContent = '';
+  }
+  
+  function showUnsavedPopup() {
+    var popup = document.getElementById('visualize-unsaved-popup');
+    if (popup) {
+      popup.style.display = 'flex';
+    }
+  }
+  
+  function hideUnsavedPopup() {
+    var popup = document.getElementById('visualize-unsaved-popup');
+    if (popup) {
+      popup.style.display = 'none';
+    }
+  }
+  
+  function saveAIImagesToProject() {
+    if (!aiState.results || aiState.results.length === 0) {
+      return false;
+    }
+    
+    // Initialize global array if not exists
+    if (!Array.isArray(window.__projectAiImages)) {
+      window.__projectAiImages = [];
+    }
+    
+    // Add new images (avoid duplicates)
+    var addedCount = 0;
+    for (var i = 0; i < aiState.results.length; i++) {
+      var img = aiState.results[i];
+      if (img && window.__projectAiImages.indexOf(img) === -1) {
+        window.__projectAiImages.push(img);
+        addedCount++;
+      }
+    }
+    
+    // Mark as saved
+    aiState.saved = true;
+    
+    // Trigger project auto-save to persist
+    if (typeof window.saveProjectSilently === 'function') {
+      window.saveProjectSilently();
+      console.log('[Visualize] Saved', addedCount, 'AI images to project');
+    }
+    
+    // Update save status in UI
+    var saveStatus = document.getElementById('visualize-ai-save-status');
+    if (saveStatus) {
+      saveStatus.textContent = '✓ Saved to project';
+      saveStatus.className = 'save-status saved';
+    }
+    
+    return true;
+  }
+  
+  function wireUnsavedPopupControls() {
+    var saveBtn = document.getElementById('visualize-unsaved-save');
+    var discardBtn = document.getElementById('visualize-unsaved-discard');
+    var cancelBtn = document.getElementById('visualize-unsaved-cancel');
+    
+    if (saveBtn && !saveBtn.__wired) {
+      saveBtn.__wired = true;
+      saveBtn.addEventListener('click', function() {
+        saveAIImagesToProject();
+        hideUnsavedPopup();
+        doCloseVisualize();
+      });
+    }
+    
+    if (discardBtn && !discardBtn.__wired) {
+      discardBtn.__wired = true;
+      discardBtn.addEventListener('click', function() {
+        hideUnsavedPopup();
+        doCloseVisualize();
+      });
+    }
+    
+    if (cancelBtn && !cancelBtn.__wired) {
+      cancelBtn.__wired = true;
+      cancelBtn.addEventListener('click', function() {
+        hideUnsavedPopup();
+      });
+    }
   }
 
   function setStatus(message, mode){
@@ -2745,7 +2853,8 @@
     model: null,
     endpoint: null,
     generating: false,
-    results: []
+    results: [],
+    saved: false  // Track if current results have been saved
   };
   
   function checkAIConfiguration() {
@@ -2809,10 +2918,11 @@
     var style = styleSelect ? styleSelect.value : '';
     var custom = customPrompt ? customPrompt.value.trim() : '';
     
-    // Start with instruction to enhance the existing 3D render
-    var parts = ['Transform this 3D architectural render into a photorealistic image'];
-    parts.push('maintain the exact same building layout, structure, and proportions from the original render');
-    parts.push('modern residential building exterior');
+    // Emphasize that this is an image-to-image transformation based on the reference render
+    var parts = ['Using the provided 3D render as exact reference, create a photorealistic version'];
+    parts.push('match the exact building shape, layout, windows, and architectural features from the reference image');
+    parts.push('keep the same camera angle and perspective as the reference');
+    parts.push('modern residential building exterior with realistic materials');
     
     // Add style preset
     if (style && AI_STYLE_PROMPTS[style]) {
@@ -2859,11 +2969,12 @@
     var qualitySelect = document.getElementById('visualize-ai-quality');
     var quality = qualitySelect ? qualitySelect.value : 'standard';
     
+    // All sizes are 16:9 widescreen for landscape orientation
     var settings = {
-      'draft': { width: 512, height: 512, steps: 20 },
-      'standard': { width: 1024, height: 1024, steps: 30 },
-      'high': { width: 1536, height: 1024, steps: 40 },
-      'ultra': { width: 2048, height: 1536, steps: 50 }
+      'draft': { width: 1024, height: 576, steps: 20, aspectRatio: 'widescreen_16_9' },
+      'standard': { width: 1280, height: 720, steps: 30, aspectRatio: 'widescreen_16_9' },
+      'high': { width: 1920, height: 1080, steps: 40, aspectRatio: 'widescreen_16_9' },
+      'ultra': { width: 2560, height: 1440, steps: 50, aspectRatio: 'widescreen_16_9' }
     };
     
     return settings[quality] || settings.standard;
@@ -2950,13 +3061,23 @@
       
       if (images.length > 0) {
         aiState.results = images;
+        aiState.saved = false; // Mark as unsaved (new images generated)
         // Display the first result directly in the main render canvas
         displayAIResultInCanvas(images[0]);
         // Also show in gallery if there are multiple
         if (images.length > 1) {
           displayAIResults(images);
         }
-        setAIStatus('Enhancement complete! Click gallery images to switch views.', 'success');
+        // Show results section with save button
+        var resultsDiv = document.getElementById('visualize-ai-results');
+        if (resultsDiv) resultsDiv.style.display = 'block';
+        // Reset save status
+        var saveStatus = document.getElementById('visualize-ai-save-status');
+        if (saveStatus) {
+          saveStatus.textContent = '';
+          saveStatus.className = 'save-status';
+        }
+        setAIStatus('Enhancement complete! Click "Save to Project" to keep.', 'success');
       } else {
         throw new Error('No images returned from API');
       }
@@ -3016,11 +3137,21 @@
       
       if (allImages.length > 0) {
         aiState.results = allImages;
+        aiState.saved = false; // Mark as unsaved (new images generated)
         // Display first variation in main canvas
         displayAIResultInCanvas(allImages[0]);
         // Show all in gallery for selection
         displayAIResults(allImages);
-        setAIStatus('Generated ' + allImages.length + ' variations! Click to switch.', 'success');
+        // Show results section with save button
+        var resultsDiv = document.getElementById('visualize-ai-results');
+        if (resultsDiv) resultsDiv.style.display = 'block';
+        // Reset save status
+        var saveStatus = document.getElementById('visualize-ai-save-status');
+        if (saveStatus) {
+          saveStatus.textContent = '';
+          saveStatus.className = 'save-status';
+        }
+        setAIStatus('Generated ' + allImages.length + ' variations! Save to keep.', 'success');
       }
       
     } catch (err) {
@@ -3050,7 +3181,7 @@
     if (!overlay) {
       overlay = document.createElement('img');
       overlay.id = overlayId;
-      overlay.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; z-index:5; background:#000;';
+      overlay.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; object-fit:cover; z-index:5; background:#000;';
       canvasWrap.appendChild(overlay);
     }
     
@@ -3161,6 +3292,21 @@
         }
       });
     }
+    
+    // Save to Project button
+    var saveBtn = document.getElementById('visualize-ai-save');
+    console.log('[AI] Save button:', !!saveBtn);
+    if (saveBtn && !saveBtn.__wired) {
+      saveBtn.__wired = true;
+      saveBtn.addEventListener('click', function() {
+        if (saveAIImagesToProject()) {
+          setAIStatus('Images saved to project!', 'success');
+        }
+      });
+    }
+    
+    // Wire the unsaved popup controls
+    wireUnsavedPopupControls();
     
     // Update panel visibility when settings change
     updateAIPanelVisibility();

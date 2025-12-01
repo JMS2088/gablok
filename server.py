@@ -480,6 +480,10 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             # Using requests library for better SSL handling
             import requests as req_lib
             
+            # Require base image for image-to-image transformation
+            if not base64_image_data:
+                return {'error': 'Base image is required for Freepik AI enhancement. Please ensure the 3D render is complete.'}
+            
             base_url = (endpoint or 'https://api.freepik.com').rstrip('/')
             
             freepik_headers = {
@@ -491,35 +495,24 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             # Build list of endpoints to try
             endpoints_to_try = []
             
-            # If we have a base image, try image-to-image endpoints first
-            if base64_image_data:
-                print(f"[Freepik] Base image provided, trying image-to-image endpoints first")
-                
-                # Try reimagine/image-to-image endpoints (may require premium API access)
-                endpoints_to_try.append(
-                    (base_url + '/v1/ai/image-to-image', {
-                        'image': base64_image_data,
-                        'prompt': prompt,
-                        'creativity': 0.3,  # Lower = more faithful to original
-                        'num_images': 1
-                    })
-                )
-                endpoints_to_try.append(
-                    (base_url + '/v1/ai/reimagine', {
-                        'image': base64_image_data,
-                        'prompt': prompt,
-                        'num_images': 1
-                    })
-                )
+            # Use image-to-image endpoint with the provided render
+            print(f"[Freepik] Base image provided, using mystic endpoint for image-to-image")
             
-            # Always include text-to-image as fallback
-            # Enhance prompt to describe architectural enhancement when we have a base image
-            enhanced_prompt = prompt
-            if base64_image_data:
-                enhanced_prompt = f"Photorealistic architectural visualization, {prompt}, professional photography, high-end real estate marketing photo"
+            # Ensure image has data URI prefix for Freepik
+            image_data = base64_image_data
+            if not image_data.startswith('data:'):
+                image_data = 'data:image/png;base64,' + image_data
             
+            # Use mystic endpoint - supports both image reference and prompt
+            # Always use widescreen 16:9 for landscape output
+            # num_images=1 ensures single generation
             endpoints_to_try.append(
-                (base_url + '/v1/ai/text-to-image', {'prompt': enhanced_prompt, 'num_images': 1})
+                (base_url + '/v1/ai/mystic', {
+                    'image': {'url': image_data},
+                    'prompt': prompt,
+                    'aspect_ratio': 'widescreen_16_9',
+                    'num_images': 1
+                })
             )
             
             # Try each endpoint until one works
@@ -527,7 +520,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             for url, body in endpoints_to_try:
                 try:
                     print(f"[Freepik] Trying endpoint: {url}")
-                    print(f"[Freepik] Body keys: {list(body.keys())}, image size: {len(body.get('image', '')) if 'image' in body else 'N/A'}")
+                    print(f"[Freepik] Body keys: {list(body.keys())}")
                     
                     resp = req_lib.post(url, json=body, headers=freepik_headers, timeout=120)
                     
@@ -535,11 +528,56 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                     
                     if resp.status_code == 200:
                         resp_data = resp.json()
-                        print(f"[Freepik] Success! Response keys: {list(resp_data.keys())}")
+                        print(f"[Freepik] Success! Response: {str(resp_data)[:500]}")
                         
-                        # Parse response
                         images = []
-                        if resp_data.get('data'):
+                        
+                        # Check if this is an async task response (mystic endpoint)
+                        if resp_data.get('data') and isinstance(resp_data['data'], dict):
+                            data_resp = resp_data['data']
+                            task_id = data_resp.get('task_id')
+                            status = data_resp.get('status')
+                            
+                            if task_id and status in ['CREATED', 'IN_PROGRESS', 'PENDING']:
+                                # Poll for completion
+                                print(f"[Freepik] Task created: {task_id}, polling for completion...")
+                                import time
+                                poll_url = f"{url}/{task_id}"
+                                max_attempts = 60  # Max 60 seconds
+                                for attempt in range(max_attempts):
+                                    time.sleep(1)
+                                    poll_resp = req_lib.get(poll_url, headers=freepik_headers, timeout=30)
+                                    if poll_resp.status_code == 200:
+                                        poll_data = poll_resp.json()
+                                        poll_status = poll_data.get('data', {}).get('status')
+                                        print(f"[Freepik] Poll attempt {attempt+1}: status={poll_status}")
+                                        
+                                        if poll_status == 'COMPLETED':
+                                            generated = poll_data.get('data', {}).get('generated', [])
+                                            for img_url in generated:
+                                                if isinstance(img_url, str):
+                                                    images.append(img_url)
+                                            print(f"[Freepik] Task completed with {len(images)} images")
+                                            break
+                                        elif poll_status in ['FAILED', 'ERROR']:
+                                            print(f"[Freepik] Task failed")
+                                            last_error = "Task failed"
+                                            break
+                                    else:
+                                        print(f"[Freepik] Poll failed: {poll_resp.status_code}")
+                                
+                                if images:
+                                    return {'images': images, 'provider': provider}
+                                continue
+                            
+                            # Check for direct image URLs in data
+                            if data_resp.get('generated'):
+                                for img_url in data_resp['generated']:
+                                    if isinstance(img_url, str):
+                                        images.append(img_url)
+                        
+                        # Parse synchronous response (text-to-image returns base64 directly)
+                        if not images and resp_data.get('data'):
                             data_resp = resp_data['data']
                             if isinstance(data_resp, list):
                                 for img in data_resp:
@@ -553,6 +591,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                                     images.append(data_resp['url'])
                                 elif data_resp.get('base64'):
                                     images.append('data:image/png;base64,' + data_resp['base64'])
+                        
                         if not images and resp_data.get('images'):
                             for img in resp_data['images']:
                                 if isinstance(img, dict) and img.get('url'):
@@ -564,8 +603,13 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                         if not images and resp_data.get('url'):
                             images.append(resp_data['url'])
                         
-                        print(f"[Freepik] Extracted {len(images)} images")
-                        return {'images': images, 'provider': provider}
+                        if images:
+                            print(f"[Freepik] Extracted {len(images)} images")
+                            return {'images': images, 'provider': provider}
+                        else:
+                            print(f"[Freepik] No images found in response")
+                            last_error = "No images in response"
+                            continue
                     else:
                         error_text = resp.text
                         print(f"[Freepik] Endpoint {url} failed ({resp.status_code}): {error_text[:500]}")
