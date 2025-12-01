@@ -2809,7 +2809,10 @@
     var style = styleSelect ? styleSelect.value : '';
     var custom = customPrompt ? customPrompt.value.trim() : '';
     
-    var parts = ['modern residential building exterior'];
+    // Start with instruction to enhance the existing 3D render
+    var parts = ['Transform this 3D architectural render into a photorealistic image'];
+    parts.push('maintain the exact same building layout, structure, and proportions from the original render');
+    parts.push('modern residential building exterior');
     
     // Add style preset
     if (style && AI_STYLE_PROMPTS[style]) {
@@ -2845,6 +2848,9 @@
     if (options.length > 0) {
       parts.push(options.join(', '));
     }
+    
+    // Add quality keywords for photorealistic output
+    parts.push('photorealistic, professional architectural photography, high resolution, realistic materials and textures');
     
     return parts.join(', ');
   }
@@ -2932,15 +2938,25 @@
       var quality = getQualitySettings();
       var baseImage = captureCurrentRender();
       
+      if (!baseImage) {
+        throw new Error('No render image available. Please wait for the 3D render to complete first.');
+      }
+      
       console.log('[AI] Generating with prompt:', prompt);
       console.log('[AI] Provider:', aiState.provider, 'Model:', aiState.model);
+      console.log('[AI] Base image captured:', baseImage ? 'yes' : 'no');
       
       var images = await generateViaProxy(prompt, quality, baseImage);
       
       if (images.length > 0) {
         aiState.results = images;
-        displayAIResults(images);
-        setAIStatus('Generated ' + images.length + ' image(s) successfully!', 'success');
+        // Display the first result directly in the main render canvas
+        displayAIResultInCanvas(images[0]);
+        // Also show in gallery if there are multiple
+        if (images.length > 1) {
+          displayAIResults(images);
+        }
+        setAIStatus('Enhancement complete! Click gallery images to switch views.', 'success');
       } else {
         throw new Error('No images returned from API');
       }
@@ -2973,11 +2989,17 @@
       var quality = getQualitySettings();
       quality.steps = Math.min(quality.steps, 25); // Faster for variations
       
+      // Capture the current render as base for all variations
+      var baseImage = captureCurrentRender();
+      if (!baseImage) {
+        throw new Error('No render image available. Please wait for the 3D render to complete first.');
+      }
+      
       var variations = [
-        basePrompt + ', morning light',
-        basePrompt + ', afternoon sun',
-        basePrompt + ', overcast sky, soft shadows',
-        basePrompt + ', golden hour, warm tones'
+        basePrompt + ', morning light, soft warm glow',
+        basePrompt + ', bright afternoon sun, clear blue sky',
+        basePrompt + ', overcast sky, soft diffused shadows',
+        basePrompt + ', golden hour sunset, warm orange tones'
       ];
       
       var allImages = [];
@@ -2985,7 +3007,7 @@
       for (var i = 0; i < variations.length; i++) {
         setAIStatus('Generating variation ' + (i + 1) + ' of ' + variations.length + '...', 'loading');
         
-        var images = await generateViaProxy(variations[i], quality, null);
+        var images = await generateViaProxy(variations[i], quality, baseImage);
         
         if (images.length > 0) {
           allImages.push(images[0]);
@@ -2994,8 +3016,11 @@
       
       if (allImages.length > 0) {
         aiState.results = allImages;
+        // Display first variation in main canvas
+        displayAIResultInCanvas(allImages[0]);
+        // Show all in gallery for selection
         displayAIResults(allImages);
-        setAIStatus('Generated ' + allImages.length + ' variations!', 'success');
+        setAIStatus('Generated ' + allImages.length + ' variations! Click to switch.', 'success');
       }
       
     } catch (err) {
@@ -3007,6 +3032,55 @@
     }
   }
   
+  // Display AI result directly in the main render canvas area
+  function displayAIResultInCanvas(imgSrc) {
+    console.log('[AI] Displaying result in main canvas');
+    
+    // Get the canvas wrapper element
+    var canvasWrap = document.getElementById(WRAP_ID);
+    if (!canvasWrap) {
+      console.warn('[AI] Canvas wrapper not found');
+      return;
+    }
+    
+    // Create or get the AI overlay image
+    var overlayId = 'visualize-ai-overlay';
+    var overlay = document.getElementById(overlayId);
+    
+    if (!overlay) {
+      overlay = document.createElement('img');
+      overlay.id = overlayId;
+      overlay.style.cssText = 'position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; z-index:5; background:#000;';
+      canvasWrap.appendChild(overlay);
+    }
+    
+    // Load and display the AI-generated image
+    overlay.src = imgSrc;
+    overlay.style.display = 'block';
+    
+    // Store reference for toggling back to 3D render
+    aiState.overlayVisible = true;
+    aiState.currentOverlaySrc = imgSrc;
+    
+    // Update status
+    setStatus('AI Enhanced Render', 'success');
+  }
+  
+  // Toggle between AI overlay and original 3D render
+  function toggleAIOverlay(show) {
+    var overlay = document.getElementById('visualize-ai-overlay');
+    if (overlay) {
+      overlay.style.display = show ? 'block' : 'none';
+      aiState.overlayVisible = show;
+    }
+  }
+  
+  // Restore original 3D render view
+  function restoreOriginalRender() {
+    toggleAIOverlay(false);
+    setStatus('Original 3D Render', 'info');
+  }
+
   function displayAIResults(images) {
     var resultsDiv = document.getElementById('visualize-ai-results');
     var galleryDiv = document.getElementById('visualize-ai-gallery');
@@ -3016,20 +3090,32 @@
     resultsDiv.style.display = 'block';
     galleryDiv.innerHTML = '';
     
+    // Add "Original" button to go back to 3D render
+    var originalBtn = document.createElement('div');
+    originalBtn.className = 'visualize-ai-gallery-item original';
+    originalBtn.innerHTML = '<span>🔄</span><small>Original</small>';
+    originalBtn.title = 'Show original 3D render';
+    originalBtn.style.cssText = 'display:flex; flex-direction:column; align-items:center; justify-content:center; aspect-ratio:16/10; background:#f0f0f0; border-radius:6px; cursor:pointer; border:2px solid transparent; font-size:20px;';
+    originalBtn.addEventListener('click', function() {
+      restoreOriginalRender();
+    });
+    galleryDiv.appendChild(originalBtn);
+    
     images.forEach(function(imgSrc, idx) {
       var img = document.createElement('img');
       img.src = imgSrc;
       img.alt = 'AI Generated Image ' + (idx + 1);
-      img.title = 'Click to view full size';
+      img.title = 'Click to display this version';
       img.addEventListener('click', function() {
-        openAIImageViewer(imgSrc);
+        // Display in main canvas instead of photo viewer
+        displayAIResultInCanvas(imgSrc);
       });
       galleryDiv.appendChild(img);
     });
   }
   
   function openAIImageViewer(imgSrc) {
-    // Use the existing photo viewer
+    // Use the existing photo viewer for full-size view
     if (state.photoViewer && state.photoImg) {
       state.photoImg.src = imgSrc;
       if (state.photoCaption) {

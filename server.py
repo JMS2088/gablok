@@ -304,6 +304,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         import urllib.request
         import urllib.error
         import ssl
+        import base64 as b64_module
         
         provider = data.get('provider', '')
         api_key = data.get('apiKey', '')
@@ -311,20 +312,83 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         prompt = data.get('prompt', '')
         endpoint = data.get('endpoint', '')
         quality = data.get('quality', {})
+        base_image = data.get('baseImage', '')
         
         if not provider or not api_key:
             return {'error': 'Missing provider or API key'}
         
-        # Create SSL context that doesn't verify (for dev environments)
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        # Extract base64 data from data URL if present
+        base64_image_data = None
+        if base_image and base_image.startswith('data:image'):
+            if ',' in base_image:
+                base64_image_data = base_image.split(',', 1)[1]
+            else:
+                base64_image_data = base_image
+            print(f"[AI Proxy] Base image provided, size: {len(base64_image_data)} bytes")
+        
+        # Create SSL context - try default first, fall back to unverified
+        try:
+            ctx = ssl.create_default_context()
+        except:
+            ctx = ssl._create_unverified_context()
         
         headers = {}
         body = {}
         url = ''
         
         if provider == 'openai':
+            # OpenAI supports image editing with DALL-E 2 (not DALL-E 3)
+            # For image-to-image, we use the /images/edits endpoint
+            if base64_image_data:
+                # Use DALL-E 2 for image editing (DALL-E 3 doesn't support edits)
+                url = (endpoint or 'https://api.openai.com/v1') + '/images/edits'
+                
+                # OpenAI requires multipart/form-data for image edits
+                import io
+                boundary = '----WebKitFormBoundary7MA4YWxkTrZu0gW'
+                
+                # Decode base64 image to binary
+                try:
+                    image_binary = b64_module.b64decode(base64_image_data)
+                except Exception as e:
+                    return {'error': f'Failed to decode base image: {e}'}
+                
+                # Build multipart form data
+                body_parts = []
+                body_parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="image"; filename="render.png"\r\nContent-Type: image/png\r\n\r\n'.encode('utf-8'))
+                body_parts.append(image_binary)
+                body_parts.append(f'\r\n--{boundary}\r\nContent-Disposition: form-data; name="prompt"\r\n\r\n{prompt}\r\n'.encode('utf-8'))
+                body_parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\ndall-e-2\r\n'.encode('utf-8'))
+                body_parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="n"\r\n\r\n1\r\n'.encode('utf-8'))
+                body_parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="size"\r\n\r\n1024x1024\r\n'.encode('utf-8'))
+                body_parts.append(f'--{boundary}--\r\n'.encode('utf-8'))
+                
+                multipart_body = b''.join(body_parts)
+                
+                headers = {
+                    'Authorization': f'Bearer {api_key}',
+                    'Content-Type': f'multipart/form-data; boundary={boundary}'
+                }
+                
+                try:
+                    print(f"[OpenAI] Using image edit endpoint with base image")
+                    req = urllib.request.Request(url, data=multipart_body, headers=headers, method='POST')
+                    with urllib.request.urlopen(req, timeout=120, context=ctx) as resp:
+                        resp_data = json.loads(resp.read().decode('utf-8'))
+                        images = []
+                        for img in resp_data.get('data', []):
+                            if img.get('url'):
+                                images.append(img['url'])
+                            elif img.get('b64_json'):
+                                images.append('data:image/png;base64,' + img['b64_json'])
+                        return {'images': images, 'provider': provider}
+                except urllib.error.HTTPError as e:
+                    error_body = e.read().decode('utf-8') if e.fp else ''
+                    print(f"[OpenAI] Edit API error ({e.code}): {error_body[:500]}")
+                    # Fall back to text-to-image
+                    print(f"[OpenAI] Falling back to text-to-image generation")
+            
+            # Text-to-image (or fallback)
             url = (endpoint or 'https://api.openai.com/v1') + '/images/generations'
             headers = {
                 'Authorization': f'Bearer {api_key}',
@@ -342,8 +406,61 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             }
         
         elif provider == 'stability':
+            import requests as req_lib
+            
             model_id = model or 'stable-diffusion-xl-1024-v1-0'
-            url = (endpoint or 'https://api.stability.ai/v1') + f'/generation/{model_id}/text-to-image'
+            base_url = (endpoint or 'https://api.stability.ai').rstrip('/')
+            
+            # Stability AI supports image-to-image with the /image-to-image endpoint
+            if base64_image_data:
+                print(f"[Stability] Using image-to-image with base render")
+                
+                # Use multipart/form-data for image-to-image
+                try:
+                    image_binary = b64_module.b64decode(base64_image_data)
+                except Exception as e:
+                    return {'error': f'Failed to decode base image: {e}'}
+                
+                # Stability AI v1 image-to-image endpoint
+                url = f"{base_url}/v1/generation/{model_id}/image-to-image"
+                
+                files = {
+                    'init_image': ('render.png', image_binary, 'image/png')
+                }
+                form_data = {
+                    'text_prompts[0][text]': prompt,
+                    'text_prompts[0][weight]': '1',
+                    'cfg_scale': '7',
+                    'image_strength': '0.35',  # How much to preserve original (0.35 = 65% original)
+                    'steps': str(quality.get('steps', 30)),
+                    'samples': '1'
+                }
+                
+                headers = {
+                    'Authorization': f'Bearer {api_key}',
+                    'Accept': 'application/json'
+                }
+                
+                try:
+                    resp = req_lib.post(url, headers=headers, files=files, data=form_data, timeout=120)
+                    print(f"[Stability] Response status: {resp.status_code}")
+                    
+                    if resp.status_code == 200:
+                        resp_data = resp.json()
+                        images = []
+                        for art in resp_data.get('artifacts', []):
+                            if art.get('base64'):
+                                images.append('data:image/png;base64,' + art['base64'])
+                        return {'images': images, 'provider': provider}
+                    else:
+                        print(f"[Stability] Image-to-image failed ({resp.status_code}): {resp.text[:500]}")
+                        print(f"[Stability] Falling back to text-to-image")
+                except Exception as e:
+                    print(f"[Stability] Image-to-image error: {e}")
+                    print(f"[Stability] Falling back to text-to-image")
+            
+            # Text-to-image (or fallback)
+            url = f"{base_url}/v1/generation/{model_id}/text-to-image"
             headers = {
                 'Authorization': f'Bearer {api_key}',
                 'Content-Type': 'application/json',
@@ -359,28 +476,179 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             }
         
         elif provider == 'freepik':
-            url = (endpoint or 'https://api.freepik.com/v1') + '/ai/text-to-image'
-            headers = {
+            # Freepik AI Image Generation API
+            # Using requests library for better SSL handling
+            import requests as req_lib
+            
+            base_url = (endpoint or 'https://api.freepik.com').rstrip('/')
+            
+            freepik_headers = {
                 'x-freepik-api-key': api_key,
                 'Content-Type': 'application/json',
                 'Accept': 'application/json'
             }
-            body = {
-                'prompt': prompt,
-                'negative_prompt': 'blurry, distorted, low quality, watermark, text',
-                'guidance_scale': 7.5,
-                'num_inference_steps': quality.get('steps', 30),
-                'num_images': 1
-            }
-            if model:
-                body['model'] = model
+            
+            # Build list of endpoints to try
+            endpoints_to_try = []
+            
+            # If we have a base image, try image-to-image endpoints first
+            if base64_image_data:
+                print(f"[Freepik] Base image provided, trying image-to-image endpoints first")
+                
+                # Try reimagine/image-to-image endpoints (may require premium API access)
+                endpoints_to_try.append(
+                    (base_url + '/v1/ai/image-to-image', {
+                        'image': base64_image_data,
+                        'prompt': prompt,
+                        'creativity': 0.3,  # Lower = more faithful to original
+                        'num_images': 1
+                    })
+                )
+                endpoints_to_try.append(
+                    (base_url + '/v1/ai/reimagine', {
+                        'image': base64_image_data,
+                        'prompt': prompt,
+                        'num_images': 1
+                    })
+                )
+            
+            # Always include text-to-image as fallback
+            # Enhance prompt to describe architectural enhancement when we have a base image
+            enhanced_prompt = prompt
+            if base64_image_data:
+                enhanced_prompt = f"Photorealistic architectural visualization, {prompt}, professional photography, high-end real estate marketing photo"
+            
+            endpoints_to_try.append(
+                (base_url + '/v1/ai/text-to-image', {'prompt': enhanced_prompt, 'num_images': 1})
+            )
+            
+            # Try each endpoint until one works
+            last_error = None
+            for url, body in endpoints_to_try:
+                try:
+                    print(f"[Freepik] Trying endpoint: {url}")
+                    print(f"[Freepik] Body keys: {list(body.keys())}, image size: {len(body.get('image', '')) if 'image' in body else 'N/A'}")
+                    
+                    resp = req_lib.post(url, json=body, headers=freepik_headers, timeout=120)
+                    
+                    print(f"[Freepik] Response status: {resp.status_code}")
+                    
+                    if resp.status_code == 200:
+                        resp_data = resp.json()
+                        print(f"[Freepik] Success! Response keys: {list(resp_data.keys())}")
+                        
+                        # Parse response
+                        images = []
+                        if resp_data.get('data'):
+                            data_resp = resp_data['data']
+                            if isinstance(data_resp, list):
+                                for img in data_resp:
+                                    if isinstance(img, dict):
+                                        if img.get('url'):
+                                            images.append(img['url'])
+                                        elif img.get('base64'):
+                                            images.append('data:image/png;base64,' + img['base64'])
+                            elif isinstance(data_resp, dict):
+                                if data_resp.get('url'):
+                                    images.append(data_resp['url'])
+                                elif data_resp.get('base64'):
+                                    images.append('data:image/png;base64,' + data_resp['base64'])
+                        if not images and resp_data.get('images'):
+                            for img in resp_data['images']:
+                                if isinstance(img, dict) and img.get('url'):
+                                    images.append(img['url'])
+                                elif isinstance(img, str):
+                                    images.append(img)
+                        if not images and resp_data.get('image'):
+                            images.append(resp_data['image'])
+                        if not images and resp_data.get('url'):
+                            images.append(resp_data['url'])
+                        
+                        print(f"[Freepik] Extracted {len(images)} images")
+                        return {'images': images, 'provider': provider}
+                    else:
+                        error_text = resp.text
+                        print(f"[Freepik] Endpoint {url} failed ({resp.status_code}): {error_text[:500]}")
+                        last_error = f"API error ({resp.status_code}): {error_text[:200]}"
+                        continue
+                        
+                except req_lib.exceptions.SSLError as e:
+                    print(f"[Freepik] SSL error for {url}: {e}")
+                    last_error = f"SSL error: {str(e)}"
+                    continue
+                except req_lib.exceptions.ConnectionError as e:
+                    print(f"[Freepik] Connection error for {url}: {e}")
+                    last_error = f"Connection error: {str(e)}"
+                    continue
+                except req_lib.exceptions.Timeout as e:
+                    print(f"[Freepik] Timeout for {url}: {e}")
+                    last_error = f"Timeout: {str(e)}"
+                    continue
+                except Exception as e:
+                    print(f"[Freepik] Exception for {url}: {type(e).__name__}: {e}")
+                    last_error = str(e)
+                    continue
+            
+            # All endpoints failed
+            return {'error': last_error or 'All Freepik endpoints failed'}
         
         elif provider == 'google':
-            model_id = model or 'imagen-3'
-            url = (endpoint or 'https://generativelanguage.googleapis.com/v1') + f'/models/{model_id}:predict?key={api_key}'
+            # Google Imagen API
+            import requests as req_lib
+            
+            model_id = model or 'imagen-3.0-generate-001'
+            base_url = (endpoint or 'https://generativelanguage.googleapis.com/v1beta').rstrip('/')
+            
+            # Google supports image editing via imageEditMode
+            if base64_image_data:
+                print(f"[Google] Using image editing with base render")
+                
+                url = f"{base_url}/models/{model_id}:predict?key={api_key}"
+                headers = {'Content-Type': 'application/json'}
+                
+                body = {
+                    'instances': [{
+                        'prompt': prompt,
+                        'image': {
+                            'bytesBase64Encoded': base64_image_data
+                        }
+                    }],
+                    'parameters': {
+                        'sampleCount': 1,
+                        'editMode': 'inpaint-insert',  # Or 'product-image' for enhancement
+                        'aspectRatio': '16:9' if quality.get('width', 0) > quality.get('height', 0) else '1:1'
+                    }
+                }
+                
+                try:
+                    resp = req_lib.post(url, json=body, headers=headers, timeout=120)
+                    print(f"[Google] Response status: {resp.status_code}")
+                    
+                    if resp.status_code == 200:
+                        resp_data = resp.json()
+                        images = []
+                        for pred in resp_data.get('predictions', []):
+                            if pred.get('bytesBase64Encoded'):
+                                images.append('data:image/png;base64,' + pred['bytesBase64Encoded'])
+                        return {'images': images, 'provider': provider}
+                    else:
+                        print(f"[Google] Image edit failed ({resp.status_code}): {resp.text[:500]}")
+                        print(f"[Google] Falling back to text-to-image")
+                except Exception as e:
+                    print(f"[Google] Image edit error: {e}")
+                    print(f"[Google] Falling back to text-to-image")
+            
+            # Text-to-image (or fallback)
+            url = f"{base_url}/models/{model_id}:predict?key={api_key}"
             headers = {'Content-Type': 'application/json'}
+            
+            # Enhance prompt for architectural visualization
+            enhanced_prompt = prompt
+            if base64_image_data:
+                enhanced_prompt = f"Photorealistic architectural exterior photo, {prompt}, professional real estate photography, high-end residential architecture"
+            
             body = {
-                'instances': [{'prompt': prompt}],
+                'instances': [{'prompt': enhanced_prompt}],
                 'parameters': {
                     'sampleCount': 1,
                     'aspectRatio': '16:9' if quality.get('width', 0) > quality.get('height', 0) else '1:1'
@@ -393,10 +661,13 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         # Make the request
         try:
             req_data = json.dumps(body).encode('utf-8')
+            print(f"[AI Proxy] Request to {url}")
+            print(f"[AI Proxy] Body: {body}")
             req = urllib.request.Request(url, data=req_data, headers=headers, method='POST')
             
             with urllib.request.urlopen(req, timeout=120, context=ctx) as resp:
                 resp_data = json.loads(resp.read().decode('utf-8'))
+                print(f"[AI Proxy] Response: {resp_data}")
                 
                 # Normalize response format
                 images = []
@@ -414,15 +685,35 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                             images.append('data:image/png;base64,' + art['base64'])
                 
                 elif provider == 'freepik':
+                    # Freepik returns images in various formats depending on endpoint
                     if resp_data.get('data'):
-                        for img in resp_data['data']:
-                            if img.get('url'):
+                        data = resp_data['data']
+                        # Handle list of images
+                        if isinstance(data, list):
+                            for img in data:
+                                if isinstance(img, dict):
+                                    if img.get('url'):
+                                        images.append(img['url'])
+                                    elif img.get('base64'):
+                                        images.append('data:image/png;base64,' + img['base64'])
+                                elif isinstance(img, str):
+                                    images.append(img)
+                        # Handle single image object
+                        elif isinstance(data, dict):
+                            if data.get('url'):
+                                images.append(data['url'])
+                            elif data.get('base64'):
+                                images.append('data:image/png;base64,' + data['base64'])
+                    # Alternative response formats
+                    if not images and resp_data.get('images'):
+                        for img in resp_data['images']:
+                            if isinstance(img, dict) and img.get('url'):
                                 images.append(img['url'])
-                            elif img.get('base64'):
-                                images.append('data:image/png;base64,' + img['base64'])
-                    elif resp_data.get('image'):
+                            elif isinstance(img, str):
+                                images.append(img)
+                    if not images and resp_data.get('image'):
                         images.append(resp_data['image'])
-                    elif resp_data.get('url'):
+                    if not images and resp_data.get('url'):
                         images.append(resp_data['url'])
                 
                 elif provider == 'google':
@@ -430,6 +721,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                         if pred.get('bytesBase64Encoded'):
                             images.append('data:image/png;base64,' + pred['bytesBase64Encoded'])
                 
+                print(f"[AI Proxy] Extracted {len(images)} images")
                 return {'images': images, 'provider': provider}
                 
         except urllib.error.HTTPError as e:
