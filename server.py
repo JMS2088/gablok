@@ -497,6 +497,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             
             # Use image-to-image endpoint with the provided render
             print(f"[Freepik] Base image provided, using mystic endpoint for image-to-image")
+            print(f"[Freepik] Base image data length: {len(base64_image_data)} chars")
             
             # Ensure image has data URI prefix for Freepik
             image_data = base64_image_data
@@ -504,14 +505,21 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 image_data = 'data:image/png;base64,' + image_data
             
             # Use mystic endpoint - supports both image reference and prompt
+            # The image field accepts a data URI with base64 content
             # Always use widescreen 16:9 for landscape output
             # num_images=1 ensures single generation
+            # styling.style controls how much the AI transforms the image
             endpoints_to_try.append(
                 (base_url + '/v1/ai/mystic', {
                     'image': {'url': image_data},
                     'prompt': prompt,
                     'aspect_ratio': 'widescreen_16_9',
-                    'num_images': 1
+                    'num_images': 1,
+                    'styling': {
+                        'style': 'photo',  # Photorealistic style
+                        'color': 'pastel', # Natural colors
+                        'framing': 'panoramic'  # Wide angle framing
+                    }
                 })
             )
             

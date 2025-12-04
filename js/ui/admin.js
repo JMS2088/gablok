@@ -112,7 +112,10 @@
     btns.forEach(function(b){ if(b.getAttribute('data-view')===target) b.classList.add('active'); else b.classList.remove('active'); });
     // Lazy-populate content for embedded views
     try {
-      if (target === 'settings' && typeof window.loadLLMSettingsUI === 'function') {
+      if (target === 'projects' && typeof window.loadProjectsView === 'function') {
+        window.loadProjectsView();
+        if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; }
+      } else if (target === 'settings' && typeof window.loadLLMSettingsUI === 'function') {
         window.loadLLMSettingsUI();
         // Stop admin polling if leaving admin
         if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; }

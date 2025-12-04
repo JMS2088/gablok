@@ -478,6 +478,27 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 	</div>
 </div>
 
+<!-- Project Selection Popup for saving AI images -->
+<div id="project-select-popup" class="project-select-popup" style="display:none;">
+	<div class="project-select-content">
+		<button id="project-select-close" class="project-select-close" type="button">✕</button>
+		<div class="project-select-icon">📁</div>
+		<h3>Save to Project</h3>
+		<p>Select a project to save your AI-generated images:</p>
+		
+		<div id="project-select-list" class="project-select-list">
+			<!-- Projects will be populated dynamically -->
+		</div>
+		
+		<div class="project-select-new">
+			<input id="project-new-name" type="text" placeholder="New project name..." />
+			<button id="project-create-btn" type="button">+ Create</button>
+		</div>
+		
+		<div id="project-select-status" class="project-select-status"></div>
+	</div>
+</div>
+
 <!-- Account Modal (full-screen splash with left nav) -->
 <div id="account-modal" aria-hidden="true">
 	<div id="account-splash"></div>
@@ -511,8 +532,22 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 				</form>
 			</section>
 			<section id="account-view-projects" style="display:none">
-				<h2>Projects</h2>
-				<p>Project management coming soon.</p>
+				<h2>Your Projects</h2>
+				<p class="settings-hint">Manage your saved projects and AI-generated renders.</p>
+				
+				<div class="projects-toolbar">
+					<button id="projects-new-btn" type="button" class="primary">+ New Project</button>
+					<button id="projects-refresh-btn" type="button" class="secondary">↻ Refresh</button>
+				</div>
+				
+				<div id="projects-list" class="projects-list">
+					<!-- Projects will be populated dynamically -->
+				</div>
+				
+				<div id="projects-empty" class="projects-empty">
+					<p>📂 No projects yet</p>
+					<p>Create a project to save your designs and AI renders.</p>
+				</div>
 			</section>
 			<section id="account-view-settings" style="display:none">
 				<h2>Settings</h2>

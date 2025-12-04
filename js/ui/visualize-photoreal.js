@@ -743,6 +743,12 @@
     aiState.results = [];
     aiState.saved = false;
     
+    // Remove AI overlay image
+    var aiOverlay = document.getElementById('visualize-ai-overlay');
+    if (aiOverlay) {
+      aiOverlay.remove();
+    }
+    
     // Stop watching for scene changes
     stopSceneWatcher();
     
@@ -755,6 +761,10 @@
     // Hide AI results panel
     var resultsDiv = document.getElementById('visualize-ai-results');
     if (resultsDiv) resultsDiv.style.display = 'none';
+    
+    // Clear the gallery
+    var galleryDiv = document.getElementById('visualize-ai-gallery');
+    if (galleryDiv) galleryDiv.innerHTML = '';
     
     // Reset save status
     var saveStatus = document.getElementById('visualize-ai-save-status');
@@ -775,43 +785,250 @@
     }
   }
   
-  function saveAIImagesToProject() {
-    if (!aiState.results || aiState.results.length === 0) {
+  // ─────────────────────────────────────────────────────────────────────────
+  // PROJECT MANAGEMENT FOR AI IMAGES
+  // ─────────────────────────────────────────────────────────────────────────
+  
+  var PROJECTS_STORAGE_KEY = 'gablok_user_projects';
+  
+  function getUserProjects() {
+    try {
+      var data = localStorage.getItem(PROJECTS_STORAGE_KEY);
+      if (data) {
+        return JSON.parse(data);
+      }
+    } catch (e) {
+      console.warn('[Projects] Failed to load projects:', e);
+    }
+    return [];
+  }
+  
+  function saveUserProjects(projects) {
+    try {
+      localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(projects));
+      return true;
+    } catch (e) {
+      console.error('[Projects] Failed to save projects:', e);
+      return false;
+    }
+  }
+  
+  function createProject(name) {
+    var projects = getUserProjects();
+    var newProject = {
+      id: 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+      name: name || 'Untitled Project',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      aiImages: [],
+      thumbnail: null
+    };
+    projects.push(newProject);
+    saveUserProjects(projects);
+    return newProject;
+  }
+  
+  function saveImagesToProject(projectId, images) {
+    var projects = getUserProjects();
+    var project = projects.find(function(p) { return p.id === projectId; });
+    
+    if (!project) {
+      console.error('[Projects] Project not found:', projectId);
       return false;
     }
     
-    // Initialize global array if not exists
-    if (!Array.isArray(window.__projectAiImages)) {
-      window.__projectAiImages = [];
-    }
-    
-    // Add new images (avoid duplicates)
+    // Add images (avoid duplicates)
     var addedCount = 0;
-    for (var i = 0; i < aiState.results.length; i++) {
-      var img = aiState.results[i];
-      if (img && window.__projectAiImages.indexOf(img) === -1) {
-        window.__projectAiImages.push(img);
+    for (var i = 0; i < images.length; i++) {
+      var img = images[i];
+      if (img && project.aiImages.indexOf(img) === -1) {
+        project.aiImages.push(img);
         addedCount++;
       }
     }
     
-    // Mark as saved
-    aiState.saved = true;
-    
-    // Trigger project auto-save to persist
-    if (typeof window.saveProjectSilently === 'function') {
-      window.saveProjectSilently();
-      console.log('[Visualize] Saved', addedCount, 'AI images to project');
+    // Update thumbnail to first image if not set
+    if (!project.thumbnail && project.aiImages.length > 0) {
+      project.thumbnail = project.aiImages[0];
     }
     
-    // Update save status in UI
-    var saveStatus = document.getElementById('visualize-ai-save-status');
-    if (saveStatus) {
-      saveStatus.textContent = '✓ Saved to project';
-      saveStatus.className = 'save-status saved';
-    }
+    project.updatedAt = Date.now();
+    saveUserProjects(projects);
     
+    console.log('[Projects] Added', addedCount, 'images to project:', project.name);
     return true;
+  }
+  
+  function showProjectSelectPopup(onSaveCallback) {
+    var popup = document.getElementById('project-select-popup');
+    var list = document.getElementById('project-select-list');
+    var status = document.getElementById('project-select-status');
+    
+    if (!popup || !list) return;
+    
+    // Store callback for later
+    popup.__onSaveCallback = onSaveCallback;
+    
+    // Populate project list
+    var projects = getUserProjects();
+    list.innerHTML = '';
+    
+    if (projects.length === 0) {
+      list.innerHTML = '<p style="color:#64748b; font-size:13px; padding:16px;">No projects yet. Create one below!</p>';
+    } else {
+      projects.forEach(function(project) {
+        var item = document.createElement('div');
+        item.className = 'project-select-item';
+        item.innerHTML = 
+          '<span class="project-select-item-icon">📁</span>' +
+          '<div class="project-select-item-info">' +
+            '<div class="project-select-item-name">' + escapeHtml(project.name) + '</div>' +
+            '<div class="project-select-item-meta">' + project.aiImages.length + ' images • ' + formatDate(project.updatedAt) + '</div>' +
+          '</div>' +
+          '<button class="project-select-item-btn" data-project-id="' + project.id + '">Save Here</button>';
+        
+        item.querySelector('.project-select-item-btn').addEventListener('click', function(e) {
+          e.stopPropagation();
+          var projId = this.getAttribute('data-project-id');
+          handleProjectSelect(projId);
+        });
+        
+        list.appendChild(item);
+      });
+    }
+    
+    // Clear status
+    if (status) {
+      status.textContent = '';
+      status.className = 'project-select-status';
+    }
+    
+    popup.style.display = 'flex';
+  }
+  
+  function hideProjectSelectPopup() {
+    var popup = document.getElementById('project-select-popup');
+    if (popup) {
+      popup.style.display = 'none';
+      popup.__onSaveCallback = null;
+    }
+  }
+  
+  function handleProjectSelect(projectId) {
+    var popup = document.getElementById('project-select-popup');
+    var status = document.getElementById('project-select-status');
+    
+    if (!aiState.results || aiState.results.length === 0) {
+      if (status) {
+        status.textContent = 'No images to save';
+        status.className = 'project-select-status error';
+      }
+      return;
+    }
+    
+    var success = saveImagesToProject(projectId, aiState.results);
+    
+    if (success) {
+      aiState.saved = true;
+      
+      // Update save status in visualize panel
+      var saveStatus = document.getElementById('visualize-ai-save-status');
+      if (saveStatus) {
+        saveStatus.textContent = '✓ Saved to project';
+        saveStatus.className = 'save-status saved';
+      }
+      
+      if (status) {
+        status.textContent = '✓ Images saved successfully!';
+        status.className = 'project-select-status';
+      }
+      
+      // Close popup after brief delay
+      setTimeout(function() {
+        hideProjectSelectPopup();
+        
+        // Call the callback if provided
+        if (popup && typeof popup.__onSaveCallback === 'function') {
+          popup.__onSaveCallback();
+        }
+      }, 800);
+    } else {
+      if (status) {
+        status.textContent = 'Failed to save images';
+        status.className = 'project-select-status error';
+      }
+    }
+  }
+  
+  function handleCreateProject() {
+    var input = document.getElementById('project-new-name');
+    var status = document.getElementById('project-select-status');
+    
+    if (!input) return;
+    
+    var name = input.value.trim();
+    if (!name) {
+      if (status) {
+        status.textContent = 'Please enter a project name';
+        status.className = 'project-select-status error';
+      }
+      return;
+    }
+    
+    var project = createProject(name);
+    input.value = '';
+    
+    if (status) {
+      status.textContent = '✓ Project "' + name + '" created!';
+      status.className = 'project-select-status';
+    }
+    
+    // Refresh the list and auto-save to new project
+    handleProjectSelect(project.id);
+  }
+  
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+  
+  function formatDate(timestamp) {
+    var date = new Date(timestamp);
+    var now = new Date();
+    var diff = now - date;
+    
+    if (diff < 60000) return 'Just now';
+    if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
+    if (diff < 604800000) return Math.floor(diff / 86400000) + 'd ago';
+    
+    return date.toLocaleDateString();
+  }
+  
+  function wireProjectSelectControls() {
+    var closeBtn = document.getElementById('project-select-close');
+    var createBtn = document.getElementById('project-create-btn');
+    var nameInput = document.getElementById('project-new-name');
+    
+    if (closeBtn && !closeBtn.__wired) {
+      closeBtn.__wired = true;
+      closeBtn.addEventListener('click', hideProjectSelectPopup);
+    }
+    
+    if (createBtn && !createBtn.__wired) {
+      createBtn.__wired = true;
+      createBtn.addEventListener('click', handleCreateProject);
+    }
+    
+    if (nameInput && !nameInput.__wired) {
+      nameInput.__wired = true;
+      nameInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+          handleCreateProject();
+        }
+      });
+    }
   }
   
   function wireUnsavedPopupControls() {
@@ -822,9 +1039,11 @@
     if (saveBtn && !saveBtn.__wired) {
       saveBtn.__wired = true;
       saveBtn.addEventListener('click', function() {
-        saveAIImagesToProject();
         hideUnsavedPopup();
-        doCloseVisualize();
+        // Show project selection popup with close callback
+        showProjectSelectPopup(function() {
+          doCloseVisualize();
+        });
       });
     }
     
@@ -2991,10 +3210,36 @@
   
   function captureCurrentRender() {
     // Capture current Three.js render as base image
-    if (!renderer) return null;
+    // IMPORTANT: We capture the 3D renderer canvas, not the AI overlay
+    if (!renderer) {
+      console.warn('[AI] No renderer available for capture');
+      return null;
+    }
     
     try {
-      return renderer.domElement.toDataURL('image/png');
+      // Hide AI overlay temporarily if visible (so we capture original 3D render)
+      var aiOverlay = document.getElementById('visualize-ai-overlay');
+      var wasVisible = false;
+      if (aiOverlay && aiOverlay.style.display !== 'none') {
+        wasVisible = true;
+        aiOverlay.style.display = 'none';
+      }
+      
+      // Force a render to ensure we have the latest frame
+      if (scene && camera) {
+        renderer.render(scene, camera);
+      }
+      
+      // Capture the 3D render canvas
+      var dataUrl = renderer.domElement.toDataURL('image/png');
+      console.log('[AI] Captured 3D render, size:', dataUrl.length, 'bytes');
+      
+      // Restore AI overlay if it was visible
+      if (wasVisible && aiOverlay) {
+        aiOverlay.style.display = 'block';
+      }
+      
+      return dataUrl;
     } catch (e) {
       console.warn('[AI] Failed to capture render:', e);
       return null;
@@ -3038,11 +3283,17 @@
       return;
     }
     
+    // Hide any previous AI overlay so we capture the original 3D render
+    var previousOverlay = document.getElementById('visualize-ai-overlay');
+    if (previousOverlay) {
+      previousOverlay.style.display = 'none';
+    }
+    
     aiState.generating = true;
     var enhanceBtn = document.getElementById('visualize-ai-enhance');
     if (enhanceBtn) enhanceBtn.disabled = true;
     
-    setAIStatus('Generating photorealistic enhancement...', 'loading');
+    setAIStatus('Capturing 3D render and sending to AI...', 'loading');
     
     try {
       var prompt = buildAIPrompt();
@@ -3055,7 +3306,7 @@
       
       console.log('[AI] Generating with prompt:', prompt);
       console.log('[AI] Provider:', aiState.provider, 'Model:', aiState.model);
-      console.log('[AI] Base image captured:', baseImage ? 'yes' : 'no');
+      console.log('[AI] Base image captured:', baseImage ? 'yes' : 'no', 'size:', baseImage ? baseImage.length : 0);
       
       var images = await generateViaProxy(prompt, quality, baseImage);
       
@@ -3293,24 +3544,153 @@
       });
     }
     
-    // Save to Project button
+    // Save to Project button - opens project selection popup
     var saveBtn = document.getElementById('visualize-ai-save');
     console.log('[AI] Save button:', !!saveBtn);
     if (saveBtn && !saveBtn.__wired) {
       saveBtn.__wired = true;
       saveBtn.addEventListener('click', function() {
-        if (saveAIImagesToProject()) {
-          setAIStatus('Images saved to project!', 'success');
+        if (!aiState.results || aiState.results.length === 0) {
+          setAIStatus('No images to save', 'error');
+          return;
         }
+        showProjectSelectPopup();
       });
     }
     
     // Wire the unsaved popup controls
     wireUnsavedPopupControls();
     
+    // Wire the project selection popup controls
+    wireProjectSelectControls();
+    
     // Update panel visibility when settings change
     updateAIPanelVisibility();
   }
+  
+  // ─────────────────────────────────────────────────────────────────────────
+  // PROJECTS VIEW IN ACCOUNT MODAL
+  // ─────────────────────────────────────────────────────────────────────────
+  
+  function loadProjectsView() {
+    var listEl = document.getElementById('projects-list');
+    var emptyEl = document.getElementById('projects-empty');
+    
+    if (!listEl) return;
+    
+    var projects = getUserProjects();
+    
+    listEl.innerHTML = '';
+    
+    if (projects.length === 0) {
+      if (emptyEl) emptyEl.style.display = 'block';
+      return;
+    }
+    
+    if (emptyEl) emptyEl.style.display = 'none';
+    
+    // Sort by most recently updated
+    projects.sort(function(a, b) { return b.updatedAt - a.updatedAt; });
+    
+    projects.forEach(function(project) {
+      var card = document.createElement('div');
+      card.className = 'project-card';
+      card.setAttribute('data-project-id', project.id);
+      
+      // Build thumbnail preview
+      var thumbsHtml = '';
+      if (project.aiImages && project.aiImages.length > 0) {
+        var previewImages = project.aiImages.slice(0, 4);
+        thumbsHtml = previewImages.map(function(url) {
+          return '<img class="project-card-thumb" src="' + escapeHtml(url) + '" alt="AI Render" onerror="this.style.display=\'none\'" />';
+        }).join('');
+      }
+      
+      card.innerHTML = 
+        '<span class="project-card-icon">📁</span>' +
+        '<div class="project-card-info">' +
+          '<div class="project-card-name">' + escapeHtml(project.name) + '</div>' +
+          '<div class="project-card-meta">' + 
+            (project.aiImages ? project.aiImages.length : 0) + ' images • Updated ' + formatDate(project.updatedAt) +
+          '</div>' +
+          '<div class="project-card-images">' + thumbsHtml + '</div>' +
+        '</div>' +
+        '<div class="project-card-actions">' +
+          '<button class="load-btn" data-action="load">Load</button>' +
+          '<button class="delete-btn" data-action="delete">Delete</button>' +
+        '</div>';
+      
+      // Wire action buttons
+      card.querySelector('.load-btn').addEventListener('click', function() {
+        loadProjectDesign(project.id);
+      });
+      
+      card.querySelector('.delete-btn').addEventListener('click', function() {
+        if (confirm('Delete project "' + project.name + '"? This cannot be undone.')) {
+          deleteProject(project.id);
+          loadProjectsView(); // Refresh list
+        }
+      });
+      
+      listEl.appendChild(card);
+    });
+  }
+  
+  function deleteProject(projectId) {
+    var projects = getUserProjects();
+    projects = projects.filter(function(p) { return p.id !== projectId; });
+    saveUserProjects(projects);
+    console.log('[Projects] Deleted project:', projectId);
+  }
+  
+  function loadProjectDesign(projectId) {
+    var projects = getUserProjects();
+    var project = projects.find(function(p) { return p.id === projectId; });
+    
+    if (!project) {
+      alert('Project not found');
+      return;
+    }
+    
+    // For now, just show the AI images in a gallery
+    // In the future, this could load the full 3D design
+    if (project.aiImages && project.aiImages.length > 0) {
+      // Open visualize panel with these images
+      alert('Project "' + project.name + '" has ' + project.aiImages.length + ' AI renders.\n\nFull project loading coming soon!');
+    } else {
+      alert('This project has no AI renders yet.');
+    }
+  }
+  
+  function wireProjectsViewControls() {
+    var newBtn = document.getElementById('projects-new-btn');
+    var refreshBtn = document.getElementById('projects-refresh-btn');
+    
+    if (newBtn && !newBtn.__wired) {
+      newBtn.__wired = true;
+      newBtn.addEventListener('click', function() {
+        var name = prompt('Enter project name:');
+        if (name && name.trim()) {
+          createProject(name.trim());
+          loadProjectsView();
+        }
+      });
+    }
+    
+    if (refreshBtn && !refreshBtn.__wired) {
+      refreshBtn.__wired = true;
+      refreshBtn.addEventListener('click', loadProjectsView);
+    }
+  }
+  
+  // Expose functions to window for external access
+  window.loadProjectsView = function() {
+    wireProjectsViewControls();
+    loadProjectsView();
+  };
+  window.getUserProjects = getUserProjects;
+  window.saveUserProjects = saveUserProjects;
+  window.createProject = createProject;
 
   document.addEventListener('DOMContentLoaded', init);
 })();
