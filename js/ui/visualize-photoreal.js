@@ -3120,7 +3120,14 @@
           'xai': 'Grok',
           'stability': 'Stability',
           'midjourney': 'Midjourney',
-          'freepik': 'Freepik'
+          'freepik': 'Freepik',
+          'replicate': 'Replicate',
+          'leonardo': 'Leonardo',
+          'ideogram': 'Ideogram',
+          'runway': 'Runway',
+          'fal': 'fal.ai',
+          'together': 'Together',
+          'fireworks': 'Fireworks'
         };
         providerBadge.textContent = providerNames[aiState.provider] || aiState.provider;
       }

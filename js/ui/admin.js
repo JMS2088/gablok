@@ -227,6 +227,65 @@
       { value: 'flux-dev', label: 'Flux Dev' },
       { value: 'flux-pro', label: 'Flux Pro (High Quality)' },
       { value: 'magnific-upscaler', label: 'Magnific Upscaler' }
+    ],
+    replicate: [
+      { value: 'black-forest-labs/flux-1.1-pro', label: 'Flux 1.1 Pro (Best Quality)' },
+      { value: 'black-forest-labs/flux-schnell', label: 'Flux Schnell (Fast)' },
+      { value: 'black-forest-labs/flux-dev', label: 'Flux Dev' },
+      { value: 'stability-ai/sdxl', label: 'Stable Diffusion XL' },
+      { value: 'ideogram-ai/ideogram-v2', label: 'Ideogram v2' },
+      { value: 'recraft-ai/recraft-v3', label: 'Recraft v3' },
+      { value: 'lucataco/realistic-vision-v5', label: 'Realistic Vision v5' },
+      { value: 'adirik/realvisxl-v4', label: 'RealVisXL v4' },
+      { value: 'bytedance/sdxl-lightning-4step', label: 'SDXL Lightning (4 Step)' },
+      { value: 'playgroundai/playground-v2.5-1024px-aesthetic', label: 'Playground v2.5' },
+      { value: 'tencentarc/photomaker', label: 'PhotoMaker' },
+      { value: 'lucataco/ssd-1b', label: 'SSD-1B (Fast)' }
+    ],
+    leonardo: [
+      { value: 'leonardo-diffusion-xl', label: 'Leonardo Diffusion XL' },
+      { value: 'leonardo-vision-xl', label: 'Leonardo Vision XL' },
+      { value: 'phoenix', label: 'Phoenix (Latest)' },
+      { value: 'kino-xl', label: 'Kino XL (Cinematic)' },
+      { value: 'photoreal-v2', label: 'PhotoReal v2' }
+    ],
+    ideogram: [
+      { value: 'ideogram-v2', label: 'Ideogram v2' },
+      { value: 'ideogram-v1-turbo', label: 'Ideogram v1 Turbo' },
+      { value: 'ideogram-v1', label: 'Ideogram v1' }
+    ],
+    runway: [
+      { value: 'gen-3-alpha', label: 'Gen-3 Alpha' },
+      { value: 'gen-2', label: 'Gen-2' }
+    ],
+    fal: [
+      { value: 'fal-ai/flux-pro', label: 'Flux Pro (Best)' },
+      { value: 'fal-ai/flux-dev', label: 'Flux Dev' },
+      { value: 'fal-ai/flux/schnell', label: 'Flux Schnell (Fastest)' },
+      { value: 'fal-ai/flux-lora', label: 'Flux LoRA' },
+      { value: 'fal-ai/aura-flow', label: 'AuraFlow' },
+      { value: 'fal-ai/stable-cascade', label: 'Stable Cascade' },
+      { value: 'fal-ai/fast-sdxl', label: 'Fast SDXL' },
+      { value: 'fal-ai/realistic-vision', label: 'Realistic Vision' },
+      { value: 'fal-ai/lightning-models', label: 'Lightning Models' },
+      { value: 'fal-ai/stable-diffusion-v3-medium', label: 'SD3 Medium' }
+    ],
+    together: [
+      { value: 'black-forest-labs/FLUX.1-schnell-Free', label: 'Flux.1 Schnell (Free)' },
+      { value: 'black-forest-labs/FLUX.1-schnell', label: 'Flux.1 Schnell' },
+      { value: 'black-forest-labs/FLUX.1-dev', label: 'Flux.1 Dev' },
+      { value: 'stabilityai/stable-diffusion-xl-base-1.0', label: 'SDXL Base' },
+      { value: 'SG161222/RealVisXL_V4.0', label: 'RealVisXL v4' },
+      { value: 'prompthero/openjourney-v4', label: 'OpenJourney v4' },
+      { value: 'wavymulder/Analog-Diffusion', label: 'Analog Diffusion' }
+    ],
+    fireworks: [
+      { value: 'accounts/fireworks/models/flux-1-dev-fp8', label: 'Flux.1 Dev' },
+      { value: 'accounts/fireworks/models/flux-1-schnell-fp8', label: 'Flux.1 Schnell (Fast)' },
+      { value: 'accounts/fireworks/models/stable-diffusion-xl-1024-v1-0', label: 'SDXL 1.0' },
+      { value: 'accounts/fireworks/models/playground-v2-1024px-aesthetic', label: 'Playground v2' },
+      { value: 'accounts/fireworks/models/SSD-1B', label: 'SSD-1B (Ultra Fast)' },
+      { value: 'accounts/fireworks/models/japanese-stable-diffusion-xl', label: 'Japanese SDXL' }
     ]
   };
   
@@ -238,7 +297,14 @@
     xai: 'https://api.x.ai/v1',
     stability: 'https://api.stability.ai/v1',
     midjourney: '', // Requires custom endpoint
-    freepik: 'https://api.freepik.com/v1'
+    freepik: 'https://api.freepik.com',
+    replicate: 'https://api.replicate.com/v1',
+    leonardo: 'https://cloud.leonardo.ai/api/rest/v1',
+    ideogram: 'https://api.ideogram.ai',
+    runway: 'https://api.runwayml.com/v1',
+    fal: 'https://fal.run',
+    together: 'https://api.together.xyz/v1',
+    fireworks: 'https://api.fireworks.ai/inference/v1'
   };
   
   function qs(id) { return document.getElementById(id); }
