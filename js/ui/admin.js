@@ -549,3 +549,262 @@
   window.getLLMSettings = getLLMSettings;
   window.loadLLMSettingsUI = loadLLMSettings;
 })();
+
+/**
+ * Save current design to project for DA submission
+ * Called from 3D view "Save for DA" button
+ */
+(function() {
+  window.saveDesignForDA = function() {
+    // Check if user is logged in
+    var currentUser = window.__appUserId;
+    if (!currentUser) {
+      alert('Please log in to save your design for DA submission.');
+      if (window.toggleAccountModal) window.toggleAccountModal();
+      return;
+    }
+    
+    // Check if there's any design to save
+    if (!window.serializeProject) {
+      alert('Design system not loaded. Please refresh the page.');
+      return;
+    }
+    
+    var designData = window.serializeProject();
+    
+    // Parse the JSON string to check if there's actual design data
+    try {
+      var parsedData = JSON.parse(designData);
+      
+      // Check if there's any meaningful design content
+      // Accept if there are rooms, wallStrips, furniture, or any other component
+      var hasDesign = (
+        (parsedData.rooms && parsedData.rooms.length > 0) ||
+        (parsedData.wallStrips && parsedData.wallStrips.length > 0) ||
+        (parsedData.furniture && parsedData.furniture.length > 0) ||
+        (parsedData.pergolas && parsedData.pergolas.length > 0) ||
+        (parsedData.garages && parsedData.garages.length > 0) ||
+        (parsedData.pools && parsedData.pools.length > 0) ||
+        (parsedData.roofs && parsedData.roofs.length > 0) ||
+        (parsedData.balconies && parsedData.balconies.length > 0) ||
+        (parsedData.stairsList && parsedData.stairsList.length > 0)
+      );
+      
+      if (!hasDesign) {
+        alert('Please create a design first before saving for DA submission.');
+        return;
+      }
+    } catch (e) {
+      console.error('Failed to parse design data:', e);
+      alert('Error validating design data. Please try again.');
+      return;
+    }
+    
+    // Capture snapshot of current view
+    captureDesignSnapshot(function(snapshot) {
+      // Get user's projects
+      var projects = getProjects();
+      
+      // Always show project selection modal (even if no projects exist)
+      showProjectSelectionForDA(projects, designData, snapshot);
+    });
+  };
+
+  /**
+   * Capture a snapshot of the current 3D view
+   */
+  function captureDesignSnapshot(callback) {
+    try {
+      var canvas = document.getElementById('canvas');
+      if (!canvas) {
+        callback(null);
+        return;
+      }
+      
+      // Capture at lower resolution for thumbnail
+      var tempCanvas = document.createElement('canvas');
+      tempCanvas.width = 400;
+      tempCanvas.height = 300;
+      var ctx = tempCanvas.getContext('2d');
+      ctx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height);
+      
+      var snapshot = tempCanvas.toDataURL('image/jpeg', 0.8);
+      callback(snapshot);
+    } catch (e) {
+      console.error('Failed to capture snapshot:', e);
+      callback(null);
+    }
+  }
+
+  /**
+   * Show modal to select which project to save DA design to
+   */
+  function showProjectSelectionForDA(projects, designData, snapshot) {
+    var modal = document.createElement('div');
+    modal.className = 'modal-overlay da-project-selector';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:100000;display:flex;align-items:center;justify-content:center;';
+    
+    var content = document.createElement('div');
+    content.style.cssText = 'background:white;padding:30px;border-radius:12px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;';
+    
+    content.innerHTML = `
+      <h2 style="margin:0 0 10px 0;font-size:24px;"><svg class="sf-icon" width="22" height="22"><use href="#sf-arrow-down-doc"/></svg> Save Design for DA Submission</h2>
+      <p style="margin:0 0 20px 0;color:#666;">Select a project or create a new one:</p>
+      <div id="da-project-list" style="margin-bottom:20px;"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="da-cancel-btn" style="padding:10px 20px;border:1px solid #ccc;background:white;border-radius:6px;cursor:pointer;">Cancel</button>
+        <button id="da-new-project-btn" style="padding:10px 20px;border:none;background:#4CAF50;color:white;border-radius:6px;cursor:pointer;font-weight:600;">+ New Project</button>
+      </div>
+    `;
+    
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+    
+    // Render project list
+    var projectList = content.querySelector('#da-project-list');
+    
+    if (projects.length === 0) {
+      var emptyMsg = document.createElement('div');
+      emptyMsg.style.cssText = 'padding:30px;text-align:center;color:#999;border:2px dashed #ddd;border-radius:8px;';
+      emptyMsg.innerHTML = '<div style="font-size:40px;margin-bottom:10px;"><svg class="sf-icon" width="40" height="40" style="color:#999;"><use href="#sf-folder"/></svg></div><div>No projects yet. Create your first project below.</div>';
+      projectList.appendChild(emptyMsg);
+    } else {
+      projects.forEach(function(project) {
+        var projectDiv = document.createElement('div');
+        projectDiv.style.cssText = 'padding:15px;border:2px solid #e0e0e0;border-radius:8px;margin-bottom:10px;cursor:pointer;transition:all 0.2s;display:flex;gap:15px;align-items:center;';
+        
+        // Create thumbnail preview
+        var thumbnailHtml = '';
+        if (project.thumbnail || snapshot) {
+          thumbnailHtml = '<img src="' + (project.thumbnail || snapshot) + '" style="width:80px;height:60px;object-fit:cover;border-radius:4px;flex-shrink:0;" />';
+        } else {
+          thumbnailHtml = '<div style="width:80px;height:60px;background:#f0f0f0;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#999;font-size:30px;flex-shrink:0;"><svg class="sf-icon" width="30" height="30" style="color:#999;"><use href="#sf-house"/></svg></div>';
+        }
+        
+        projectDiv.innerHTML = `
+          ${thumbnailHtml}
+          <div style="flex:1;">
+            <div style="font-weight:600;font-size:16px;margin-bottom:5px;"><svg class="sf-icon" width="16" height="16"><use href="#sf-folder"/></svg> ${escapeHtml(project.name)}</div>
+            <div style="font-size:12px;color:#666;">Updated: ${new Date(project.updatedAt).toLocaleDateString()}</div>
+            ${project.hasDesign ? '<div style="margin-top:5px;"><span style="background:#4CAF50;color:white;padding:2px 8px;border-radius:4px;font-size:11px;"><svg class="sf-icon" width="11" height="11"><use href="#sf-square-and-pencil"/></svg> Design</span></div>' : ''}
+          </div>
+        `;
+        
+        projectDiv.onmouseover = function() { this.style.borderColor = '#4CAF50'; this.style.background = '#f1f8f4'; };
+        projectDiv.onmouseout = function() { this.style.borderColor = '#e0e0e0'; this.style.background = 'white'; };
+        projectDiv.onclick = function() {
+          saveToExistingProject(project.id, designData, snapshot);
+          modal.remove();
+        };
+        
+        projectList.appendChild(projectDiv);
+      });
+    }
+    
+    // Cancel button
+    content.querySelector('.da-cancel-btn').onclick = function() {
+      modal.remove();
+    };
+    
+    // New project button
+    content.querySelector('#da-new-project-btn').onclick = function() {
+      var projectName = prompt('Enter new project name:', 'DA Project ' + new Date().toLocaleDateString());
+      if (!projectName) return;
+      
+      var projectId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      var newProject = {
+        id: projectId,
+        name: projectName,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        aiImages: window.aiImages || [],
+        thumbnail: snapshot,
+        designData: designData,
+        hasDesign: true
+      };
+      
+      var allProjects = getProjects();
+      allProjects.push(newProject);
+      saveProjects(allProjects);
+      
+      modal.remove();
+      alert('✅ Design saved to "' + projectName + '"\n\nYou can now access the DA Workflow from the Projects tab.');
+      if (window.toggleAccountModal) window.toggleAccountModal();
+    };
+  }
+
+  /**
+   * Save design to existing project
+   */
+  function saveToExistingProject(projectId, designData, snapshot) {
+    var projects = getProjects();
+    var project = projects.find(function(p) { return p.id === projectId; });
+    
+    if (!project) {
+      alert('Error: Project not found.');
+      return;
+    }
+    
+    project.designData = designData;
+    project.hasDesign = true;
+    project.updatedAt = Date.now();
+    project.aiImages = window.aiImages || [];
+    
+    // Update thumbnail if new snapshot provided
+    if (snapshot) {
+      project.thumbnail = snapshot;
+    }
+    
+    saveProjects(projects);
+    
+    alert('✅ Design saved to "' + project.name + '"\n\nYou can now access the DA Workflow from the Projects tab.');
+    if (window.toggleAccountModal) window.toggleAccountModal();
+  }
+
+  /**
+   * Get projects from localStorage
+   */
+  function getProjects() {
+    var userId = window.__appUserId;
+    if (!userId) return [];
+    
+    try {
+      var key = 'gablok_projects_' + userId;
+      var data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : [];
+    } catch(e) {
+      console.error('Error loading projects:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Save projects to localStorage
+   */
+  function saveProjects(projects) {
+    var userId = window.__appUserId;
+    if (!userId) return;
+    
+    try {
+      var key = 'gablok_projects_' + userId;
+      localStorage.setItem(key, JSON.stringify(projects));
+    } catch(e) {
+      console.error('Error saving projects:', e);
+      alert('Error saving project. Storage may be full.');
+    }
+  }
+
+  /**
+   * Escape HTML to prevent XSS
+   */
+  function escapeHtml(text) {
+    var map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+  }
+})();

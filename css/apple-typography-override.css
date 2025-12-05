@@ -1,0 +1,427 @@
+/* ========================================
+   APPLE TYPOGRAPHY GLOBAL OVERRIDE
+   Forces Apple Design System fonts across entire app
+   ======================================== */
+
+/* === GLOBAL FONT OVERRIDES === */
+
+/* Replace 14px with 13px (footnote) or 15px (subheadline) */
+button,
+select,
+input,
+.dropdown-item,
+.pricing-field-label,
+.account-field input,
+#account-share-url,
+#info-content,
+#account-info-body,
+.palette-name,
+#account-nav h3,
+.settings-row input,
+.settings-row select,
+.visualize-hint,
+.floorplan-small-text,
+#loading-subtitle,
+#visualize-photo-caption {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 400 !important;
+  line-height: 1.47 !important;
+  letter-spacing: -0.24px !important;
+}
+
+/* Replace 16px with 17px (body) */
+.pricing-section h3,
+.total-section .pricing-item,
+.visualize-ai-section select,
+.visualize-ai-section input {
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+  line-height: 1.47 !important;
+  letter-spacing: -0.41px !important;
+}
+
+/* Replace 18px with 17px (headline) or 20px (title3) */
+#info-content h2,
+#pricing-content h2,
+#visualize-loading {
+  font-size: 20px !important; /* title3 */
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  letter-spacing: 0.38px !important;
+}
+
+/* Replace 24px with 22px (title2) */
+#reset-title,
+.close-button,
+#account-main h2 {
+  font-size: 22px !important; /* title2 */
+  font-weight: 700 !important;
+  line-height: 1.27 !important;
+  letter-spacing: 0.35px !important;
+}
+
+/* Replace 30-33px with 28px (title1) */
+#loading-title {
+  font-size: 28px !important; /* title1 */
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.35px !important;
+}
+
+/* Replace 32-36px with 34px (largeTitle) */
+.visualize-unsaved-icon svg,
+.project-select-icon svg {
+  font-size: 34px !important; /* largeTitle */
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.35px !important;
+}
+
+/* === SPECIFIC COMPONENT OVERRIDES === */
+
+/* Dropdown Items */
+.dropdown-item {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 400 !important;
+  padding: 10px 16px !important;
+}
+
+.dropdown-title {
+  font-size: 13px !important; /* footnote */
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(60, 60, 67, 0.6);
+  padding: 8px 16px 4px 16px !important;
+}
+
+[data-theme="dark"] .dropdown-title {
+  color: rgba(235, 235, 245, 0.6);
+}
+
+/* Buttons */
+button {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif !important;
+  font-size: 17px !important; /* body */
+  font-weight: 600 !important;
+  line-height: 1.47 !important;
+  letter-spacing: -0.41px !important;
+}
+
+button.secondary {
+  font-size: 15px !important; /* subheadline */
+}
+
+/* Inputs and Selects */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="url"],
+input[type="password"],
+select,
+textarea {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif !important;
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+  line-height: 1.47 !important;
+  letter-spacing: -0.41px !important;
+}
+
+/* Labels */
+label {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 600 !important;
+  line-height: 1.33 !important;
+  letter-spacing: -0.24px !important;
+}
+
+/* Headings */
+h1 {
+  font-size: 34px !important; /* largeTitle */
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.35px !important;
+}
+
+h2 {
+  font-size: 28px !important; /* title1 */
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.35px !important;
+}
+
+h3 {
+  font-size: 22px !important; /* title2 */
+  font-weight: 700 !important;
+  line-height: 1.27 !important;
+  letter-spacing: 0.35px !important;
+}
+
+h4 {
+  font-size: 20px !important; /* title3 */
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  letter-spacing: 0.38px !important;
+}
+
+h5 {
+  font-size: 17px !important; /* headline */
+  font-weight: 600 !important;
+  line-height: 1.29 !important;
+  letter-spacing: -0.41px !important;
+}
+
+h6 {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 600 !important;
+  line-height: 1.33 !important;
+  letter-spacing: -0.24px !important;
+}
+
+/* Body Text - Only apply to paragraphs and specific content classes */
+p {
+  font-size: 15px !important; /* subheadline */
+  line-height: 1.47 !important;
+  letter-spacing: -0.24px !important;
+}
+
+/* Small Text */
+small,
+.small-text,
+.caption {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+  line-height: 1.38 !important;
+  letter-spacing: -0.08px !important;
+}
+
+/* Captions */
+.caption1 {
+  font-size: 12px !important; /* caption1 */
+  font-weight: 400 !important;
+  line-height: 1.33 !important;
+  letter-spacing: 0;
+}
+
+.caption2 {
+  font-size: 11px !important; /* caption2 */
+  font-weight: 400 !important;
+  line-height: 1.18 !important;
+  letter-spacing: 0.06px !important;
+}
+
+/* === MEASUREMENT PANEL === */
+#measurements {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif !important;
+}
+
+#measurements h3 {
+  font-size: 22px !important; /* title2 */
+  font-weight: 700 !important;
+}
+
+.measurement-label {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 600 !important;
+}
+
+.measurement-input {
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+}
+
+.measurement-value {
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+}
+
+/* === STATUS BAR === */
+#status {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+  line-height: 1.38 !important;
+}
+
+/* === PRICING MODAL === */
+#pricing-content h2 {
+  font-size: 28px !important; /* title1 */
+  font-weight: 700 !important;
+}
+
+.pricing-section h3 {
+  font-size: 22px !important; /* title2 */
+  font-weight: 700 !important;
+}
+
+.pricing-item {
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+}
+
+.total-section .pricing-item {
+  font-size: 20px !important; /* title3 */
+  font-weight: 700 !important;
+}
+
+/* === VISUALIZE MODAL === */
+#visualize-capture-status {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+}
+
+#visualize-footnote {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+}
+
+.visualize-ai-title {
+  font-size: 20px !important; /* title3 */
+  font-weight: 700 !important;
+}
+
+.visualize-subtitle {
+  font-size: 17px !important; /* headline */
+  font-weight: 600 !important;
+}
+
+/* === ACCOUNT MODAL === */
+.account-nav-btn {
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+}
+
+.account-nav-btn.active {
+  font-weight: 600 !important;
+}
+
+.account-field label {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 600 !important;
+}
+
+/* === FLOORPLAN MODAL === */
+.floorplan-header strong {
+  font-size: 28px !important; /* title1 */
+  font-weight: 700 !important;
+}
+
+.floorplan-page-label {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+}
+
+.floorplan-steps-title {
+  font-size: 20px !important; /* title3 */
+  font-weight: 700 !important;
+}
+
+.floorplan-auto-title {
+  font-size: 17px !important; /* headline */
+  font-weight: 600 !important;
+}
+
+.floorplan-small-text {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+}
+
+/* === ROOM PALETTE === */
+#room-palette-title {
+  font-size: 22px !important; /* title2 */
+  font-weight: 700 !important;
+}
+
+#room-palette-right h3 {
+  font-size: 20px !important; /* title3 */
+  font-weight: 700 !important;
+}
+
+/* === INFO MODAL === */
+.info-section-title {
+  font-size: 22px !important; /* title2 */
+  font-weight: 700 !important;
+}
+
+.info-list li {
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+}
+
+.info-sublist li {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 400 !important;
+}
+
+.kbd {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, monospace !important;
+  font-size: 13px !important; /* footnote */
+  font-weight: 600 !important;
+}
+
+/* === SHARE MODAL === */
+#share-note {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+}
+
+#share-hint {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+}
+
+/* === ADMIN MODAL === */
+.admin-section h3 {
+  font-size: 22px !important; /* title2 */
+  font-weight: 700 !important;
+}
+
+.admin-list li {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 400 !important;
+}
+
+/* === SETTINGS === */
+.settings-hint {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+  color: rgba(60, 60, 67, 0.6);
+}
+
+[data-theme="dark"] .settings-hint {
+  color: rgba(235, 235, 245, 0.6);
+}
+
+.settings-row label {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 600 !important;
+}
+
+.settings-status {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+}
+
+/* === PROJECTS LIST === */
+.projects-list {
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+}
+
+.project-card-title {
+  font-size: 17px !important; /* body */
+  font-weight: 600 !important;
+}
+
+.project-card-meta {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+}
+
+/* === RESPONSIVE ADJUSTMENTS === */
+@media (max-width: 768px) {
+  h1 { font-size: 28px !important; }
+  h2 { font-size: 22px !important; }
+  h3 { font-size: 20px !important; }
+  button { font-size: 15px !important; }
+  .dropdown-item { font-size: 13px !important; }
+}

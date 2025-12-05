@@ -1,0 +1,797 @@
+/*! 
+ * Apple Design System for Gablok DA Workflow
+ * Based on Apple Human Interface Guidelines
+ * https://developer.apple.com/design/human-interface-guidelines/
+ * 
+ * Design Tokens, Typography, Colors, Spacing, Shadows, and Components
+ * Following Apple's exact specifications
+ */
+
+/* ============================================================================
+   DESIGN TOKENS - Apple System Foundation
+   ============================================================================ */
+
+:root {
+  /* Typography - San Francisco Font System */
+  --apple-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', system-ui, sans-serif;
+  --apple-font-family-mono: 'SF Mono', ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+  
+  /* Font Sizes - Apple's Type Scale */
+  --apple-font-size-largeTitle: 34px;
+  --apple-font-size-title1: 28px;
+  --apple-font-size-title2: 22px;
+  --apple-font-size-title3: 20px;
+  --apple-font-size-headline: 17px;
+  --apple-font-size-body: 17px;
+  --apple-font-size-callout: 16px;
+  --apple-font-size-subheadline: 15px;
+  --apple-font-size-footnote: 13px;
+  --apple-font-size-caption1: 12px;
+  --apple-font-size-caption2: 11px;
+  
+  /* Font Weights - SF Pro Weights */
+  --apple-font-weight-ultralight: 100;
+  --apple-font-weight-thin: 200;
+  --apple-font-weight-light: 300;
+  --apple-font-weight-regular: 400;
+  --apple-font-weight-medium: 500;
+  --apple-font-weight-semibold: 600;
+  --apple-font-weight-bold: 700;
+  --apple-font-weight-heavy: 800;
+  --apple-font-weight-black: 900;
+  
+  /* Line Heights */
+  --apple-line-height-tight: 1.1;
+  --apple-line-height-normal: 1.2;
+  --apple-line-height-relaxed: 1.4;
+  --apple-line-height-loose: 1.5;
+  
+  /* Letter Spacing */
+  --apple-tracking-tight: -0.41px;
+  
+  /* SF Symbol Icon Sizes */
+  --sf-icon-small: 14px;
+  --sf-icon-regular: 16px;
+  --sf-icon-medium: 20px;
+  --sf-icon-large: 24px;
+  --sf-icon-xlarge: 32px;
+}
+  --apple-tracking-normal: -0.24px;
+  --apple-tracking-loose: 0.38px;
+  
+  /* Spacing Scale - Apple's 4pt Grid System */
+  --apple-space-1: 4px;
+  --apple-space-2: 8px;
+  --apple-space-3: 12px;
+  --apple-space-4: 16px;
+  --apple-space-5: 20px;
+  --apple-space-6: 24px;
+  --apple-space-7: 28px;
+  --apple-space-8: 32px;
+  --apple-space-10: 40px;
+  --apple-space-12: 48px;
+  --apple-space-16: 64px;
+  --apple-space-20: 80px;
+  --apple-space-24: 96px;
+  
+  /* Border Radius - Apple's Corner Radii */
+  --apple-radius-small: 6px;
+  --apple-radius-medium: 8px;
+  --apple-radius-large: 10px;
+  --apple-radius-xlarge: 12px;
+  --apple-radius-2xlarge: 16px;
+  --apple-radius-3xlarge: 20px;
+  --apple-radius-full: 9999px;
+  
+  /* Shadows - Apple's Elevation System */
+  --apple-shadow-1: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+  --apple-shadow-2: 0 3px 6px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.12);
+  --apple-shadow-3: 0 10px 20px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.10);
+  --apple-shadow-4: 0 15px 25px rgba(0, 0, 0, 0.15), 0 5px 10px rgba(0, 0, 0, 0.05);
+  --apple-shadow-5: 0 20px 40px rgba(0, 0, 0, 0.2);
+  
+  /* Animation Timing - Apple's Easing Curves */
+  --apple-ease-in: cubic-bezier(0.42, 0, 1, 1);
+  --apple-ease-out: cubic-bezier(0, 0, 0.58, 1);
+  --apple-ease-in-out: cubic-bezier(0.42, 0, 0.58, 1);
+  --apple-ease-default: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --apple-ease-spring: cubic-bezier(0.5, 1.5, 0.5, 1);
+  
+  /* Duration */
+  --apple-duration-instant: 100ms;
+  --apple-duration-fast: 200ms;
+  --apple-duration-normal: 300ms;
+  --apple-duration-slow: 400ms;
+  --apple-duration-slower: 500ms;
+  
+  /* Z-Index Scale */
+  --apple-z-dropdown: 1000;
+  --apple-z-sticky: 1020;
+  --apple-z-fixed: 1030;
+  --apple-z-modal-backdrop: 1040;
+  --apple-z-modal: 1050;
+  --apple-z-popover: 1060;
+  --apple-z-tooltip: 1070;
+}
+
+/* ============================================================================
+   LIGHT MODE COLORS - Apple System Colors
+   https://developer.apple.com/design/human-interface-guidelines/color
+   ============================================================================ */
+
+:root,
+[data-theme="light"] {
+  /* Label Colors */
+  --apple-label: rgba(0, 0, 0, 1);
+  --apple-secondary-label: rgba(60, 60, 67, 0.6);
+  --apple-tertiary-label: rgba(60, 60, 67, 0.3);
+  --apple-quaternary-label: rgba(60, 60, 67, 0.18);
+  
+  /* Fill Colors */
+  --apple-fill: rgba(120, 120, 128, 0.2);
+  --apple-secondary-fill: rgba(120, 120, 128, 0.16);
+  --apple-tertiary-fill: rgba(118, 118, 128, 0.12);
+  --apple-quaternary-fill: rgba(116, 116, 128, 0.08);
+  
+  /* Background Colors */
+  --apple-system-background: rgba(255, 255, 255, 1);
+  --apple-secondary-system-background: rgba(242, 242, 247, 1);
+  --apple-tertiary-system-background: rgba(255, 255, 255, 1);
+  
+  /* Grouped Background Colors */
+  --apple-system-grouped-background: rgba(242, 242, 247, 1);
+  --apple-secondary-system-grouped-background: rgba(255, 255, 255, 1);
+  --apple-tertiary-system-grouped-background: rgba(242, 242, 247, 1);
+  
+  /* Separator Colors */
+  --apple-separator: rgba(60, 60, 67, 0.29);
+  --apple-opaque-separator: rgba(198, 198, 200, 1);
+  
+  /* Link Color */
+  --apple-link: rgba(0, 122, 255, 1);
+  
+  /* System Colors - Blue */
+  --apple-blue: #007AFF;
+  --apple-blue-light: rgba(0, 122, 255, 0.1);
+  --apple-blue-hover: #0051D5;
+  
+  /* System Colors - Green */
+  --apple-green: #34C759;
+  --apple-green-light: rgba(52, 199, 89, 0.1);
+  --apple-green-hover: #248A3D;
+  
+  /* System Colors - Indigo */
+  --apple-indigo: #5856D6;
+  --apple-indigo-light: rgba(88, 86, 214, 0.1);
+  
+  /* System Colors - Orange */
+  --apple-orange: #FF9500;
+  --apple-orange-light: rgba(255, 149, 0, 0.1);
+  
+  /* System Colors - Pink */
+  --apple-pink: #FF2D55;
+  --apple-pink-light: rgba(255, 45, 85, 0.1);
+  
+  /* System Colors - Purple */
+  --apple-purple: #AF52DE;
+  --apple-purple-light: rgba(175, 82, 222, 0.1);
+  
+  /* System Colors - Red */
+  --apple-red: #FF3B30;
+  --apple-red-light: rgba(255, 59, 48, 0.1);
+  
+  /* System Colors - Teal */
+  --apple-teal: #5AC8FA;
+  --apple-teal-light: rgba(90, 200, 250, 0.1);
+  
+  /* System Colors - Yellow */
+  --apple-yellow: #FFCC00;
+  --apple-yellow-light: rgba(255, 204, 0, 0.1);
+  
+  /* System Gray Colors */
+  --apple-gray: #8E8E93;
+  --apple-gray2: #AEAEB2;
+  --apple-gray3: #C7C7CC;
+  --apple-gray4: #D1D1D6;
+  --apple-gray5: #E5E5EA;
+  --apple-gray6: #F2F2F7;
+  
+  /* Vibrancy and Materials */
+  --apple-material-regular: rgba(255, 255, 255, 0.7);
+  --apple-material-thick: rgba(255, 255, 255, 0.85);
+  --apple-material-thin: rgba(255, 255, 255, 0.5);
+  --apple-material-ultra-thin: rgba(255, 255, 255, 0.3);
+}
+
+/* ============================================================================
+   DARK MODE COLORS - Apple Dark System Colors
+   ============================================================================ */
+
+[data-theme="dark"],
+.dark-mode {
+  /* Label Colors */
+  --apple-label: rgba(255, 255, 255, 1);
+  --apple-secondary-label: rgba(235, 235, 245, 0.6);
+  --apple-tertiary-label: rgba(235, 235, 245, 0.3);
+  --apple-quaternary-label: rgba(235, 235, 245, 0.18);
+  
+  /* Fill Colors */
+  --apple-fill: rgba(120, 120, 128, 0.36);
+  --apple-secondary-fill: rgba(120, 120, 128, 0.32);
+  --apple-tertiary-fill: rgba(118, 118, 128, 0.24);
+  --apple-quaternary-fill: rgba(118, 118, 128, 0.18);
+  
+  /* Background Colors */
+  --apple-system-background: rgba(0, 0, 0, 1);
+  --apple-secondary-system-background: rgba(28, 28, 30, 1);
+  --apple-tertiary-system-background: rgba(44, 44, 46, 1);
+  
+  /* Grouped Background Colors */
+  --apple-system-grouped-background: rgba(0, 0, 0, 1);
+  --apple-secondary-system-grouped-background: rgba(28, 28, 30, 1);
+  --apple-tertiary-system-grouped-background: rgba(44, 44, 46, 1);
+  
+  /* Separator Colors */
+  --apple-separator: rgba(84, 84, 88, 0.6);
+  --apple-opaque-separator: rgba(56, 56, 58, 1);
+  
+  /* Link Color */
+  --apple-link: rgba(10, 132, 255, 1);
+  
+  /* System Colors - Blue */
+  --apple-blue: #0A84FF;
+  --apple-blue-light: rgba(10, 132, 255, 0.15);
+  --apple-blue-hover: #409CFF;
+  
+  /* System Colors - Green */
+  --apple-green: #30D158;
+  --apple-green-light: rgba(48, 209, 88, 0.15);
+  --apple-green-hover: #32D74B;
+  
+  /* System Colors - Indigo */
+  --apple-indigo: #5E5CE6;
+  --apple-indigo-light: rgba(94, 92, 230, 0.15);
+  
+  /* System Colors - Orange */
+  --apple-orange: #FF9F0A;
+  --apple-orange-light: rgba(255, 159, 10, 0.15);
+  
+  /* System Colors - Pink */
+  --apple-pink: #FF375F;
+  --apple-pink-light: rgba(255, 55, 95, 0.15);
+  
+  /* System Colors - Purple */
+  --apple-purple: #BF5AF2;
+  --apple-purple-light: rgba(191, 90, 242, 0.15);
+  
+  /* System Colors - Red */
+  --apple-red: #FF453A;
+  --apple-red-light: rgba(255, 69, 58, 0.15);
+  
+  /* System Colors - Teal */
+  --apple-teal: #64D2FF;
+  --apple-teal-light: rgba(100, 210, 255, 0.15);
+  
+  /* System Colors - Yellow */
+  --apple-yellow: #FFD60A;
+  --apple-yellow-light: rgba(255, 214, 10, 0.15);
+  
+  /* System Gray Colors */
+  --apple-gray: #8E8E93;
+  --apple-gray2: #636366;
+  --apple-gray3: #48484A;
+  --apple-gray4: #3A3A3C;
+  --apple-gray5: #2C2C2E;
+  --apple-gray6: #1C1C1E;
+  
+  /* Vibrancy and Materials */
+  --apple-material-regular: rgba(30, 30, 30, 0.7);
+  --apple-material-thick: rgba(30, 30, 30, 0.85);
+  --apple-material-thin: rgba(30, 30, 30, 0.5);
+  --apple-material-ultra-thin: rgba(30, 30, 30, 0.3);
+  
+  /* Dark Mode Specific Shadows */
+  --apple-shadow-1: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --apple-shadow-2: 0 3px 6px rgba(0, 0, 0, 0.6), 0 2px 4px rgba(0, 0, 0, 0.5);
+  --apple-shadow-3: 0 10px 20px rgba(0, 0, 0, 0.7), 0 3px 6px rgba(0, 0, 0, 0.6);
+  --apple-shadow-4: 0 15px 25px rgba(0, 0, 0, 0.8), 0 5px 10px rgba(0, 0, 0, 0.7);
+  --apple-shadow-5: 0 20px 40px rgba(0, 0, 0, 0.9);
+}
+
+/* ============================================================================
+   TYPOGRAPHY SYSTEM - San Francisco Font Styles
+   ============================================================================ */
+
+.apple-text-largeTitle {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-largeTitle);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-tight);
+  letter-spacing: var(--apple-tracking-tight);
+}
+
+.apple-text-title1 {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-title1);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-normal);
+  letter-spacing: var(--apple-tracking-tight);
+}
+
+.apple-text-title2 {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-title2);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-normal);
+  letter-spacing: var(--apple-tracking-normal);
+}
+
+.apple-text-title3 {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-title3);
+  font-weight: var(--apple-font-weight-semibold);
+  line-height: var(--apple-line-height-normal);
+  letter-spacing: var(--apple-tracking-normal);
+}
+
+.apple-text-headline {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-headline);
+  font-weight: var(--apple-font-weight-semibold);
+  line-height: var(--apple-line-height-normal);
+  letter-spacing: var(--apple-tracking-normal);
+}
+
+.apple-text-body {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-body);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-normal);
+}
+
+.apple-text-callout {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-callout);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-normal);
+}
+
+.apple-text-subheadline {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-subheadline);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-normal);
+}
+
+.apple-text-footnote {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-footnote);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-loose);
+}
+
+.apple-text-caption1 {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-caption1);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-loose);
+}
+
+.apple-text-caption2 {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-caption2);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-loose);
+}
+
+/* ============================================================================
+   GLASS MATERIALS - Vibrancy & Translucency
+   https://developer.apple.com/design/human-interface-guidelines/materials
+   ============================================================================ */
+
+.apple-material-regular {
+  background: var(--apple-material-regular);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+}
+
+.apple-material-thick {
+  background: var(--apple-material-thick);
+  backdrop-filter: blur(60px) saturate(200%);
+  -webkit-backdrop-filter: blur(60px) saturate(200%);
+}
+
+.apple-material-thin {
+  background: var(--apple-material-thin);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+}
+
+.apple-material-ultra-thin {
+  background: var(--apple-material-ultra-thin);
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+}
+
+.apple-material-chrome {
+  background: var(--apple-material-regular);
+  backdrop-filter: blur(80px) saturate(200%) brightness(110%);
+  -webkit-backdrop-filter: blur(80px) saturate(200%) brightness(110%);
+}
+
+/* ============================================================================
+   BUTTONS - Apple Button Styles
+   https://developer.apple.com/design/human-interface-guidelines/buttons
+   ============================================================================ */
+
+.apple-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--apple-space-2);
+  padding: var(--apple-space-2) var(--apple-space-4);
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-body);
+  font-weight: var(--apple-font-weight-semibold);
+  line-height: 1;
+  border: none;
+  border-radius: var(--apple-radius-medium);
+  cursor: pointer;
+  transition: all var(--apple-duration-fast) var(--apple-ease-out);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.apple-button:active {
+  transform: scale(0.96);
+  transition-duration: var(--apple-duration-instant);
+}
+
+/* Primary Button (Filled) */
+.apple-button-filled {
+  background: var(--apple-blue);
+  color: white;
+}
+
+.apple-button-filled:hover {
+  background: var(--apple-blue-hover);
+}
+
+.apple-button-filled:active {
+  opacity: 0.8;
+}
+
+/* Secondary Button (Gray) */
+.apple-button-gray {
+  background: var(--apple-fill);
+  color: var(--apple-label);
+}
+
+.apple-button-gray:hover {
+  background: var(--apple-secondary-fill);
+}
+
+/* Tinted Button */
+.apple-button-tinted {
+  background: var(--apple-blue-light);
+  color: var(--apple-blue);
+}
+
+.apple-button-tinted:hover {
+  background: var(--apple-blue-light);
+  opacity: 0.8;
+}
+
+/* Borderless Button */
+.apple-button-borderless {
+  background: transparent;
+  color: var(--apple-blue);
+}
+
+.apple-button-borderless:hover {
+  background: var(--apple-quaternary-fill);
+}
+
+/* Button Sizes */
+.apple-button-small {
+  padding: var(--apple-space-1) var(--apple-space-3);
+  font-size: var(--apple-font-size-subheadline);
+}
+
+.apple-button-large {
+  padding: var(--apple-space-3) var(--apple-space-6);
+  font-size: var(--apple-font-size-headline);
+}
+
+/* Button with Icon */
+.apple-button-icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--apple-radius-full);
+}
+
+/* ============================================================================
+   CARDS & CONTAINERS
+   ============================================================================ */
+
+.apple-card {
+  background: var(--apple-secondary-system-grouped-background);
+  border-radius: var(--apple-radius-2xlarge);
+  box-shadow: var(--apple-shadow-1);
+  overflow: hidden;
+  transition: all var(--apple-duration-normal) var(--apple-ease-out);
+}
+
+.apple-card:hover {
+  box-shadow: var(--apple-shadow-3);
+  transform: translateY(-2px);
+}
+
+.apple-card-header {
+  padding: var(--apple-space-4);
+  border-bottom: 1px solid var(--apple-separator);
+}
+
+.apple-card-body {
+  padding: var(--apple-space-4);
+}
+
+.apple-card-footer {
+  padding: var(--apple-space-4);
+  border-top: 1px solid var(--apple-separator);
+}
+
+/* ============================================================================
+   LISTS - Apple List Styles
+   https://developer.apple.com/design/human-interface-guidelines/lists-and-tables
+   ============================================================================ */
+
+.apple-list {
+  background: var(--apple-secondary-system-grouped-background);
+  border-radius: var(--apple-radius-2xlarge);
+  overflow: hidden;
+}
+
+.apple-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--apple-space-3);
+  padding: var(--apple-space-3) var(--apple-space-4);
+  background: var(--apple-system-background);
+  border-bottom: 1px solid var(--apple-separator);
+  cursor: pointer;
+  transition: background var(--apple-duration-fast) var(--apple-ease-out);
+}
+
+.apple-list-item:hover {
+  background: var(--apple-tertiary-fill);
+}
+
+.apple-list-item:active {
+  background: var(--apple-secondary-fill);
+  transition-duration: var(--apple-duration-instant);
+}
+
+.apple-list-item:last-child {
+  border-bottom: none;
+}
+
+/* ============================================================================
+   NAVIGATION BAR
+   https://developer.apple.com/design/human-interface-guidelines/toolbars-and-toolbars
+   ============================================================================ */
+
+.apple-navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--apple-space-3) var(--apple-space-4);
+  background: var(--apple-material-regular);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border-bottom: 1px solid var(--apple-separator);
+}
+
+.apple-navbar-title {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-headline);
+  font-weight: var(--apple-font-weight-semibold);
+  color: var(--apple-label);
+}
+
+/* ============================================================================
+   PROGRESS INDICATORS
+   ============================================================================ */
+
+.apple-progress-ring {
+  position: relative;
+  display: inline-flex;
+}
+
+.apple-progress-ring-circle {
+  fill: none;
+  stroke-linecap: round;
+  transition: stroke-dashoffset var(--apple-duration-slow) var(--apple-ease-out);
+}
+
+.apple-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--apple-quaternary-fill);
+  border-radius: var(--apple-radius-full);
+  overflow: hidden;
+}
+
+.apple-progress-bar-fill {
+  height: 100%;
+  background: var(--apple-blue);
+  border-radius: var(--apple-radius-full);
+  transition: width var(--apple-duration-normal) var(--apple-ease-out);
+}
+
+/* ============================================================================
+   BADGES
+   ============================================================================ */
+
+.apple-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--apple-space-1) var(--apple-space-2);
+  background: var(--apple-red);
+  color: white;
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-caption2);
+  font-weight: var(--apple-font-weight-semibold);
+  border-radius: var(--apple-radius-full);
+  line-height: 1;
+}
+
+/* ============================================================================
+   SEPARATORS
+   ============================================================================ */
+
+.apple-separator {
+  width: 100%;
+  height: 1px;
+  background: var(--apple-separator);
+  border: none;
+}
+
+.apple-separator-vertical {
+  width: 1px;
+  height: 100%;
+  background: var(--apple-separator);
+}
+
+/* ============================================================================
+   FOCUS STATES - Accessibility
+   ============================================================================ */
+
+*:focus-visible {
+  outline: 2px solid var(--apple-blue);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   ANIMATIONS - Apple Motion Guidelines
+   ============================================================================ */
+
+@keyframes apple-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes apple-slide-up {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes apple-slide-down {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes apple-scale-in {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes apple-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ============================================================================
+   UTILITIES
+   ============================================================================ */
+
+.apple-shadow-1 { box-shadow: var(--apple-shadow-1); }
+.apple-shadow-2 { box-shadow: var(--apple-shadow-2); }
+.apple-shadow-3 { box-shadow: var(--apple-shadow-3); }
+.apple-shadow-4 { box-shadow: var(--apple-shadow-4); }
+.apple-shadow-5 { box-shadow: var(--apple-shadow-5); }
+
+/* SF Symbol Icons */
+.sf-icon {
+  display: inline-block;
+  vertical-align: middle;
+  fill: currentColor;
+  width: var(--sf-icon-regular);
+  height: var(--sf-icon-regular);
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sf-icon-small {
+  width: var(--sf-icon-small);
+  height: var(--sf-icon-small);
+}
+
+.sf-icon-medium {
+  width: var(--sf-icon-medium);
+  height: var(--sf-icon-medium);
+}
+
+.sf-icon-large {
+  width: var(--sf-icon-large);
+  height: var(--sf-icon-large);
+}
+
+.sf-icon-xlarge {
+  width: var(--sf-icon-xlarge);
+  height: var(--sf-icon-xlarge);
+}
+
+/* SF Symbol in buttons */
+button .sf-icon {
+  margin-right: 4px;
+  margin-left: -2px;
+}
+
+button:hover .sf-icon {
+  transform: scale(1.05);
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

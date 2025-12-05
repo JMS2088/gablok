@@ -9,6 +9,15 @@
 <title>3D Home Configurator with Pricing</title>
 <link rel="icon" type="image/x-icon" href="/favicon.ico" />
 <script>window.__ASSET_VERSION='20251129-26';</script>
+<!-- Apple Design System -->
+<link rel="stylesheet" href="css/apple-design-system.css?v=20251205-4">
+<link rel="stylesheet" href="css/da-workflow-apple.css?v=20251205-4">
+<link rel="stylesheet" href="css/apple-micro-animations.css?v=20251205-4">
+<link rel="stylesheet" href="css/apple-main-menu.css?v=20251205-4">
+<link rel="stylesheet" href="css/apple-modals.css?v=20251205-4">
+<link rel="stylesheet" href="css/apple-plan2d.css?v=20251205-4">
+<link rel="stylesheet" href="css/apple-splash.css?v=20251205-4">
+<link rel="stylesheet" href="css/apple-typography-override.css?v=20251205-4">
 <link rel="stylesheet" href="css/styles.css?v=20251129-11">
 <script>
 // Version verification - shows in console immediately
@@ -32,6 +41,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 <div id="controls">
 		<button onclick="addNewRoom()">+ Add Room</button>
 	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor">Floor Plan</button>
+	<button id="btn-save-for-da" class="secondary save-for-da" title="Save current design to project for DA submission" onclick="saveDesignForDA()"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-doc"/></svg> Save for DA</button>
 	<button id="btn-render-walls" class="secondary" title="Toggle wall render mode">Render: Lines</button>
 	<button id="btn-clean-view" class="secondary" title="Toggle clean view (hide UI)" onclick="toggleCleanView()">Clean View</button>
 	<!-- Debug Dropdown: quick toggles for corner handles and debug logs -->
@@ -101,22 +111,22 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 			<div class="dropdown-item separator" aria-hidden="true"></div>
 			<div class="dropdown-title">Project</div>
 			<div class="dropdown-item" data-action="price">Price</div>
-			<div class="dropdown-item" data-action="visualize-photoreal">📸 Visualize (Screenshot)</div>
+			<div class="dropdown-item" data-action="visualize-photoreal"><svg class="sf-icon" width="16" height="16"><use href="#sf-camera"/></svg> Visualize</div>
 			<div class="dropdown-item separator" aria-hidden="true"></div>
 			<div class="dropdown-title">Export</div>
-			<div class="dropdown-item" data-action="obj">⬇ 3D - OBJ</div>
-			<div class="dropdown-item" data-action="pdf">📄 PDF (Export Views)</div>
-			<div class="dropdown-item" data-action="json-download">⬇ JSON</div>
-			<div class="dropdown-item" data-action="dxf-export">⬇ Floorplan (DXF)</div>
-			<div class="dropdown-item" data-action="dwg-export">⬇ Floorplan (DWG)</div>
+			<div class="dropdown-item" data-action="obj"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> 3D - OBJ</div>
+			<div class="dropdown-item" data-action="pdf"><svg class="sf-icon" width="16" height="16"><use href="#sf-doc"/></svg> PDF (Export Views)</div>
+			<div class="dropdown-item" data-action="json-download"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> JSON</div>
+			<div class="dropdown-item" data-action="dxf-export"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> Floorplan (DXF)</div>
+			<div class="dropdown-item" data-action="dwg-export"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> Floorplan (DWG)</div>
 			<div class="dropdown-item separator" aria-hidden="true"></div>
 			<div class="dropdown-title">Import</div>
-			<div class="dropdown-item" data-action="obj-upload">⬆ 3D - OBJ</div>
-			<div class="dropdown-item" data-action="pdf-floorplan-upload">⬆ Floorplan (PDF)</div>
-			<div class="dropdown-item" data-action="svg-floorplan-upload">⬆ Floorplan (SVG)</div>
-			<div class="dropdown-item" data-action="dxf-floorplan-upload">⬆ Floorplan (DXF)</div>
-			<div class="dropdown-item" data-action="dwg-floorplan-upload">⬆ Floorplan (DWG)</div>
-			<div class="dropdown-item" data-action="json-upload">⬆ JSON</div>
+			<div class="dropdown-item" data-action="obj-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> 3D - OBJ</div>
+			<div class="dropdown-item" data-action="pdf-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (PDF)</div>
+			<div class="dropdown-item" data-action="svg-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (SVG)</div>
+			<div class="dropdown-item" data-action="dxf-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (DXF)</div>
+			<div class="dropdown-item" data-action="dwg-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (DWG)</div>
+			<div class="dropdown-item" data-action="json-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> JSON</div>
 		</div>
 	</div>
 	<!-- Navigation Compass: sits next to Main Menu dropdown -->
@@ -166,7 +176,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 <!-- Room palette modal for adding furniture -->
 <div id="room-palette-modal">
 	<div id="room-palette-content">
-		<button class="close-button" onclick="hideRoomPalette()">&times;</button>
+		<button class="close-button" onclick="hideRoomPalette()"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
 		<div id="room-palette-left">
 			<h3 id="room-palette-title">Room</h3>
 			<canvas id="room-preview-canvas" width="360" height="260"></canvas>
@@ -189,7 +199,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 	<div id="info-content">
 		<div id="info-header">
 			<strong>Information & Help</strong>
-			<button class="secondary" onclick="hideInfo()" title="Close">✕</button>
+			<button class="secondary" onclick="hideInfo()" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
 		</div>
 		<div id="info-body">
 			<section>
@@ -297,7 +307,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 	<div id="share-content">
 		<div id="share-header">
 			<strong>Share Link</strong>
-			<button class="secondary" onclick="hideShare()" title="Close">✕</button>
+			<button class="secondary" onclick="hideShare()" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
 		</div>
 		<div id="share-body">
 			<div id="share-note">Open your share link in a new tab. In Codespaces, this will be the forwarded URL.</div>
@@ -316,7 +326,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 	<div id="admin-content">
 		<div id="admin-header">
 			<strong>Admin: Users & Error Logs</strong>
-			<button class="secondary" onclick="hideAdmin()" title="Close">✕</button>
+			<button class="secondary" onclick="hideAdmin()" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
 		</div>
 		<div id="admin-body">
 			<section class="admin-section">
@@ -345,14 +355,14 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 				<div id="visualize-loading">Generating...</div>
 				<div id="visualize-photo-viewer">
 					<div class="visualize-photo-frame">
-						<button id="visualize-photo-close" class="secondary" type="button" title="Close photo">✕</button>
+						<button id="visualize-photo-close" class="secondary" type="button" title="Close photo"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
 						<img id="visualize-photo-image" alt="Visualize design preview" />
 						<p id="visualize-photo-caption"></p>
 					</div>
 				</div>
 			</div>
 			<div id="visualize-controls">
-				<button id="visualize-close" class="secondary" title="Close">✕</button>
+				<button id="visualize-close" class="secondary" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
 				<p id="visualize-capture-status" class="visualize-hint" aria-live="polite"></p>
 				<div class="visualize-buttons" style="margin-top:20px;">
 					<button id="visualize-generate">Re-Render</button>
@@ -362,7 +372,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 				<!-- AI Enhancement Panel - shown when LLM is configured -->
 				<div id="visualize-ai-panel" class="visualize-ai-panel" style="display:none;">
 					<div class="visualize-ai-header">
-						<span class="visualize-ai-title">🤖 AI Enhancement</span>
+						<span class="visualize-ai-title"><svg class="sf-icon" width="18" height="18"><use href="#sf-wand-and-stars"/></svg> AI Enhancement</span>
 						<span id="visualize-ai-provider" class="visualize-ai-badge"></span>
 					</div>
 					
@@ -427,7 +437,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 					</div>
 					
 					<div class="visualize-ai-actions">
-						<button id="visualize-ai-enhance" type="button">✨ Enhance with AI</button>
+						<button id="visualize-ai-enhance" type="button"><svg class="sf-icon" width="16" height="16"><use href="#sf-wand-and-stars"/></svg> Enhance with AI</button>
 						<button id="visualize-ai-variations" type="button" class="secondary">Generate Variations</button>
 					</div>
 					
@@ -438,7 +448,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 						<label>AI Generated Images</label>
 						<div id="visualize-ai-gallery" class="visualize-ai-gallery"></div>
 						<div class="visualize-ai-save-row">
-							<button id="visualize-ai-save" type="button" class="save-btn">💾 Save to Project</button>
+							<button id="visualize-ai-save" type="button" class="save-btn"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-doc"/></svg> Save to Project</button>
 							<span id="visualize-ai-save-status" class="save-status"></span>
 						</div>
 					</div>
@@ -466,13 +476,13 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 <!-- Unsaved AI Images Confirmation Popup -->
 <div id="visualize-unsaved-popup" class="visualize-unsaved-popup" style="display:none;">
 	<div class="visualize-unsaved-content">
-		<div class="visualize-unsaved-icon">⚠️</div>
+		<div class="visualize-unsaved-icon"><svg class="sf-icon" width="40" height="40"><use href="#sf-exclamationmark-triangle"/></svg></div>
 		<h3>Unsaved AI Images</h3>
 		<p>By closing, your AI-generated images will not be saved and will be deleted.</p>
 		<p class="visualize-unsaved-warning">Are you sure you want to close?</p>
 		<div class="visualize-unsaved-actions">
-			<button id="visualize-unsaved-save" type="button" class="primary">💾 Save &amp; Close</button>
-			<button id="visualize-unsaved-discard" type="button" class="danger">🗑️ Discard &amp; Close</button>
+			<button id="visualize-unsaved-save" type="button" class="primary"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-doc"/></svg> Save &amp; Close</button>
+			<button id="visualize-unsaved-discard" type="button" class="danger"><svg class="sf-icon" width="16" height="16"><use href="#sf-trash"/></svg> Discard &amp; Close</button>
 			<button id="visualize-unsaved-cancel" type="button" class="secondary">Cancel</button>
 		</div>
 	</div>
@@ -481,8 +491,8 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 <!-- Project Selection Popup for saving AI images -->
 <div id="project-select-popup" class="project-select-popup" style="display:none;">
 	<div class="project-select-content">
-		<button id="project-select-close" class="project-select-close" type="button">✕</button>
-		<div class="project-select-icon">📁</div>
+		<button id="project-select-close" class="project-select-close" type="button"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+		<div class="project-select-icon"><svg class="sf-icon" width="40" height="40"><use href="#sf-folder"/></svg></div>
 		<h3>Save to Project</h3>
 		<p>Select a project to save your AI-generated images:</p>
 		
@@ -515,7 +525,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 			<button class="account-nav-btn" data-view="admin" data-action="admin">Admin</button>
 		</nav>
 		<main id="account-main">
-			<button id="account-close" class="secondary" title="Close">✕</button>
+			<button id="account-close" class="secondary" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
 			<section id="account-view-profile">
 				<h2>Your Profile</h2>
 				<form id="account-form" class="account-form">
@@ -545,7 +555,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 				</div>
 				
 				<div id="projects-empty" class="projects-empty">
-					<p>📂 No projects yet</p>
+					<p><svg class="sf-icon" width="24" height="24"><use href="#sf-folder"/></svg> No projects yet</p>
 					<p>Create a project to save your designs and AI renders.</p>
 				</div>
 			</section>
@@ -681,7 +691,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 	<div id="floorplan-content">
 		<div class="floorplan-header">
 			<strong>Import Floorplan (PDF)</strong>
-			<button id="floorplan-close" class="secondary" title="Close">✕</button>
+			<button id="floorplan-close" class="secondary" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
 		</div>
 		<div id="floorplan-stage">
 			<div id="floorplan-stage-main">
@@ -744,7 +754,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 
 <div id="pricing-modal">
     <div id="pricing-content">
-		<button class="close-button" onclick="hidePricing()">&times;</button>
+		<button class="close-button" onclick="hidePricing()"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
 		<h2>Project Pricing</h2>
 			<div class="pricing-settings-row">
 				<label class="pricing-field-label">

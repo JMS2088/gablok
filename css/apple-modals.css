@@ -1,0 +1,991 @@
+/* ========================================
+   APPLE DESIGN SYSTEM - MODALS & OVERLAYS
+   Complete styling for all modals/overlays
+   ======================================== */
+
+/* === MODAL BASE STYLES === */
+#info-modal,
+#share-modal,
+#admin-modal,
+#visualize-modal,
+#floorplan-modal,
+#pricing-modal,
+#room-palette-modal,
+#account-modal,
+#reset-confirmation-modal,
+#project-select-popup,
+#visualize-unsaved-popup {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* === BACKDROPS/OVERLAYS - Pure black with glass blur === */
+#info-backdrop,
+#share-backdrop,
+#admin-backdrop,
+#visualize-backdrop,
+#floorplan-backdrop,
+#room-palette-backdrop,
+#account-splash,
+#reset-confirmation-modal,
+.visualize-unsaved-popup,
+.project-select-popup {
+  background: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+}
+
+/* === DARK MODE - Pure Black Backgrounds === */
+[data-theme="dark"] #info-backdrop,
+[data-theme="dark"] #share-backdrop,
+[data-theme="dark"] #admin-backdrop,
+[data-theme="dark"] #visualize-backdrop,
+[data-theme="dark"] #floorplan-backdrop,
+[data-theme="dark"] #room-palette-backdrop,
+[data-theme="dark"] #account-splash,
+[data-theme="dark"] #reset-confirmation-modal {
+  background: rgba(0, 0, 0, 0.90) !important;
+}
+
+/* === MODAL CONTENT PANELS - Apple Glass Material === */
+#info-content,
+#share-content,
+#admin-content,
+#visualize-content,
+#floorplan-content,
+#pricing-content,
+#room-palette-content,
+#account-sheet,
+.visualize-unsaved-content,
+.project-select-content {
+  background: rgba(255, 255, 255, 0.80) !important;
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] #info-content,
+[data-theme="dark"] #share-content,
+[data-theme="dark"] #admin-content,
+[data-theme="dark"] #visualize-content,
+[data-theme="dark"] #floorplan-content,
+[data-theme="dark"] #pricing-content,
+[data-theme="dark"] #room-palette-content,
+[data-theme="dark"] #account-sheet,
+[data-theme="dark"] .visualize-unsaved-content,
+[data-theme="dark"] .project-select-content {
+  background: rgba(28, 28, 30, 0.85) !important;
+  border: 1px solid rgba(84, 84, 88, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* === MODAL HEADERS === */
+#info-header,
+#share-header,
+#admin-header,
+.floorplan-header,
+#pricing-content h2 {
+  font-size: 28px !important; /* title1 */
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.35px !important;
+  color: #000000;
+  margin: 0 0 20px 0;
+  padding: 0;
+}
+
+[data-theme="dark"] #info-header,
+[data-theme="dark"] #share-header,
+[data-theme="dark"] #admin-header,
+[data-theme="dark"] .floorplan-header,
+[data-theme="dark"] #pricing-content h2 {
+  color: rgba(255, 255, 255, 1);
+}
+
+#info-header strong,
+#share-header strong,
+#admin-header strong,
+.floorplan-header strong {
+  font-size: 28px !important; /* title1 */
+  font-weight: 700 !important;
+}
+
+/* === BODY TEXT - Apple Typography === */
+#info-body,
+#share-body,
+#admin-body,
+#visualize-controls,
+#floorplan-sidebar,
+#pricing-breakdown,
+#room-palette-right,
+#account-main {
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+  line-height: 1.47 !important;
+  letter-spacing: -0.41px !important;
+  color: #000000;
+}
+
+[data-theme="dark"] #info-body,
+[data-theme="dark"] #share-body,
+[data-theme="dark"] #admin-body,
+[data-theme="dark"] #visualize-controls,
+[data-theme="dark"] #floorplan-sidebar,
+[data-theme="dark"] #pricing-breakdown,
+[data-theme="dark"] #room-palette-right,
+[data-theme="dark"] #account-main {
+  color: rgba(255, 255, 255, 1);
+}
+
+/* === SECTION TITLES === */
+.info-section-title,
+.admin-section h3,
+.floorplan-steps-title,
+.floorplan-auto-title,
+.pricing-section h3,
+#room-palette-title,
+#account-main h2 {
+  font-size: 22px !important; /* title2 */
+  font-weight: 700 !important;
+  line-height: 1.27 !important;
+  letter-spacing: 0.35px !important;
+  color: #000000;
+  margin: 20px 0 12px 0;
+}
+
+[data-theme="dark"] .info-section-title,
+[data-theme="dark"] .admin-section h3,
+[data-theme="dark"] .floorplan-steps-title,
+[data-theme="dark"] .floorplan-auto-title,
+[data-theme="dark"] .pricing-section h3,
+[data-theme="dark"] #room-palette-title,
+[data-theme="dark"] #account-main h2 {
+  color: rgba(255, 255, 255, 1);
+}
+
+/* === SUBTITLES/HINTS === */
+.visualize-hint,
+.settings-hint,
+.floorplan-small-text,
+.pricing-field-label,
+.share-hint,
+#visualize-footnote,
+#share-note {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+  line-height: 1.38 !important;
+  letter-spacing: -0.08px !important;
+  color: rgba(60, 60, 67, 0.6);
+  margin: 8px 0;
+}
+
+[data-theme="dark"] .visualize-hint,
+[data-theme="dark"] .settings-hint,
+[data-theme="dark"] .floorplan-small-text,
+[data-theme="dark"] .pricing-field-label,
+[data-theme="dark"] .share-hint,
+[data-theme="dark"] #visualize-footnote,
+[data-theme="dark"] #share-note {
+  color: rgba(235, 235, 245, 0.6);
+}
+
+/* === CAPTIONS === */
+.floorplan-page-label,
+.floorplan-auto-label,
+#fp-scale-display,
+#fp-rooms-count,
+.visualize-ai-badge {
+  font-size: 12px !important; /* caption1 */
+  font-weight: 400 !important;
+  line-height: 1.33 !important;
+  letter-spacing: 0;
+  color: rgba(60, 60, 67, 0.6);
+}
+
+[data-theme="dark"] .floorplan-page-label,
+[data-theme="dark"] .floorplan-auto-label,
+[data-theme="dark"] #fp-scale-display,
+[data-theme="dark"] #fp-rooms-count,
+[data-theme="dark"] .visualize-ai-badge {
+  color: rgba(235, 235, 245, 0.6);
+}
+
+/* === BUTTONS - Apple Style === */
+#info-modal button,
+#share-modal button,
+#admin-modal button,
+#visualize-modal button,
+#floorplan-modal button,
+#pricing-modal button,
+#room-palette-modal button,
+#account-modal button,
+#reset-confirmation-modal button,
+.visualize-unsaved-popup button,
+.project-select-popup button {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  font-size: 17px !important; /* body */
+  font-weight: 600 !important;
+  line-height: 1.47 !important;
+  letter-spacing: -0.41px !important;
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(0, 122, 255, 1);
+  color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="dark"] #info-modal button,
+[data-theme="dark"] #share-modal button,
+[data-theme="dark"] #admin-modal button,
+[data-theme="dark"] #visualize-modal button,
+[data-theme="dark"] #floorplan-modal button,
+[data-theme="dark"] #pricing-modal button,
+[data-theme="dark"] #room-palette-modal button,
+[data-theme="dark"] #account-modal button,
+[data-theme="dark"] #reset-confirmation-modal button,
+[data-theme="dark"] .visualize-unsaved-popup button,
+[data-theme="dark"] .project-select-popup button {
+  background: rgba(10, 132, 255, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* === SECONDARY BUTTONS === */
+#info-modal button.secondary,
+#share-modal button.secondary,
+#admin-modal button.secondary,
+#visualize-modal button.secondary,
+#floorplan-modal button.secondary,
+#pricing-modal button.secondary,
+#room-palette-modal button.secondary,
+#account-modal button.secondary,
+button#account-cancel,
+button#llm-test-connection,
+button#visualize-ai-configure {
+  background: rgba(120, 120, 128, 0.2);
+  color: rgba(0, 122, 255, 1);
+}
+
+[data-theme="dark"] #info-modal button.secondary,
+[data-theme="dark"] #share-modal button.secondary,
+[data-theme="dark"] #admin-modal button.secondary,
+[data-theme="dark"] #visualize-modal button.secondary,
+[data-theme="dark"] #floorplan-modal button.secondary,
+[data-theme="dark"] #pricing-modal button.secondary,
+[data-theme="dark"] #room-palette-modal button.secondary,
+[data-theme="dark"] #account-modal button.secondary,
+[data-theme="dark"] button#account-cancel,
+[data-theme="dark"] button#llm-test-connection,
+[data-theme="dark"] button#visualize-ai-configure {
+  background: rgba(118, 118, 128, 0.24);
+  color: rgba(10, 132, 255, 1);
+}
+
+/* === BUTTON HOVER STATES === */
+#info-modal button:hover,
+#share-modal button:hover,
+#admin-modal button:hover,
+#visualize-modal button:hover,
+#floorplan-modal button:hover,
+#pricing-modal button:hover,
+#room-palette-modal button:hover,
+#account-modal button:hover,
+#reset-confirmation-modal button:hover,
+.visualize-unsaved-popup button:hover,
+.project-select-popup button:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="dark"] #info-modal button:hover,
+[data-theme="dark"] #share-modal button:hover,
+[data-theme="dark"] #admin-modal button:hover,
+[data-theme="dark"] #visualize-modal button:hover,
+[data-theme="dark"] #floorplan-modal button:hover,
+[data-theme="dark"] #pricing-modal button:hover,
+[data-theme="dark"] #room-palette-modal button:hover,
+[data-theme="dark"] #account-modal button:hover,
+[data-theme="dark"] #reset-confirmation-modal button:hover,
+[data-theme="dark"] .visualize-unsaved-popup button:hover,
+[data-theme="dark"] .project-select-popup button:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* === CLOSE BUTTONS === */
+.close-button,
+#info-header button,
+#share-header button,
+#admin-header button,
+#floorplan-close,
+#visualize-close,
+#account-close,
+#visualize-photo-close,
+#project-select-close {
+  font-size: 28px !important;
+  font-weight: 300 !important;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(120, 120, 128, 0.2);
+  color: rgba(60, 60, 67, 0.6);
+}
+
+[data-theme="dark"] .close-button,
+[data-theme="dark"] #info-header button,
+[data-theme="dark"] #share-header button,
+[data-theme="dark"] #admin-header button,
+[data-theme="dark"] #floorplan-close,
+[data-theme="dark"] #visualize-close,
+[data-theme="dark"] #account-close,
+[data-theme="dark"] #visualize-photo-close,
+[data-theme="dark"] #project-select-close {
+  background: rgba(118, 118, 128, 0.24);
+  color: rgba(235, 235, 245, 0.6);
+}
+
+/* === INPUTS - Apple Style === */
+#info-modal input,
+#share-modal input,
+#admin-modal input,
+#visualize-modal input,
+#floorplan-modal input,
+#pricing-modal input,
+#room-palette-modal input,
+#account-modal input,
+#account-form input,
+#fp-real-distance,
+#fp-auto-min,
+#fp-auto-ar,
+#fp-auto-border,
+#pricing-slab-mm,
+#pricing-soil-per-m3 {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+  line-height: 1.47 !important;
+  letter-spacing: -0.41px !important;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.8);
+  color: #000000;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="dark"] #info-modal input,
+[data-theme="dark"] #share-modal input,
+[data-theme="dark"] #admin-modal input,
+[data-theme="dark"] #visualize-modal input,
+[data-theme="dark"] #floorplan-modal input,
+[data-theme="dark"] #pricing-modal input,
+[data-theme="dark"] #room-palette-modal input,
+[data-theme="dark"] #account-modal input,
+[data-theme="dark"] #account-form input,
+[data-theme="dark"] #fp-real-distance,
+[data-theme="dark"] #fp-auto-min,
+[data-theme="dark"] #fp-auto-ar,
+[data-theme="dark"] #fp-auto-border,
+[data-theme="dark"] #pricing-slab-mm,
+[data-theme="dark"] #pricing-soil-per-m3 {
+  background: rgba(58, 58, 60, 0.3);
+  border: 1px solid rgba(84, 84, 88, 0.3);
+  color: rgba(255, 255, 255, 1);
+}
+
+/* === INPUT FOCUS === */
+#info-modal input:focus,
+#share-modal input:focus,
+#admin-modal input:focus,
+#visualize-modal input:focus,
+#floorplan-modal input:focus,
+#pricing-modal input:focus,
+#room-palette-modal input:focus,
+#account-modal input:focus,
+#account-form input:focus {
+  outline: none;
+  border-color: rgba(0, 122, 255, 1);
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
+}
+
+[data-theme="dark"] #info-modal input:focus,
+[data-theme="dark"] #share-modal input:focus,
+[data-theme="dark"] #admin-modal input:focus,
+[data-theme="dark"] #visualize-modal input:focus,
+[data-theme="dark"] #floorplan-modal input:focus,
+[data-theme="dark"] #pricing-modal input:focus,
+[data-theme="dark"] #room-palette-modal input:focus,
+[data-theme="dark"] #account-modal input:focus,
+[data-theme="dark"] #account-form input:focus {
+  border-color: rgba(10, 132, 255, 1);
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.2);
+}
+
+/* === SELECTS - Apple Style === */
+#visualize-modal select,
+#floorplan-modal select,
+#account-modal select,
+#llm-provider,
+#llm-model,
+#settings-units,
+#visualize-ai-style,
+#visualize-ai-quality {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+  line-height: 1.47 !important;
+  letter-spacing: -0.41px !important;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.8);
+  color: #000000;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="dark"] #visualize-modal select,
+[data-theme="dark"] #floorplan-modal select,
+[data-theme="dark"] #account-modal select,
+[data-theme="dark"] #llm-provider,
+[data-theme="dark"] #llm-model,
+[data-theme="dark"] #settings-units,
+[data-theme="dark"] #visualize-ai-style,
+[data-theme="dark"] #visualize-ai-quality {
+  background: rgba(58, 58, 60, 0.3);
+  border: 1px solid rgba(84, 84, 88, 0.3);
+  color: rgba(255, 255, 255, 1);
+}
+
+/* === TEXTAREAS - Apple Style === */
+#visualize-ai-prompt {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+  line-height: 1.47 !important;
+  letter-spacing: -0.41px !important;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.8);
+  color: #000000;
+  resize: vertical;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="dark"] #visualize-ai-prompt {
+  background: rgba(58, 58, 60, 0.3);
+  border: 1px solid rgba(84, 84, 88, 0.3);
+  color: rgba(255, 255, 255, 1);
+}
+
+#visualize-ai-prompt:focus {
+  outline: none;
+  border-color: rgba(0, 122, 255, 1);
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
+}
+
+[data-theme="dark"] #visualize-ai-prompt:focus {
+  border-color: rgba(10, 132, 255, 1);
+  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.2);
+}
+
+/* === LISTS - Minimal Apple Style === */
+.info-list,
+.admin-list,
+.floorplan-steps-list,
+.projects-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+}
+
+.info-list li,
+.admin-list li,
+.floorplan-steps-list li {
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+  line-height: 1.47 !important;
+  letter-spacing: -0.41px !important;
+  padding: 8px 0;
+  color: #000000;
+}
+
+[data-theme="dark"] .info-list li,
+[data-theme="dark"] .admin-list li,
+[data-theme="dark"] .floorplan-steps-list li {
+  color: rgba(255, 255, 255, 1);
+}
+
+/* === SUBLISTS === */
+.info-sublist {
+  margin: 8px 0 8px 20px;
+  list-style: disc;
+}
+
+.info-sublist li {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 400 !important;
+  line-height: 1.47 !important;
+  letter-spacing: -0.24px !important;
+  padding: 4px 0;
+}
+
+/* === KEYBOARD SHORTCUTS === */
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px 16px;
+  margin: 12px 0;
+}
+
+.shortcut-grid .left {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 600 !important;
+}
+
+.shortcut-grid .right {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 400 !important;
+}
+
+.kbd {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, monospace;
+  font-size: 13px !important; /* footnote */
+  font-weight: 600 !important;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(120, 120, 128, 0.2);
+  color: #000000;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  display: inline-block;
+}
+
+[data-theme="dark"] .kbd {
+  background: rgba(118, 118, 128, 0.24);
+  color: rgba(255, 255, 255, 1);
+  border: 1px solid rgba(84, 84, 88, 0.3);
+}
+
+/* === CHECKBOXES - Apple Style === */
+input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="dark"] input[type="checkbox"] {
+  background: rgba(58, 58, 60, 0.3);
+  border: 1px solid rgba(84, 84, 88, 0.3);
+}
+
+input[type="checkbox"]:checked {
+  background: rgba(0, 122, 255, 1);
+  border-color: rgba(0, 122, 255, 1);
+}
+
+[data-theme="dark"] input[type="checkbox"]:checked {
+  background: rgba(10, 132, 255, 1);
+  border-color: rgba(10, 132, 255, 1);
+}
+
+/* === ACCOUNT MODAL SPECIFIC === */
+#account-nav {
+  background: rgba(255, 255, 255, 0.5);
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 20px;
+}
+
+[data-theme="dark"] #account-nav {
+  background: rgba(28, 28, 30, 0.5);
+  border-right: 1px solid rgba(84, 84, 88, 0.3);
+}
+
+#account-nav h3 {
+  font-size: 22px !important; /* title2 */
+  font-weight: 700 !important;
+  color: #000000;
+  margin: 0 0 20px 0;
+}
+
+[data-theme="dark"] #account-nav h3 {
+  color: rgba(255, 255, 255, 1);
+}
+
+.account-nav-btn {
+  font-size: 17px !important; /* body */
+  font-weight: 400 !important;
+  width: 100%;
+  text-align: left;
+  padding: 10px 16px;
+  margin: 4px 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #000000;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="dark"] .account-nav-btn {
+  color: rgba(255, 255, 255, 1);
+}
+
+.account-nav-btn.active {
+  background: rgba(0, 122, 255, 0.1);
+  color: rgba(0, 122, 255, 1);
+  font-weight: 600;
+}
+
+[data-theme="dark"] .account-nav-btn.active {
+  background: rgba(10, 132, 255, 0.2);
+  color: rgba(10, 132, 255, 1);
+}
+
+.account-nav-btn:hover {
+  background: rgba(120, 120, 128, 0.1);
+}
+
+[data-theme="dark"] .account-nav-btn:hover {
+  background: rgba(118, 118, 128, 0.15);
+}
+
+/* === ACCOUNT FORM === */
+.account-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.account-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.account-field.full {
+  grid-column: 1 / -1;
+}
+
+.account-field label {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 600 !important;
+  color: rgba(60, 60, 67, 0.6);
+}
+
+[data-theme="dark"] .account-field label {
+  color: rgba(235, 235, 245, 0.6);
+}
+
+.account-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+/* === SETTINGS GROUP === */
+.settings-group {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+[data-theme="dark"] .settings-group {
+  background: rgba(28, 28, 30, 0.5);
+  border: 1px solid rgba(84, 84, 88, 0.3);
+}
+
+.settings-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.settings-row label {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 600 !important;
+  color: #000000;
+}
+
+[data-theme="dark"] .settings-row label {
+  color: rgba(255, 255, 255, 1);
+}
+
+.settings-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.settings-status {
+  font-size: 13px !important; /* footnote */
+  font-weight: 400 !important;
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(120, 120, 128, 0.1);
+}
+
+[data-theme="dark"] .settings-status {
+  background: rgba(118, 118, 128, 0.15);
+}
+
+/* === VISUALIZE AI PANEL === */
+.visualize-ai-panel {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+[data-theme="dark"] .visualize-ai-panel {
+  background: rgba(28, 28, 30, 0.5);
+  border: 1px solid rgba(84, 84, 88, 0.3);
+}
+
+.visualize-ai-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.visualize-ai-title {
+  font-size: 20px !important; /* title3 */
+  font-weight: 700 !important;
+  color: #000000;
+}
+
+[data-theme="dark"] .visualize-ai-title {
+  color: rgba(255, 255, 255, 1);
+}
+
+.visualize-ai-section {
+  margin: 16px 0;
+}
+
+.visualize-ai-section label {
+  font-size: 15px !important; /* subheadline */
+  font-weight: 600 !important;
+  color: #000000;
+  display: block;
+  margin-bottom: 8px;
+}
+
+[data-theme="dark"] .visualize-ai-section label {
+  color: rgba(255, 255, 255, 1);
+}
+
+.visualize-ai-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.visualize-ai-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px !important;
+  font-weight: 400 !important;
+  cursor: pointer;
+}
+
+.visualize-ai-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+/* === PRICING SECTIONS === */
+.pricing-section {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 16px 0;
+}
+
+[data-theme="dark"] .pricing-section {
+  background: rgba(28, 28, 30, 0.5);
+  border: 1px solid rgba(84, 84, 88, 0.3);
+}
+
+.total-section {
+  background: rgba(0, 122, 255, 0.1);
+  border: 1px solid rgba(0, 122, 255, 0.2);
+}
+
+[data-theme="dark"] .total-section {
+  background: rgba(10, 132, 255, 0.15);
+  border: 1px solid rgba(10, 132, 255, 0.3);
+}
+
+.pricing-settings-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 20px;
+}
+
+/* === ROOM PALETTE SPECIFIC === */
+#room-palette-content {
+  display: flex;
+  gap: 20px;
+  max-width: 90vw;
+  max-height: 90vh;
+  padding: 30px;
+}
+
+#room-palette-left,
+#room-palette-right {
+  flex: 1;
+}
+
+#room-preview-canvas {
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+[data-theme="dark"] #room-preview-canvas {
+  border: 1px solid rgba(84, 84, 88, 0.3);
+  background: rgba(28, 28, 30, 0.5);
+}
+
+.room-palette-actions {
+  display: flex;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+#palette-list {
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+}
+
+[data-theme="dark"] #palette-list {
+  background: rgba(28, 28, 30, 0.5);
+  border: 1px solid rgba(84, 84, 88, 0.3);
+}
+
+/* === FLOORPLAN SPECIFIC === */
+#floorplan-stage {
+  display: flex;
+  gap: 20px;
+  padding: 20px;
+}
+
+#floorplan-stage-main {
+  flex: 1;
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] #floorplan-stage-main {
+  background: rgba(28, 28, 30, 0.5);
+  border: 1px solid rgba(84, 84, 88, 0.3);
+}
+
+#floorplan-sidebar {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.floorplan-page-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.floorplan-tools-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.floorplan-distances-column,
+.floorplan-auto-box {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+[data-theme="dark"] .floorplan-distances-column,
+[data-theme="dark"] .floorplan-auto-box {
+  background: rgba(28, 28, 30, 0.5);
+  border: 1px solid rgba(84, 84, 88, 0.3);
+}
+
+.floorplan-commit-row {
+  display: flex;
+  gap: 12px;
+  margin-top: auto;
+}
+
+/* === SCROLLBARS - Apple Style === */
+#info-body::-webkit-scrollbar,
+#palette-list::-webkit-scrollbar,
+#account-main::-webkit-scrollbar {
+  width: 8px;
+}
+
+#info-body::-webkit-scrollbar-track,
+#palette-list::-webkit-scrollbar-track,
+#account-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#info-body::-webkit-scrollbar-thumb,
+#palette-list::-webkit-scrollbar-thumb,
+#account-main::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 128, 0.3);
+  border-radius: 4px;
+}
+
+[data-theme="dark"] #info-body::-webkit-scrollbar-thumb,
+[data-theme="dark"] #palette-list::-webkit-scrollbar-thumb,
+[data-theme="dark"] #account-main::-webkit-scrollbar-thumb {
+  background: rgba(118, 118, 128, 0.4);
+}
+
+#info-body::-webkit-scrollbar-thumb:hover,
+#palette-list::-webkit-scrollbar-thumb:hover,
+#account-main::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 120, 128, 0.5);
+}
+
+[data-theme="dark"] #info-body::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"] #palette-list::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"] #account-main::-webkit-scrollbar-thumb:hover {
+  background: rgba(118, 118, 128, 0.6);
+}

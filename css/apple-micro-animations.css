@@ -1,0 +1,493 @@
+/*!
+ * Apple Micro-Animations & Transitions
+ * Implements Apple's fluid motion design language
+ * https://developer.apple.com/design/human-interface-guidelines/motion
+ */
+
+/* ============================================================================
+   MICRO-ANIMATIONS - Buttons & Interactive Elements
+   ============================================================================ */
+
+/* Button press animation */
+.da-btn-mode,
+.da-btn-icon,
+.da-btn-close,
+.da-quick-btn,
+.da-nav-btn,
+.da-btn-small,
+.da-btn-complete,
+.da-doc-action,
+.da-contact-action {
+  transition: all var(--apple-duration-fast) var(--apple-ease-spring);
+  transform-origin: center;
+}
+
+.da-btn-mode:active,
+.da-btn-icon:active,
+.da-btn-close:active,
+.da-quick-btn:active,
+.da-nav-btn:active,
+.da-btn-small:active,
+.da-btn-complete:active,
+.da-doc-action:active,
+.da-contact-action:active {
+  transform: scale(0.94);
+  transition-duration: 50ms;
+}
+
+/* Hover scale animation */
+.da-btn-mode:hover,
+.da-btn-icon:hover,
+.da-quick-btn:hover {
+  transform: scale(1.05);
+}
+
+/* Icon rotation on hover */
+.da-btn-icon svg,
+.da-quick-btn svg {
+  transition: transform var(--apple-duration-fast) var(--apple-ease-spring);
+}
+
+.da-btn-icon:hover svg {
+  transform: rotate(15deg);
+}
+
+/* Dark mode icon transition */
+.dark-mode-symbol {
+  transition: all var(--apple-duration-normal) var(--apple-ease-out);
+}
+
+.dark-mode-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================================================
+   CARD ANIMATIONS - Entrance & Hover
+   ============================================================================ */
+
+.da-card,
+.da-step-header-card,
+.da-stage-item,
+.da-doc-item,
+.da-contact-item,
+.da-checklist-item,
+.da-tip-card,
+.da-resource-link {
+  animation: apple-slide-up var(--apple-duration-normal) var(--apple-ease-out) backwards;
+}
+
+/* Stagger card animations */
+.da-card:nth-child(1) { animation-delay: 50ms; }
+.da-card:nth-child(2) { animation-delay: 100ms; }
+.da-card:nth-child(3) { animation-delay: 150ms; }
+.da-card:nth-child(4) { animation-delay: 200ms; }
+.da-card:nth-child(5) { animation-delay: 250ms; }
+
+/* Hover lift effect */
+.da-card:hover,
+.da-stage-item:hover,
+.da-doc-item:hover,
+.da-contact-item:hover,
+.da-resource-link:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--apple-shadow-3);
+  transition: all var(--apple-duration-fast) var(--apple-ease-out);
+}
+
+/* ============================================================================
+   PROGRESS RING ANIMATION
+   ============================================================================ */
+
+.da-progress-ring-fill {
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.da-progress-percent {
+  animation: number-fade-in 0.5s var(--apple-ease-out);
+}
+
+@keyframes number-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================================================
+   STAGE LIST ANIMATIONS
+   ============================================================================ */
+
+.da-stage-item {
+  transition: all var(--apple-duration-fast) var(--apple-ease-spring);
+  position: relative;
+}
+
+.da-stage-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 0;
+  background: var(--apple-system-blue);
+  border-radius: 0 2px 2px 0;
+  transition: height var(--apple-duration-fast) var(--apple-ease-spring);
+}
+
+.da-stage-item.current::before,
+.da-stage-item:hover::before {
+  height: 70%;
+}
+
+.da-stage-item.current {
+  background: var(--apple-system-blue-tint);
+}
+
+/* Icon pulse animation for current stage */
+.da-stage-item.current .complete-icon {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+/* Complete checkmark animation */
+.complete-icon {
+  transition: all var(--apple-duration-fast) var(--apple-ease-spring);
+}
+
+.da-stage-item.complete .complete-icon {
+  color: var(--apple-system-green);
+  animation: checkmark-bounce 0.5s var(--apple-ease-spring);
+}
+
+@keyframes checkmark-bounce {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* ============================================================================
+   CHECKLIST ITEM ANIMATIONS
+   ============================================================================ */
+
+.da-checklist-checkbox {
+  transition: all var(--apple-duration-fast) var(--apple-ease-spring);
+}
+
+.da-checklist-item.completed .da-checklist-checkbox {
+  animation: checkbox-check 0.4s var(--apple-ease-spring);
+}
+
+@keyframes checkbox-check {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.2) rotate(-5deg);
+  }
+  60% {
+    transform: scale(0.95) rotate(3deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* Strikethrough animation */
+.da-checklist-item.completed .da-checklist-text {
+  animation: strike-through 0.3s var(--apple-ease-out) forwards;
+}
+
+@keyframes strike-through {
+  from {
+    text-decoration-color: transparent;
+  }
+  to {
+    text-decoration-color: var(--apple-tertiary-label);
+  }
+}
+
+/* ============================================================================
+   STEP INDICATOR DOTS
+   ============================================================================ */
+
+.da-step-dot {
+  transition: all var(--apple-duration-normal) var(--apple-ease-spring);
+}
+
+.da-step-dot.current {
+  animation: dot-expand 0.5s var(--apple-ease-spring);
+}
+
+@keyframes dot-expand {
+  0% {
+    width: 8px;
+  }
+  50% {
+    width: 28px;
+  }
+  100% {
+    width: 24px;
+  }
+}
+
+/* ============================================================================
+   MODAL & OVERLAY ANIMATIONS
+   ============================================================================ */
+
+.da-workflow-fullscreen {
+  animation: modal-fade-in var(--apple-duration-normal) var(--apple-ease-out);
+}
+
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Content slide-in */
+.da-main-content {
+  animation: content-slide-in 0.5s var(--apple-ease-out);
+}
+
+@keyframes content-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Sidebar slide-in */
+.da-sidebar {
+  animation: sidebar-slide-in 0.4s var(--apple-ease-out);
+}
+
+@keyframes sidebar-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* ============================================================================
+   NAVIGATION ANIMATIONS
+   ============================================================================ */
+
+.da-nav-icon {
+  transition: transform var(--apple-duration-fast) var(--apple-ease-spring);
+  display: inline-block;
+}
+
+.da-nav-btn:hover .da-nav-icon {
+  animation: arrow-bounce 0.6s ease-in-out;
+}
+
+@keyframes arrow-bounce {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(4px);
+  }
+}
+
+.da-nav-prev:hover .da-nav-icon {
+  animation: arrow-bounce-left 0.6s ease-in-out;
+}
+
+@keyframes arrow-bounce-left {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(-4px);
+  }
+}
+
+/* ============================================================================
+   BADGE ANIMATIONS
+   ============================================================================ */
+
+.da-complete-badge,
+.da-step-badge {
+  animation: badge-pop 0.4s var(--apple-ease-spring);
+}
+
+@keyframes badge-pop {
+  0% {
+    transform: scale(0) rotate(-15deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.15) rotate(5deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* ============================================================================
+   LOADING & SKELETON STATES
+   ============================================================================ */
+
+.da-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--apple-fill-tertiary) 0%,
+    var(--apple-fill-secondary) 50%,
+    var(--apple-fill-tertiary) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ============================================================================
+   FOCUS ANIMATIONS
+   ============================================================================ */
+
+.da-btn-mode:focus-visible,
+.da-btn-icon:focus-visible,
+.da-nav-btn:focus-visible,
+.da-notes-input:focus-visible {
+  animation: focus-ring 0.3s var(--apple-ease-out);
+}
+
+@keyframes focus-ring {
+  from {
+    box-shadow: 0 0 0 0 var(--apple-system-blue-tint);
+  }
+  to {
+    box-shadow: 0 0 0 4px var(--apple-system-blue-tint);
+  }
+}
+
+/* ============================================================================
+   THEME TRANSITION
+   ============================================================================ */
+
+[data-theme="dark"] {
+  animation: theme-transition 0.3s var(--apple-ease-out);
+}
+
+@keyframes theme-transition {
+  from {
+    opacity: 0.95;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Smooth color transitions for all elements */
+* {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: var(--apple-duration-fast);
+  transition-timing-function: var(--apple-ease-out);
+}
+
+/* Prevent transition on transform and other layout properties */
+*:not(.da-btn-mode):not(.da-btn-icon):not(.da-nav-btn) {
+  transition-property: background-color, border-color, color, fill, stroke;
+}
+
+/* ============================================================================
+   LIQUID GLASS SHIMMER EFFECT
+   ============================================================================ */
+
+.da-workflow-header::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  animation: shimmer 3s infinite;
+  pointer-events: none;
+}
+
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+[data-theme="dark"] .da-workflow-header::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.05),
+    transparent
+  );
+}
+
+/* ============================================================================
+   ACCESSIBILITY - Respect reduced motion preference
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .da-workflow-header::after {
+    animation: none;
+  }
+}

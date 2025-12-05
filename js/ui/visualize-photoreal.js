@@ -813,7 +813,7 @@
     }
   }
   
-  function createProject(name) {
+  function createProject(name, saveCurrentDesign) {
     var projects = getUserProjects();
     var newProject = {
       id: 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
@@ -821,11 +821,112 @@
       createdAt: Date.now(),
       updatedAt: Date.now(),
       aiImages: [],
-      thumbnail: null
+      thumbnail: null,
+      // Design data (3D + 2D)
+      designData: saveCurrentDesign ? getCurrentDesignData() : null,
+      hasDesign: !!saveCurrentDesign
     };
     projects.push(newProject);
     saveUserProjects(projects);
+    console.log('[Projects] Created project:', newProject.name, '(Has design:', newProject.hasDesign + ')');
     return newProject;
+  }
+  
+  /**
+   * Get current 3D/2D design data from the workspace
+   */
+  function getCurrentDesignData() {
+    try {
+      if (typeof window.serializeProject === 'function') {
+        var serialized = window.serializeProject();
+        return JSON.parse(serialized);
+      }
+      return null;
+    } catch (e) {
+      console.error('[Projects] Failed to get design data:', e);
+      return null;
+    }
+  }
+  
+  /**
+   * Save current workspace design to a project
+   */
+  function saveCurrentDesignToProject(projectId) {
+    var projects = getUserProjects();
+    var project = projects.find(function(p) { return p.id === projectId; });
+    
+    if (!project) {
+      console.error('[Projects] Project not found:', projectId);
+      return false;
+    }
+    
+    var designData = getCurrentDesignData();
+    if (!designData) {
+      console.error('[Projects] Failed to capture design data');
+      return false;
+    }
+    
+    project.designData = designData;
+    project.hasDesign = true;
+    project.updatedAt = Date.now();
+    
+    saveUserProjects(projects);
+    console.log('[Projects] Saved design to project:', project.name);
+    
+    // Also update localStorage current project
+    if (typeof window.saveProjectSilently === 'function') {
+      window.saveProjectSilently();
+    }
+    
+    return true;
+  }
+  
+  /**
+   * Load project design into workspace
+   */
+  function loadProjectDesignIntoWorkspace(projectId) {
+    var projects = getUserProjects();
+    var project = projects.find(function(p) { return p.id === projectId; });
+    
+    if (!project) {
+      alert('Project not found');
+      return false;
+    }
+    
+    if (!project.designData) {
+      alert('This project has no saved design data.\n\nCreate a design in the 3D/2D workspace, then save it to this project.');
+      return false;
+    }
+    
+    // Confirm before loading (will replace current workspace)
+    if (!confirm('Load project "' + project.name + '"?\n\nThis will replace your current workspace.\n\nMake sure you\'ve saved any changes first!')) {
+      return false;
+    }
+    
+    try {
+      // Restore the project design
+      if (typeof window.restoreProject === 'function') {
+        var serialized = JSON.stringify(project.designData);
+        window.restoreProject(serialized);
+        
+        // Store current project ID globally
+        window.__currentProjectId = projectId;
+        
+        console.log('[Projects] Loaded design from project:', project.name);
+        
+        if (typeof window.updateStatus === 'function') {
+          window.updateStatus('Loaded project: ' + project.name);
+        }
+        
+        return true;
+      }
+    } catch (e) {
+      console.error('[Projects] Failed to load design:', e);
+      alert('Failed to load project design. See console for details.');
+      return false;
+    }
+    
+    return false;
   }
   
   function saveImagesToProject(projectId, images) {
@@ -880,7 +981,7 @@
         var item = document.createElement('div');
         item.className = 'project-select-item';
         item.innerHTML = 
-          '<span class="project-select-item-icon">📁</span>' +
+          '<span class="project-select-item-icon"><svg class="sf-icon" width="18" height="18"><use href="#sf-folder"/></svg></span>' +
           '<div class="project-select-item-info">' +
             '<div class="project-select-item-name">' + escapeHtml(project.name) + '</div>' +
             '<div class="project-select-item-meta">' + project.aiImages.length + ' images • ' + formatDate(project.updatedAt) + '</div>' +
@@ -1065,9 +1166,53 @@
 
   function setStatus(message, mode){
     if (!state.statusEl) return;
-    state.statusEl.textContent = message || '';
+    
+    // Clear existing content
+    state.statusEl.textContent = '';
     state.statusEl.classList.remove('live', 'fallback', 'error', 'info');
     if (mode) state.statusEl.classList.add(mode);
+    
+    if (!message) return;
+    
+    // Create message container
+    var messageContainer = document.createElement('div');
+    messageContainer.className = 'visualize-status-content';
+    messageContainer.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 10px;';
+    
+    // Create message text
+    var messageText = document.createElement('span');
+    messageText.textContent = message;
+    messageText.style.flex = '1';
+    messageContainer.appendChild(messageText);
+    
+    // Add minimize button for success messages
+    if (mode === 'live' && message.toLowerCase().includes('complete')) {
+      var minimizeBtn = document.createElement('button');
+      minimizeBtn.className = 'visualize-status-minimize';
+      minimizeBtn.innerHTML = '−';
+      minimizeBtn.title = 'Minimize';
+      minimizeBtn.style.cssText = 'padding: 2px 8px; margin-left: 10px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: inherit; border-radius: 4px; cursor: pointer; font-size: 16px; line-height: 1;';
+      
+      minimizeBtn.onclick = function() {
+        if (state.statusEl.classList.contains('minimized')) {
+          // Restore
+          state.statusEl.classList.remove('minimized');
+          messageText.style.display = '';
+          minimizeBtn.innerHTML = '−';
+          minimizeBtn.title = 'Minimize';
+        } else {
+          // Minimize
+          state.statusEl.classList.add('minimized');
+          messageText.style.display = 'none';
+          minimizeBtn.innerHTML = '+';
+          minimizeBtn.title = 'Restore';
+        }
+      };
+      
+      messageContainer.appendChild(minimizeBtn);
+    }
+    
+    state.statusEl.appendChild(messageContainer);
   }
 
   function setLoading(visible, label){
@@ -3604,32 +3749,64 @@
       card.className = 'project-card';
       card.setAttribute('data-project-id', project.id);
       
-      // Build thumbnail preview
+      // Build thumbnail preview - prioritize design thumbnail
       var thumbsHtml = '';
+      if (project.thumbnail) {
+        // Show design thumbnail first
+        thumbsHtml = '<img class="project-card-thumb project-design-thumb" src="' + escapeHtml(project.thumbnail) + '" alt="Design Preview" onerror="this.style.display=\'none\'" />';
+      }
+      
       if (project.aiImages && project.aiImages.length > 0) {
-        var previewImages = project.aiImages.slice(0, 4);
-        thumbsHtml = previewImages.map(function(url) {
+        var previewImages = project.aiImages.slice(0, project.thumbnail ? 3 : 4);
+        thumbsHtml += previewImages.map(function(url) {
           return '<img class="project-card-thumb" src="' + escapeHtml(url) + '" alt="AI Render" onerror="this.style.display=\'none\'" />';
         }).join('');
       }
+      
+      // Build status badges
+      var badges = [];
+      if (project.hasDesign) badges.push('<span class="project-badge design">📐 Design</span>');
+      if (project.aiImages && project.aiImages.length > 0) badges.push('<span class="project-badge ai">' + project.aiImages.length + ' AI</span>');
+      var badgesHtml = badges.length > 0 ? '<div class="project-badges">' + badges.join('') + '</div>' : '';
       
       card.innerHTML = 
         '<span class="project-card-icon">📁</span>' +
         '<div class="project-card-info">' +
           '<div class="project-card-name">' + escapeHtml(project.name) + '</div>' +
           '<div class="project-card-meta">' + 
-            (project.aiImages ? project.aiImages.length : 0) + ' images • Updated ' + formatDate(project.updatedAt) +
+            formatDate(project.updatedAt) +
           '</div>' +
+          badgesHtml +
           '<div class="project-card-images">' + thumbsHtml + '</div>' +
         '</div>' +
         '<div class="project-card-actions">' +
-          '<button class="load-btn" data-action="load">Load</button>' +
-          '<button class="delete-btn" data-action="delete">Delete</button>' +
+          '<button class="da-workflow-btn" data-action="da-workflow" title="DA Approval Workflow">🏗️ DA</button>' +
+          '<button class="save-design-btn" data-action="save-design" title="Save current 3D/2D design to this project">💾 Save</button>' +
+          '<button class="load-btn" data-action="load" title="Load this project\'s design">📂 Load</button>' +
+          '<button class="delete-btn" data-action="delete" title="Delete project">🗑️</button>' +
         '</div>';
       
       // Wire action buttons
+      card.querySelector('.da-workflow-btn').addEventListener('click', function() {
+        openDAWorkflowForProject(project.id);
+      });
+      
+      card.querySelector('.save-design-btn').addEventListener('click', function() {
+        if (saveCurrentDesignToProject(project.id)) {
+          if (typeof window.updateStatus === 'function') {
+            window.updateStatus('Design saved to: ' + project.name);
+          }
+          loadProjectsView(); // Refresh to show updated badge
+        }
+      });
+      
       card.querySelector('.load-btn').addEventListener('click', function() {
-        loadProjectDesign(project.id);
+        if (loadProjectDesignIntoWorkspace(project.id)) {
+          // Close account modal after loading
+          if (typeof window.hideAccount === 'function') {
+            window.hideAccount();
+          }
+        }
       });
       
       card.querySelector('.delete-btn').addEventListener('click', function() {
@@ -3650,22 +3827,18 @@
     console.log('[Projects] Deleted project:', projectId);
   }
   
-  function loadProjectDesign(projectId) {
-    var projects = getUserProjects();
-    var project = projects.find(function(p) { return p.id === projectId; });
-    
-    if (!project) {
-      alert('Project not found');
-      return;
+  function openDAWorkflowForProject(projectId) {
+    // Close account modal if open
+    if (typeof window.hideAccount === 'function') {
+      window.hideAccount();
     }
     
-    // For now, just show the AI images in a gallery
-    // In the future, this could load the full 3D design
-    if (project.aiImages && project.aiImages.length > 0) {
-      // Open visualize panel with these images
-      alert('Project "' + project.name + '" has ' + project.aiImages.length + ' AI renders.\n\nFull project loading coming soon!');
+    // Open DA workflow in fullscreen
+    if (typeof window.DAWorkflowUI !== 'undefined' && window.DAWorkflowUI.open) {
+      window.DAWorkflowUI.open(projectId);
     } else {
-      alert('This project has no AI renders yet.');
+      console.error('[DA Workflow] UI not loaded yet');
+      alert('DA Workflow system is loading... Please try again in a moment.');
     }
   }
   
@@ -3678,7 +3851,11 @@
       newBtn.addEventListener('click', function() {
         var name = prompt('Enter project name:');
         if (name && name.trim()) {
-          createProject(name.trim());
+          var saveDesign = confirm('Save current 3D/2D design to this project?\n\nClick OK to include your current workspace design,\nor Cancel to create an empty project.');
+          createProject(name.trim(), saveDesign);
+          if (saveDesign && typeof window.updateStatus === 'function') {
+            window.updateStatus('Created project with design: ' + name.trim());
+          }
           loadProjectsView();
         }
       });
@@ -3698,6 +3875,9 @@
   window.getUserProjects = getUserProjects;
   window.saveUserProjects = saveUserProjects;
   window.createProject = createProject;
+  window.saveCurrentDesignToProject = saveCurrentDesignToProject;
+  window.loadProjectDesignIntoWorkspace = loadProjectDesignIntoWorkspace;
+  window.getCurrentDesignData = getCurrentDesignData;
 
   document.addEventListener('DOMContentLoaded', init);
 })();

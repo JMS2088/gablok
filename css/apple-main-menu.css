@@ -1,0 +1,378 @@
+/*!
+ * Apple Design System - Main 3D Menu Override
+ * Applies Apple HIG to the main application controls
+ */
+
+/* ============================================================================
+   GLOBAL APPLE BUTTON SYSTEM FOR MAIN MENU
+   ============================================================================ */
+
+#controls {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 100;
+  background: transparent;
+  backdrop-filter: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Base button style - Apple System */
+#controls button,
+#controls .dropdown-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+
+/* Primary button (Add Room) - Blue filled */
+#controls button:not(.secondary):not(.dropdown-button) {
+  background: #007AFF;
+  color: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+#controls button:not(.secondary):not(.dropdown-button):hover {
+  background: #0051D5;
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+#controls button:not(.secondary):not(.dropdown-button):active {
+  transform: scale(0.96);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* Secondary buttons - Glass material */
+#controls button.secondary {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  color: #1D1D1F !important;
+  border: 0.5px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  font-weight: 600 !important;
+}
+
+#controls button.secondary:hover {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  transform: translateY(-1px);
+  color: #007AFF !important;
+}
+
+#controls button.secondary:active {
+  transform: scale(0.96);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Save for DA button - Special styling */
+#controls button.save-for-da {
+  background: rgba(52, 199, 89, 0.12) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  color: #34C759 !important;
+  border: 0.5px solid rgba(52, 199, 89, 0.3) !important;
+}
+
+#controls button.save-for-da:hover {
+  background: rgba(52, 199, 89, 0.2) !important;
+  border-color: rgba(52, 199, 89, 0.5) !important;
+  color: #28A745 !important;
+}
+
+/* ============================================================================
+   DROPDOWN SYSTEM - Apple Style
+   ============================================================================ */
+
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-button {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  color: #1D1D1F !important;
+  border: 0.5px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  padding-right: 32px !important;
+}
+
+.dropdown-button:hover {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  transform: translateY(-1px);
+  color: #007AFF !important;
+}
+
+.dropdown-button:hover .caret svg path {
+  stroke: #007AFF !important;
+}
+
+.dropdown.open .dropdown-button {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: #007AFF !important;
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15) !important;
+  color: #007AFF !important;
+}
+
+.dropdown.open .dropdown-button .caret svg path {
+  stroke: #007AFF !important;
+}
+
+.dropdown-button .caret {
+  position: absolute;
+  right: 10px;
+  width: 12px;
+  height: 8px;
+  pointer-events: none;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.dropdown.open .dropdown-button .caret {
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.dropdown-button .caret svg path {
+  stroke: #1D1D1F;
+  transition: stroke 0.2s ease;
+}
+
+/* Dropdown List - Apple Style */
+.dropdown-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 200px;
+  max-height: 400px;
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 6px;
+  z-index: 200;
+  display: none;
+  animation: dropdown-slide-in 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+@keyframes dropdown-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dropdown.open .dropdown-list {
+  display: block;
+}
+
+/* Dropdown Items */
+.dropdown-item {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  color: #1D1D1F;
+  transition: all 0.15s ease;
+  margin-bottom: 2px;
+}
+
+.dropdown-item:last-child {
+  margin-bottom: 0;
+}
+
+.dropdown-item:hover {
+  background: #007AFF;
+  color: #FFFFFF;
+}
+
+.dropdown-item.disabled {
+  color: rgba(60, 60, 67, 0.3);
+  cursor: default;
+}
+
+.dropdown-item.disabled:hover {
+  background: transparent;
+  color: rgba(60, 60, 67, 0.3);
+}
+
+.dropdown-item.separator {
+  padding: 0;
+  margin: 4px 0;
+  border-top: 0.5px solid rgba(60, 60, 67, 0.12);
+  cursor: default;
+  height: 1px;
+  min-height: 1px;
+}
+
+.dropdown-item.separator:hover {
+  background: transparent;
+}
+
+.dropdown-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(60, 60, 67, 0.6);
+  padding: 8px 12px 4px 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: default;
+}
+
+.dropdown-title:hover {
+  background: transparent;
+  color: rgba(60, 60, 67, 0.6);
+}
+
+/* ============================================================================
+   ACCOUNT BUTTON
+   ============================================================================ */
+
+#account-button {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 100;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+#account-button:hover {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: scale(1.05);
+}
+
+#account-button:active {
+  transform: scale(0.95);
+}
+
+#account-button svg circle {
+  stroke: #007AFF;
+  fill: #FFFFFF;
+}
+
+#account-button svg path {
+  stroke: #007AFF;
+}
+
+#account-button:hover svg circle,
+#account-button:hover svg path {
+  stroke: #0051D5;
+}
+
+/* ============================================================================
+   VERSION BADGE - Minimal Apple Style
+   ============================================================================ */
+
+#version-badge {
+  position: fixed;
+  top: 8px;
+  right: 64px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: rgba(255, 255, 255, 0.9);
+  padding: 4px 8px;
+  font: 10px 'SF Mono', ui-monospace, monospace;
+  z-index: 10000;
+  border-radius: 6px;
+  border: 0.5px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================================
+   RESPONSIVE & ACCESSIBILITY
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  #controls {
+    top: 12px;
+    left: 12px;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  #controls button,
+  #controls .dropdown-button {
+    height: 36px;
+    font-size: 14px;
+  }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  #controls button,
+  #controls .dropdown-button,
+  .dropdown-list,
+  .dropdown-item {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* Focus states for accessibility */
+#controls button:focus-visible,
+#controls .dropdown-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.25);
+}
+
+.dropdown-item:focus-visible {
+  outline: none;
+  background: #007AFF;
+  color: #FFFFFF;
+}
