@@ -680,7 +680,7 @@
   window.plan2dFlipVertical = window.plan2dFlipVertical || plan2dFlipVertical;
 
   // UI helpers -------------------------------------------------------------
-  function plan2dUpdateActiveButtons(){ try{ var ids=['plan2d-tool-wall','plan2d-tool-window','plan2d-tool-door','plan2d-tool-select','plan2d-tool-erase']; for(var i=0;i<ids.length;i++){ var el=document.getElementById(ids[i]); if(el) el.classList.remove('active'); } var map={wall:'plan2d-tool-wall',window:'plan2d-tool-window',door:'plan2d-tool-door',select:'plan2d-tool-select',erase:'plan2d-tool-erase'}; var id=map[__plan2d.tool]; var btn=id&&document.getElementById(id); if(btn) btn.classList.add('active'); }catch(e){} }
+  function plan2dUpdateActiveButtons(){ try{ var ids=['plan2d-tool-wall','plan2d-tool-window','plan2d-tool-door','plan2d-tool-select','plan2d-tool-erase']; for(var i=0;i<ids.length;i++){ var el=document.getElementById(ids[i]); if(el) el.classList.remove('selected'); } var map={wall:'plan2d-tool-wall',window:'plan2d-tool-window',door:'plan2d-tool-door',select:'plan2d-tool-select',erase:'plan2d-tool-erase'}; var id=map[__plan2d.tool]; var btn=id&&document.getElementById(id); if(btn) btn.classList.add('selected'); }catch(e){} }
   function plan2dCursor(){ var c=document.getElementById('plan2d-canvas'); if(!c) return; c.style.cursor = (__plan2d.tool==='erase')? 'not-allowed' : (__plan2d.tool==='select' ? 'pointer' : 'crosshair'); plan2dUpdateActiveButtons(); }
   window.plan2dCursor = window.plan2dCursor || plan2dCursor;
 

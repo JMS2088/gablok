@@ -244,19 +244,24 @@
     
     // Render step header card
     if (headerCard) {
+      var stepIndex = stage.steps.findIndex(function(s) { return s.id === step.id; }) + 1;
+      var stepCode = stage.code + stepIndex;
       headerCard.innerHTML = `
-        <div class="da-step-badge">${stage.icon} Stage ${stage.code}</div>
-        <h2 class="da-step-title">${step.title}</h2>
-        <p class="da-step-description">${step.description}</p>
-        <div class="da-step-actions">
-          <button class="da-btn-complete ${isComplete ? 'completed' : ''}" 
-                  onclick="window.DAWorkflowUI.toggleStepComplete('${step.id}')">
-            <svg class="complete-icon" width="18" height="18" viewBox="0 0 18 18">
-              <use xlink:href="/css/sf-symbols.svg#${isComplete ? 'sf-checkmark-circle' : 'sf-circle'}" />
-            </svg>
-            <span>${isComplete ? 'Completed' : 'Mark Complete'}</span>
-          </button>
-          ${stage.estimatedDays ? '<span class="da-time-estimate"><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align: middle; margin-right: 4px;"><use xlink:href="/css/sf-symbols.svg#sf-clock" /></svg>' + stage.estimatedDays + '</span>' : ''}
+        <div class="da-step-badge-graphic">${stepCode}</div>
+        <div class="da-step-header-content">
+          <div class="da-step-stage-label">Stage ${stage.code} • Step ${stepIndex} of ${stage.steps.length}</div>
+          <h2 class="da-step-title">${step.title}</h2>
+          <p class="da-step-description">${step.description}</p>
+          <div class="da-step-actions">
+            <button class="da-btn-complete ${isComplete ? 'completed' : ''}" 
+                    onclick="window.DAWorkflowUI.toggleStepComplete('${step.id}')">
+              <svg class="complete-icon" width="18" height="18" viewBox="0 0 18 18">
+                <use href="#${isComplete ? 'sf-checkmark-circle' : 'sf-circle'}" />
+              </svg>
+              <span>${isComplete ? 'Completed' : 'Mark Complete'}</span>
+            </button>
+            ${stage.estimatedDays ? '<span class="da-time-estimate"><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align: middle; margin-right: 4px;"><use href="#sf-clock" /></svg>' + stage.estimatedDays + '</span>' : ''}
+          </div>
         </div>
       `;
     }
@@ -269,7 +274,7 @@
       <!-- Checklist Card -->
       <div class="da-card da-checklist-card">
         <div class="da-card-header">
-          <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 20 20"><use xlink:href="/css/sf-symbols.svg#sf-checkmark-circle" /></svg> Action Items</h3>
+          <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#sf-checkmark-circle" /></svg> Action Items</h3>
           <span class="da-card-badge">${getChecklistProgress(step)} of ${step.checklist.length}</span>
         </div>
         <div class="da-card-body">
@@ -281,7 +286,7 @@
       ${step.documents.length > 0 ? `
         <div class="da-card da-documents-card">
           <div class="da-card-header">
-            <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 20 20"><use xlink:href="/css/sf-symbols.svg#sf-doc-text" /></svg> Required Documents</h3>
+            <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#sf-folder" /></svg> Required Documents</h3>
             <span class="da-card-badge">${getDocumentsProgress(step)} of ${step.documents.length}</span>
           </div>
           <div class="da-card-body">
@@ -294,7 +299,7 @@
       ${step.contacts.length > 0 ? `
         <div class="da-card da-contacts-card">
           <div class="da-card-header">
-            <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 20 20"><use xlink:href="/css/sf-symbols.svg#sf-person-2" /></svg> Key Contacts</h3>
+            <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#sf-person-2" /></svg> Key Contacts</h3>
             <span class="da-card-badge">${getContactsProgress(step)} of ${step.contacts.length}</span>
           </div>
           <div class="da-card-body">

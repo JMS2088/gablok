@@ -92,7 +92,7 @@
 .da-contact-item:hover,
 .da-resource-link:hover {
   transform: translateY(-2px);
-  box-shadow: var(--apple-shadow-3);
+  box-shadow: none;
   transition: all var(--apple-duration-fast) var(--apple-ease-out);
 }
 
@@ -399,10 +399,10 @@
 
 @keyframes focus-ring {
   from {
-    box-shadow: 0 0 0 0 var(--apple-system-blue-tint);
+    box-shadow: none;
   }
   to {
-    box-shadow: 0 0 0 4px var(--apple-system-blue-tint);
+    box-shadow: none;
   }
 }
 

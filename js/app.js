@@ -114,6 +114,22 @@ function __wireAppUi(){
     } catch(e){ /* no-op */ }
   });
 
+  // Close all dropdowns helper
+  function closeAllDropdowns() {
+    var dropdowns = document.querySelectorAll('.dropdown');
+    dropdowns.forEach(function(dd) {
+      dd.classList.remove('open');
+    });
+  }
+
+  // Close all dropdowns helper
+  function closeAllDropdowns() {
+    var dropdowns = document.querySelectorAll('.dropdown');
+    dropdowns.forEach(function(dd) {
+      dd.classList.remove('open');
+    });
+  }
+
   // Custom Level Dropdown wiring
   (function(){
     var dd = document.getElementById('levelDropdown');
@@ -122,7 +138,7 @@ function __wireAppUi(){
     var list = document.getElementById('levelList');
     var nativeSel = document.getElementById('levelSelect');
     function close(){ if(dd) dd.classList.remove('open'); }
-    function open(){ if(dd) dd.classList.add('open'); }
+    function open(){ closeAllDropdowns(); if(dd) dd.classList.add('open'); }
     function setLabelFromValue(v){
       var map = { '0':'Ground Floor', '1':'First Floor', 'stairs':'+ Stairs', 'pergola':'+ Pergola', 'garage':'+ Garage', 'roof':'+ Roof', 'pool':'+ Pool', 'balcony':'+ Balcony' };
       if(btnText) btnText.textContent = map[String(v)] || 'Level';
@@ -200,7 +216,7 @@ function __wireAppUi(){
     var btn = document.getElementById('actionsButton');
     var list = document.getElementById('actionsList');
     function close(){ if(dd) dd.classList.remove('open'); }
-    function open(){ if(dd) dd.classList.add('open'); }
+    function open(){ closeAllDropdowns(); if(dd) dd.classList.add('open'); }
     if(btn){ btn.addEventListener('click', function(e){ e.stopPropagation(); if(dd.classList.contains('open')) close(); else open(); }); }
     if(list){ list.addEventListener('click', function(e){
       var item = e.target.closest('.dropdown-item'); if(!item || item.classList.contains('separator')) return;

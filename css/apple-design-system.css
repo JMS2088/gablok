@@ -48,6 +48,8 @@
   
   /* Letter Spacing */
   --apple-tracking-tight: -0.41px;
+  --apple-tracking-normal: -0.24px;
+  --apple-tracking-loose: 0.38px;
   
   /* SF Symbol Icon Sizes */
   --sf-icon-small: 14px;
@@ -55,9 +57,6 @@
   --sf-icon-medium: 20px;
   --sf-icon-large: 24px;
   --sf-icon-xlarge: 32px;
-}
-  --apple-tracking-normal: -0.24px;
-  --apple-tracking-loose: 0.38px;
   
   /* Spacing Scale - Apple's 4pt Grid System */
   --apple-space-1: 4px;
@@ -524,13 +523,13 @@
 .apple-card {
   background: var(--apple-secondary-system-grouped-background);
   border-radius: var(--apple-radius-2xlarge);
-  box-shadow: var(--apple-shadow-1);
+  box-shadow: none;
   overflow: hidden;
   transition: all var(--apple-duration-normal) var(--apple-ease-out);
 }
 
 .apple-card:hover {
-  box-shadow: var(--apple-shadow-3);
+  box-shadow: none;
   transform: translateY(-2px);
 }
 
@@ -739,11 +738,11 @@
    UTILITIES
    ============================================================================ */
 
-.apple-shadow-1 { box-shadow: var(--apple-shadow-1); }
-.apple-shadow-2 { box-shadow: var(--apple-shadow-2); }
-.apple-shadow-3 { box-shadow: var(--apple-shadow-3); }
-.apple-shadow-4 { box-shadow: var(--apple-shadow-4); }
-.apple-shadow-5 { box-shadow: var(--apple-shadow-5); }
+.apple-shadow-1 { box-shadow: none; }
+.apple-shadow-2 { box-shadow: none; }
+.apple-shadow-3 { box-shadow: none; }
+.apple-shadow-4 { box-shadow: none; }
+.apple-shadow-5 { box-shadow: none; }
 
 /* SF Symbol Icons */
 .sf-icon {

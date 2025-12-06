@@ -80,10 +80,6 @@
   animation: dna-container-rotate 20s linear infinite !important;
 }
 
-[data-theme="dark"] .splash-module-list {
-  /* Inherited from parent */
-}
-
 [data-theme="dark"] .splash-module-list > div {
   background: rgba(45, 55, 72, 0.7) !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
@@ -165,7 +161,7 @@
   font-weight: var(--apple-font-weight-semibold) !important;
   background: var(--apple-blue) !important;
   color: white !important;
-  box-shadow: 0 2px 12px var(--apple-blue-alpha-40), 0 0 20px var(--apple-blue-alpha-20) !important;
+  box-shadow: none;
   transform: scale(1.05) !important;
 }
 
@@ -173,7 +169,7 @@
 [data-theme="dark"] .splash-module-list > div[style*="opacity: 1"] {
   background: var(--apple-blue) !important;
   color: white !important;
-  box-shadow: 0 2px 12px var(--apple-blue-alpha-50), 0 0 25px var(--apple-blue-alpha-30) !important;
+  box-shadow: none;
 }
 
 /* === LOADING SPINNER (if used elsewhere) === */

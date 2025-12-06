@@ -80,11 +80,33 @@
     var m = qs('account-modal'); if(!m) return;
     if(m.__animating) return; // avoid re-entry during animation
     loadProfile();
+    updateDashboard(); // Update dashboard stats
     m.classList.remove('closing');
     m.classList.add('visible');
     // Force reflow then add showing to trigger staged animations
     void m.offsetWidth; // reflow
     m.classList.add('showing');
+  }
+  
+  function updateDashboard(){
+    // Update time
+    function updateTime(){
+      var timeEl = qs('dashboard-time');
+      if(timeEl){
+        var now = new Date();
+        var hours = now.getHours();
+        var mins = now.getMinutes();
+        var ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12 || 12;
+        mins = mins < 10 ? '0' + mins : mins;
+        timeEl.textContent = hours + ':' + mins + ' ' + ampm;
+      }
+    }
+    updateTime();
+    // Update time every minute
+    if(!window.__dashboardTimeInterval){
+      window.__dashboardTimeInterval = setInterval(updateTime, 60000);
+    }
   }
   function hideAccount(){
     var m = qs('account-modal'); if(!m) return;
@@ -106,10 +128,32 @@
     else { setTimeout(done, 520); }
   }
   function switchView(target){
+    // Hide dashboard, show target view
+    var dashboard = qs('account-dashboard');
+    if(dashboard) dashboard.classList.add('is-hidden');
+    
     var views = ['profile','projects','settings','payments','info','share','admin'];
-    views.forEach(function(v){ var sec = qs('account-view-' + v); if(sec) sec.style.display = (v===target?'block':'none'); });
-    var btns = document.querySelectorAll('.account-nav-btn');
-    btns.forEach(function(b){ if(b.getAttribute('data-view')===target) b.classList.add('active'); else b.classList.remove('active'); });
+    views.forEach(function(v){ 
+      var sec = qs('account-view-' + v); 
+      if(sec) {
+        if(v === target) {
+          sec.classList.remove('is-hidden');
+        } else {
+          sec.classList.add('is-hidden');
+        }
+      }
+    });
+    
+    // Update card active states
+    var cards = document.querySelectorAll('.account-card');
+    cards.forEach(function(c){ 
+      if(c.getAttribute('data-view')===target) c.classList.add('active'); 
+      else c.classList.remove('active'); 
+    });
+    
+    // Add back button to return to dashboard
+    addBackButton(target);
+    
     // Lazy-populate content for embedded views
     try {
       if (target === 'projects' && typeof window.loadProjectsView === 'function') {
@@ -155,19 +199,59 @@
       }
     } catch(e) {}
   }
+  
+  function addBackButton(viewName){
+    // Check if view has a back button area, if not create one
+    var view = qs('account-view-' + viewName);
+    if(!view) return;
+    
+    var existing = view.querySelector('.view-back-btn');
+    if(existing) return; // already has back button
+    
+    var backBtn = document.createElement('button');
+    backBtn.className = 'view-back-btn secondary';
+    backBtn.innerHTML = '<svg class="sf-icon" width="16" height="16"><use href="#sf-chevron-left"/></svg> Dashboard';
+    backBtn.addEventListener('click', function(){
+      returnToDashboard();
+    });
+    
+    // Insert at top of view
+    view.insertBefore(backBtn, view.firstChild);
+  }
+  
+  function returnToDashboard(){
+    var dashboard = qs('account-dashboard');
+    if(dashboard) dashboard.classList.remove('is-hidden');
+    
+    var views = ['profile','projects','settings','payments','info','share','admin'];
+    views.forEach(function(v){ 
+      var sec = qs('account-view-' + v); 
+      if(sec) sec.classList.add('is-hidden');
+    });
+    
+    // Clear active states
+    var cards = document.querySelectorAll('.account-card');
+    cards.forEach(function(c){ c.classList.remove('active'); });
+  }
+  
   function wire(){
     var btn = qs('account-button'); if(btn && !btn.__wired){ btn.__wired=true; btn.addEventListener('click', showAccount); }
     var close = qs('account-close'); if(close) close.addEventListener('click', hideAccount);
-    var nav = document.getElementById('account-nav');
-    if(nav && !nav.__wired){
-      nav.__wired=true;
-      nav.addEventListener('click', function(e){
-        var b = e.target.closest('.account-nav-btn'); if(!b) return;
-        var view = b.getAttribute('data-view'); if (view) switchView(view);
-      });
-    }
-  var save = qs('account-save'); if(save) save.addEventListener('click', function(){ saveProfile(); hideAccount(); });
-  var cancel = qs('account-cancel'); if(cancel) cancel.addEventListener('click', function(){ hideAccount(); });
+    
+    // Wire account cards instead of nav buttons
+    var cards = document.querySelectorAll('.account-card');
+    cards.forEach(function(card){
+      if(!card.__wired){
+        card.__wired = true;
+        card.addEventListener('click', function(){
+          var view = this.getAttribute('data-view');
+          if(view) switchView(view);
+        });
+      }
+    });
+    
+    var save = qs('account-save'); if(save) save.addEventListener('click', function(){ saveProfile(); hideAccount(); });
+    var cancel = qs('account-cancel'); if(cancel) cancel.addEventListener('click', function(){ hideAccount(); });
     // Allow clicking backdrop to close (optional)
     var backdrop = qs('account-splash'); if(backdrop){ backdrop.addEventListener('click', function(e){ if(e.target===backdrop) hideAccount(); }); }
   }
@@ -645,15 +729,15 @@
     modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:100000;display:flex;align-items:center;justify-content:center;';
     
     var content = document.createElement('div');
-    content.style.cssText = 'background:white;padding:30px;border-radius:12px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;';
+    content.className = 'da-modal-content';
     
     content.innerHTML = `
-      <h2 style="margin:0 0 10px 0;font-size:24px;"><svg class="sf-icon" width="22" height="22"><use href="#sf-arrow-down-doc"/></svg> Save Design for DA Submission</h2>
-      <p style="margin:0 0 20px 0;color:#666;">Select a project or create a new one:</p>
-      <div id="da-project-list" style="margin-bottom:20px;"></div>
-      <div style="display:flex;gap:10px;justify-content:flex-end;">
-        <button class="da-cancel-btn" style="padding:10px 20px;border:1px solid #ccc;background:white;border-radius:6px;cursor:pointer;">Cancel</button>
-        <button id="da-new-project-btn" style="padding:10px 20px;border:none;background:#4CAF50;color:white;border-radius:6px;cursor:pointer;font-weight:600;">+ New Project</button>
+      <h2 class="da-modal-title"><svg class="sf-icon" width="22" height="22"><use href="#sf-arrow-down-doc"/></svg> Save Design for DA Submission</h2>
+      <p class="da-modal-subtitle">Select a project or create a new one:</p>
+      <div id="da-project-list" class="da-project-list"></div>
+      <div class="da-modal-actions">
+        <button class="da-cancel-btn secondary">Cancel</button>
+        <button id="da-new-project-btn" class="da-new-btn">+ New Project</button>
       </div>
     `;
     
@@ -665,33 +749,39 @@
     
     if (projects.length === 0) {
       var emptyMsg = document.createElement('div');
-      emptyMsg.style.cssText = 'padding:30px;text-align:center;color:#999;border:2px dashed #ddd;border-radius:8px;';
-      emptyMsg.innerHTML = '<div style="font-size:40px;margin-bottom:10px;"><svg class="sf-icon" width="40" height="40" style="color:#999;"><use href="#sf-folder"/></svg></div><div>No projects yet. Create your first project below.</div>';
+      emptyMsg.className = 'da-project-empty';
+      emptyMsg.innerHTML = '<div class="da-empty-icon"><svg class="sf-icon" width="40" height="40"><use href="#sf-folder"/></svg></div><div>No projects yet. Create your first project below.</div>';
       projectList.appendChild(emptyMsg);
     } else {
       projects.forEach(function(project) {
         var projectDiv = document.createElement('div');
-        projectDiv.style.cssText = 'padding:15px;border:2px solid #e0e0e0;border-radius:8px;margin-bottom:10px;cursor:pointer;transition:all 0.2s;display:flex;gap:15px;align-items:center;';
+        projectDiv.className = 'da-project-item';
         
         // Create thumbnail preview
         var thumbnailHtml = '';
         if (project.thumbnail || snapshot) {
-          thumbnailHtml = '<img src="' + (project.thumbnail || snapshot) + '" style="width:80px;height:60px;object-fit:cover;border-radius:4px;flex-shrink:0;" />';
+          thumbnailHtml = '<img src="' + (project.thumbnail || snapshot) + '" class="da-project-thumbnail" />';
         } else {
-          thumbnailHtml = '<div style="width:80px;height:60px;background:#f0f0f0;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#999;font-size:30px;flex-shrink:0;"><svg class="sf-icon" width="30" height="30" style="color:#999;"><use href="#sf-house"/></svg></div>';
+          thumbnailHtml = '<div class="da-project-thumbnail-empty"><svg class="sf-icon" width="30" height="30"><use href="#sf-house"/></svg></div>';
         }
         
         projectDiv.innerHTML = `
           ${thumbnailHtml}
-          <div style="flex:1;">
-            <div style="font-weight:600;font-size:16px;margin-bottom:5px;"><svg class="sf-icon" width="16" height="16"><use href="#sf-folder"/></svg> ${escapeHtml(project.name)}</div>
-            <div style="font-size:12px;color:#666;">Updated: ${new Date(project.updatedAt).toLocaleDateString()}</div>
-            ${project.hasDesign ? '<div style="margin-top:5px;"><span style="background:#4CAF50;color:white;padding:2px 8px;border-radius:4px;font-size:11px;"><svg class="sf-icon" width="11" height="11"><use href="#sf-square-and-pencil"/></svg> Design</span></div>' : ''}
+          <div class="da-project-info">
+            <div class="da-project-name"><svg class="sf-icon" width="16" height="16"><use href="#sf-folder"/></svg> ${escapeHtml(project.name)}</div>
+            <div class="da-project-date">Updated: ${new Date(project.updatedAt).toLocaleDateString()}</div>
+            ${project.hasDesign ? '<div class="da-project-badge-wrap"><span class="da-project-badge"><svg class="sf-icon" width="11" height="11"><use href="#sf-square-and-pencil"/></svg> Design</span></div>' : ''}
           </div>
         `;
         
-        projectDiv.onmouseover = function() { this.style.borderColor = '#4CAF50'; this.style.background = '#f1f8f4'; };
-        projectDiv.onmouseout = function() { this.style.borderColor = '#e0e0e0'; this.style.background = 'white'; };
+        projectDiv.onmouseover = function() { 
+          this.style.borderColor = 'var(--apple-blue)'; 
+          this.style.background = 'var(--apple-secondary-system-background)'; 
+        };
+        projectDiv.onmouseout = function() { 
+          this.style.borderColor = 'var(--apple-separator)'; 
+          this.style.background = 'var(--apple-system-background)'; 
+        };
         projectDiv.onclick = function() {
           saveToExistingProject(project.id, designData, snapshot);
           modal.remove();

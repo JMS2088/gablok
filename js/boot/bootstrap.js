@@ -166,6 +166,7 @@
     { label: 'Plan2D core', url: withV('js/plan2d/editor-core.js'), critical: false },
     { label: 'Plan2D draw', url: withV('js/plan2d/draw.js'), critical: false },
     { label: 'Plan2D editor wiring', url: withV('js/plan2d/editor.js'), critical: false },
+    { label: 'Plan2D navigation', url: withV('js/plan2d/nav.js'), critical: false },
     { label: 'Plan2D WebGL', url: withV('js/plan2d/webgl.js'), critical: false },
     { label: 'App core', url: withV('js/app.js'), critical: true, essential: true }
   ];

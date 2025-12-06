@@ -64,7 +64,7 @@
   -webkit-backdrop-filter: blur(40px) saturate(180%);
   border: 1px solid var(--apple-separator);
   border-radius: var(--apple-radius-large);
-  box-shadow: var(--apple-shadow-3);
+  box-shadow: none;
 }
 
 [data-theme="dark"] #info-content,
@@ -79,7 +79,7 @@
 [data-theme="dark"] .project-select-content {
   background: var(--apple-material-regular);
   border: 1px solid var(--apple-separator);
-  box-shadow: var(--apple-shadow-3);
+  box-shadow: none;
 }
 
 /* === MODAL HEADERS === */
@@ -242,7 +242,7 @@
   transition: all var(--apple-duration-fast) var(--apple-ease-default);
   background: var(--apple-blue);
   color: #ffffff;
-  box-shadow: var(--apple-shadow-1);
+  box-shadow: none;
 }
 
 [data-theme="dark"] #info-modal button,
@@ -257,7 +257,7 @@
 [data-theme="dark"] .visualize-unsaved-popup button,
 [data-theme="dark"] .project-select-popup button {
   background: rgba(10, 132, 255, 1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: none;
 }
 
 /* === SECONDARY BUTTONS === */
@@ -304,7 +304,7 @@ button#visualize-ai-configure {
 .visualize-unsaved-popup button:hover,
 .project-select-popup button:hover {
   transform: scale(1.02);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: none;
 }
 
 [data-theme="dark"] #info-modal button:hover,
@@ -318,7 +318,7 @@ button#visualize-ai-configure {
 [data-theme="dark"] #reset-confirmation-modal button:hover,
 [data-theme="dark"] .visualize-unsaved-popup button:hover,
 [data-theme="dark"] .project-select-popup button:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  box-shadow: none;
 }
 
 /* === CLOSE BUTTONS === */
@@ -418,7 +418,7 @@ button#visualize-ai-configure {
 #account-form input:focus {
   outline: none;
   border-color: rgba(0, 122, 255, 1);
-  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
+  box-shadow: none;
 }
 
 [data-theme="dark"] #info-modal input:focus,
@@ -431,7 +431,7 @@ button#visualize-ai-configure {
 [data-theme="dark"] #account-modal input:focus,
 [data-theme="dark"] #account-form input:focus {
   border-color: rgba(10, 132, 255, 1);
-  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.2);
+  box-shadow: none;
 }
 
 /* === SELECTS - Apple Style === */
@@ -495,12 +495,12 @@ button#visualize-ai-configure {
 #visualize-ai-prompt:focus {
   outline: none;
   border-color: rgba(0, 122, 255, 1);
-  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.1);
+  box-shadow: none;
 }
 
 [data-theme="dark"] #visualize-ai-prompt:focus {
   border-color: rgba(10, 132, 255, 1);
-  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.2);
+  box-shadow: none;
 }
 
 /* === LISTS - Minimal Apple Style === */
@@ -537,7 +537,7 @@ button#visualize-ai-configure {
 }
 
 .info-sublist li {
-  font-size: 15px !important; /* subheadline */
+  font-size: 14px !important; /* subheadline */
   font-weight: 400 !important;
   line-height: 1.47 !important;
   letter-spacing: -0.24px !important;
@@ -553,12 +553,12 @@ button#visualize-ai-configure {
 }
 
 .shortcut-grid .left {
-  font-size: 15px !important; /* subheadline */
-  font-weight: 600 !important;
+  font-size: 14px !important; /* subheadline */
+  font-weight: 400 !important;
 }
 
 .shortcut-grid .right {
-  font-size: 15px !important; /* subheadline */
+  font-size: 14px !important; /* subheadline */
   font-weight: 400 !important;
 }
 
@@ -688,8 +688,8 @@ input[type="checkbox"]:checked {
 }
 
 .account-field label {
-  font-size: 15px !important; /* subheadline */
-  font-weight: 600 !important;
+  font-size: 14px !important; /* subheadline */
+  font-weight: 400 !important;
   color: rgba(60, 60, 67, 0.6);
 }
 
@@ -725,8 +725,8 @@ input[type="checkbox"]:checked {
 }
 
 .settings-row label {
-  font-size: 15px !important; /* subheadline */
-  font-weight: 600 !important;
+  font-size: 14px !important; /* subheadline */
+  font-weight: 400 !important;
   color: #000000;
 }
 
@@ -789,8 +789,8 @@ input[type="checkbox"]:checked {
 }
 
 .visualize-ai-section label {
-  font-size: 15px !important; /* subheadline */
-  font-weight: 600 !important;
+  font-size: 14px !important; /* subheadline */
+  font-weight: 400 !important;
   color: #000000;
   display: block;
   margin-bottom: 8px;
@@ -810,7 +810,7 @@ input[type="checkbox"]:checked {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 15px !important;
+  font-size: 14px !important;
   font-weight: 400 !important;
   cursor: pointer;
 }

@@ -81,7 +81,7 @@ input,
 
 /* Dropdown Items */
 .dropdown-item {
-  font-size: 15px !important; /* subheadline */
+  font-size: 14px !important; /* subheadline */
   font-weight: 400 !important;
   padding: 10px 16px !important;
 }
@@ -103,13 +103,13 @@ input,
 button {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif !important;
   font-size: 17px !important; /* body */
-  font-weight: 600 !important;
+  font-weight: 400 !important;
   line-height: 1.47 !important;
   letter-spacing: -0.41px !important;
 }
 
 button.secondary {
-  font-size: 15px !important; /* subheadline */
+  font-size: 14px !important; /* subheadline */
 }
 
 /* Inputs and Selects */
@@ -129,8 +129,8 @@ textarea {
 
 /* Labels */
 label {
-  font-size: 15px !important; /* subheadline */
-  font-weight: 600 !important;
+  font-size: 14px !important; /* subheadline */
+  font-weight: 400 !important;
   line-height: 1.33 !important;
   letter-spacing: -0.24px !important;
 }
@@ -216,22 +216,22 @@ small,
 }
 
 #measurements h3 {
-  font-size: 22px !important; /* title2 */
+  font-size: 15px !important; /* subheadline */
   font-weight: 700 !important;
 }
 
 .measurement-label {
-  font-size: 15px !important; /* subheadline */
-  font-weight: 600 !important;
+  font-size: 14px !important; /* subheadline */
+  font-weight: 400 !important;
 }
 
 .measurement-input {
-  font-size: 17px !important; /* body */
+  font-size: 14px !important; /* subheadline */
   font-weight: 400 !important;
 }
 
 .measurement-value {
-  font-size: 17px !important; /* body */
+  font-size: 14px !important; /* subheadline */
   font-weight: 400 !important;
 }
 
@@ -422,6 +422,6 @@ small,
   h1 { font-size: 28px !important; }
   h2 { font-size: 22px !important; }
   h3 { font-size: 20px !important; }
-  button { font-size: 15px !important; }
+  button { font-size: 13px !important; }
   .dropdown-item { font-size: 13px !important; }
 }

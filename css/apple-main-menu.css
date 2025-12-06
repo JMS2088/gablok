@@ -40,7 +40,7 @@ body.app-ready #controls {
   height: 32px;
   padding: 0 12px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  font-size: 13px;
+  font-size: 13px !important;
   font-weight: 600;
   letter-spacing: -0.01em;
   border-radius: 8px;
@@ -56,18 +56,18 @@ body.app-ready #controls {
 #controls button:not(.secondary):not(.dropdown-button) {
   background: var(--apple-blue);
   color: var(--apple-system-background);
-  box-shadow: var(--apple-shadow-1);
+  box-shadow: none;
 }
 
 #controls button:not(.secondary):not(.dropdown-button):hover {
   background: var(--apple-blue-hover);
-  box-shadow: 0 4px 12px var(--apple-blue-alpha-30);
+  box-shadow: none;
   transform: translateY(-1px);
 }
 
 #controls button:not(.secondary):not(.dropdown-button):active {
   transform: scale(0.96);
-  box-shadow: var(--apple-shadow-1);
+  box-shadow: none;
 }
 
 /* Secondary buttons - Glass material */
@@ -77,21 +77,21 @@ body.app-ready #controls {
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   color: var(--apple-label) !important;
   border: 0.5px solid var(--apple-separator) !important;
-  box-shadow: var(--apple-shadow-1) !important;
+  box-shadow: none;
   font-weight: var(--apple-font-weight-semibold) !important;
 }
 
 #controls button.secondary:hover {
   background: var(--apple-secondary-system-background) !important;
   border-color: var(--apple-separator) !important;
-  box-shadow: 0 4px 12px var(--apple-shadow-2) !important;
+  box-shadow: none;
   transform: translateY(-1px);
   color: var(--apple-blue) !important;
 }
 
 #controls button.secondary:active {
   transform: scale(0.96);
-  box-shadow: var(--apple-shadow-1) !important;
+  box-shadow: none;
 }
 
 /* Save for DA button - Special styling */
@@ -124,14 +124,14 @@ body.app-ready #controls {
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   color: var(--apple-label) !important;
   border: 0.5px solid var(--apple-separator) !important;
-  box-shadow: var(--apple-shadow-1) !important;
+  box-shadow: none;
   padding-right: 32px !important;
 }
 
 .dropdown-button:hover {
   background: var(--apple-secondary-system-background) !important;
   border-color: var(--apple-separator) !important;
-  box-shadow: 0 4px 12px var(--apple-shadow-2) !important;
+  box-shadow: none;
   transform: translateY(-1px);
   color: var(--apple-blue) !important;
 }
@@ -143,7 +143,7 @@ body.app-ready #controls {
 .dropdown.open .dropdown-button {
   background: var(--apple-secondary-system-background) !important;
   border-color: var(--apple-blue) !important;
-  box-shadow: 0 0 0 3px var(--apple-blue-alpha-15) !important;
+  box-shadow: none;
   color: var(--apple-blue) !important;
 }
 
@@ -187,7 +187,7 @@ body.app-ready #controls {
   -webkit-backdrop-filter: blur(40px) saturate(180%);
   border: 0.5px solid var(--apple-separator);
   border-radius: var(--apple-radius-medium);
-  box-shadow: var(--apple-shadow-3);
+  box-shadow: none;
   padding: 6px;
   z-index: 200;
   display: none;
@@ -212,7 +212,7 @@ body.app-ready #controls {
 /* Dropdown Items */
 .dropdown-item {
   padding: 8px 12px;
-  font-size: var(--apple-font-size-subheadline);
+  font-size: 13px !important;
   font-weight: var(--apple-font-weight-medium);
   cursor: pointer;
   white-space: nowrap;
@@ -292,14 +292,14 @@ body.app-ready #controls {
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 0.5px solid var(--apple-separator);
   border-radius: 50%;
-  box-shadow: var(--apple-shadow-1);
+  box-shadow: none;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
 #account-button:hover {
   background: var(--apple-secondary-system-background);
-  box-shadow: 0 4px 12px var(--apple-shadow-2);
+  box-shadow: none;
   transform: scale(1.05);
 }
 
@@ -338,7 +338,7 @@ body.app-ready #controls {
   z-index: 10000;
   border-radius: var(--apple-radius-small);
   border: 0.5px solid var(--apple-quaternary-label);
-  box-shadow: var(--apple-shadow-1);
+  box-shadow: none;
   letter-spacing: 0.02em;
 }
 
@@ -376,7 +376,7 @@ body.app-ready #controls {
 #controls button:focus-visible,
 #controls .dropdown-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px var(--apple-blue-alpha-25);
+  box-shadow: none;
 }
 
 .dropdown-item:focus-visible {
