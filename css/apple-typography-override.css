@@ -91,12 +91,12 @@ input,
   font-weight: 600 !important;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(60, 60, 67, 0.6);
+  color: var(--apple-secondary-label);
   padding: 8px 16px 4px 16px !important;
 }
 
 [data-theme="dark"] .dropdown-title {
-  color: rgba(235, 235, 245, 0.6);
+  color: var(--apple-secondary-label);
 }
 
 /* Buttons */
@@ -286,17 +286,17 @@ small,
 
 /* === ACCOUNT MODAL === */
 .account-nav-btn {
-  font-size: 17px !important; /* body */
-  font-weight: 400 !important;
+  font-size: var(--apple-font-size-body) !important;
+  font-weight: var(--apple-font-weight-regular) !important;
 }
 
 .account-nav-btn.active {
-  font-weight: 600 !important;
+  font-weight: var(--apple-font-weight-semibold) !important;
 }
 
 .account-field label {
-  font-size: 15px !important; /* subheadline */
-  font-weight: 600 !important;
+  font-size: var(--apple-font-size-subheadline) !important;
+  font-weight: var(--apple-font-weight-semibold) !important;
 }
 
 /* === FLOORPLAN MODAL === */
@@ -371,24 +371,24 @@ small,
 
 /* === ADMIN MODAL === */
 .admin-section h3 {
-  font-size: 22px !important; /* title2 */
-  font-weight: 700 !important;
+  font-size: var(--apple-font-size-title2) !important;
+  font-weight: var(--apple-font-weight-bold) !important;
 }
 
 .admin-list li {
-  font-size: 15px !important; /* subheadline */
-  font-weight: 400 !important;
+  font-size: var(--apple-font-size-subheadline) !important;
+  font-weight: var(--apple-font-weight-regular) !important;
 }
 
 /* === SETTINGS === */
 .settings-hint {
-  font-size: 13px !important; /* footnote */
-  font-weight: 400 !important;
-  color: rgba(60, 60, 67, 0.6);
+  font-size: var(--apple-font-size-footnote) !important;
+  font-weight: var(--apple-font-weight-regular) !important;
+  color: var(--apple-secondary-label);
 }
 
 [data-theme="dark"] .settings-hint {
-  color: rgba(235, 235, 245, 0.6);
+  color: var(--apple-secondary-label);
 }
 
 .settings-row label {

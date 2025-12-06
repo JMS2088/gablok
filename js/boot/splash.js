@@ -26,49 +26,40 @@
     root.style.justifyContent='center';
     root.style.fontFamily='system-ui, sans-serif';
     root.style.zIndex='9999';
-    var title=document.createElement('div'); title.textContent='Loading…'; title.className='splash-message'; title.style.marginBottom='12px'; title.style.color='#c9d1d9';
-    var barWrap=document.createElement('div'); barWrap.style.width='320px'; barWrap.style.height='10px'; barWrap.style.border='1px solid #30363d'; barWrap.style.borderRadius='999px'; barWrap.style.background='#161b22'; barWrap.style.overflow='hidden';
-    var bar=document.createElement('div'); bar.className='splash-progress-bar'; bar.style.height='100%'; bar.style.width='0%'; bar.style.background='linear-gradient(90deg,#238636,#2ea043)'; bar.style.transition='width .25s ease'; barWrap.appendChild(bar);
-    var pct=document.createElement('div'); pct.className='splash-percent'; pct.style.marginTop='8px'; pct.style.fontSize='12px'; pct.style.color='#8b949e'; pct.textContent='0%';
-    var list=document.createElement('div'); list.className='splash-module-list'; list.style.marginTop='16px'; list.style.width='320px'; list.style.display='flex'; list.style.flexDirection='column'; list.style.gap='4px'; list.style.fontSize='11px'; list.style.color='#8b949e';
-    root.appendChild(title); root.appendChild(barWrap); root.appendChild(pct); root.appendChild(list);
+    var pct=document.createElement('div'); pct.className='splash-percent'; pct.style.fontSize='72px'; pct.style.fontWeight='700'; pct.style.color='#c9d1d9'; pct.textContent='0%';
+    var list=document.createElement('div'); list.className='splash-module-list';
+    root.appendChild(pct); root.appendChild(list);
     document.body.appendChild(root);
   }
 
-  var barEl = root.querySelector('.splash-progress-bar');
   var pctEl = root.querySelector('.splash-percent');
-  var msgEl = root.querySelector('.splash-message');
   var listEl = root.querySelector('.splash-module-list');
 
   function render(){
-    if(!barEl || total===0) return;
+    if(total===0) return;
     var p = Math.min(100, Math.round(loaded/total*100));
-    barEl.style.width = p + '%';
     if(pctEl) pctEl.textContent = p + '%';
   }
   function hideSplash(){
     if(hidden) return; hidden = true;
     root.classList.add('splash-hide');
     root.style.opacity='0';
+    // Add app-ready class to body to show 3D canvas and UI
+    setTimeout(function(){ 
+      try { document.body.classList.add('app-ready'); } catch(e){}
+    }, 200);
     setTimeout(function(){ try{ root.remove(); }catch(e){} }, 400);
   }
   function maybeHide(){
     if(hidden) return;
-    // Allow early hide once essential modules loaded + first frame OR full load complete.
-    // Maintain minimum display to avoid flash.
+    // Wait for ALL modules to load (not just essentials) + first frame + minimum display time
     var now = Date.now();
     var minDisplayTime = 600; // Slightly reduced for snappier feel
     var loadStartTime = window.__loadStartTime || now;
     var timeSinceStart = now - loadStartTime;
-    var essentialsDone = false;
-    try {
-      if (typeof window.__bootEssentialLoaded === 'number' && typeof window.__bootEssentialTotal === 'number') {
-        essentialsDone = (window.__bootEssentialLoaded >= window.__bootEssentialTotal && window.__bootEssentialTotal > 0);
-      }
-    } catch(_eChk){}
     var fullDone = (loaded === total && total > 0);
-    if ((essentialsDone || fullDone) && firstFrame && timeSinceStart >= minDisplayTime){
-      console.log('[Splash] Hiding (essentialsDone='+essentialsDone+', fullDone='+fullDone+', firstFrame='+firstFrame+', ms='+timeSinceStart+')');
+    if (fullDone && firstFrame && timeSinceStart >= minDisplayTime){
+      console.log('[Splash] Hiding (fullDone='+fullDone+', firstFrame='+firstFrame+', ms='+timeSinceStart+')');
       hideSplash();
     }
   }
@@ -111,8 +102,8 @@
   };
   window.__splashSetMessage = function(m){ if(msgEl) msgEl.textContent = m; };
   window.__splashFirstFrame = function(){ firstFrame = true; maybeHide(); };
-  // Listen for essential completion to attempt early hide
-  window.addEventListener('gablok:essential-complete', function(){ setTimeout(maybeHide, 50); });
+  // Listen for all modules completion to attempt hide
+  window.addEventListener('gablok:all-modules-complete', function(){ setTimeout(maybeHide, 50); });
   window.__splashMark = function(){ /* no-op maintained for compatibility */ };
 
   // Accelerated failsafe sequence: attempt progressive hide if first frame delayed

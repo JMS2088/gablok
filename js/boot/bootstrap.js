@@ -216,15 +216,54 @@
       trace.push({ module:m.label, url:m.url, ok:!!ok, ms:dur, attempts:tries||1, critical:!!m.critical, version: GLOBAL_VERSION });
       if(ok){
         tick(m.label);
+        // Check if splash progress reached 99% - enable 3D rendering then
+        try {
+          var splashProgress = (window.__bootAllLoaded || 0) / (window.__bootAllTotal || 1);
+          if (splashProgress >= 0.99 && !window.__renderingEnabled) {
+            window.__renderingEnabled = true;
+            console.log('[Boot] Splash at 99% - enabling 3D rendering');
+            // Force first frame now that rendering is enabled
+            try {
+              if (!window.__firstFrameEmitted) {
+                if (typeof window.setupCanvas==='function') window.setupCanvas();
+                if (typeof window.updateProjectionCache==='function') window.updateProjectionCache();
+                if (typeof window.renderLoop==='function') window.renderLoop();
+              }
+            } catch(_eForceFF){}
+          }
+        } catch(_eProgressCheck){}
         try { console.log('[BootLoad]', m.label, 'version='+GLOBAL_VERSION, 'ms='+dur); } catch(_eLog){}
         try {
           window.__bootAllLoaded = (window.__bootAllLoaded||0)+1;
           window.dispatchEvent(new CustomEvent('gablok:module-progress', { detail:{ loaded:window.__bootAllLoaded, total:window.__bootAllTotal, label:m.label, ms:dur } }));
+          // Check if splash progress reached 99% - enable 3D rendering then
+          try {
+            var splashProgress = (window.__bootAllLoaded || 0) / (window.__bootAllTotal || 1);
+            if (splashProgress >= 0.99 && !window.__renderingEnabled) {
+              window.__renderingEnabled = true;
+              console.log('[Boot] Splash at 99% - enabling 3D rendering');
+              // Force first frame now that rendering is enabled
+              try {
+                if (!window.__firstFrameEmitted) {
+                  if (typeof window.setupCanvas==='function') window.setupCanvas();
+                  if (typeof window.updateProjectionCache==='function') window.updateProjectionCache();
+                  if (typeof window.renderLoop==='function') window.renderLoop();
+                }
+              } catch(_eForceFF){}
+              // If app core is loaded, start the app now
+              if (window.__appCoreLoaded && !window.__appStarted && typeof window.startApp === 'function') {
+                window.__appStarted = true;
+                window.startApp();
+                console.log('[Boot] App started after splash reached 99%');
+              }
+            }
+          } catch(_eProgressCheck){}
           if(m.essential){
             window.__bootEssentialLoaded = (window.__bootEssentialLoaded||0)+1;
             if(window.__bootEssentialLoaded === window.__bootEssentialTotal){ 
               essentialDone=true; 
-              window.__renderingEnabled = true; // Enable rendering after essentials loaded
+              // Don't enable rendering yet - wait for splash to reach 99%
+              // window.__renderingEnabled = true; // Enable rendering after essentials loaded
               window.dispatchEvent(new CustomEvent('gablok:essential-complete')); 
               // Auto-select solid render mode once so windows/glass appear immediately
               try {
@@ -233,14 +272,14 @@
                   window.__autoWallModeApplied = true;
                 }
               } catch(_eAutoMode){}
-              // Force early first frame if engine ready but renderLoop not yet kicked
-              try {
-                if (!window.__firstFrameEmitted) {
-                  if (typeof window.setupCanvas==='function') window.setupCanvas();
-                  if (typeof window.updateProjectionCache==='function') window.updateProjectionCache();
-                  if (typeof window.renderLoop==='function') window.renderLoop();
-                }
-              } catch(_eForceFF){}
+              // Don't force early first frame - wait for 99% progress
+              // try {
+              //   if (!window.__firstFrameEmitted) {
+              //     if (typeof window.setupCanvas==='function') window.setupCanvas();
+              //     if (typeof window.updateProjectionCache==='function') window.updateProjectionCache();
+              //     if (typeof window.renderLoop==='function') window.renderLoop();
+              //   }
+              // } catch(_eForceFF){}
             }
             else window.dispatchEvent(new CustomEvent('gablok:essential-progress', { detail:{ loaded:window.__bootEssentialLoaded, total:window.__bootEssentialTotal, label:m.label } }));
           }
@@ -248,9 +287,47 @@
       } else {
         try { console[(m.optional?'warn':'error')]('[Boot] Failed', m.label, errLast); } catch(_eC){}
         tick(m.label + ' (failed)');
+        // Check if splash progress reached 99% even with failed module
+        try {
+          var splashProgress = (window.__bootAllLoaded || 0) / (window.__bootAllTotal || 1);
+          if (splashProgress >= 0.99 && !window.__renderingEnabled) {
+            window.__renderingEnabled = true;
+            console.log('[Boot] Splash at 99% - enabling 3D rendering (with failed module)');
+            // Force first frame now that rendering is enabled
+            try {
+              if (!window.__firstFrameEmitted) {
+                if (typeof window.setupCanvas==='function') window.setupCanvas();
+                if (typeof window.updateProjectionCache==='function') window.updateProjectionCache();
+                if (typeof window.renderLoop==='function') window.renderLoop();
+              }
+            } catch(_eForceFF){}
+          }
+        } catch(_eProgressCheckFail){}
         try {
           window.__bootAllLoaded = (window.__bootAllLoaded||0)+1;
           window.dispatchEvent(new CustomEvent('gablok:module-progress', { detail:{ loaded:window.__bootAllLoaded, total:window.__bootAllTotal, label:m.label, failed:true } }));
+          // Check if splash progress reached 99% even with failed module
+          try {
+            var splashProgress = (window.__bootAllLoaded || 0) / (window.__bootAllTotal || 1);
+            if (splashProgress >= 0.99 && !window.__renderingEnabled) {
+              window.__renderingEnabled = true;
+              console.log('[Boot] Splash at 99% - enabling 3D rendering (with failed module)');
+              // Force first frame now that rendering is enabled
+              try {
+                if (!window.__firstFrameEmitted) {
+                  if (typeof window.setupCanvas==='function') window.setupCanvas();
+                  if (typeof window.updateProjectionCache==='function') window.updateProjectionCache();
+                  if (typeof window.renderLoop==='function') window.renderLoop();
+                }
+              } catch(_eForceFF){}
+              // If app core is loaded, start the app now
+              if (window.__appCoreLoaded && !window.__appStarted && typeof window.startApp === 'function') {
+                window.__appStarted = true;
+                window.startApp();
+                console.log('[Boot] App started after splash reached 99%');
+              }
+            }
+          } catch(_eProgressCheckFail2){}
           if(m.essential){
             window.__bootEssentialLoaded = (window.__bootEssentialLoaded||0)+1;
             window.dispatchEvent(new CustomEvent('gablok:essential-progress', { detail:{ loaded:window.__bootEssentialLoaded, total:window.__bootEssentialTotal, label:m.label, failed:true } }));
@@ -259,9 +336,11 @@
         } catch(_ePF){}
       }
       if(!appStarted && ((m.label==='App core') || (m.url && /js\/app\.js/.test(m.url)))){
-        appStarted = true; window.__bootReady = true; if(typeof bootResolve==='function') bootResolve(true);
+        window.__appCoreLoaded = true; // Mark that app core is loaded, but don't start app yet
+        window.__bootReady = true; if(typeof bootResolve==='function') bootResolve(true);
         try { window.dispatchEvent(new CustomEvent('gablok:boot-ready')); } catch(_eEvt){}
-        try { if(document.readyState!=='loading' && typeof window.startApp==='function' && !window.__appStarted){ window.__appStarted=true; window.startApp(); } } catch(_eStart){}
+        // Don't start app yet - wait for splash to reach 99%
+        // try { if(document.readyState!=='loading' && typeof window.startApp==='function' && !window.__appStarted){ window.__appStarted=true; window.startApp(); } } catch(_eStart){}
       }
     }
 
@@ -269,7 +348,7 @@
     for(var i=0;i<essentials.length;i++){ await loadOne(essentials[i]); }
 
     // Start app if not yet started after essentials loaded
-    if(!appStarted){ window.__bootReady = true; if(typeof bootResolve==='function') bootResolve(true); try{ window.dispatchEvent(new CustomEvent('gablok:boot-ready')); }catch(_eBR){} try{ if(document.readyState!=='loading' && typeof window.startApp==='function' && !window.__appStarted){ window.__appStarted=true; window.startApp(); } }catch(_eSA){} 
+    if(!appStarted){ window.__bootReady = true; if(typeof bootResolve==='function') bootResolve(true); try{ window.dispatchEvent(new CustomEvent('gablok:boot-ready')); }catch(_eBR){} /* Don't start app yet - wait for splash to reach 99% */ /* try{ if(document.readyState!=='loading' && typeof window.startApp==='function' && !window.__appStarted){ window.__appStarted=true; window.startApp(); } }catch(_eSA){} */
       // Ensure a render is attempted immediately after boot-ready
       try { if (!window.__firstFrameEmitted && typeof window.renderLoop==='function') window.renderLoop(); } catch(_eKick){}
     }
@@ -279,6 +358,25 @@
 
     // Mark all done
     if(!allDone){ allDone=true; window.dispatchEvent(new CustomEvent('gablok:all-modules-complete')); }
+
+    // Final check: ensure rendering is enabled when all modules are loaded
+    if (!window.__renderingEnabled) {
+      window.__renderingEnabled = true;
+      console.log('[Boot] All modules loaded - enabling 3D rendering');
+      try {
+        if (!window.__firstFrameEmitted) {
+          if (typeof window.setupCanvas==='function') window.setupCanvas();
+          if (typeof window.updateProjectionCache==='function') window.updateProjectionCache();
+          if (typeof window.renderLoop==='function') window.renderLoop();
+        }
+      } catch(_eForceFF){}
+      // If app core is loaded, start the app now
+      if (window.__appCoreLoaded && !window.__appStarted && typeof window.startApp === 'function') {
+        window.__appStarted = true;
+        window.startApp();
+        console.log('[Boot] App started after all modules loaded');
+      }
+    }
 
     // Diagnostics
     try {

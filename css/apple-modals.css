@@ -59,12 +59,12 @@
 #account-sheet,
 .visualize-unsaved-content,
 .project-select-content {
-  background: rgba(255, 255, 255, 0.80) !important;
+  background: var(--apple-material-regular);
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--apple-separator);
+  border-radius: var(--apple-radius-large);
+  box-shadow: var(--apple-shadow-3);
 }
 
 [data-theme="dark"] #info-content,
@@ -77,9 +77,9 @@
 [data-theme="dark"] #account-sheet,
 [data-theme="dark"] .visualize-unsaved-content,
 [data-theme="dark"] .project-select-content {
-  background: rgba(28, 28, 30, 0.85) !important;
-  border: 1px solid rgba(84, 84, 88, 0.3);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  background: var(--apple-material-regular);
+  border: 1px solid var(--apple-separator);
+  box-shadow: var(--apple-shadow-3);
 }
 
 /* === MODAL HEADERS === */
@@ -88,11 +88,12 @@
 #admin-header,
 .floorplan-header,
 #pricing-content h2 {
-  font-size: 28px !important; /* title1 */
-  font-weight: 700 !important;
-  line-height: 1.2 !important;
-  letter-spacing: 0.35px !important;
-  color: #000000;
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-title1);
+  font-weight: var(--apple-font-weight-semibold);
+  line-height: var(--apple-line-height-normal);
+  letter-spacing: var(--apple-tracking-normal);
+  color: var(--apple-label);
   margin: 0 0 20px 0;
   padding: 0;
 }
@@ -102,7 +103,7 @@
 [data-theme="dark"] #admin-header,
 [data-theme="dark"] .floorplan-header,
 [data-theme="dark"] #pricing-content h2 {
-  color: rgba(255, 255, 255, 1);
+  color: var(--apple-label);
 }
 
 #info-header strong,
@@ -122,11 +123,12 @@
 #pricing-breakdown,
 #room-palette-right,
 #account-main {
-  font-size: 17px !important; /* body */
-  font-weight: 400 !important;
-  line-height: 1.47 !important;
-  letter-spacing: -0.41px !important;
-  color: #000000;
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-body);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-normal);
+  color: var(--apple-label);
 }
 
 [data-theme="dark"] #info-body,
@@ -137,7 +139,7 @@
 [data-theme="dark"] #pricing-breakdown,
 [data-theme="dark"] #room-palette-right,
 [data-theme="dark"] #account-main {
-  color: rgba(255, 255, 255, 1);
+  color: var(--apple-label);
 }
 
 /* === SECTION TITLES === */
@@ -148,11 +150,12 @@
 .pricing-section h3,
 #room-palette-title,
 #account-main h2 {
-  font-size: 22px !important; /* title2 */
-  font-weight: 700 !important;
-  line-height: 1.27 !important;
-  letter-spacing: 0.35px !important;
-  color: #000000;
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-title2);
+  font-weight: var(--apple-font-weight-semibold);
+  line-height: var(--apple-line-height-normal);
+  letter-spacing: var(--apple-tracking-normal);
+  color: var(--apple-label);
   margin: 20px 0 12px 0;
 }
 
@@ -174,11 +177,12 @@
 .share-hint,
 #visualize-footnote,
 #share-note {
-  font-size: 13px !important; /* footnote */
-  font-weight: 400 !important;
-  line-height: 1.38 !important;
-  letter-spacing: -0.08px !important;
-  color: rgba(60, 60, 67, 0.6);
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-footnote);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-loose);
+  color: var(--apple-secondary-label);
   margin: 8px 0;
 }
 
@@ -198,11 +202,12 @@
 #fp-scale-display,
 #fp-rooms-count,
 .visualize-ai-badge {
-  font-size: 12px !important; /* caption1 */
-  font-weight: 400 !important;
-  line-height: 1.33 !important;
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-caption1);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-relaxed);
   letter-spacing: 0;
-  color: rgba(60, 60, 67, 0.6);
+  color: var(--apple-secondary-label);
 }
 
 [data-theme="dark"] .floorplan-page-label,
@@ -225,19 +230,19 @@
 #reset-confirmation-modal button,
 .visualize-unsaved-popup button,
 .project-select-popup button {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-  font-size: 17px !important; /* body */
-  font-weight: 600 !important;
-  line-height: 1.47 !important;
-  letter-spacing: -0.41px !important;
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-body);
+  font-weight: var(--apple-font-weight-semibold);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-normal);
   padding: 10px 20px;
-  border-radius: 10px;
+  border-radius: var(--apple-radius-medium);
   border: none;
   cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  background: rgba(0, 122, 255, 1);
+  transition: all var(--apple-duration-fast) var(--apple-ease-default);
+  background: var(--apple-blue);
   color: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--apple-shadow-1);
 }
 
 [data-theme="dark"] #info-modal button,
@@ -267,8 +272,8 @@
 button#account-cancel,
 button#llm-test-connection,
 button#visualize-ai-configure {
-  background: rgba(120, 120, 128, 0.2);
-  color: rgba(0, 122, 255, 1);
+  background: var(--apple-secondary-fill);
+  color: var(--apple-blue);
 }
 
 [data-theme="dark"] #info-modal button.secondary,
@@ -326,8 +331,8 @@ button#visualize-ai-configure {
 #account-close,
 #visualize-photo-close,
 #project-select-close {
-  font-size: 28px !important;
-  font-weight: 300 !important;
+  font-size: var(--apple-font-size-largeTitle);
+  font-weight: var(--apple-font-weight-light);
   width: 32px;
   height: 32px;
   padding: 0;
@@ -335,8 +340,8 @@ button#visualize-ai-configure {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(120, 120, 128, 0.2);
-  color: rgba(60, 60, 67, 0.6);
+  background: var(--apple-secondary-fill);
+  color: var(--apple-secondary-label);
 }
 
 [data-theme="dark"] .close-button,
@@ -368,17 +373,17 @@ button#visualize-ai-configure {
 #fp-auto-border,
 #pricing-slab-mm,
 #pricing-soil-per-m3 {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-  font-size: 17px !important; /* body */
-  font-weight: 400 !important;
-  line-height: 1.47 !important;
-  letter-spacing: -0.41px !important;
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-body);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-normal);
   padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: rgba(255, 255, 255, 0.8);
-  color: #000000;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: var(--apple-radius-medium);
+  border: 1px solid var(--apple-separator);
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  transition: all var(--apple-duration-fast) var(--apple-ease-default);
 }
 
 [data-theme="dark"] #info-modal input,

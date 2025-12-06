@@ -12,13 +12,11 @@
 
 /* === 2D PLAN CONTENT - Pure Black Dark Mode === */
 #plan2d-content {
-  background: repeating-linear-gradient(0deg, #f5f5f7, #f5f5f7 28px, #e5e5ea 28px, #e5e5ea 56px),
-              repeating-linear-gradient(90deg, #f5f5f7, #f5f5f7 28px, #e5e5ea 28px, #e5e5ea 56px) !important;
+  background: var(--apple-system-background);
 }
 
 [data-theme="dark"] #plan2d-content {
-  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 1), rgba(0, 0, 0, 1) 28px, rgba(28, 28, 30, 1) 28px, rgba(28, 28, 30, 1) 56px),
-              repeating-linear-gradient(90deg, rgba(0, 0, 0, 1), rgba(0, 0, 0, 1) 28px, rgba(28, 28, 30, 1) 28px, rgba(28, 28, 30, 1) 56px) !important;
+  background: var(--apple-system-background);
 }
 
 /* === CAD MODE - Clean White === */
@@ -36,26 +34,26 @@ body.cad-mode #plan2d-canvas {
   align-items: center;
   gap: 14px;
   padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.80);
+  background: var(--apple-material-regular);
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid var(--apple-separator);
   position: relative;
   z-index: 2;
 }
 
 [data-theme="dark"] #plan2d-header {
-  background: rgba(28, 28, 30, 0.85);
-  border-bottom: 1px solid rgba(84, 84, 88, 0.3);
+  background: var(--apple-material-regular);
+  border-bottom: 1px solid var(--apple-separator);
 }
 
 /* === CANVAS AREA - Pure Black in Dark Mode === */
 #plan2d-canvas {
-  background: #f5f5f7;
+  background: var(--apple-system-background);
 }
 
 [data-theme="dark"] #plan2d-canvas {
-  background: rgba(0, 0, 0, 1) !important;
+  background: var(--apple-system-background) !important;
 }
 
 #plan2d-overlay {
@@ -65,121 +63,121 @@ body.cad-mode #plan2d-canvas {
 /* === RULERS - Apple Style === */
 #plan2d-ruler-top,
 #plan2d-ruler-left {
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  background: var(--apple-secondary-system-background);
+  border: 1px solid var(--apple-separator);
+  box-shadow: var(--apple-shadow-1);
 }
 
 [data-theme="dark"] #plan2d-ruler-top,
 [data-theme="dark"] #plan2d-ruler-left {
-  background: rgba(28, 28, 30, 0.95);
-  border: 1px solid rgba(84, 84, 88, 0.3);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  background: var(--apple-secondary-system-background);
+  border: 1px solid var(--apple-separator);
+  box-shadow: var(--apple-shadow-1);
 }
 
 body.cad-mode #plan2d-ruler-top,
 body.cad-mode #plan2d-ruler-left {
-  background: #ffffff !important;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: var(--apple-system-background) !important;
+  border: 1px solid var(--apple-separator);
 }
 
 /* === TOOLBAR BUTTONS - Apple Style === */
 #plan2d-toolbar-right button,
 #plan2d-side-overlay > button {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-  font-size: 15px !important; /* subheadline */
-  font-weight: 600 !important;
-  line-height: 1.33 !important;
-  letter-spacing: -0.24px !important;
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-subheadline);
+  font-weight: var(--apple-font-weight-semibold);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-normal);
   padding: 10px 16px;
-  border-radius: 10px;
+  border-radius: var(--apple-radius-medium);
   border: none;
   cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  background: rgba(255, 255, 255, 0.8);
-  color: #000000;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  transition: all var(--apple-duration-fast) var(--apple-ease-default);
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  box-shadow: var(--apple-shadow-1);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
 
 [data-theme="dark"] #plan2d-toolbar-right button,
 [data-theme="dark"] #plan2d-side-overlay > button {
-  background: rgba(58, 58, 60, 0.5);
-  color: rgba(255, 255, 255, 1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  box-shadow: var(--apple-shadow-1);
 }
 
 /* === BUTTON HOVER === */
 #plan2d-toolbar-right button:hover,
 #plan2d-side-overlay > button:hover {
   transform: scale(1.02);
-  background: rgba(0, 122, 255, 1);
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+  background: var(--apple-blue);
+  color: var(--apple-system-background);
+  box-shadow: 0 4px 12px var(--apple-blue-alpha-30);
 }
 
 [data-theme="dark"] #plan2d-toolbar-right button:hover,
 [data-theme="dark"] #plan2d-side-overlay > button:hover {
-  background: rgba(10, 132, 255, 1);
-  box-shadow: 0 4px 12px rgba(10, 132, 255, 0.4);
+  background: var(--apple-blue);
+  box-shadow: 0 4px 12px var(--apple-blue-alpha-40);
 }
 
 /* === SELECTED BUTTON === */
 #plan2d-toolbar-right button.selected {
-  background: rgba(0, 122, 255, 1);
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+  background: var(--apple-blue);
+  color: var(--apple-system-background);
+  box-shadow: 0 2px 8px var(--apple-blue-alpha-30);
 }
 
 [data-theme="dark"] #plan2d-toolbar-right button.selected {
-  background: rgba(10, 132, 255, 1);
-  box-shadow: 0 2px 8px rgba(10, 132, 255, 0.4);
+  background: var(--apple-blue);
+  box-shadow: 0 2px 8px var(--apple-blue-alpha-40);
 }
 
 #plan2d-toolbar-right button.selected:hover {
   transform: scale(1.02);
-  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
+  box-shadow: 0 4px 12px var(--apple-blue-alpha-40);
 }
 
 [data-theme="dark"] #plan2d-toolbar-right button.selected:hover {
-  box-shadow: 0 4px 12px rgba(10, 132, 255, 0.5);
+  box-shadow: 0 4px 12px var(--apple-blue-alpha-50);
 }
 
 /* === SECONDARY BUTTONS === */
 #plan2d-page button.secondary {
-  background: rgba(120, 120, 128, 0.2) !important;
-  color: rgba(0, 122, 255, 1) !important;
+  background: var(--apple-secondary-system-background) !important;
+  color: var(--apple-blue) !important;
   border: none !important;
 }
 
 [data-theme="dark"] #plan2d-page button.secondary {
-  background: rgba(118, 118, 128, 0.24) !important;
-  color: rgba(10, 132, 255, 1) !important;
+  background: var(--apple-secondary-system-background) !important;
+  color: var(--apple-blue) !important;
 }
 
 #plan2d-page button.secondary:hover {
-  background: rgba(120, 120, 128, 0.3) !important;
+  background: var(--apple-tertiary-system-background) !important;
   transform: scale(1.02);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  box-shadow: var(--apple-shadow-1) !important;
 }
 
 [data-theme="dark"] #plan2d-page button.secondary:hover {
-  background: rgba(118, 118, 128, 0.35) !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+  background: var(--apple-tertiary-system-background) !important;
+  box-shadow: var(--apple-shadow-1) !important;
 }
 
 /* === DANGER BUTTONS (Clear) === */
 #plan2d-clear:hover {
-  background: rgba(255, 59, 48, 1) !important;
-  color: #ffffff !important;
+  background: var(--apple-red) !important;
+  color: var(--apple-system-background) !important;
   border: none !important;
-  box-shadow: 0 4px 12px rgba(255, 59, 48, 0.4) !important;
+  box-shadow: 0 4px 12px var(--apple-red-alpha-40) !important;
 }
 
 [data-theme="dark"] #plan2d-clear:hover {
-  background: rgba(255, 69, 58, 1) !important;
-  box-shadow: 0 4px 12px rgba(255, 69, 58, 0.4) !important;
+  background: var(--apple-red) !important;
+  box-shadow: 0 4px 12px var(--apple-red-alpha-40) !important;
 }
 
 /* === CLOSE BUTTON === */
@@ -196,14 +194,14 @@ body.cad-mode #plan2d-ruler-left {
 }
 
 #plan2d-close:hover {
-  background: rgba(120, 120, 128, 0.3) !important;
-  color: rgba(60, 60, 67, 0.8) !important;
+  background: var(--apple-secondary-system-background) !important;
+  color: var(--apple-label) !important;
   transform: scale(1.02);
 }
 
 [data-theme="dark"] #plan2d-close:hover {
-  background: rgba(118, 118, 128, 0.35) !important;
-  color: rgba(235, 235, 245, 0.8) !important;
+  background: var(--apple-secondary-system-background) !important;
+  color: var(--apple-label) !important;
 }
 
 /* === TOOLBAR CONTAINERS - Transparent Apple Style === */
@@ -233,102 +231,102 @@ body.cad-mode #plan2d-ruler-left {
 
 /* === WALL GROUP INFO === */
 #plan2d-wall-group {
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--apple-material-regular);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   padding: 10px 16px;
-  border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  border-radius: var(--apple-radius-medium);
+  border: 1px solid var(--apple-separator);
+  box-shadow: var(--apple-shadow-1);
 }
 
 [data-theme="dark"] #plan2d-wall-group {
-  background: rgba(58, 58, 60, 0.5);
-  border: 1px solid rgba(84, 84, 88, 0.3);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  background: var(--apple-material-regular);
+  border: 1px solid var(--apple-separator);
+  box-shadow: var(--apple-shadow-1);
 }
 
 #plan2d-wall-group #plan2d-scale {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, monospace;
-  font-size: 11px !important; /* caption2 */
-  font-weight: 600 !important;
-  color: #000000;
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-caption2);
+  font-weight: var(--apple-font-weight-semibold);
+  color: var(--apple-label);
   line-height: 1;
 }
 
 [data-theme="dark"] #plan2d-wall-group #plan2d-scale {
-  color: rgba(255, 255, 255, 1);
+  color: var(--apple-label);
 }
 
 #plan2d-wall-group > div {
-  font-size: 11px !important; /* caption2 */
-  font-weight: 400 !important;
-  color: rgba(60, 60, 67, 0.6);
+  font-size: var(--apple-font-size-caption2);
+  font-weight: var(--apple-font-weight-regular);
+  color: var(--apple-secondary-label);
   line-height: 1;
 }
 
 [data-theme="dark"] #plan2d-wall-group > div {
-  color: rgba(235, 235, 245, 0.6);
+  color: var(--apple-secondary-label);
 }
 
 /* === OPENING INLINE CONTROLS === */
 #plan2d-opening-inline {
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--apple-material-regular);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   padding: 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  border-radius: var(--apple-radius-medium);
+  border: 1px solid var(--apple-separator);
+  box-shadow: var(--apple-shadow-1);
 }
 
 [data-theme="dark"] #plan2d-opening-inline {
-  background: rgba(58, 58, 60, 0.5);
-  border: 1px solid rgba(84, 84, 88, 0.3);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  background: var(--apple-material-regular);
+  border: 1px solid var(--apple-separator);
+  box-shadow: var(--apple-shadow-1);
 }
 
 #plan2d-opening-inline select,
 #plan2d-window-type,
 #plan2d-door-swing,
 #plan2d-door-hinge {
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
-  font-size: 15px !important; /* subheadline */
-  font-weight: 400 !important;
-  line-height: 1.33 !important;
-  letter-spacing: -0.24px !important;
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-subheadline);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-normal);
   padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: rgba(255, 255, 255, 0.8);
-  color: #000000;
+  border-radius: var(--apple-radius-medium);
+  border: 1px solid var(--apple-separator);
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
   cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--apple-duration-fast) var(--apple-ease-default);
 }
 
 [data-theme="dark"] #plan2d-opening-inline select,
 [data-theme="dark"] #plan2d-window-type,
 [data-theme="dark"] #plan2d-door-swing,
 [data-theme="dark"] #plan2d-door-hinge {
-  background: rgba(58, 58, 60, 0.3);
-  border: 1px solid rgba(84, 84, 88, 0.3);
-  color: rgba(255, 255, 255, 1);
+  background: var(--apple-secondary-system-background);
+  border: 1px solid var(--apple-separator);
+  color: var(--apple-label);
 }
 
 #plan2d-opening-inline select:hover,
 #plan2d-window-type:hover,
 #plan2d-door-swing:hover,
 #plan2d-door-hinge:hover {
-  border-color: rgba(0, 122, 255, 0.5);
-  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.1);
+  border-color: var(--apple-blue);
+  box-shadow: 0 0 0 2px var(--apple-blue-alpha-20);
 }
 
 [data-theme="dark"] #plan2d-opening-inline select:hover,
 [data-theme="dark"] #plan2d-window-type:hover,
 [data-theme="dark"] #plan2d-door-swing:hover,
 [data-theme="dark"] #plan2d-door-hinge:hover {
-  border-color: rgba(10, 132, 255, 0.5);
-  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.2);
+  border-color: var(--apple-blue);
+  box-shadow: 0 0 0 2px var(--apple-blue-alpha-30);
 }
 
 /* === FLOOR CENTER CONTROLS === */
@@ -343,47 +341,47 @@ body.cad-mode #plan2d-ruler-left {
   gap: 6px;
   z-index: 1;
   pointer-events: auto;
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--apple-material-regular);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   padding: 10px 16px;
-  border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  border-radius: var(--apple-radius-medium);
+  border: 1px solid var(--apple-separator);
+  box-shadow: var(--apple-shadow-1);
 }
 
 [data-theme="dark"] #plan2d-floor-center {
-  background: rgba(58, 58, 60, 0.5);
-  border: 1px solid rgba(84, 84, 88, 0.3);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  background: var(--apple-material-regular);
+  border: 1px solid var(--apple-separator);
+  box-shadow: var(--apple-shadow-1);
 }
 
 #plan2d-floor-center button {
-  font-size: 15px !important; /* subheadline */
-  font-weight: 600 !important;
+  font-size: var(--apple-font-size-subheadline);
+  font-weight: var(--apple-font-weight-semibold);
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--apple-radius-medium);
 }
 
 /* === APPLY TO 3D BUTTON - Primary Action === */
 #plan2d-apply-3d {
-  background: rgba(0, 122, 255, 1) !important;
-  color: #ffffff !important;
-  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3) !important;
+  background: var(--apple-blue) !important;
+  color: var(--apple-system-background) !important;
+  box-shadow: 0 2px 8px var(--apple-blue-alpha-30) !important;
 }
 
 [data-theme="dark"] #plan2d-apply-3d {
-  background: rgba(10, 132, 255, 1) !important;
-  box-shadow: 0 2px 8px rgba(10, 132, 255, 0.4) !important;
+  background: var(--apple-blue) !important;
+  box-shadow: 0 2px 8px var(--apple-blue-alpha-40) !important;
 }
 
 #plan2d-apply-3d:hover {
   transform: scale(1.05) !important;
-  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.4) !important;
+  box-shadow: 0 4px 16px var(--apple-blue-alpha-40) !important;
 }
 
 [data-theme="dark"] #plan2d-apply-3d:hover {
-  box-shadow: 0 4px 16px rgba(10, 132, 255, 0.5) !important;
+  box-shadow: 0 4px 16px var(--apple-blue-alpha-50) !important;
 }
 
 /* === EXPORT/IMPORT BUTTONS === */
@@ -397,33 +395,33 @@ body.cad-mode #plan2d-ruler-left {
 #plan2d-side-overlay > button:focus-visible,
 #plan2d-opening-inline select:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.2);
+  box-shadow: 0 0 0 4px var(--apple-blue-alpha-20);
 }
 
 [data-theme="dark"] #plan2d-toolbar-right button:focus-visible,
 [data-theme="dark"] #plan2d-side-overlay > button:focus-visible,
 [data-theme="dark"] #plan2d-opening-inline select:focus-visible {
-  box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.3);
+  box-shadow: 0 0 0 4px var(--apple-blue-alpha-30);
 }
 
 /* === CAD MODE OVERRIDES - Clean White === */
 body.cad-mode #plan2d-toolbar-right button,
 body.cad-mode #plan2d-side-overlay > button {
-  background: rgba(255, 255, 255, 0.95) !important;
-  color: #000000 !important;
-  border: 1px solid rgba(0, 0, 0, 0.15) !important;
+  background: var(--apple-system-background) !important;
+  color: var(--apple-label) !important;
+  border: 1px solid var(--apple-separator) !important;
 }
 
 body.cad-mode #plan2d-toolbar-right button:hover,
 body.cad-mode #plan2d-side-overlay > button:hover {
-  background: rgba(0, 122, 255, 1) !important;
-  color: #ffffff !important;
+  background: var(--apple-blue) !important;
+  color: var(--apple-system-background) !important;
   border: none !important;
 }
 
 body.cad-mode #plan2d-toolbar-right button.selected {
-  background: rgba(0, 122, 255, 1) !important;
-  color: #ffffff !important;
+  background: var(--apple-blue) !important;
+  color: var(--apple-system-background) !important;
   border: none !important;
 }
 

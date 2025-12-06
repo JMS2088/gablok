@@ -20,6 +20,14 @@
   display: flex;
   gap: 8px;
   align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body.app-ready #controls {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Base button style - Apple System */
@@ -46,59 +54,59 @@
 
 /* Primary button (Add Room) - Blue filled */
 #controls button:not(.secondary):not(.dropdown-button) {
-  background: #007AFF;
-  color: #FFFFFF;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.06);
+  background: var(--apple-blue);
+  color: var(--apple-system-background);
+  box-shadow: var(--apple-shadow-1);
 }
 
 #controls button:not(.secondary):not(.dropdown-button):hover {
-  background: #0051D5;
-  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+  background: var(--apple-blue-hover);
+  box-shadow: 0 4px 12px var(--apple-blue-alpha-30);
   transform: translateY(-1px);
 }
 
 #controls button:not(.secondary):not(.dropdown-button):active {
   transform: scale(0.96);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--apple-shadow-1);
 }
 
 /* Secondary buttons - Glass material */
 #controls button.secondary {
-  background: rgba(255, 255, 255, 0.85) !important;
+  background: var(--apple-material-regular) !important;
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  color: #1D1D1F !important;
-  border: 0.5px solid rgba(0, 0, 0, 0.08) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
-  font-weight: 600 !important;
+  color: var(--apple-label) !important;
+  border: 0.5px solid var(--apple-separator) !important;
+  box-shadow: var(--apple-shadow-1) !important;
+  font-weight: var(--apple-font-weight-semibold) !important;
 }
 
 #controls button.secondary:hover {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border-color: rgba(0, 0, 0, 0.12) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  background: var(--apple-secondary-system-background) !important;
+  border-color: var(--apple-separator) !important;
+  box-shadow: 0 4px 12px var(--apple-shadow-2) !important;
   transform: translateY(-1px);
-  color: #007AFF !important;
+  color: var(--apple-blue) !important;
 }
 
 #controls button.secondary:active {
   transform: scale(0.96);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: var(--apple-shadow-1) !important;
 }
 
 /* Save for DA button - Special styling */
 #controls button.save-for-da {
-  background: rgba(52, 199, 89, 0.12) !important;
+  background: var(--apple-green-alpha-12) !important;
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  color: #34C759 !important;
-  border: 0.5px solid rgba(52, 199, 89, 0.3) !important;
+  color: var(--apple-green) !important;
+  border: 0.5px solid var(--apple-green-alpha-30) !important;
 }
 
 #controls button.save-for-da:hover {
-  background: rgba(52, 199, 89, 0.2) !important;
-  border-color: rgba(52, 199, 89, 0.5) !important;
-  color: #28A745 !important;
+  background: var(--apple-green-alpha-20) !important;
+  border-color: var(--apple-green-alpha-50) !important;
+  color: var(--apple-green-hover) !important;
 }
 
 /* ============================================================================
@@ -111,36 +119,36 @@
 }
 
 .dropdown-button {
-  background: rgba(255, 255, 255, 0.85) !important;
+  background: var(--apple-material-regular) !important;
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  color: #1D1D1F !important;
-  border: 0.5px solid rgba(0, 0, 0, 0.08) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  color: var(--apple-label) !important;
+  border: 0.5px solid var(--apple-separator) !important;
+  box-shadow: var(--apple-shadow-1) !important;
   padding-right: 32px !important;
 }
 
 .dropdown-button:hover {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border-color: rgba(0, 0, 0, 0.12) !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  background: var(--apple-secondary-system-background) !important;
+  border-color: var(--apple-separator) !important;
+  box-shadow: 0 4px 12px var(--apple-shadow-2) !important;
   transform: translateY(-1px);
-  color: #007AFF !important;
+  color: var(--apple-blue) !important;
 }
 
 .dropdown-button:hover .caret svg path {
-  stroke: #007AFF !important;
+  stroke: var(--apple-blue) !important;
 }
 
 .dropdown.open .dropdown-button {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border-color: #007AFF !important;
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.15) !important;
-  color: #007AFF !important;
+  background: var(--apple-secondary-system-background) !important;
+  border-color: var(--apple-blue) !important;
+  box-shadow: 0 0 0 3px var(--apple-blue-alpha-15) !important;
+  color: var(--apple-blue) !important;
 }
 
 .dropdown.open .dropdown-button .caret svg path {
-  stroke: #007AFF !important;
+  stroke: var(--apple-blue) !important;
 }
 
 .dropdown-button .caret {
@@ -162,7 +170,7 @@
 }
 
 .dropdown-button .caret svg path {
-  stroke: #1D1D1F;
+  stroke: var(--apple-label);
   transition: stroke 0.2s ease;
 }
 
@@ -174,12 +182,12 @@
   min-width: 200px;
   max-height: 400px;
   overflow: auto;
-  background: rgba(255, 255, 255, 0.95);
+  background: var(--apple-material-regular);
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 0.5px solid rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 0.5px solid var(--apple-separator);
+  border-radius: var(--apple-radius-medium);
+  box-shadow: var(--apple-shadow-3);
   padding: 6px;
   z-index: 200;
   display: none;
@@ -204,15 +212,15 @@
 /* Dropdown Items */
 .dropdown-item {
   padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--apple-font-size-subheadline);
+  font-weight: var(--apple-font-weight-medium);
   cursor: pointer;
   white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 8px;
-  border-radius: 6px;
-  color: #1D1D1F;
+  border-radius: var(--apple-radius-small);
+  color: var(--apple-label);
   transition: all 0.15s ease;
   margin-bottom: 2px;
 }
@@ -222,24 +230,24 @@
 }
 
 .dropdown-item:hover {
-  background: #007AFF;
-  color: #FFFFFF;
+  background: var(--apple-blue);
+  color: var(--apple-system-background);
 }
 
 .dropdown-item.disabled {
-  color: rgba(60, 60, 67, 0.3);
+  color: var(--apple-tertiary-label);
   cursor: default;
 }
 
 .dropdown-item.disabled:hover {
   background: transparent;
-  color: rgba(60, 60, 67, 0.3);
+  color: var(--apple-tertiary-label);
 }
 
 .dropdown-item.separator {
   padding: 0;
   margin: 4px 0;
-  border-top: 0.5px solid rgba(60, 60, 67, 0.12);
+  border-top: 0.5px solid var(--apple-separator);
   cursor: default;
   height: 1px;
   min-height: 1px;
@@ -250,9 +258,9 @@
 }
 
 .dropdown-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: rgba(60, 60, 67, 0.6);
+  font-size: var(--apple-font-size-caption2);
+  font-weight: var(--apple-font-weight-bold);
+  color: var(--apple-secondary-label);
   padding: 8px 12px 4px 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -261,7 +269,7 @@
 
 .dropdown-title:hover {
   background: transparent;
-  color: rgba(60, 60, 67, 0.6);
+  color: var(--apple-secondary-label);
 }
 
 /* ============================================================================
@@ -279,19 +287,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.85);
+  background: var(--apple-material-regular);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 0.5px solid rgba(0, 0, 0, 0.08);
+  border: 0.5px solid var(--apple-separator);
   border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--apple-shadow-1);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
 #account-button:hover {
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background: var(--apple-secondary-system-background);
+  box-shadow: 0 4px 12px var(--apple-shadow-2);
   transform: scale(1.05);
 }
 
@@ -300,17 +308,17 @@
 }
 
 #account-button svg circle {
-  stroke: #007AFF;
-  fill: #FFFFFF;
+  stroke: var(--apple-blue);
+  fill: var(--apple-system-background);
 }
 
 #account-button svg path {
-  stroke: #007AFF;
+  stroke: var(--apple-blue);
 }
 
 #account-button:hover svg circle,
 #account-button:hover svg path {
-  stroke: #0051D5;
+  stroke: var(--apple-blue-hover);
 }
 
 /* ============================================================================
@@ -321,16 +329,16 @@
   position: fixed;
   top: 8px;
   right: 64px;
-  background: rgba(0, 0, 0, 0.6);
+  background: var(--apple-secondary-label);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--apple-system-background);
   padding: 4px 8px;
-  font: 10px 'SF Mono', ui-monospace, monospace;
+  font: var(--apple-font-size-caption2) var(--apple-font-family-mono);
   z-index: 10000;
-  border-radius: 6px;
-  border: 0.5px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border-radius: var(--apple-radius-small);
+  border: 0.5px solid var(--apple-quaternary-label);
+  box-shadow: var(--apple-shadow-1);
   letter-spacing: 0.02em;
 }
 
@@ -368,11 +376,11 @@
 #controls button:focus-visible,
 #controls .dropdown-button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.25);
+  box-shadow: 0 0 0 4px var(--apple-blue-alpha-25);
 }
 
 .dropdown-item:focus-visible {
   outline: none;
-  background: #007AFF;
-  color: #FFFFFF;
+  background: var(--apple-blue);
+  color: var(--apple-system-background);
 }
