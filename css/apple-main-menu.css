@@ -101,7 +101,7 @@ body.app-ready #controls {
 .dropdown-item {
   padding: 8px 12px;
   font-size: 13px !important;
-  font-weight: var(--apple-font-weight-medium);
+  font-weight: var(--apple-font-weight-regular);
   cursor: pointer;
   white-space: nowrap;
   display: flex;
