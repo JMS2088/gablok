@@ -137,12 +137,19 @@ function __wireAppUi(){
     var btnText = document.getElementById('levelButtonText');
     var list = document.getElementById('levelList');
     var nativeSel = document.getElementById('levelSelect');
+    var levelLabelLookup = {
+      '0': { icon: 'sf-house', label: 'Ground Floor' },
+      '1': { icon: 'sf-building-2', label: 'First Floor' }
+    };
+    var defaultLevelLabel = { icon: 'sf-floor-levels', label: 'Level' };
     function close(){ if(dd) dd.classList.remove('open'); }
     function open(){ closeAllDropdowns(); if(dd) dd.classList.add('open'); }
     function setLabelFromValue(v){
-      var map = { '0':'Ground Floor', '1':'First Floor', 'stairs':'+ Stairs', 'pergola':'+ Pergola', 'garage':'+ Garage', 'roof':'+ Roof', 'pool':'+ Pool', 'balcony':'+ Balcony' };
-      if(btnText) btnText.textContent = map[String(v)] || 'Level';
+      if(!btnText) return;
+      var entry = levelLabelLookup[String(v)] || defaultLevelLabel;
+      btnText.innerHTML = '<svg class="sf-icon" width="16" height="16"><use href="#' + entry.icon + '"/></svg> ' + entry.label;
     }
+    try { window.setLevelButtonLabel = setLabelFromValue; } catch(_exposeLevelLabel) {}
     // Expose a helper to enable/disable add items dynamically based on state (e.g., singleton stairs)
     // With multi-stairs support, ensure "+ Stairs" is always enabled
     function updateLevelMenuStates(){
@@ -177,8 +184,8 @@ function __wireAppUi(){
         close();
         return;
       }
-      // Regular floor switch
-  if(nativeSel){ nativeSel.value = val; }
+        // Regular floor switch
+        if(nativeSel){ nativeSel.value = val; }
       setLabelFromValue(val);
       if(typeof switchLevel==='function') switchLevel();
       close();
@@ -199,9 +206,16 @@ function __wireAppUi(){
           var cur = (typeof window.currentFloor==='number'? window.currentFloor:0);
           var g=document.getElementById('plan2d-floor-ground');
           var f=document.getElementById('plan2d-floor-first');
-          if(g&&f){
-            if(cur===0){ g.classList.add('active'); f.classList.remove('active'); }
-            else { f.classList.add('active'); g.classList.remove('active'); }
+          if(g||f){
+            var isGround = (cur===0);
+            if(g){
+              g.classList.toggle('active', isGround);
+              g.setAttribute('aria-pressed', isGround ? 'true' : 'false');
+            }
+            if(f){
+              f.classList.toggle('active', !isGround);
+              f.setAttribute('aria-pressed', isGround ? 'false' : 'true');
+            }
           }
         } catch(e){}
       };
@@ -342,8 +356,11 @@ function __wireAppUi(){
       if(!btnGround || !btnFirst) return;
       try {
         var cur = (typeof currentFloor==='number'? currentFloor : 0);
-        if(cur===0){ btnGround.classList.add('active'); btnFirst.classList.remove('active'); }
-        else { btnFirst.classList.add('active'); btnGround.classList.remove('active'); }
+        var isGround = (cur===0);
+        btnGround.classList.toggle('active', isGround);
+        btnFirst.classList.toggle('active', !isGround);
+        btnGround.setAttribute('aria-pressed', isGround ? 'true' : 'false');
+        btnFirst.setAttribute('aria-pressed', isGround ? 'false' : 'true');
       } catch(e) {}
     }
     function doSwitch(toFloor){

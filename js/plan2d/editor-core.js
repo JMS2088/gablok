@@ -1325,8 +1325,13 @@
           if(levelSel) levelSel.style.display='none';
           var floorPlanBtn = document.getElementById('btn-floorplan');
           if(floorPlanBtn){
-            floorPlanBtn.__origText = floorPlanBtn.textContent;
-            floorPlanBtn.textContent = '3D View';
+            if(typeof floorPlanBtn.__origHTML === 'undefined'){
+              floorPlanBtn.__origHTML = floorPlanBtn.innerHTML;
+            }
+            if(typeof floorPlanBtn.__origText === 'undefined'){
+              floorPlanBtn.__origText = floorPlanBtn.textContent;
+            }
+            floorPlanBtn.innerHTML = '<svg class="sf-icon" width="16" height="16"><use href="#sf-cube"/></svg> 3D View';
             floorPlanBtn.title = 'Return to 3D View';
             if(!floorPlanBtn.__swapHandler){
               floorPlanBtn.__swapHandler = function(ev){
@@ -1441,7 +1446,8 @@
         var floorPlanBtn = document.getElementById('btn-floorplan');
         if(floorPlanBtn){
           if(floorPlanBtn.__swapHandler){ floorPlanBtn.removeEventListener('click', floorPlanBtn.__swapHandler, true); floorPlanBtn.__swapHandler=null; }
-          if(floorPlanBtn.__origText){ floorPlanBtn.textContent = floorPlanBtn.__origText; }
+          if(typeof floorPlanBtn.__origHTML === 'string'){ floorPlanBtn.innerHTML = floorPlanBtn.__origHTML; }
+          else if(floorPlanBtn.__origText){ floorPlanBtn.textContent = floorPlanBtn.__origText; }
           floorPlanBtn.title = 'Open 2D floor plan editor';
         }
       }catch(_restore2d){}

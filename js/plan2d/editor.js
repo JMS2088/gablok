@@ -188,7 +188,22 @@
     try{
       var bG=document.getElementById('plan2d-floor-ground');
       var bF=document.getElementById('plan2d-floor-first');
-      function setActive(){ try{ var cur=(typeof window.currentFloor==='number'? window.currentFloor:0); if(bG&&bF){ if(cur===0){ bG.classList.add('active'); bF.classList.remove('active'); } else { bF.classList.add('active'); bG.classList.remove('active'); } } }catch(_){} }
+      function setActive(){
+        try {
+          var cur=(typeof window.currentFloor==='number'? window.currentFloor:0);
+          if(bG||bF){
+            var isGround = (cur===0);
+            if(bG){
+              bG.classList.toggle('active', isGround);
+              bG.setAttribute('aria-pressed', isGround ? 'true' : 'false');
+            }
+            if(bF){
+              bF.classList.toggle('active', !isGround);
+              bF.setAttribute('aria-pressed', isGround ? 'false' : 'true');
+            }
+          }
+        }catch(_){}
+      }
       function switchFloor(to){ try{
         // Save current 2D plan before switching (persist draft for prior floor)
         try{ plan2dSaveDraft && plan2dSaveDraft((typeof window.currentFloor==='number'? window.currentFloor:0)); }catch(_s){}

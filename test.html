@@ -8,7 +8,12 @@
     <script>
         console.log('Test script loading...');
         
-        const canvas = document.getElementById('canvas');
+        const canvas = document.getElementById('test-canvas');
+        if (!canvas) {
+            console.error('Test canvas element #test-canvas not found.');
+            document.body.insertAdjacentHTML('beforeend', '<p style="color:red">Canvas element missing.</p>');
+            return;
+        }
         const ctx = canvas.getContext('2d');
         
         console.log('Canvas:', canvas, 'Context:', ctx);

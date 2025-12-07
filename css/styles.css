@@ -5,6 +5,9 @@
     --label-btn-height: 24px;
     --label-btn-radius: 12px;
     --roof-rotate-size: 32px;
+    --global-hover-bg: rgba(142, 142, 147, 0.18);
+    --global-hover-color: var(--apple-label);
+    --global-hover-border: rgba(60, 60, 67, 0.36);
   }
   /* Utility visibility classes */
   .is-hidden { display: none !important; }
@@ -47,121 +50,11 @@
   
   /* Version badge */
   #version-badge {
-    position: fixed;
-    top: 4px;
-    right: 4px;
-    background: rgba(0,0,0,0.7);
-    color: #0f0;
-    padding: 4px 8px;
-    font: 10px var(--apple-font-monospaced);
-    z-index: 10000;
-    border-radius: 3px;
-  }
-  
-  /* Checkbox labels in dropdowns */
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    font-size: 13px;
-  }
-  
-  /* Account section header */
-  .account-section-header {
-    margin: 14px 6px 6px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--apple-secondary-label);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  
-  /* DA Modal Styles */
-  .da-modal-content {
-    background: var(--apple-system-background);
-    padding: 30px;
-    border-radius: 12px;
-    max-width: 600px;
-    width: 90%;
-    max-height: 80vh;
-    overflow-y: auto;
-  }
-  
-  .da-modal-title {
-    margin: 0 0 10px 0;
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--apple-label);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  
-  .da-modal-subtitle {
     margin: 0 0 20px 0;
     color: var(--apple-secondary-label);
     font-size: 13px;
   }
   
-  .da-project-list {
-    margin-bottom: 20px;
-  }
-  
-  .da-modal-actions {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-  }
-  
-  .da-new-btn {
-    padding: 10px 20px;
-    border: none;
-    background: var(--apple-blue);
-    color: white;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 13px;
-  }
-  
-  .da-new-btn:hover {
-    background: var(--apple-blue-hover);
-  }
-  
-  .da-project-empty {
-    padding: 30px;
-    text-align: center;
-    color: var(--apple-secondary-label);
-    border: 2px dashed var(--apple-separator);
-    border-radius: 8px;
-  }
-  
-  .da-empty-icon {
-    font-size: 40px;
-    margin-bottom: 10px;
-    color: var(--apple-tertiary-label);
-  }
-  
-  .da-project-item {
-    padding: 15px;
-    border: 2px solid var(--apple-separator);
-    border-radius: 8px;
-    margin-bottom: 10px;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    gap: 15px;
-    align-items: center;
-  }
-  
-  .da-project-thumbnail {
-    width: 80px;
-    height: 60px;
-    object-fit: cover;
-    border-radius: 4px;
-    flex-shrink: 0;
-  }
   
   .da-project-thumbnail-empty {
     width: 80px;
@@ -180,44 +73,6 @@
     flex: 1;
   }
   
-  .da-project-name {
-    font-weight: 600;
-    font-size: 15px;
-    margin-bottom: 5px;
-    color: var(--apple-label);
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  
-  .da-project-date {
-    font-size: 12px;
-    color: var(--apple-secondary-label);
-  }
-  
-  .da-project-badge-wrap {
-    margin-top: 5px;
-  }
-  
-  .da-project-badge {
-    background: var(--apple-green);
-    color: white;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-  
-  /* Project select empty state */
-  .project-select-empty {
-    color: var(--apple-secondary-label);
-    font-size: 13px;
-    padding: 16px;
-    text-align: center;
-  }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     height: 100%;
     overflow: hidden;
@@ -225,7 +80,9 @@
     background: var(--apple-system-background);
     color: var(--apple-label);
   }
-  
+
+  /* #btn-render-walls styles moved to apple-design-system.css */
+
   #controls {
     position: fixed; top: 35px; left: 35px; z-index: 100;
     /* Remove surrounding background panel */
@@ -236,42 +93,6 @@
   /* Normalize child margins so spacing relies solely on container gap */
   #controls > * { margin: 0; }
 
-  /* Custom dropdown (forces white/black regardless of native UI) */
-  .dropdown { position: relative; display: inline-block; }
-  .dropdown-button {
-    display: inline-flex; align-items: center; gap: 8px;
-    position: relative; /* anchor absolute caret */
-    background: var(--apple-secondary-system-background); color: var(--apple-label); border: 1px solid var(--apple-opaque-separator);
-    border-radius: 6px;
-    padding: 10px 34px 10px 12px; font-size: 14px; font-weight: 400; cursor: pointer;
-    box-shadow: none;
-    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, color 160ms ease;
-  }
-  .dropdown-button:hover { 
-    background: var(--apple-secondary-system-background) !important;
-    border-color: var(--apple-separator) !important;
-    box-shadow: none;
-    transform: translateY(-1px);
-    color: var(--apple-blue) !important;
-  }
-  .dropdown-button:focus { outline: none; border-color: #007acc; box-shadow: none; }
-  .dropdown-button .caret {
-    position: absolute; right: 12px; width: 12px; height: 8px; pointer-events: none;
-    top: 50%; transform: translateY(-50%); /* center arrow vertically */
-    display: flex; align-items: center; justify-content: center;
-  }
-  .dropdown-button .caret svg { display: block; }
-
-  /* 2D Plan floor toggle */
-  .plan2d-floor-toggle { background:var(--apple-tertiary-system-background); padding:4px; border-radius:999px; display:inline-flex; gap:4px; box-shadow: none; }
-  .plan2d-floor-toggle button { border:none; background:var(--apple-system-background); color:var(--apple-label); font-weight:400; font-size:13px; padding:6px 12px; border-radius:999px; cursor:pointer; box-shadow: none; transition: background-color 0.2s, color 0.2s; }
-  .plan2d-floor-toggle button:hover {
-    background: var(--apple-blue);
-    color: #ffffff;
-    box-shadow: none;
-  }
-  .plan2d-floor-toggle button.active { background:var(--apple-blue); color:#ffffff; box-shadow: none; }
-
   /* Remove thick focus keyline on the 2D Plan modal container while preserving keyboard focus */
   #plan2d-content { outline: none; }
   #plan2d-content:focus { outline: none !important; box-shadow: none; }
@@ -280,142 +101,16 @@
   #plan2d-canvas:focus, #plan2d-overlay:focus { outline: none !important; }
   #plan2d-canvas, #plan2d-overlay { -webkit-tap-highlight-color: transparent; }
 
-  /* Removed specialized 2D secondary overrides to unify with global styles */
-  .dropdown-button .caret svg path { stroke: #333; }
-  .dropdown.open .dropdown-button { border-color: #007acc; box-shadow: none; }
-
-  /* Main menu (actions) specific hover/open styles: white text on brand blue */
-  #actionsDropdown .dropdown-button:hover {
-    background: var(--apple-secondary-system-background) !important;
-    border-color: var(--apple-separator) !important;
-    color: var(--apple-blue) !important;
-    box-shadow: none;
-  }
-  #actionsDropdown .dropdown-button:hover .caret svg path { stroke: var(--apple-blue) !important; }
-  #actionsDropdown.open .dropdown-button {
-    color: #ffffff !important;
-    background-color: #007acc !important;
-    border-color: #007acc !important;
-    box-shadow: none;
-  }
-  #actionsDropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
-
-  /* Level dropdown: same white-on-blue rollover/open behavior */
-  #levelDropdown .dropdown-button:hover {
-    background: var(--apple-secondary-system-background) !important;
-    border-color: var(--apple-separator) !important;
-    color: var(--apple-blue) !important;
-    box-shadow: none;
-  }
-  #levelDropdown .dropdown-button:hover .caret svg path { stroke: var(--apple-blue) !important; }
-  #levelDropdown.open .dropdown-button {
-    color: #ffffff !important;
-    background-color: #007acc !important;
-    border-color: #007acc !important;
-    box-shadow: none;
-  }
-  #levelDropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
-
-  /* Debug dropdown: white text on blue when hovering/open, matching other menus */
-  #debugDropdown .dropdown-button:hover {
-    background: var(--apple-secondary-system-background) !important;
-    border-color: var(--apple-separator) !important;
-    color: var(--apple-blue) !important;
-    box-shadow: none;
-  }
-  #debugDropdown .dropdown-button:hover .caret svg path { stroke: var(--apple-blue) !important; }
-  #debugDropdown.open .dropdown-button {
-    color: #ffffff !important;
-    background-color: #007acc !important;
-    border-color: #007acc !important;
-    box-shadow: none;
-  }
-  #debugDropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
-
-  /* Roof type dropdown: white text on blue for rollover/open, and white text on hovered items */
-  #roof-type-dropdown .dropdown-button:hover {
-    background: var(--apple-secondary-system-background) !important;
-    border-color: var(--apple-separator) !important;
-    color: var(--apple-blue) !important;
-    box-shadow: none;
-  }
-  #roof-type-dropdown .dropdown-button:hover .caret svg path { stroke: var(--apple-blue) !important; }
-  #roof-type-dropdown.open .dropdown-button {
-    color: #ffffff !important;
-    background-color: #007acc !important;
-    border-color: #007acc !important;
-    box-shadow: none;
-  }
-  #roof-type-dropdown.open .dropdown-button .caret svg path { stroke: #ffffff !important; }
-  /* Dropdown list item rollover: brand blue background with white text (scoped to roof dropdown only) */
-  #roof-type-dropdown .dropdown-list .dropdown-item:hover {
-    background: var(--apple-blue) !important;
-    color: white !important;
-  }
-
-  /* Pulse highlight when opening the roof dropdown */
-  @keyframes dropdownPulse {
-    0% { box-shadow: none; }
-    100% { box-shadow: none; }
-  }
-  #roof-type-dropdown.pulse .dropdown-button {
-    animation: dropdownPulse 0.65s ease-out;
-  }
-
-  /* Main menu: make all secondary buttons white with black text (except primary Add Room) */
-  #controls button.secondary {
-    background: #ffffff !important;
-    color: #000000 !important;
-    border: 1px solid #ccc !important;
-    box-shadow: none;
-    font-weight: 400 !important;
-  }
-  /* Hover state matches main menu rollover: brand blue background, white text */
-  #controls button.secondary:hover {
-    background-color: #007acc !important;
-    color: #ffffff !important;
-    border-color: #007acc !important;
-    box-shadow: none;
-  }
-
-  .dropdown-list {
-    position: absolute; top: calc(100% + 6px); left: 0; min-width: 180px; max-height: 300px; overflow: auto;
-    background: var(--apple-system-grouped-background); color: var(--apple-label); border: 1px solid var(--apple-separator); border-radius: 8px; box-shadow: none;
-    padding: 8px; z-index: 200; display: none;
-  }
-  .dropdown.open .dropdown-list { display: block; }
   /* Actions menu: show full submenu without scrolling */
   #actionsDropdown .dropdown-list {
     max-height: none !important;
     overflow: visible !important;
   }
-  .dropdown-item {
-    padding: 6px 12px; font-size: 13px; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 8px; min-height: 28px;
+  /* Level dropdown should never clip the final entries like Pool/Balcony */
+  #levelDropdown .dropdown-list {
+    max-height: none !important;
+    overflow: visible !important;
   }
-  .dropdown-item:hover { 
-    background: var(--apple-blue) !important;
-    color: white !important;
-  }
-  .dropdown-item.disabled { color: #9aa0a6; cursor: default; }
-  .dropdown-item.separator { padding: 0; margin: 4px 0; border-top: 1px solid var(--apple-separator); cursor: default; pointer-events: none; }
-  .dropdown-title { font-size: 11px; font-weight: 600; color: var(--apple-secondary-label); padding: 8px 12px 4px 12px; text-transform: uppercase; letter-spacing: 0.05em; cursor: default; pointer-events: none; }
-  
-  button {
-    padding: 10px 16px;
-    border: none;
-    border-radius: 6px;
-    background: var(--apple-blue);
-    color: #ffffff;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 400;
-    transition: background 0.2s, color 0.2s, border-color 0.2s;
-  }
-  button:hover {
-    background: var(--apple-blue-hover);
-    box-shadow: none;
-  }
-  
   /* =====================================================================
      2D FLOOR PLAN EDITOR LAYOUT - APPLE HIG COMPLIANT
      ---------------------------------------------------------------------
@@ -424,98 +119,62 @@
      Uses Apple Design System tokens throughout, no inline styles
      ===================================================================== */
   
-  /* Left Vertical Toolbar - Drawing Tools */
+  /* Right-aligned tool row matches main navigation */
   #plan2d-toolbar-left {
     position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 72px;
-    z-index: 100;
+    top: 35px;
+    right: 35px;
+    z-index: 110;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 12px 8px;
-    background: var(--apple-material-thick);
-    backdrop-filter: blur(20px) saturate(1.8);
-    border-right: 1px solid var(--apple-separator);
-  }
-
-  .plan2d-tool-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    padding: 10px 6px;
-    background: var(--apple-secondary-system-background);
-    color: var(--apple-label);
-    border: 1px solid var(--apple-separator);
-    border-radius: var(--apple-radius-medium);
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    white-space: nowrap;
-  }
-
-  .plan2d-tool-btn:hover {
-    background: var(--apple-tertiary-system-fill);
-    border-color: rgba(0, 0, 0, 0.12);
-    box-shadow: none;
-    transform: translateX(2px);
-  }
-
-  .plan2d-tool-btn.selected {
-    background: var(--apple-blue);
-    color: #ffffff;
-    border-color: var(--apple-blue);
-    box-shadow: none;
-  }
-
-  .plan2d-tool-btn.selected:hover {
-    background: var(--apple-blue-hover);
-    box-shadow: none;
-  }
-
-  .plan2d-tool-btn .sf-icon {
-    opacity: 0.85;
-  }
-
-  .plan2d-tool-btn.selected .sf-icon {
-    opacity: 1;
-  }
-
-  /* Right Top Menu Bar - Actions & Settings */
-  #plan2d-menubar-right {
-    position: fixed;
-    top: 0;
-    left: 72px;
-    right: 0;
-    height: 52px;
-    z-index: 99;
-    display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 12px;
-    padding: 0 16px;
-    background: var(--apple-material-thick);
-    backdrop-filter: blur(20px) saturate(1.8);
-    border-bottom: 1px solid var(--apple-separator);
+    background: transparent;
+  }
+
+  .plan2d-toolbar-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--btn-gap);
+  }
+
+  .plan2d-toolbar-dropdowns {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .plan2d-toolbar-dropdowns .dropdown {
+    width: 100%;
+    display: flex;
+  }
+
+  .plan2d-toolbar-dropdowns .dropdown-button {
+    width: 100%;
+  }
+
+  /* Left-aligned plan menubar (mirrors top navigation) */
+  #plan2d-menubar-right {
+    position: static;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
   }
 
   #plan2d-menubar-right .dropdown {
     position: relative;
-  }
-
-  #plan2d-menubar-right button.secondary {
-    margin-left: auto;
+    display: flex;
   }
 
   /* Adjust canvas area for new layout */
   #plan2d-canvas-container {
     position: fixed;
-    top: 52px;
-    left: 72px;
+    top: 0;
+    left: 0;
     right: 0;
     bottom: 0;
   }
@@ -523,90 +182,7 @@
   /* Dark mode for 2D editor */
   [data-theme="dark"] #plan2d-toolbar-left,
   [data-theme="dark"] #plan2d-menubar-right {
-    background: rgba(28, 28, 30, 0.85);
-    border-color: rgba(84, 84, 88, 0.4);
-  }
-
-  [data-theme="dark"] .plan2d-tool-btn {
-    background: rgba(58, 58, 60, 0.5);
-    border-color: rgba(84, 84, 88, 0.4);
-    color: rgba(255, 255, 255, 0.85);
-  }
-
-  [data-theme="dark"] .plan2d-tool-btn:hover {
-    background: rgba(72, 72, 74, 0.6);
-    border-color: rgba(84, 84, 88, 0.5);
-  }
-  
-  /* =====================================================================
-     OLD 2D CONTROLS - DEPRECATED (kept for backwards compatibility)
-     ===================================================================== */
-  /* 2D Plan Navigation (matches main controls) */
-  #plan2d-controls {
-    display: flex;
-    align-items: center;
-    gap: var(--btn-gap);
-    padding: 8px 16px;
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 100;
-    background: var(--apple-material-thick);
-    backdrop-filter: blur(20px) saturate(1.8);
-    border-bottom: 1px solid var(--apple-separator);
-  }
-
-  #plan2d-controls button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 10px 14px;
-    min-height: unset;
-    height: auto;
-    white-space: nowrap;
-  }
-
-  #plan2d-controls .dropdown {
-    position: relative;
-  }
-
-  /* 2D Tool buttons match main controls */
-  #plan2d-controls button:not(.dropdown-button):not(.secondary) {
-    background: var(--apple-secondary-system-background);
-    color: var(--apple-label);
-    border: 1px solid var(--apple-separator);
-    border-radius: var(--apple-radius-medium);
-    font-size: 14px;
-    font-weight: 400;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  #plan2d-controls button:not(.dropdown-button):not(.secondary):hover {
-    background: var(--apple-tertiary-system-fill);
-    border-color: rgba(0, 0, 0, 0.12);
-    box-shadow: none;
-  }
-
-  /* Selected (active tool) state */
-  #plan2d-controls button.selected {
-    background: var(--apple-blue);
-    color: #ffffff;
-    border-color: var(--apple-blue);
-    box-shadow: none;
-  }
-
-  #plan2d-controls button.selected:hover {
-    background: var(--apple-blue-hover);
-    box-shadow: none;
-  }
-
-  /* Focus visible ring for keyboard accessibility */
-  #plan2d-controls button:focus-visible {
-    outline: 2px solid var(--apple-blue-alpha-50);
-    outline-offset: 2px;
+    background: transparent;
   }
 
   /* 2D Compass matching main nav compass */
@@ -622,21 +198,6 @@
     display: block;
     width: 100%;
     height: 100%;
-  }
-
-  /* Secondary buttons inside 2D dark context: lighten base for contrast */
-  #plan2d-page button.secondary { background: var(--apple-secondary-fill) !important; color: var(--apple-blue) !important; border:1px solid var(--apple-separator) !important; }
-  #plan2d-page button.secondary:hover { background:var(--apple-blue) !important; color:#ffffff !important; border-color:var(--apple-blue) !important; box-shadow: none; transform: translateY(-1px); }
-  /* Clear button destructive hint */
-  #plan2d-clear:hover { background:var(--apple-red) !important; color:#ffffff !important; border-color:var(--apple-red) !important; box-shadow: none; transform: translateY(-1px); }
-  /* Close button distinct neutral hover (avoid accidental destructive feel) */
-  #plan2d-close:hover { background:var(--apple-secondary-system-background) !important; color:var(--apple-label) !important; border-color:var(--apple-separator) !important; transform: translateY(-1px); }
-  button.secondary { background: var(--apple-secondary-system-background); color: var(--apple-label); border: 1px solid var(--apple-separator); }
-  button.secondary:hover {
-    background: var(--apple-tertiary-system-fill);
-    color: var(--apple-label);
-    border-color: rgba(0, 0, 0, 0.12);
-    box-shadow: none;
   }
 
   /* Clean view mode: hide all overlay UI except canvas */
@@ -711,32 +272,6 @@
     box-shadow: none;
     min-width: 200px; width: 340px; font-size: 12px;
     display: none;
-  }
-
-  /* 2D plan right-side overlay: match main controls container (transparent, no panel) */
-  #plan2d-side-overlay {
-    position: absolute; right: 35px; top: 110px; z-index: 4; /* pushed down from standard 35px to 110px per user request */
-    display: flex; flex-direction: column; gap: var(--btn-gap);
-    background: transparent; border: 0; border-radius: 0; padding: 0;
-    backdrop-filter: none;
-  }
-  #plan2d-side-overlay > * { margin: 0; }
-  /* Make right-hand side overlay buttons the same height as main navigation */
-  #plan2d-side-overlay > button {
-    /* Match Floor Plan button height: rely on shared padding (10px vertical) */
-    min-height: unset; /* remove forced 44px */
-    display: inline-flex;
-    align-items: center;
-    justify-content: center; /* center text/content horizontally */
-    padding: 10px 14px; /* unified horizontal padding (same left/right) */
-  }
-  /* Make key overlay buttons 25px wider total (≈ +12px left/right) */
-  #plan2d-apply-3d,
-  #plan2d-export,
-  #plan2d-import {
-    width: 170px;            /* fixed width to prevent jumping */
-    padding-left: 16px;      /* restore comfortable inner spacing */
-    padding-right: 16px;
   }
 
   
@@ -869,14 +404,6 @@
   body.cad-mode #plan2d-overlay { background:transparent !important; }
   /* Rulers switch to light theme in CAD mode */
   body.cad-mode #plan2d-ruler-top, body.cad-mode #plan2d-ruler-left { background:var(--apple-system-background) !important; }
-  /* 2D controls in CAD mode */
-  body.cad-mode #plan2d-controls { display: flex; background: rgba(255, 255, 255, 0.95) !important; }
-  body.cad-mode #plan2d-controls button:not(.secondary):hover {
-    background: var(--apple-blue) !important;
-    color: white !important;
-    border-color: var(--apple-blue) !important;
-    box-shadow: none;
-  }
   /* Measurement text color adaptation */
   body.cad-mode .plan2d-measure-label { color:var(--apple-label) !important; }
   #plan2d-header { 
@@ -915,7 +442,6 @@
   #reset-title { font-size:24px; font-weight:700; color:#111827; margin-bottom:8px; }
   #reset-desc { font-size:14px; color:#6b7280; line-height:1.6; }
   #reset-actions { display:flex; gap:12px; }
-  #reset-cancel-btn { flex:1; padding:12px; font-size:14px; font-weight:400; }
   
   /* Debug overlay (migrated from JS inline) */
   .debug-overlay { position:fixed; top:8px; left:8px; z-index:99999; background:rgba(0,0,0,0.75); color:#fff; font:12px/1.35 monospace; padding:8px 10px; border-radius:8px; pointer-events:none; }
@@ -943,7 +469,6 @@
   #roof-controls { display:none; gap:8px; align-items:center; margin-left:8px; }
   #roof-controls.visible { display:inline-flex; }
   .roof-label { font-size:12px; color:#374151; }
-  #reset-confirm-btn { flex:1; padding:12px; font-size:14px; font-weight:400; background:#ef4444; border:none; color:#ffffff; border-radius:8px; cursor:pointer; transition:all 0.2s; }
 
   /* Floorplan modal remaining inline styles */
   #floorplan-modal { display:none; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center; }
@@ -1146,80 +671,10 @@
   .visualize-control-row { display:flex; flex-direction:column; gap:8px; }
   .visualize-subtitle { font-size:12px; font-weight:600; letter-spacing:0.02em; text-transform:uppercase; color:var(--apple-secondary-label); }
   #visualize-view-grid { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:8px; }
-  #visualize-view-grid button { 
-    position: relative; 
-    padding: 10px 8px; 
-    border-radius: 8px; 
-    border: 1px solid var(--apple-separator); 
-    background: var(--apple-secondary-system-background); 
-    color: var(--apple-label); 
-    font-weight: 500; 
-    font-size: 12px; 
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
-    cursor: pointer;
-  }
-  #visualize-view-grid button:hover:not(:disabled):not(.active) { 
-    background: var(--apple-tertiary-system-fill); 
-    border-color: rgba(0, 0, 0, 0.12); 
-    transform: translateY(-1px); 
-    box-shadow: none;
-  }
-  #visualize-view-grid button:active:not(:disabled) {
-    transform: translateY(0);
-    box-shadow: none;
-  }
-  #visualize-view-grid button.active { 
-    background: var(--apple-blue); 
-    color: #ffffff; 
-    border-color: var(--apple-blue); 
-    box-shadow: none; 
-  }
-  #visualize-view-grid button.active:hover {
-    background: var(--apple-blue-hover);
-    box-shadow: none;
-  }
-  #visualize-view-grid button.inactive, 
-  #visualize-view-grid button:disabled { 
-    opacity: 0.4; 
-    cursor: not-allowed; 
-    box-shadow: none; 
-    transform: none; 
-  }
   .visualize-buttons { display:flex; flex-direction:column; gap:8px; }
-  .visualize-photoreal-row button { width:100%; }
   #visualize-photoreal-status { min-height:18px; font-size:12px; color:var(--apple-secondary-label); margin:0; }
   #visualize-photoreal-status.error { color:var(--apple-red); }
   #visualize-photoreal-status.success { color:var(--apple-green); }
-  #visualize-controls button { 
-    width:100%; 
-    padding: 10px 16px;
-    background: var(--apple-secondary-system-background);
-    color: var(--apple-label);
-    border: 1px solid var(--apple-separator);
-    border-radius: var(--apple-radius-medium);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-  }
-  #visualize-controls button:hover {
-    background: var(--apple-tertiary-system-fill);
-    border-color: rgba(0, 0, 0, 0.12);
-    box-shadow: none;
-  }
-  #visualize-controls button:not(.secondary) {
-    background: var(--apple-blue);
-    color: #ffffff;
-    border-color: var(--apple-blue);
-  }
-  #visualize-controls button:not(.secondary):hover {
-    background: var(--apple-blue-hover);
-    box-shadow: none;
-  }
   .visualize-footnote { margin:0; font-size:12px; color:var(--apple-secondary-label); }
   .visualize-hint { margin:0; font-size:13px; color:var(--apple-secondary-label); line-height:1.4; }
   
@@ -1543,66 +998,7 @@
     box-shadow: none;
   }
   .room-label.selected { background: #007acc; color: white; }
-  /* External edit button for room labels */
-  .room-edit-btn {
-    position: absolute;
-    transform: translate(-50%, -50%);
-    z-index: 60;
-    pointer-events: auto;
-    min-width: 44px; height: var(--label-btn-height);
-    padding: 0 8px;
-    border-radius: var(--label-btn-radius);
-    border: none; /* remove 1px keyline */
-    background: #ffffff;
-    color: #007acc;
-  font-size: var(--label-btn-font-size); font-weight: 400; line-height: var(--label-btn-height); text-align: center;
-    box-shadow: none;
-    cursor: pointer;
-    /* Keep in lockstep with JS-driven fade */
-    transition: opacity 0s linear;
-  }
-  .room-edit-btn:hover { filter: brightness(0.97); box-shadow: none; }
-  /* Improve hover contrast: white text on brand background */
-  .room-edit-btn:hover {
-    background: var(--apple-blue);
-    color: #ffffff;
-    filter: none;
-    box-shadow: none;
-    /* no border */
-  }
-  .room-edit-btn:active { transform: translate(-50%, -50%) scale(0.96); }
-  /* Roof rotate button: match stairs 360 handle (violet circle, white border/text) */
-  .roof-rotate-btn {
-    position: absolute;
-    z-index: 60;
-    pointer-events: auto;
-    width: var(--roof-rotate-size); height: var(--roof-rotate-size); text-align: center;
-    display: flex; align-items: center; justify-content: center;
-    transform: translate(-50%, -50%);
-    border-radius: calc(var(--roof-rotate-size) / 2); border: 2px solid rgba(255,255,255,0.9);
-  background: #8b5cf6; color: #ffffff; font-weight: 400; font-size: 12px;
-    box-shadow: none;
-    cursor: pointer;
-    transition: opacity 0s linear, transform 0.06s ease, background-color var(--transition-fast) ease, color var(--transition-fast) ease, border-color var(--transition-fast) ease;
-  }
-  .roof-rotate-btn:hover {
-    background: var(--apple-purple-hover); /* slightly darker violet on hover */
-    color: #ffffff;
-    border-color: rgba(255,255,255,0.95);
-    box-shadow: none;
-  }
-  /* Prevent any positional/scale change on press to keep button static */
-  .roof-rotate-btn:active { transform: translate(-50%, -50%); }
-  .label-edit-btn {
-    z-index: 60; /* above labels */
-    border: 1px solid rgba(0,0,0,0.15);
-    background: #fff;
-    color: #333;
-    width: 22px; height: 22px; line-height: 20px; text-align: center;
-  border-radius: 11px; font-size: 12px; font-weight: 400; cursor: pointer;
-    box-shadow: none;
-  }
-  .label-edit-btn:hover { filter: brightness(0.95); }
+  /* External edit button for room labels handled by apple-design-system.css */
   
   /* Legacy modal styles: restrict to Info only to avoid overriding Pricing z-index/display */
   #info-modal {
@@ -1659,15 +1055,6 @@
   
   .total-section .pricing-item { font-size: 16px; font-weight: 700; }
   
-  .close-button {
-    position: absolute; top: 15px; right: 20px; background: none; border: none;
-    font-size: 24px; cursor: pointer; color: #999;
-    transition: color 0.2s, transform 0.1s;
-  }
-  .close-button:hover {
-    color: var(--apple-blue);
-    transform: scale(1.1);
-  }
 
   /* Room palette modal */
   #room-palette-modal { position: fixed; inset: 0; display: none; z-index: 9999; align-items: center; justify-content: center; }
@@ -1685,7 +1072,6 @@
     --label-btn-font-size: 8px; /* was 10px */
   }
   /* Generic controls */
-  button, .dropdown-button { font-size: 13px !important; }
   .dropdown-item { font-size: 13px !important; }
   .dropdown-title { font-size: 11px !important; }
   select { font-size: 12px !important; }
@@ -1724,17 +1110,6 @@
 
   /* Reset Confirmation Modal */
   #reset-confirmation-modal.hidden { display: none; }
-  #reset-confirmation-modal .modal-buttons button:hover {
-    transform: translateY(-1px);
-    box-shadow: none;
-  }
-  #reset-confirmation-modal .modal-buttons button:active {
-    transform: translateY(0);
-  }
-  #reset-confirm-btn:hover {
-    background: var(--apple-red-hover) !important;
-    box-shadow: none;
-  }
   @keyframes modalFadeIn {
     from {
       opacity: 0;
@@ -1776,20 +1151,6 @@
   [data-theme="dark"] .admin-meta { color: var(--apple-secondary-label); }
   [data-theme="dark"] .admin-error { color: var(--apple-label); }
 
-  /* Account button (top-right) */
-  #account-button {
-    position: fixed; top: 28px; right: 28px; z-index: 1200; width: 45px; height: 45px;
-    border-radius: 999px; border: 1px solid var(--apple-separator); background: var(--apple-material-regular); color: var(--apple-label);
-    box-shadow: none; cursor: pointer; display: flex; align-items: center; justify-content: center;
-    font-weight: var(--apple-font-weight-regular); font-family: var(--apple-font-family);
-    transition: transform 0.1s ease, background-color 0.2s ease;
-  }
-  #account-button:hover { box-shadow: none; transform: scale(1.05); }
-  #account-button:active { transform: scale(0.95); }
-  #account-button svg { width: 24px; height: 24px; }
-
-  /* Account button dark mode */
-  [data-theme="dark"] #account-button { border: 1px solid var(--apple-separator); background: var(--apple-material-regular); color: var(--apple-label); }
 
   /* Account modal + splash animation */
   #account-modal { position: fixed; inset: 0; display: none; z-index: 17000; }
@@ -2070,30 +1431,6 @@
     line-height: 1.4;
   }
   
-  /* View Back Button */
-  .view-back-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 8px 12px;
-    margin-bottom: 16px;
-    font-size: 14px;
-    background: var(--apple-tertiary-system-fill);
-    border: 1px solid var(--apple-separator);
-    border-radius: var(--apple-radius-medium);
-    color: var(--apple-blue);
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  
-  .view-back-btn:hover {
-    background: var(--apple-quaternary-system-fill);
-    transform: translateX(-2px);
-  }
-  
-  .view-back-btn .sf-icon {
-    color: var(--apple-blue);
-  }
   
   /* Dark mode for account section */
   [data-theme="dark"] #account-sheet {
@@ -2140,7 +1477,6 @@
   .account-field label { font-size: var(--apple-font-size-caption2); color: var(--apple-secondary-label); }
   .account-field input { height: 36px; border: 1px solid var(--apple-separator); border-radius: var(--apple-radius-medium); padding: 6px 10px; font-size: var(--apple-font-size-callout); background: var(--apple-secondary-system-background); color: var(--apple-label); }
   .account-actions { margin-top: 8px; display: flex; gap: 8px; }
-  .account-actions button { padding: 8px 12px; border-radius: var(--apple-radius-medium); border: 1px solid var(--apple-separator); background: var(--apple-secondary-system-background); color: var(--apple-label); }
 
   /* Hidden state for account views */
   .is-hidden {
@@ -2163,26 +1499,6 @@
     color: var(--apple-label);
   }
 
-  .admin-header button {
-    background: var(--apple-tertiary-system-fill);
-    border: 1px solid var(--apple-separator);
-    color: var(--apple-label);
-    padding: 8px 16px;
-    border-radius: 10px;
-    font-size: 14px;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .admin-header button:hover {
-    background: var(--apple-quaternary-system-fill);
-    transform: translateY(-1px);
-    box-shadow: none;
-  }
 
   .admin-grid {
     display: grid;
@@ -2389,107 +1705,8 @@
     box-shadow: none;
   }
 
-  [data-theme="dark"] .input-with-toggle .icon-btn {
-    background: rgba(58, 58, 60, 0.5);
-    border-color: rgba(84, 84, 88, 0.4);
-  }
 
-  [data-theme="dark"] .input-with-toggle .icon-btn:hover {
-    background: rgba(72, 72, 74, 0.6);
-  }
 
-  [data-theme="dark"] .settings-status.success {
-    background: rgba(52, 199, 89, 0.15);
-    border-color: rgba(52, 199, 89, 0.3);
-  }
-
-  [data-theme="dark"] .settings-status.error {
-    background: rgba(255, 59, 48, 0.15);
-    border-color: rgba(255, 59, 48, 0.3);
-  }
-
-  [data-theme="dark"] .settings-status.info {
-    background: rgba(10, 132, 255, 0.15);
-    border-color: rgba(10, 132, 255, 0.3);
-  }
-
-  /* Scrollable help content inside Account */
-  .account-scroll { max-height: calc(70vh - 80px); overflow-y: auto; padding-right: 8px; }
-  .account-scroll::-webkit-scrollbar { width: 10px; }
-  .account-scroll::-webkit-scrollbar-track { background: var(--apple-tertiary-system-background); border-radius: 6px; }
-  .account-scroll::-webkit-scrollbar-thumb { background: var(--apple-secondary-label); border-radius: 6px; }
-  .account-scroll::-webkit-scrollbar-thumb:hover { background: var(--apple-label); }
-
-  /* Account modal dark mode */
-  [data-theme="dark"] #account-sheet { color: var(--apple-label); }
-  /* Dark mode account-nav styles removed - using card grid */
-  [data-theme="dark"] #account-main { 
-    background: linear-gradient(135deg, 
-      rgba(28, 28, 30, 1) 0%, 
-      rgba(44, 44, 46, 1) 50%,
-      rgba(58, 58, 60, 1) 100%);
-    border: 1px solid var(--apple-separator); 
-    box-shadow: none; 
-  }
-  [data-theme="dark"] .account-field label { color: var(--apple-secondary-label); }
-  [data-theme="dark"] .account-field input { background: var(--apple-secondary-system-background); color: var(--apple-label); border: 1px solid var(--apple-separator); }
-  [data-theme="dark"] .account-actions button { background: var(--apple-secondary-system-background); color: var(--apple-label); border: 1px solid var(--apple-separator); }
-  [data-theme="dark"] .account-scroll::-webkit-scrollbar-track { background: var(--apple-tertiary-system-background); }
-  [data-theme="dark"] .account-scroll::-webkit-scrollbar-thumb { background: var(--apple-secondary-label); }
-  [data-theme="dark"] .account-scroll::-webkit-scrollbar-thumb:hover { background: var(--apple-label); }
-
-  /* Dark mode for projects section */
-  [data-theme="dark"] .projects-toolbar button.primary {
-    background: rgba(58, 58, 60, 0.6);
-    border-color: rgba(84, 84, 88, 0.4);
-  }
-
-  [data-theme="dark"] .projects-toolbar button.primary:hover {
-    background: rgba(72, 72, 74, 0.7);
-  }
-
-  [data-theme="dark"] .projects-toolbar button.secondary {
-    background: rgba(58, 58, 60, 0.5);
-    border-color: rgba(84, 84, 88, 0.4);
-  }
-
-  [data-theme="dark"] .projects-toolbar button.secondary:hover {
-    background: rgba(72, 72, 74, 0.6);
-  }
-
-  [data-theme="dark"] .project-card {
-    background: rgba(28, 28, 30, 0.95);
-    border-color: rgba(84, 84, 88, 0.4);
-    box-shadow: none;
-  }
-
-  [data-theme="dark"] .project-card:hover {
-    border-color: rgba(84, 84, 88, 0.6);
-    box-shadow: none;
-  }
-
-  [data-theme="dark"] .project-card-thumb {
-    border-color: rgba(84, 84, 88, 0.4);
-  }
-
-  [data-theme="dark"] .project-card-actions .load-btn {
-    background: rgba(58, 58, 60, 0.6);
-    border-color: rgba(84, 84, 88, 0.4);
-  }
-
-  [data-theme="dark"] .project-card-actions .load-btn:hover {
-    background: rgba(72, 72, 74, 0.7);
-  }
-
-  [data-theme="dark"] .project-card-actions .delete-btn {
-    background: rgba(255, 59, 48, 0.15);
-    border-color: rgba(255, 59, 48, 0.3);
-  }
-
-  [data-theme="dark"] .project-card-actions .delete-btn:hover {
-    background: rgba(255, 59, 48, 0.2);
-    border-color: rgba(255, 59, 48, 0.4);
-  }
 
   /* Inline Share layout */
   .share-inline { display: flex; flex-direction: column; gap: 10px; max-width: 640px; }
@@ -2563,27 +1780,11 @@
   .input-with-toggle input { 
     flex: 1; 
   }
-  .input-with-toggle .icon-btn { 
-    padding: 8px 12px; 
-    background: var(--apple-tertiary-system-fill); 
-    border: 1px solid var(--apple-separator); 
-    border-radius: 10px; 
-    cursor: pointer; 
-    font-size: 14px;
-    transition: background-color 0.2s;
-  }
-  .input-with-toggle .icon-btn:hover { 
-    background: var(--apple-quaternary-system-fill); 
-  }
   .settings-actions { 
     display: flex; 
     gap: 10px; 
     margin-top: 16px; 
     flex-wrap: wrap;
-  }
-  .settings-actions button { 
-    padding: 10px 18px; 
-    font-size: 13px; 
   }
   .settings-status { 
     margin-top: 12px; 
@@ -2665,40 +1866,6 @@
     gap: 10px;
     margin-top: 24px;
   }
-  .visualize-unsaved-actions button {
-    padding: 12px 20px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
-    border: none;
-  }
-  .visualize-unsaved-actions button.primary {
-    background: var(--apple-blue);
-    color: #fff;
-  }
-  .visualize-unsaved-actions button.primary:hover {
-    background: var(--apple-blue-hover);
-    box-shadow: none;
-  }
-  .visualize-unsaved-actions button.danger {
-    background: var(--apple-red);
-    color: #fff;
-  }
-  .visualize-unsaved-actions button.danger:hover {
-    background: var(--apple-red-hover);
-    box-shadow: none;
-  }
-  .visualize-unsaved-actions button.secondary {
-    background: var(--apple-secondary-system-background);
-    color: var(--apple-label);
-    border: 1px solid var(--apple-separator);
-  }
-  .visualize-unsaved-actions button.secondary:hover {
-    background: var(--apple-secondary-system-background);
-    color: var(--apple-blue);
-  }
 
   /* Project Selection Popup */
   .project-select-popup {
@@ -2724,22 +1891,6 @@
     text-align: center;
     box-shadow: none;
     animation: popupSlideIn 0.2s ease;
-  }
-  .project-select-close {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 32px;
-    height: 32px;
-    border: none;
-    background: #f1f5f9;
-    border-radius: 8px;
-    font-size: 16px;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .project-select-close:hover {
-    background: var(--apple-secondary-system-background);
   }
   .project-select-icon {
     font-size: 48px;
@@ -2804,21 +1955,6 @@
     font-size: 12px;
     color: #64748b;
   }
-  .project-select-item-btn {
-    padding: 6px 14px;
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
-    flex-shrink: 0;
-  }
-  .project-select-item-btn:hover {
-    background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
-  }
   .project-select-new {
     display: flex;
     gap: 8px;
@@ -2838,22 +1974,6 @@
     border-color: #3b82f6;
     box-shadow: none;
   }
-  .project-select-new button {
-    padding: 10px 16px;
-    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
-  }
-  .project-select-new button:hover {
-    background: var(--apple-blue-hover);
-    box-shadow: none;
-  }
   .project-select-status {
     margin-top: 12px;
     font-size: 13px;
@@ -2869,33 +1989,6 @@
     display: flex;
     gap: 10px;
     margin-bottom: 20px;
-  }
-  .projects-toolbar button {
-    padding: 10px 18px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-  .projects-toolbar button.primary {
-    background: var(--apple-tertiary-system-fill);
-    color: var(--apple-label);
-    border: 1px solid var(--apple-separator);
-  }
-  .projects-toolbar button.primary:hover {
-    background: var(--apple-quaternary-system-fill);
-    box-shadow: none;
-    transform: translateY(-1px);
-  }
-  .projects-toolbar button.secondary {
-    background: var(--apple-secondary-system-background);
-    color: var(--apple-label);
-    border: 1px solid var(--apple-separator);
-  }
-  .projects-toolbar button.secondary:hover {
-    background: var(--apple-tertiary-system-fill);
-    box-shadow: none;
   }
   .projects-list {
     display: flex;
@@ -2954,32 +2047,6 @@
     flex-direction: column;
     gap: 6px;
     flex-shrink: 0;
-  }
-  .project-card-actions button {
-    padding: 8px 14px;
-    font-size: 13px;
-    font-weight: 500;
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .project-card-actions .load-btn {
-    background: var(--apple-tertiary-system-fill);
-    color: var(--apple-label);
-    border: 1px solid var(--apple-separator);
-  }
-  .project-card-actions .load-btn:hover {
-    background: var(--apple-quaternary-system-fill);
-    box-shadow: none;
-  }
-  .project-card-actions .delete-btn {
-    background: rgba(255, 59, 48, 0.1);
-    color: var(--apple-red);
-    border: 1px solid rgba(255, 59, 48, 0.2);
-  }
-  .project-card-actions .delete-btn:hover {
-    background: rgba(255, 59, 48, 0.15);
-    border-color: rgba(255, 59, 48, 0.3);
   }
   .projects-empty {
     text-align: center;
@@ -3077,43 +2144,6 @@
   
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Account Navigation - Minimal Apple Design */
-  .account-nav-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    font-size: 15px;
-    font-weight: 400;
-    color: var(--apple-label);
-    background: transparent;
-    border: none;
-    border-radius: 8px;
-    text-align: left;
-    cursor: pointer;
-    transition: all 0.2s var(--apple-ease-out);
-    width: 100%;
-  }
-  
-  .account-nav-btn:hover {
-    background: var(--apple-secondary-system-background);
-  }
-  
-  .account-nav-btn.active {
-    background: var(--apple-blue);
-    color: white;
-    font-weight: 600;
-  }
-  
-  .account-nav-btn .sf-icon {
-    flex-shrink: 0;
-    opacity: 0.8;
-  }
-  
-  .account-nav-btn.active .sf-icon {
-    opacity: 1;
-  }
-  
   .account-section-header {
     font-size: 11px;
     font-weight: 600;
@@ -3133,47 +2163,6 @@
 /* ============================================
    DA WORKFLOW - All styles moved to da-workflow-apple.css
    ============================================ */
-
-/* DA Workflow Button in Project Cards */
-.da-workflow-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 6px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  background: linear-gradient(135deg, var(--apple-system-blue) 0%, var(--apple-system-indigo) 100%);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s var(--apple-ease-out);
-}
-
-.da-workflow-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: none;
-}
-
-.da-workflow-btn:active {
-  transform: translateY(0);
-}
-
-.da-workflow-btn .sf-icon {
-  flex-shrink: 0;
-}
-
-.project-card-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.project-card-actions button {
-  flex: 1;
-  min-width: 100px;
-}
 
 /* Project Status Badges */
 .project-badges {
@@ -3204,99 +2193,14 @@
   color: white;
 }
 
-/* Enhanced Project Card Actions */
-.project-card-actions {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.project-card-actions button {
-  padding: 8px 6px;
-  font-size: 12px;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.save-design-btn {
-  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.save-design-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: none;
-}
-
-.load-btn {
-  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.load-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: none;
-}
-
-.delete-btn {
-  background: #fc8181;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.delete-btn:hover {
-  background: #f56565;
-  transform: translateY(-2px);
-  box-shadow: none;
-}
 
 /* Responsive project cards */
 @media (max-width: 768px) {
   .project-card-actions {
     grid-template-columns: repeat(2, 1fr);
   }
-  
-  .project-card-actions button {
-    font-size: 11px;
-    padding: 6px 4px;
-  }
 }
 
-/* Save for DA Button - Special styling */
-#btn-save-for-da {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-  color: white !important;
-  font-weight: 600;
-  border: none !important;
-  box-shadow: none;
-  transition: all 0.3s ease;
-}
-
-#btn-save-for-da:hover {
-  background: linear-gradient(135deg, #5568d3 0%, #653a91 100%) !important;
-  box-shadow: none;
-  transform: translateY(-1px);
-}
-
-#btn-save-for-da:active {
-  transform: translateY(0);
-  box-shadow: none;
-}
 
 /* Visualize Status Panel Minimize */
 #visualize-capture-status.minimized {

@@ -517,6 +517,1219 @@
 }
 
 /* ============================================================================
+   SHARED BUTTON CONTEXTS (MAIN TOOLBAR, DROPDOWNS, PLAN2D)
+   Centralized so every surface pulls from the same Apple Design tokens
+   ============================================================================ */
+
+#controls button,
+#controls .dropdown-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 13px !important;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+
+#controls button:not(.secondary):not(.dropdown-button) {
+  background: var(--apple-blue);
+  color: var(--apple-system-background);
+  box-shadow: none;
+}
+
+#controls .dropdown-button {
+  justify-content: flex-start;
+}
+
+#controls button:not(.secondary):not(.dropdown-button):hover {
+  background: var(--global-hover-bg);
+  color: var(--global-hover-color);
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+#controls button:not(.secondary):not(.dropdown-button):active {
+  transform: scale(0.96);
+  box-shadow: none;
+}
+
+#controls button.secondary {
+  background: var(--apple-material-regular) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  color: var(--apple-label) !important;
+  border: 0.5px solid var(--apple-separator) !important;
+  box-shadow: none;
+  font-weight: var(--apple-font-weight-semibold) !important;
+}
+
+#controls button.secondary:hover {
+  background: var(--global-hover-bg) !important;
+  border-color: var(--global-hover-border) !important;
+  box-shadow: none;
+  transform: translateY(-1px);
+  color: var(--global-hover-color) !important;
+}
+
+#controls button.secondary:active {
+  transform: scale(0.96);
+  box-shadow: none;
+}
+
+#controls button.save-for-da {
+  background: var(--apple-green-alpha-12) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  color: var(--apple-green) !important;
+  border: 0.5px solid var(--apple-green-alpha-30) !important;
+}
+
+#controls button.save-for-da:hover {
+  background: var(--apple-green-alpha-20) !important;
+  border-color: var(--apple-green-alpha-50) !important;
+  color: var(--apple-green-hover) !important;
+}
+
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  position: relative;
+  min-height: 34px;
+  padding: 0 12px;
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  border: 1px solid var(--apple-opaque-separator);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 400;
+  cursor: pointer;
+  box-shadow: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.dropdown-button:hover {
+  background: var(--global-hover-bg) !important;
+  border-color: var(--global-hover-border) !important;
+  box-shadow: none;
+  transform: translateY(-1px);
+  color: var(--global-hover-color) !important;
+}
+
+.dropdown-button:focus {
+  outline: none;
+  border-color: #007acc;
+  box-shadow: none;
+}
+
+.dropdown-button .caret {
+  margin-left: auto;
+  width: 14px;
+  height: 12px;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.dropdown-button .caret svg {
+  display: block;
+}
+
+.dropdown-button .caret svg path {
+  stroke: var(--apple-label);
+}
+
+.dropdown-button span:not(.caret) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.dropdown.open .dropdown-button {
+  border-color: #007acc;
+  box-shadow: none;
+}
+
+#actionsDropdown .dropdown-button:hover,
+#levelDropdown .dropdown-button:hover,
+#debugDropdown .dropdown-button:hover,
+#roof-type-dropdown .dropdown-button:hover {
+  background: var(--global-hover-bg) !important;
+  border-color: var(--global-hover-border) !important;
+  color: var(--global-hover-color) !important;
+  box-shadow: none;
+}
+
+#actionsDropdown .dropdown-button:hover .caret svg path,
+#levelDropdown .dropdown-button:hover .caret svg path,
+#debugDropdown .dropdown-button:hover .caret svg path,
+#roof-type-dropdown .dropdown-button:hover .caret svg path {
+  stroke: var(--global-hover-color) !important;
+}
+
+#actionsDropdown.open .dropdown-button,
+#levelDropdown.open .dropdown-button,
+#debugDropdown.open .dropdown-button,
+#roof-type-dropdown.open .dropdown-button {
+  color: #ffffff !important;
+  background-color: #007acc !important;
+  border-color: #007acc !important;
+  box-shadow: none;
+}
+
+#actionsDropdown.open .dropdown-button .caret svg path,
+#levelDropdown.open .dropdown-button .caret svg path,
+#debugDropdown.open .dropdown-button .caret svg path,
+#roof-type-dropdown.open .dropdown-button .caret svg path {
+  stroke: #ffffff !important;
+}
+
+#roof-type-dropdown .dropdown-list .dropdown-item:hover {
+  background: var(--global-hover-bg) !important;
+  color: var(--global-hover-color) !important;
+}
+
+@keyframes dropdownPulse {
+  0% {
+    box-shadow: none;
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+#roof-type-dropdown.pulse .dropdown-button {
+  animation: dropdownPulse 0.65s ease-out;
+}
+
+/* App-wide base button style (fallback for modals and legacy controls) */
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--apple-radius-medium);
+  border: 1px solid var(--apple-separator);
+  background: var(--apple-blue);
+  color: var(--apple-system-background);
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-body);
+  font-weight: var(--apple-font-weight-semibold);
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  box-shadow: none;
+  text-decoration: none;
+}
+
+button:hover {
+  background: var(--global-hover-bg);
+  color: var(--global-hover-color);
+  border-color: var(--global-hover-border);
+  transform: translateY(-1px);
+}
+
+.plan2d-floor-toggle {
+  background: var(--apple-tertiary-system-background);
+  padding: 4px;
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 4px;
+  box-shadow: none;
+}
+
+.plan2d-floor-toggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: var(--apple-system-background);
+  color: var(--apple-label);
+  font-weight: 400;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.plan2d-floor-toggle button:hover,
+.plan2d-floor-toggle button.active {
+  background: var(--apple-blue);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.plan2d-tool-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 12px;
+  height: 32px;
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  border: 0.5px solid var(--apple-separator);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+  box-shadow: none;
+  white-space: nowrap;
+}
+
+.plan2d-tool-btn .sf-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.9;
+}
+
+.plan2d-tool-btn:hover {
+  background: var(--global-hover-bg);
+  color: var(--global-hover-color);
+  border-color: var(--global-hover-border);
+  transform: translateY(-1px);
+}
+
+.plan2d-tool-btn.selected {
+  background: var(--apple-blue);
+  color: #ffffff;
+  border-color: var(--apple-blue);
+}
+
+.plan2d-tool-btn.selected .sf-icon {
+  opacity: 1;
+}
+
+.plan2d-tool-btn.selected:hover {
+  background: var(--apple-blue-hover);
+  color: #ffffff;
+  border-color: var(--apple-blue);
+}
+
+[data-theme="dark"] .plan2d-tool-btn {
+  background: rgba(58, 58, 60, 0.35);
+  border-color: rgba(84, 84, 88, 0.4);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme="dark"] .plan2d-tool-btn:hover {
+  background: rgba(72, 72, 74, 0.55);
+  border-color: rgba(99, 99, 102, 0.6);
+}
+
+#plan2d-menubar-right button {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  gap: 6px;
+  border-radius: 8px;
+}
+
+#plan2d-menubar-right button.secondary {
+  border: 0.5px solid var(--apple-separator) !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+#plan2d-menubar-right button.secondary:hover {
+  background: var(--global-hover-bg) !important;
+  color: var(--global-hover-color) !important;
+  border-color: var(--global-hover-border) !important;
+}
+
+#plan2d-menubar-right .dropdown-button,
+#plan2d-menubar-right button:not(.secondary) {
+  font-family: var(--apple-font-family);
+  font-size: 13px;
+  font-weight: var(--apple-font-weight-semibold);
+  line-height: 1;
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  border: 1px solid var(--apple-separator);
+  border-radius: var(--apple-radius-medium);
+  padding: 8px 32px 8px 12px;
+  box-shadow: none;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+#plan2d-menubar-right .dropdown-button:hover,
+#plan2d-menubar-right button:not(.secondary):hover {
+  background: var(--global-hover-bg);
+  color: var(--global-hover-color);
+  border-color: var(--global-hover-border);
+}
+
+#plan2d-menubar-right .dropdown.open .dropdown-button {
+  background: #007acc !important;
+  border-color: #007acc !important;
+  color: #ffffff !important;
+}
+
+#plan2d-menubar-right .dropdown.open .dropdown-button .caret svg path {
+  stroke: #ffffff !important;
+}
+
+#plan2d-page button.secondary {
+  background: var(--apple-secondary-system-background) !important;
+  color: var(--apple-blue) !important;
+  border: none !important;
+}
+
+[data-theme="dark"] #plan2d-page button.secondary {
+  background: var(--apple-secondary-system-background) !important;
+  color: var(--apple-blue) !important;
+}
+
+#plan2d-page button.secondary:hover {
+  background: var(--apple-tertiary-system-background) !important;
+  transform: scale(1.02);
+  box-shadow: none;
+}
+
+[data-theme="dark"] #plan2d-page button.secondary:hover {
+  background: var(--apple-tertiary-system-background) !important;
+  box-shadow: none;
+}
+
+#plan2d-clear:hover {
+  background: var(--apple-red) !important;
+  color: var(--apple-system-background) !important;
+  border: none !important;
+  box-shadow: none;
+}
+
+[data-theme="dark"] #plan2d-clear:hover {
+  background: var(--apple-red) !important;
+  box-shadow: none;
+}
+
+#plan2d-close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: calc(var(--btn-gap) * 1.5);
+  line-height: 0;
+  flex-shrink: 0;
+}
+
+#plan2d-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+#plan2d-close:hover {
+  background: var(--global-hover-bg) !important;
+  color: var(--global-hover-color) !important;
+  border-color: var(--global-hover-border) !important;
+  transform: translateY(-1px);
+}
+
+[data-theme="dark"] #plan2d-close:hover {
+  background: var(--global-hover-bg) !important;
+  color: var(--global-hover-color) !important;
+  border-color: var(--global-hover-border) !important;
+}
+
+#plan2d-toolbar-left button:focus-visible,
+#plan2d-opening-inline select:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+[data-theme="dark"] #plan2d-toolbar-left button:focus-visible,
+[data-theme="dark"] #plan2d-opening-inline select:focus-visible {
+  box-shadow: none;
+}
+
+body.cad-mode #plan2d-toolbar-left button {
+  background: var(--apple-system-background) !important;
+  color: var(--apple-label) !important;
+  border: 1px solid var(--apple-separator) !important;
+}
+
+body.cad-mode #plan2d-toolbar-left button:hover,
+body.cad-mode #plan2d-toolbar-left button.selected {
+  background: var(--apple-blue) !important;
+  color: var(--apple-system-background) !important;
+  border: none !important;
+}
+
+button.secondary {
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  border: 1px solid var(--apple-separator);
+}
+
+button.secondary:hover {
+  background: var(--apple-tertiary-system-fill);
+  color: var(--apple-label);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: none;
+}
+
+/* ============================================================================
+   APPLICATION BUTTON CONTEXTS
+   Ensures every module-level button/droplist appearance sources from here
+   ============================================================================ */
+
+/* Visualize controls */
+#visualize-view-grid button {
+  position: relative;
+  padding: 10px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--apple-separator);
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  font-weight: 500;
+  font-size: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+#visualize-view-grid button:hover:not(:disabled):not(.active) {
+  background: var(--apple-tertiary-system-fill);
+  border-color: rgba(0, 0, 0, 0.12);
+  transform: translateY(-1px);
+  box-shadow: none;
+}
+
+#visualize-view-grid button:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+#visualize-view-grid button.active {
+  background: var(--apple-blue);
+  color: #ffffff;
+  border-color: var(--apple-blue);
+  box-shadow: none;
+}
+
+#visualize-view-grid button.active:hover {
+  background: var(--apple-blue-hover);
+  box-shadow: none;
+}
+
+#visualize-view-grid button.inactive,
+#visualize-view-grid button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.visualize-photoreal-row button {
+  width: 100%;
+}
+
+#visualize-controls button {
+  width: 100%;
+  padding: 10px 16px;
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  border: 1px solid var(--apple-separator);
+  border-radius: var(--apple-radius-medium);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+#visualize-controls button:hover {
+  background: var(--apple-tertiary-system-fill);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: none;
+}
+
+#visualize-controls button:not(.secondary) {
+  background: var(--apple-blue);
+  color: #ffffff;
+  border-color: var(--apple-blue);
+}
+
+#visualize-controls button:not(.secondary):hover {
+  background: var(--apple-blue-hover);
+  box-shadow: none;
+}
+
+/* Canvas overlay buttons */
+.room-edit-btn {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 60;
+  pointer-events: auto;
+  min-width: 44px;
+  height: var(--label-btn-height);
+  padding: 0 8px;
+  border-radius: var(--label-btn-radius);
+  border: none;
+  background: #ffffff;
+  color: #007acc;
+  font-size: var(--label-btn-font-size);
+  font-weight: 400;
+  line-height: var(--label-btn-height);
+  text-align: center;
+  box-shadow: none;
+  cursor: pointer;
+  transition: opacity 0s linear;
+}
+
+.room-edit-btn:hover {
+  background: var(--apple-blue);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.room-edit-btn:active {
+  transform: translate(-50%, -50%) scale(0.96);
+}
+
+.roof-rotate-btn {
+  position: absolute;
+  z-index: 60;
+  pointer-events: auto;
+  width: var(--roof-rotate-size);
+  height: var(--roof-rotate-size);
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  border-radius: calc(var(--roof-rotate-size) / 2);
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: #8b5cf6;
+  color: #ffffff;
+  font-weight: 400;
+  font-size: 12px;
+  box-shadow: none;
+  cursor: pointer;
+  transition: opacity 0s linear, transform 0.06s ease, background-color var(--transition-fast) ease, color var(--transition-fast) ease, border-color var(--transition-fast) ease;
+}
+
+.roof-rotate-btn:hover {
+  background: var(--apple-purple-hover);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.95);
+}
+
+.roof-rotate-btn:active {
+  transform: translate(-50%, -50%);
+}
+
+.label-edit-btn {
+  z-index: 60;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: #fff;
+  color: #333;
+  width: 22px;
+  height: 22px;
+  line-height: 20px;
+  text-align: center;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 400;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.label-edit-btn:hover {
+  filter: brightness(0.95);
+}
+
+/* Modal close buttons */
+.close-button {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #999;
+  transition: color 0.2s, transform 0.1s;
+}
+
+.close-button:hover {
+  color: var(--apple-blue);
+  transform: scale(1.1);
+}
+
+#reset-confirmation-modal .modal-buttons button:hover {
+  transform: translateY(-1px);
+  box-shadow: none;
+}
+
+#reset-confirmation-modal .modal-buttons button:active {
+  transform: translateY(0);
+}
+
+#reset-confirm-btn:hover {
+  background: var(--apple-red-hover) !important;
+  box-shadow: none;
+}
+
+/* Account chrome */
+#account-button {
+  position: fixed;
+  top: 28px;
+  right: 28px;
+  z-index: 1200;
+  width: 45px;
+  height: 45px;
+  border-radius: 999px;
+  border: 1px solid var(--apple-separator);
+  background: var(--apple-material-regular);
+  color: var(--apple-label);
+  box-shadow: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: var(--apple-font-weight-regular);
+  font-family: var(--apple-font-family);
+  transition: transform 0.1s ease, background-color 0.2s ease;
+}
+
+#account-button:hover {
+  transform: scale(1.05);
+}
+
+#account-button:active {
+  transform: scale(0.95);
+}
+
+#account-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+[data-theme="dark"] #account-button {
+  border: 1px solid var(--apple-separator);
+  background: var(--apple-material-regular);
+  color: var(--apple-label);
+}
+
+.view-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  background: var(--apple-tertiary-system-fill);
+  border: 1px solid var(--apple-separator);
+  border-radius: var(--apple-radius-medium);
+  color: var(--apple-blue);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-back-btn:hover {
+  background: var(--apple-quaternary-system-fill);
+  transform: translateX(-2px);
+}
+
+.view-back-btn .sf-icon {
+  color: var(--apple-blue);
+}
+
+.account-actions button {
+  padding: 8px 12px;
+  border-radius: var(--apple-radius-medium);
+  border: 1px solid var(--apple-separator);
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+}
+
+.admin-header button {
+  background: var(--apple-tertiary-system-fill);
+  border: 1px solid var(--apple-separator);
+  color: var(--apple-label);
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.admin-header button:hover {
+  background: var(--apple-quaternary-system-fill);
+  transform: translateY(-1px);
+  box-shadow: none;
+}
+
+.settings-actions button {
+  padding: 10px 18px;
+  font-size: 13px;
+}
+
+/* Visualize unsaved dialog */
+.visualize-unsaved-actions button {
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+}
+
+.visualize-unsaved-actions button.primary {
+  background: var(--apple-blue);
+  color: #fff;
+}
+
+.visualize-unsaved-actions button.primary:hover {
+  background: var(--apple-blue-hover);
+  box-shadow: none;
+}
+
+.visualize-unsaved-actions button.danger {
+  background: var(--apple-red);
+  color: #fff;
+}
+
+.visualize-unsaved-actions button.danger:hover {
+  background: var(--apple-red-hover);
+  box-shadow: none;
+}
+
+.visualize-unsaved-actions button.secondary {
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  border: 1px solid var(--apple-separator);
+}
+
+.visualize-unsaved-actions button.secondary:hover {
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-blue);
+}
+
+/* Project select modal */
+.project-select-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f1f5f9;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.project-select-close:hover {
+  background: var(--apple-secondary-system-background);
+}
+
+.project-select-new button {
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.project-select-new button:hover {
+  background: var(--apple-blue-hover);
+  box-shadow: none;
+}
+
+.project-select-item-btn {
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.project-select-item-btn:hover {
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+}
+
+/* Render toolbar toggle */
+#btn-render-walls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#btn-render-walls .render-label {
+  white-space: nowrap;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+#btn-render-walls .render-mode-svg {
+  width: 18px;
+  height: 18px;
+  margin-right: 2px;
+}
+
+.render-mode-icon__frame,
+.render-mode-icon__line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.render-mode-icon__line {
+  opacity: 0.85;
+  transition: opacity 0.3s ease, transform 0.35s ease;
+}
+
+.render-mode-icon__fill {
+  fill: currentColor;
+  opacity: 0;
+  transform-origin: 20px 16px;
+  transform: scaleX(0.1);
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease;
+  border-radius: 2px;
+}
+
+#btn-render-walls[data-render-mode="solid"] .render-mode-icon__fill {
+  opacity: 0.85;
+  transform: scaleX(1);
+}
+
+#btn-render-walls[data-render-mode="solid"] .render-mode-icon__line {
+  opacity: 0.35;
+  transform: translateY(0.4px);
+}
+
+/* Account modal project controls */
+.projects-toolbar button {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.projects-toolbar button.primary {
+  background: var(--apple-tertiary-system-fill);
+  color: var(--apple-label);
+  border: 1px solid var(--apple-separator);
+}
+
+.projects-toolbar button.primary:hover {
+  background: var(--apple-quaternary-system-fill);
+  box-shadow: none;
+  transform: translateY(-1px);
+}
+
+.projects-toolbar button.secondary {
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  border: 1px solid var(--apple-separator);
+}
+
+.projects-toolbar button.secondary:hover {
+  background: var(--apple-tertiary-system-fill);
+  box-shadow: none;
+}
+
+.project-card-actions button {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.project-card-actions .load-btn {
+  background: var(--apple-tertiary-system-fill);
+  color: var(--apple-label);
+  border: 1px solid var(--apple-separator);
+}
+
+.project-card-actions .load-btn:hover {
+  background: var(--apple-quaternary-system-fill);
+  box-shadow: none;
+}
+
+.project-card-actions .delete-btn {
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--apple-red);
+  border: 1px solid rgba(255, 59, 48, 0.2);
+}
+
+.project-card-actions .delete-btn:hover {
+  background: rgba(255, 59, 48, 0.15);
+  border-color: rgba(255, 59, 48, 0.3);
+}
+
+[data-theme="dark"] .project-card-actions .delete-btn {
+  background: rgba(255, 59, 48, 0.15);
+  border-color: rgba(255, 59, 48, 0.3);
+}
+
+[data-theme="dark"] .project-card-actions .delete-btn:hover {
+  background: rgba(255, 59, 48, 0.2);
+  border-color: rgba(255, 59, 48, 0.4);
+}
+
+.da-workflow-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  background: linear-gradient(135deg, var(--apple-blue) 0%, var(--apple-indigo) 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s var(--apple-ease-out);
+}
+
+.da-workflow-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: none;
+}
+
+.da-workflow-btn:active {
+  transform: translateY(0);
+}
+
+.da-workflow-btn .sf-icon {
+  flex-shrink: 0;
+}
+
+.da-new-btn {
+  padding: 10px 20px;
+  border: none;
+  background: var(--apple-blue);
+  color: #ffffff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: background 0.2s ease;
+}
+
+.da-new-btn:hover {
+  background: var(--apple-blue-hover);
+}
+
+#reset-cancel-btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 400;
+  border-radius: 8px;
+  border: 1px solid var(--apple-separator);
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+}
+
+#reset-confirm-btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 400;
+  background: var(--apple-red);
+  border: none;
+  color: #ffffff;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.account-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--apple-label);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s var(--apple-ease-out);
+  width: 100%;
+}
+
+.account-nav-btn:hover {
+  background: var(--apple-secondary-system-background);
+}
+
+.account-nav-btn.active {
+  background: var(--apple-blue);
+  color: white;
+  font-weight: 600;
+}
+
+.account-nav-btn .sf-icon {
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.account-nav-btn.active .sf-icon {
+  opacity: 1;
+}
+
+#account-admin-refresh {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  border: 0.5px solid var(--apple-separator);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s var(--apple-ease-out);
+  margin-bottom: 16px;
+}
+
+#account-admin-refresh:hover {
+  background: var(--apple-tertiary-system-background);
+  border-color: var(--apple-blue);
+}
+
+.input-with-toggle .icon-btn {
+  padding: 8px 12px;
+  background: var(--apple-tertiary-system-fill);
+  border: 1px solid var(--apple-separator);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.input-with-toggle .icon-btn:hover {
+  background: var(--apple-quaternary-system-fill);
+}
+
+[data-theme="dark"] .input-with-toggle .icon-btn {
+  background: rgba(58, 58, 60, 0.5);
+  border-color: rgba(84, 84, 88, 0.4);
+}
+
+[data-theme="dark"] .input-with-toggle .icon-btn:hover {
+  background: rgba(72, 72, 74, 0.6);
+}
+
+.save-design-btn,
+.load-btn,
+.delete-btn {
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.save-design-btn {
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: #ffffff;
+}
+
+.save-design-btn:hover {
+  transform: translateY(-2px);
+}
+
+.load-btn {
+  background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
+  color: #ffffff;
+}
+
+.load-btn:hover {
+  transform: translateY(-2px);
+}
+
+.delete-btn {
+  background: #fc8181;
+  color: #ffffff;
+}
+
+.delete-btn:hover {
+  background: #f56565;
+  transform: translateY(-2px);
+}
+
+#btn-save-for-da {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: #ffffff !important;
+  font-weight: 600;
+  border: none !important;
+  box-shadow: none;
+  transition: all 0.3s ease;
+}
+
+#btn-save-for-da:hover {
+  background: linear-gradient(135deg, #5568d3 0%, #653a91 100%) !important;
+  transform: translateY(-1px);
+}
+
+#btn-save-for-da:active {
+  transform: translateY(0);
+}
+
+/* ============================================================================
    CARDS & CONTAINERS
    ============================================================================ */
 
@@ -752,6 +1965,7 @@
   width: var(--sf-icon-regular);
   height: var(--sf-icon-regular);
   transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
 }
 
 .sf-icon-small {
@@ -776,8 +1990,8 @@
 
 /* SF Symbol in buttons */
 button .sf-icon {
-  margin-right: 4px;
-  margin-left: -2px;
+  margin-right: 6px;
+  margin-left: 0;
 }
 
 button:hover .sf-icon {

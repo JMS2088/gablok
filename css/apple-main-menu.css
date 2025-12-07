@@ -30,115 +30,6 @@ body.app-ready #controls {
   pointer-events: auto;
 }
 
-/* Base button style - Apple System */
-#controls button,
-#controls .dropdown-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  font-size: 13px !important;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
-  position: relative;
-}
-
-/* Primary button (Add Room) - Blue filled */
-#controls button:not(.secondary):not(.dropdown-button) {
-  background: var(--apple-blue);
-  color: var(--apple-system-background);
-  box-shadow: none;
-}
-
-#controls button:not(.secondary):not(.dropdown-button):hover {
-  background: var(--apple-blue-hover);
-  box-shadow: none;
-  transform: translateY(-1px);
-}
-
-#controls button:not(.secondary):not(.dropdown-button):active {
-  transform: scale(0.96);
-  box-shadow: none;
-}
-
-/* Secondary buttons - Glass material */
-#controls button.secondary {
-  background: var(--apple-material-regular) !important;
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  color: var(--apple-label) !important;
-  border: 0.5px solid var(--apple-separator) !important;
-  box-shadow: none;
-  font-weight: var(--apple-font-weight-semibold) !important;
-}
-
-#controls button.secondary:hover {
-  background: var(--apple-secondary-system-background) !important;
-  border-color: var(--apple-separator) !important;
-  box-shadow: none;
-  transform: translateY(-1px);
-  color: var(--apple-blue) !important;
-}
-
-#controls button.secondary:active {
-  transform: scale(0.96);
-  box-shadow: none;
-}
-
-/* Save for DA button - Special styling */
-#controls button.save-for-da {
-  background: var(--apple-green-alpha-12) !important;
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  color: var(--apple-green) !important;
-  border: 0.5px solid var(--apple-green-alpha-30) !important;
-}
-
-#controls button.save-for-da:hover {
-  background: var(--apple-green-alpha-20) !important;
-  border-color: var(--apple-green-alpha-50) !important;
-  color: var(--apple-green-hover) !important;
-}
-
-/* ============================================================================
-   DROPDOWN SYSTEM - Apple Style
-   ============================================================================ */
-
-.dropdown {
-  position: relative;
-  display: inline-block;
-}
-
-.dropdown-button {
-  background: var(--apple-material-regular) !important;
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  color: var(--apple-label) !important;
-  border: 0.5px solid var(--apple-separator) !important;
-  box-shadow: none;
-  padding-right: 32px !important;
-}
-
-.dropdown-button:hover {
-  background: var(--apple-secondary-system-background) !important;
-  border-color: var(--apple-separator) !important;
-  box-shadow: none;
-  transform: translateY(-1px);
-  color: var(--apple-blue) !important;
-}
-
-.dropdown-button:hover .caret svg path {
-  stroke: var(--apple-blue) !important;
-}
 
 .dropdown.open .dropdown-button {
   background: var(--apple-secondary-system-background) !important;
@@ -152,21 +43,18 @@ body.app-ready #controls {
 }
 
 .dropdown-button .caret {
-  position: absolute;
-  right: 10px;
-  width: 12px;
-  height: 8px;
+  margin-left: auto;
+  width: 14px;
+  height: 10px;
   pointer-events: none;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   transition: transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
 .dropdown.open .dropdown-button .caret {
-  transform: translateY(-50%) rotate(180deg);
+  transform: rotate(180deg);
 }
 
 .dropdown-button .caret svg path {
@@ -182,10 +70,10 @@ body.app-ready #controls {
   min-width: 200px;
   max-height: 400px;
   overflow: auto;
-  background: var(--apple-material-regular);
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
-  border: 0.5px solid var(--apple-separator);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(30px) saturate(160%);
+  -webkit-backdrop-filter: blur(30px) saturate(160%);
+  border: 0.5px solid rgba(120, 120, 128, 0.18);
   border-radius: var(--apple-radius-medium);
   box-shadow: none;
   padding: 6px;
@@ -230,8 +118,8 @@ body.app-ready #controls {
 }
 
 .dropdown-item:hover {
-  background: var(--apple-blue);
-  color: var(--apple-system-background);
+  background: var(--global-hover-bg);
+  color: var(--global-hover-color);
 }
 
 .dropdown-item.disabled {

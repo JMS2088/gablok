@@ -6,9 +6,6 @@
 
   // Initialize dropdowns when DOM is ready
   function initPlan2DNav() {
-    // Floor Dropdown
-    initFloorDropdown();
-    
     // Tools Dropdown
     initToolsDropdown();
     
@@ -17,46 +14,6 @@
     
     // Wire up compass canvas rendering (matches main nav compass)
     initPlan2DCompass();
-  }
-
-  function initFloorDropdown() {
-    const dropdown = document.getElementById('plan2d-floor-dropdown');
-    const button = document.getElementById('plan2d-floor-button');
-    const list = document.getElementById('plan2d-floor-list');
-    const text = document.getElementById('plan2d-floor-text');
-    
-    if (!dropdown || !button || !list) return;
-    
-    // Toggle dropdown
-    button.addEventListener('click', function(e) {
-      e.stopPropagation();
-      const isOpen = list.classList.contains('show');
-      closeAllPlan2DDropdowns();
-      if (!isOpen) {
-        list.classList.add('show');
-      }
-    });
-    
-    // Handle floor selection
-    list.addEventListener('click', function(e) {
-      const item = e.target.closest('.dropdown-item');
-      if (!item) return;
-      
-      const value = item.dataset.value;
-      if (value === 'ground') {
-        text.textContent = 'Ground';
-        if (typeof window.plan2dSwitchFloorInEditor === 'function') {
-          window.plan2dSwitchFloorInEditor(0);
-        }
-      } else if (value === 'first') {
-        text.textContent = 'First';
-        if (typeof window.plan2dSwitchFloorInEditor === 'function') {
-          window.plan2dSwitchFloorInEditor(1);
-        }
-      }
-      
-      list.classList.remove('show');
-    });
   }
 
   function initToolsDropdown() {
@@ -69,9 +26,10 @@
     // Toggle dropdown
     button.addEventListener('click', function(e) {
       e.stopPropagation();
-      const isOpen = list.classList.contains('show');
+      const isOpen = dropdown.classList.contains('open');
       closeAllPlan2DDropdowns();
       if (!isOpen) {
+        dropdown.classList.add('open');
         list.classList.add('show');
       }
     });
@@ -121,6 +79,7 @@
           break;
       }
       
+      dropdown.classList.remove('open');
       list.classList.remove('show');
     });
   }
@@ -135,9 +94,10 @@
     // Toggle dropdown
     button.addEventListener('click', function(e) {
       e.stopPropagation();
-      const isOpen = list.classList.contains('show');
+      const isOpen = dropdown.classList.contains('open');
       closeAllPlan2DDropdowns();
       if (!isOpen) {
+        dropdown.classList.add('open');
         list.classList.add('show');
       }
     });
@@ -171,18 +131,20 @@
           break;
       }
       
+      dropdown.classList.remove('open');
       list.classList.remove('show');
     });
   }
 
   function closeAllPlan2DDropdowns() {
-    const dropdowns = document.querySelectorAll('#plan2d-controls .dropdown-list');
-    dropdowns.forEach(list => list.classList.remove('show'));
+    const lists = document.querySelectorAll('#plan2d-header .dropdown-list');
+    lists.forEach(list => list.classList.remove('show'));
+    document.querySelectorAll('#plan2d-header .dropdown').forEach(dropdown => dropdown.classList.remove('open'));
   }
 
   // Close dropdowns when clicking outside
   document.addEventListener('click', function(e) {
-    if (!e.target.closest('#plan2d-controls .dropdown')) {
+    if (!e.target.closest('#plan2d-header .dropdown')) {
       closeAllPlan2DDropdowns();
     }
   });

@@ -188,7 +188,9 @@
                 window.currentFloor = lvl;
                 try {
                   var nativeSel = document.getElementById('levelSelect'); if (nativeSel) nativeSel.value = String(lvl);
-                  var btnText = document.getElementById('levelButtonText'); if (btnText) btnText.textContent = (lvl === 1 ? 'First Floor' : 'Ground Floor');
+                  var btnText = document.getElementById('levelButtonText');
+                  if (typeof window.setLevelButtonLabel === 'function') { window.setLevelButtonLabel(lvl); }
+                  else if (btnText) { btnText.textContent = (lvl === 1 ? 'First Floor' : 'Ground Floor'); }
                 } catch(_ui) {}
               }
               if (typeof window.selectObject==='function') window.selectObject(box.id, { noRender: true });
@@ -207,7 +209,9 @@
               if (typeof window.currentFloor==='number' && window.currentFloor !== lvl){
                 window.currentFloor = lvl;
                 var nativeSel=document.getElementById('levelSelect'); if(nativeSel) nativeSel.value=String(lvl);
-                var btnText=document.getElementById('levelButtonText'); if(btnText) btnText.textContent = (lvl===1 ? 'First Floor' : 'Ground Floor');
+                var btnText=document.getElementById('levelButtonText');
+                if (typeof window.setLevelButtonLabel === 'function') { window.setLevelButtonLabel(lvl); }
+                else if (btnText) { btnText.textContent = (lvl===1 ? 'First Floor' : 'Ground Floor'); }
               }
             } catch(_e) {}
             // Attach move/up listeners to start drag only after threshold
