@@ -2,6 +2,10 @@
 
 name: Deploy to GitHub Pages
 
+permissions:
+  contents: write
+  pages: write
+
 on:
   push:
     branches:
@@ -12,10 +16,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Deploy static site to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GH_PAT }}
-          publish_dir: ./
-          publish_branch: gh-pages
-          force_orphan: true
+      - name: Prepare gh-pages content
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          # Create orphan gh-pages branch
+          git checkout --orphan gh-pages
+          # Remove .github directory to exclude it from deployment
+          rm -rf .github
+          # Add all files
+          git add .
+          git commit -m "deploy: ${{ github.sha }}"
+      - name: Configure git and push to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          # Ensure remote uses token for authentication regardless of persist-credentials
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git
+          git push origin --force gh-pages
