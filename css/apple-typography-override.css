@@ -121,7 +121,7 @@ input[type="password"],
 select,
 textarea {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif !important;
-  font-size: 17px !important; /* body */
+  font-size: 14px !important; /* body */
   font-weight: 400 !important;
   line-height: 1.47 !important;
   letter-spacing: -0.41px !important;

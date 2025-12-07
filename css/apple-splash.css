@@ -51,18 +51,18 @@
   left: 50% !important;
   transform: translate(-50%, -50%) !important;
   font-family: var(--apple-font-family) !important;
-  font-size: 72px !important;
+  font-size: 500px !important;
   font-weight: 700 !important;
   line-height: 1 !important;
   letter-spacing: -0.03em !important;
-  color: #2d3748 !important;
-  z-index: 10001 !important;
-  text-shadow: 0 2px 20px rgba(255,255,255,0.5) !important;
+  color: rgba(160, 174, 192, 0.1) !important;
+  z-index: 100 !important;
+  text-shadow: none !important;
 }
 
 [data-theme="dark"] .splash-percent {
-  color: #f5f7fa !important;
-  text-shadow: 0 2px 20px rgba(0,0,0,0.5) !important;
+  color: rgba(213, 222, 237, 0.1) !important;
+  text-shadow: none !important;
 }
 
 /* === MODULE LIST - 3D Rotating DNA Helix === */
@@ -70,107 +70,126 @@
   position: fixed !important;
   top: 50% !important;
   left: 50% !important;
-  transform: translate(-50%, -50%) !important;
-  width: 800px !important;
-  height: 600px !important;
+  transform: translate(-50%, -50%) rotateX(24deg) rotateY(0deg) !important;
+  width: 1020px !important;
+  height: 680px !important;
   display: block !important;
   pointer-events: none !important;
   transform-style: preserve-3d !important;
-  perspective: 1000px !important;
-  animation: dna-container-rotate 20s linear infinite !important;
+  perspective: 1800px !important;
 }
 
 [data-theme="dark"] .splash-module-list > div {
-  background: rgba(45, 55, 72, 0.7) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  background: rgba(45, 55, 72, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
 }
 
-/* Dark mode grey variations for depth */
-[data-theme="dark"] .splash-module-list > div:nth-child(1),
-[data-theme="dark"] .splash-module-list > div:nth-child(17) { color: #4b5563 !important; }
-[data-theme="dark"] .splash-module-list > div:nth-child(3),
-[data-theme="dark"] .splash-module-list > div:nth-child(15) { color: #6b7280 !important; }
-[data-theme="dark"] .splash-module-list > div:nth-child(5),
-[data-theme="dark"] .splash-module-list > div:nth-child(13) { color: #9ca3af !important; }
-[data-theme="dark"] .splash-module-list > div:nth-child(7),
-[data-theme="dark"] .splash-module-list > div:nth-child(11) { color: #d1d5db !important; }
-[data-theme="dark"] .splash-module-list > div:nth-child(9) { color: #e5e7eb !important; }
-
-[data-theme="dark"] .splash-module-list > div:nth-child(2),
-[data-theme="dark"] .splash-module-list > div:nth-child(18) { color: #d1d5db !important; }
-[data-theme="dark"] .splash-module-list > div:nth-child(4),
-[data-theme="dark"] .splash-module-list > div:nth-child(16) { color: #9ca3af !important; }
-[data-theme="dark"] .splash-module-list > div:nth-child(6),
-[data-theme="dark"] .splash-module-list > div:nth-child(14) { color: #6b7280 !important; }
-[data-theme="dark"] .splash-module-list > div:nth-child(8),
-[data-theme="dark"] .splash-module-list > div:nth-child(12) { color: #4b5563 !important; }
-[data-theme="dark"] .splash-module-list > div:nth-child(10) { color: #374151 !important; }
-
+/* Dark mode gradient colors for depth perception */
 .splash-module-list > div {
   position: absolute !important;
-  padding: 6px 14px !important;
-  border-radius: 20px !important;
-  background: rgba(255, 255, 255, 0.7) !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
-  font-size: var(--apple-font-size-caption1) !important;
-  font-weight: var(--apple-font-weight-medium) !important;
-  white-space: nowrap !important;
-  opacity: 0 !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-  transform-style: preserve-3d !important;
+  top: 50% !important;
   left: 50% !important;
   transform-origin: center center !important;
+  transform-style: preserve-3d !important;
+  transition: opacity 0.4s ease;
 }
 
-/* DNA Helix 3D positioning - creates double helix spiral with depth */
-/* Left strand - darker greys (further back) */
-.splash-module-list > div:nth-child(1) { top: 5%; transform: translateX(-150px) translateZ(-100px) rotateY(-15deg); color: #b8bfc7 !important; animation: helix-rotate-1 20s linear infinite; }
-.splash-module-list > div:nth-child(3) { top: 15%; transform: translateX(-120px) translateZ(-50px) rotateY(-10deg); color: #a5adb5 !important; animation: helix-rotate-3 20s linear infinite; }
-.splash-module-list > div:nth-child(5) { top: 25%; transform: translateX(-80px) translateZ(0px) rotateY(-5deg); color: #929aa3 !important; animation: helix-rotate-5 20s linear infinite; }
-.splash-module-list > div:nth-child(7) { top: 35%; transform: translateX(-40px) translateZ(50px) rotateY(0deg); color: #7f8791 !important; animation: helix-rotate-7 20s linear infinite; }
-.splash-module-list > div:nth-child(9) { top: 45%; transform: translateX(0px) translateZ(100px) rotateY(5deg); color: #6c747f !important; animation: helix-rotate-9 20s linear infinite; }
-.splash-module-list > div:nth-child(11) { top: 55%; transform: translateX(40px) translateZ(50px) rotateY(10deg); color: #7f8791 !important; animation: helix-rotate-11 20s linear infinite; }
-.splash-module-list > div:nth-child(13) { top: 65%; transform: translateX(80px) translateZ(0px) rotateY(5deg); color: #929aa3 !important; animation: helix-rotate-13 20s linear infinite; }
-.splash-module-list > div:nth-child(15) { top: 75%; transform: translateX(120px) translateZ(-50px) rotateY(0deg); color: #a5adb5 !important; animation: helix-rotate-15 20s linear infinite; }
-.splash-module-list > div:nth-child(17) { top: 85%; transform: translateX(150px) translateZ(-100px) rotateY(-5deg); color: #b8bfc7 !important; animation: helix-rotate-17 20s linear infinite; }
-
-/* Right strand - lighter greys (closer/in front) */
-.splash-module-list > div:nth-child(2) { top: 10%; transform: translateX(150px) translateZ(100px) rotateY(15deg); color: #6c747f !important; animation: helix-rotate-2 20s linear infinite; }
-.splash-module-list > div:nth-child(4) { top: 20%; transform: translateX(120px) translateZ(50px) rotateY(10deg); color: #7f8791 !important; animation: helix-rotate-4 20s linear infinite; }
-.splash-module-list > div:nth-child(6) { top: 30%; transform: translateX(80px) translateZ(0px) rotateY(5deg); color: #929aa3 !important; animation: helix-rotate-6 20s linear infinite; }
-.splash-module-list > div:nth-child(8) { top: 40%; transform: translateX(40px) translateZ(-50px) rotateY(0deg); color: #a5adb5 !important; animation: helix-rotate-8 20s linear infinite; }
-.splash-module-list > div:nth-child(10) { top: 50%; transform: translateX(0px) translateZ(-100px) rotateY(-5deg); color: #b8bfc7 !important; animation: helix-rotate-10 20s linear infinite; }
-.splash-module-list > div:nth-child(12) { top: 60%; transform: translateX(-40px) translateZ(-50px) rotateY(-10deg); color: #a5adb5 !important; animation: helix-rotate-12 20s linear infinite; }
-.splash-module-list > div:nth-child(14) { top: 70%; transform: translateX(-80px) translateZ(0px) rotateY(-5deg); color: #929aa3 !important; animation: helix-rotate-14 20s linear infinite; }
-.splash-module-list > div:nth-child(16) { top: 80%; transform: translateX(-120px) translateZ(50px) rotateY(0deg); color: #7f8791 !important; animation: helix-rotate-16 20s linear infinite; }
-.splash-module-list > div:nth-child(18) { top: 90%; transform: translateX(-150px) translateZ(100px) rotateY(5deg); color: #6c747f !important; animation: helix-rotate-18 20s linear infinite; }
-
-.splash-module-list > div:nth-child(n+19) { top: 95%; left: 50%; transform: translateX(-50%) translateZ(0); color: #9ca3af !important; }
-
-[data-theme="dark"] .splash-module-list > div {
-  background: var(--apple-tertiary-system-background) !important;
+.splash-helix-connector {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  height: 2px !important;
+  border-radius: 999px !important;
+  --connector-rgb: 255,255,255;
+  background: linear-gradient(90deg, rgba(var(--connector-rgb), 0), rgba(var(--connector-rgb), 0.8), rgba(var(--connector-rgb), 0)) !important;
+  opacity: 0.4;
+  transform-origin: center center !important;
+  pointer-events: none !important;
+  filter: drop-shadow(0 0 6px rgba(var(--connector-rgb), 0.45));
 }
 
-/* === LOADED MODULE - Highlighted in DNA Helix === */
-.splash-module-list > div[style*="opacity:1"],
-.splash-module-list > div[style*="opacity: 1"] {
+.splash-helix-connector.is-pending {
+  --connector-rgb: 255,255,255;
+}
+
+.splash-helix-connector.is-loading {
+  --connector-rgb: 209,213,219;
+}
+
+.splash-helix-connector.is-loaded {
+  --connector-rgb: 156,200,255;
+}
+
+[data-theme="dark"] .splash-helix-connector.is-loaded {
+  --connector-rgb: 140,197,255;
+}
+
+/* DNA cell: floating capsule containing keyline + label */
+.splash-module-cell {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border: none !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.01em !important;
+  color: #ffffff !important;
+  white-space: nowrap !important;
+  opacity: var(--helix-opacity, 0.6);
+  box-shadow: none !important;
+  transition: opacity 0.4s ease, color 0.4s ease, background-color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease !important;
+  position: relative !important;
+}
+
+.splash-module-keyline {
+  display: inline-block !important;
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50% !important;
+  background: currentColor !important;
+  box-shadow: 0 0 8px currentColor !important;
+}
+
+.splash-module-label {
+  display: inline-block !important;
+}
+
+/* Helix positioning for modules is now controlled dynamically in splash.js */
+
+
+.splash-module-cell.is-pending {
+  color: #ffffff !important;
+}
+
+.splash-module-cell.is-loading {
+  color: #d1d5db !important;
+}
+
+.splash-module-cell.is-loaded {
+  color: #9cc8ff !important;
   opacity: 1 !important;
-  color: var(--apple-label) !important;
-  font-weight: var(--apple-font-weight-semibold) !important;
-  background: var(--apple-blue) !important;
-  color: white !important;
-  box-shadow: none;
-  transform: scale(1.05) !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
-[data-theme="dark"] .splash-module-list > div[style*="opacity:1"],
-[data-theme="dark"] .splash-module-list > div[style*="opacity: 1"] {
-  background: var(--apple-blue) !important;
-  color: white !important;
-  box-shadow: none;
+[data-theme="dark"] .splash-module-cell.is-loaded {
+  color: #8cc5ff !important;
 }
+
+/* === LOADED MODULE - Highlighted DNA cell (dark grey / accent) === */
+.splash-module-cell.is-loaded .splash-module-keyline {
+  box-shadow: 0 0 10px currentColor !important;
+}
+
+/* Connect even-numbered pills back to the left strand to suggest the zipped DNA ladder */
+/* Crosslinks handled visually via depth/animation */
+
+
 
 /* === LOADING SPINNER (if used elsewhere) === */
 .spinner,
@@ -223,32 +242,6 @@
     backdrop-filter: blur(20px);
   }
 }
-
-/* Removed old animations - replaced with DNA helix animations */
-
-@keyframes dna-container-rotate {
-  0% { transform: translate(-50%, -50%) rotateY(0deg); }
-  100% { transform: translate(-50%, -50%) rotateY(360deg); }
-}
-
-@keyframes helix-rotate-1 { 0%, 100% { transform: translateX(-150px) translateZ(-100px) rotateY(-15deg); } 50% { transform: translateX(-150px) translateZ(-100px) rotateY(165deg); } }
-@keyframes helix-rotate-2 { 0%, 100% { transform: translateX(150px) translateZ(100px) rotateY(15deg); } 50% { transform: translateX(150px) translateZ(100px) rotateY(195deg); } }
-@keyframes helix-rotate-3 { 0%, 100% { transform: translateX(-120px) translateZ(-50px) rotateY(-10deg); } 50% { transform: translateX(-120px) translateZ(-50px) rotateY(170deg); } }
-@keyframes helix-rotate-4 { 0%, 100% { transform: translateX(120px) translateZ(50px) rotateY(10deg); } 50% { transform: translateX(120px) translateZ(50px) rotateY(190deg); } }
-@keyframes helix-rotate-5 { 0%, 100% { transform: translateX(-80px) translateZ(0px) rotateY(-5deg); } 50% { transform: translateX(-80px) translateZ(0px) rotateY(175deg); } }
-@keyframes helix-rotate-6 { 0%, 100% { transform: translateX(80px) translateZ(0px) rotateY(5deg); } 50% { transform: translateX(80px) translateZ(0px) rotateY(185deg); } }
-@keyframes helix-rotate-7 { 0%, 100% { transform: translateX(-40px) translateZ(50px) rotateY(0deg); } 50% { transform: translateX(-40px) translateZ(50px) rotateY(180deg); } }
-@keyframes helix-rotate-8 { 0%, 100% { transform: translateX(40px) translateZ(-50px) rotateY(0deg); } 50% { transform: translateX(40px) translateZ(-50px) rotateY(180deg); } }
-@keyframes helix-rotate-9 { 0%, 100% { transform: translateX(0px) translateZ(100px) rotateY(5deg); } 50% { transform: translateX(0px) translateZ(100px) rotateY(185deg); } }
-@keyframes helix-rotate-10 { 0%, 100% { transform: translateX(0px) translateZ(-100px) rotateY(-5deg); } 50% { transform: translateX(0px) translateZ(-100px) rotateY(175deg); } }
-@keyframes helix-rotate-11 { 0%, 100% { transform: translateX(40px) translateZ(50px) rotateY(10deg); } 50% { transform: translateX(40px) translateZ(50px) rotateY(190deg); } }
-@keyframes helix-rotate-12 { 0%, 100% { transform: translateX(-40px) translateZ(-50px) rotateY(-10deg); } 50% { transform: translateX(-40px) translateZ(-50px) rotateY(170deg); } }
-@keyframes helix-rotate-13 { 0%, 100% { transform: translateX(80px) translateZ(0px) rotateY(5deg); } 50% { transform: translateX(80px) translateZ(0px) rotateY(185deg); } }
-@keyframes helix-rotate-14 { 0%, 100% { transform: translateX(-80px) translateZ(0px) rotateY(-5deg); } 50% { transform: translateX(-80px) translateZ(0px) rotateY(175deg); } }
-@keyframes helix-rotate-15 { 0%, 100% { transform: translateX(120px) translateZ(-50px) rotateY(0deg); } 50% { transform: translateX(120px) translateZ(-50px) rotateY(180deg); } }
-@keyframes helix-rotate-16 { 0%, 100% { transform: translateX(-120px) translateZ(50px) rotateY(0deg); } 50% { transform: translateX(-120px) translateZ(50px) rotateY(180deg); } }
-@keyframes helix-rotate-17 { 0%, 100% { transform: translateX(150px) translateZ(-100px) rotateY(-5deg); } 50% { transform: translateX(150px) translateZ(-100px) rotateY(175deg); } }
-@keyframes helix-rotate-18 { 0%, 100% { transform: translateX(-150px) translateZ(100px) rotateY(5deg); } 50% { transform: translateX(-150px) translateZ(100px) rotateY(185deg); } }
 
 @keyframes module-fade-in {
   0% {
