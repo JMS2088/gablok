@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Canvas</title>
+</head>
+<body>
+    <canvas id="test-canvas" width="800" height="600"></canvas>
+    <script>
+        console.log('Test script loading...');
+        
+        const canvas = document.getElementById('test-canvas');
+        if (!canvas) {
+            console.error('Test canvas element #test-canvas not found.');
+            document.body.insertAdjacentHTML('beforeend', '<p style="color:red">Canvas element missing.</p>');
+            return;
+        }
+        const ctx = canvas.getContext('2d');
+        
+        console.log('Canvas:', canvas, 'Context:', ctx);
+        
+        // Clear canvas
+        ctx.fillStyle = '#f8fbff';
+        ctx.fillRect(0, 0, 800, 600);
+        
+        // Draw test rectangle
+        ctx.fillStyle = 'red';
+        ctx.fillRect(100, 100, 100, 100);
+        console.log('Red rectangle drawn');
+        
+        // Draw test grid
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        for (let x = 0; x <= 800; x += 50) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, 600);
+            ctx.stroke();
+        }
+        for (let y = 0; y <= 600; y += 50) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(800, y);
+            ctx.stroke();
+        }
+        console.log('Grid drawn');
+    </script>
+</body>
+</html>

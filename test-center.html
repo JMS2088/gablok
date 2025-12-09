@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Center Test</title>
+    <style>
+        body { margin: 0; background: #222; color: #fff; font-family: monospace; }
+        #container { width: 100vw; height: 100vh; }
+        #info { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 10px; z-index: 100; }
+        #crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 99; }
+        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: red; }
+        #crosshair::before { width: 40px; height: 2px; left: -20px; top: -1px; }
+        #crosshair::after { width: 2px; height: 40px; left: -1px; top: -20px; }
+    </style>
+</head>
+<body>
+    <div id="info">Loading...</div>
+    <div id="crosshair"></div>
+    <div id="container"></div>
+    
+    <script>
+    (function(){
+        const info = document.getElementById('info');
+        const container = document.getElementById('container');
+        let started = false;
+
+        function injectScript(src, onload, onerror){
+            var s = document.createElement('script');
+            s.src = src;
+            s.onload = onload;
+            s.onerror = onerror;
+            document.head.appendChild(s);
+        }
+
+        function startScene(){
+            if(started) return;
+            started = true;
+            if (!window.THREE) {
+                info.textContent = 'Failed to load Three.js';
+                return;
+            }
+
+            // Setup
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            const aspect = width / height;
+
+            // Scene
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+
+            // Camera - positioned exactly on 45° diagonal
+            const camera = new THREE.PerspectiveCamera(55, aspect, 0.1, 1000);
+
+            // Scene center (where the object is)
+            const centerX = 0;
+            const centerY = 2;
+            const centerZ = 0;
+
+            // Camera distance and angle
+            const distance = 30;
+            const pitch = -Math.PI / 5;  // -36 degrees (looking down)
+            const yaw = Math.PI / 4;     // EXACTLY 45 degrees
+
+            // Calculate camera position with EXACT symmetry
+            const cp = Math.cos(pitch);
+            const sp = Math.sin(pitch);
+            const cy = Math.cos(yaw);  // 0.7071067811865476
+            const sy = Math.sin(yaw);  // 0.7071067811865476
+
+            // Camera offset - sy and cy are IDENTICAL at 45°
+            const camX = centerX - sy * cp * distance;
+            const camZ = centerZ - cy * cp * distance;
+            const camY = centerY - sp * distance;
+
+            camera.position.set(camX, camY, camZ);
+            camera.lookAt(centerX, centerY, centerZ);
+
+            // Renderer
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            // Ground plane
+            const groundGeo = new THREE.PlaneGeometry(100, 100);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = 0;
+            scene.add(ground);
+
+            // Building (4x4x4 box centered at origin)
+            const boxGeo = new THREE.BoxGeometry(4, 4, 4);
+            const boxMat = new THREE.MeshStandardMaterial({ color: 0xD2691E });
+            const box = new THREE.Mesh(boxGeo, boxMat);
+            box.position.set(0, 2, 0);  // Center at (0, 2, 0) - sitting on ground
+            scene.add(box);
+
+            // Lights
+            const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambient);
+            const sun = new THREE.DirectionalLight(0xffffff, 1);
+            sun.position.set(10, 20, 10);
+            scene.add(sun);
+
+            // Render
+            renderer.render(scene, camera);
+
+            // Show info
+            info.innerHTML = `
+                <b>CENTER TEST v1</b><br>
+                Screen: ${width} x ${height}<br>
+                Aspect: ${aspect.toFixed(3)}<br>
+                <br>
+                <b>Camera:</b><br>
+                Position: (${camX.toFixed(3)}, ${camY.toFixed(3)}, ${camZ.toFixed(3)})<br>
+                Looking at: (${centerX}, ${centerY}, ${centerZ})<br>
+                Yaw: ${(yaw * 180 / Math.PI).toFixed(1)}°<br>
+                Pitch: ${(pitch * 180 / Math.PI).toFixed(1)}°<br>
+                <br>
+                <b>Symmetry check:</b><br>
+                sin(45°) = ${sy.toFixed(10)}<br>
+                cos(45°) = ${cy.toFixed(10)}<br>
+                X offset = ${(camX - centerX).toFixed(6)}<br>
+                Z offset = ${(camZ - centerZ).toFixed(6)}<br>
+                Difference = ${Math.abs((camX - centerX) - (camZ - centerZ)).toFixed(10)}<br>
+                <br>
+                <span style="color: ${Math.abs((camX - centerX) - (camZ - centerZ)) < 0.0001 ? 'lime' : 'red'}">
+                    ${Math.abs((camX - centerX) - (camZ - centerZ)) < 0.0001 ? '✓ SYMMETRIC' : '✗ ASYMMETRIC'}
+                </span><br>
+                <br>
+                The red crosshair marks screen center.<br>
+                The box should appear centered on it.
+            `;
+        }
+
+        function loadThree(){
+            info.textContent = 'Loading Three.js…';
+            injectScript('vendor/three/three.min.js', startScene, function(){
+                injectScript('https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.min.js', startScene, function(){
+                    info.textContent = 'Unable to load Three.js (local + CDN failed).';
+                });
+            });
+        }
+
+        loadThree();
+    })();
+    </script>
+</body>
+</html>
