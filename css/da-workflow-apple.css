@@ -226,7 +226,7 @@
 }
 
 .da-btn-close:active {
-  transform: scale(0.96);
+  transform: none;
 }
 
 /* ============================================================================
@@ -496,13 +496,13 @@
 }
 
 .da-quick-btn:hover {
-  background: var(--apple-fill);
-  transform: translateY(-2px);
+  background: #e5e5ea;
+  transform: none;
   box-shadow: none;
 }
 
 .da-quick-btn:active {
-  transform: translateY(0) scale(0.96);
+  transform: none;
 }
 
 .da-quick-icon-svg {
@@ -513,7 +513,7 @@
 }
 
 .da-quick-btn:hover .da-quick-icon-svg {
-  transform: scale(1.1);
+  transform: none;
 }
 
 .da-quick-label {
@@ -641,29 +641,32 @@
 .da-btn-complete {
   display: inline-flex;
   align-items: center;
-  gap: var(--apple-space-2);
-  padding: var(--apple-space-4) var(--apple-space-8);
-  background: var(--apple-fill);
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  background: #e5e5ea;
   color: var(--apple-label);
   border: none;
-  border-radius: var(--apple-radius-full);
-  font-size: var(--apple-font-size-body);
-  font-weight: var(--apple-font-weight-semibold);
-  font-family: var(--apple-font-family);
+  border-radius: 8px;
+  font-size: 13px !important;
+  font-weight: var(--apple-font-weight-medium);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
   cursor: pointer;
-  transition: all var(--apple-duration-normal) var(--apple-ease-out);
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
   box-shadow: none;
 }
 
 .da-btn-complete:hover {
   background: var(--apple-blue);
   color: white;
-  transform: translateY(-2px);
+  transform: none;
   box-shadow: none;
 }
 
 .da-btn-complete:active {
-  transform: translateY(0) scale(0.98);
+  background: var(--apple-blue);
+  color: white;
+  transform: none;
 }
 
 .da-btn-complete.completed {
@@ -673,6 +676,7 @@
 
 .da-btn-complete.completed:hover {
   background: var(--apple-green-hover);
+  transform: none;
 }
 
 .complete-icon {
@@ -1135,48 +1139,53 @@
 
 .da-nav-btn {
   flex: 1;
-  padding: 12px 20px;
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 400;
-  border-radius: var(--apple-radius-medium);
+  height: 32px;
+  padding: 0 16px;
+  font-size: 13px !important;
+  line-height: 32px;
+  font-weight: var(--apple-font-weight-medium);
+  border-radius: 8px;
   border: none;
   cursor: pointer;
-  transition: all var(--apple-duration-fast) var(--apple-ease-out);
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .da-nav-btn.back {
-  background: var(--apple-fill-tertiary);
+  background: var(--apple-secondary-system-background, #f2f2f7);
   color: var(--apple-label);
 }
 
 .da-nav-btn.back:hover {
-  background: var(--apple-fill-secondary);
+  background: #e5e5ea;
   box-shadow: none;
+  transform: none;
 }
 
 .da-nav-btn.back:active {
-  background: var(--apple-fill);
-  transform: scale(0.98);
+  background: var(--apple-blue);
+  color: #ffffff;
+  transform: none;
 }
 
 .da-nav-btn.next {
-  background: var(--apple-system-blue);
+  background: var(--apple-blue);
   color: white;
 }
 
 .da-nav-btn.next:hover {
-  background: var(--apple-system-blue-hover);
+  background: var(--apple-blue-hover);
   box-shadow: none;
+  transform: none;
 }
 
 .da-nav-btn.next:active {
-  background: var(--apple-system-blue-active);
-  transform: scale(0.98);
+  background: var(--apple-blue);
+  color: white;
+  transform: none;
 }
 
 .da-nav-btn:disabled {
@@ -1185,14 +1194,15 @@
 }
 
 .da-nav-btn:disabled:hover {
-  background: var(--apple-fill-tertiary);
+  background: var(--apple-secondary-system-background, #f2f2f7);
   box-shadow: none;
   transform: none;
 }
 
 .da-nav-btn.next:disabled:hover {
-  background: var(--apple-system-blue);
+  background: var(--apple-blue);
   box-shadow: none;
+  transform: none;
 }
 
 /* Tip cards */

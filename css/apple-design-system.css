@@ -478,7 +478,7 @@ button,
 }
 
 .apple-button:active {
-  transform: scale(0.96);
+  transform: none;
   transition-duration: var(--apple-duration-instant);
 }
 
@@ -493,38 +493,37 @@ button,
 }
 
 .apple-button-filled:active {
-  opacity: 0.8;
+  background: var(--apple-blue-hover);
 }
 
 /* Secondary Button (Gray) */
 .apple-button-gray {
-  background: var(--apple-fill);
+  background: var(--apple-secondary-system-background, #f2f2f7);
   color: var(--apple-label);
 }
 
 .apple-button-gray:hover {
-  background: var(--apple-secondary-fill);
+  background: #e5e5ea;
 }
 
 /* Tinted Button */
 .apple-button-tinted {
-  background: var(--apple-blue-light);
+  background: #dbeafe;
   color: var(--apple-blue);
 }
 
 .apple-button-tinted:hover {
-  background: var(--apple-blue-light);
-  opacity: 0.8;
+  background: #c7ddff;
 }
 
 /* Borderless Button */
 .apple-button-borderless {
-  background: transparent;
+  background: var(--apple-tertiary-system-background, #e5e5ea);
   color: var(--apple-blue);
 }
 
 .apple-button-borderless:hover {
-  background: var(--apple-quaternary-fill);
+  background: #e5e5ea;
 }
 
 /* Button Sizes */
@@ -552,7 +551,11 @@ button,
    ============================================================================ */
 
 #controls button,
-#controls .dropdown-button {
+#controls .dropdown-button,
+.plan2d-tool-btn,
+.plan2d-floor-toggle button,
+#plan2d-menubar-right .dropdown-button,
+#plan2d-menubar-right button:not(.secondary) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -561,7 +564,7 @@ button,
   padding: 0 12px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
   font-size: 13px !important;
-  font-weight: var(--apple-font-weight-regular);
+  font-weight: var(--apple-font-weight-medium);
   letter-spacing: -0.01em;
   border-radius: 8px;
   border: none;
@@ -572,8 +575,12 @@ button,
   position: relative;
 }
 
-#controls button:not(.secondary):not(.dropdown-button) {
-  background: var(--apple-secondary-system-background);
+#controls button:not(.secondary):not(.dropdown-button),
+.plan2d-tool-btn,
+.plan2d-floor-toggle button,
+#plan2d-menubar-right .dropdown-button,
+#plan2d-menubar-right button:not(.secondary) {
+  background: var(--apple-secondary-system-background, #f2f2f7);
   color: var(--apple-label);
   box-shadow: none;
 }
@@ -582,16 +589,27 @@ button,
   justify-content: flex-start;
 }
 
-#controls button:not(.secondary):not(.dropdown-button):hover {
-  background: var(--global-hover-bg);
-  color: var(--global-hover-color);
+#controls button:not(.secondary):not(.dropdown-button):hover,
+.plan2d-tool-btn:hover,
+.plan2d-floor-toggle button:hover,
+#plan2d-menubar-right .dropdown-button:hover,
+#plan2d-menubar-right button:not(.secondary):hover {
+  /* Solid hover color (no alpha) to match 3D buttons */
+  background: #e5e5ea !important;
+  color: var(--apple-label) !important;
   box-shadow: none;
-  transform: translateY(-1px);
+  transform: none;
 }
 
-#controls button:not(.secondary):not(.dropdown-button):active {
-  transform: scale(0.96);
+#controls button:not(.secondary):not(.dropdown-button):active,
+.plan2d-tool-btn:active,
+.plan2d-floor-toggle button:active,
+#plan2d-menubar-right .dropdown-button:active,
+#plan2d-menubar-right button:not(.secondary):active {
+  transform: none;
   box-shadow: none;
+  background: var(--apple-blue) !important;
+  color: #ffffff !important;
 }
 
 #controls button.secondary {
@@ -607,25 +625,25 @@ button,
 #controls button.secondary:hover {
   background: var(--global-hover-bg) !important;
   box-shadow: none;
-  transform: translateY(-1px);
+  transform: none;
   color: var(--global-hover-color) !important;
 }
 
 #controls button.secondary:active {
-  transform: scale(0.96);
+  transform: none;
   box-shadow: none;
 }
 
 #controls button.save-for-da {
   background: var(--apple-secondary-system-background) !important;
-  color: var(--apple-green) !important;
+  color: var(--apple-label) !important;
   border: none !important;
   font-weight: var(--apple-font-weight-regular) !important;
 }
 
 #controls button.save-for-da:hover {
   background: var(--global-hover-bg) !important;
-  color: var(--apple-green-hover) !important;
+  color: var(--global-hover-color) !important;
 }
 
 .dropdown {
@@ -637,26 +655,36 @@ button,
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
+  gap: 6px;
   position: relative;
-  min-height: 34px;
+  height: 32px;
   padding: 0 12px;
-  background: var(--apple-secondary-system-background);
+  background: var(--apple-secondary-system-background, #f2f2f7);
   color: var(--apple-label);
   border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: var(--apple-font-weight-regular);
+  border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 13px !important;
+  font-weight: var(--apple-font-weight-medium);
+  letter-spacing: -0.01em;
   cursor: pointer;
   box-shadow: none;
-  transition: box-shadow 160ms ease, background-color 160ms ease, color 160ms ease;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  white-space: nowrap;
 }
 
 .dropdown-button:hover {
-  background: var(--global-hover-bg) !important;
+  background: #e5e5ea !important;
   box-shadow: none;
-  transform: translateY(-1px);
-  color: var(--global-hover-color) !important;
+  transform: none;
+  color: var(--apple-label) !important;
+}
+
+.dropdown-button:active {
+  background: var(--apple-blue) !important;
+  color: #ffffff !important;
+  transform: none;
+  box-shadow: none;
 }
 
 .dropdown-button:focus {
@@ -692,45 +720,16 @@ button,
 }
 
 .dropdown.open .dropdown-button {
-  box-shadow: none;
-}
-
-#actionsDropdown .dropdown-button:hover,
-#levelDropdown .dropdown-button:hover,
-#debugDropdown .dropdown-button:hover,
-#roof-type-dropdown .dropdown-button:hover {
-  background: var(--global-hover-bg) !important;
-  color: var(--global-hover-color) !important;
-  box-shadow: none;
-}
-
-#actionsDropdown .dropdown-button:hover .caret svg path,
-#levelDropdown .dropdown-button:hover .caret svg path,
-#debugDropdown .dropdown-button:hover .caret svg path,
-#roof-type-dropdown .dropdown-button:hover .caret svg path {
-  stroke: var(--global-hover-color) !important;
-}
-
-#actionsDropdown.open .dropdown-button,
-#levelDropdown.open .dropdown-button,
-#debugDropdown.open .dropdown-button,
-#roof-type-dropdown.open .dropdown-button {
+  background: var(--apple-blue) !important;
   color: #ffffff !important;
-  background-color: #007acc !important;
   box-shadow: none;
 }
 
-#actionsDropdown.open .dropdown-button .caret svg path,
-#levelDropdown.open .dropdown-button .caret svg path,
-#debugDropdown.open .dropdown-button .caret svg path,
-#roof-type-dropdown.open .dropdown-button .caret svg path {
+.dropdown.open .dropdown-button .caret svg path {
   stroke: #ffffff !important;
 }
 
-#roof-type-dropdown .dropdown-list .dropdown-item:hover {
-  background: var(--global-hover-bg) !important;
-  color: var(--global-hover-color) !important;
-}
+/* Specific dropdowns now inherit global styles */
 
 @keyframes dropdownPulse {
   0% {
@@ -751,25 +750,34 @@ button {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 16px;
-  border-radius: var(--apple-radius-medium);
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
   border: none;
-  background: var(--apple-secondary-system-background);
+  background: var(--apple-secondary-system-background, #f2f2f7);
   color: var(--apple-label);
-  font-family: var(--apple-font-family);
-  font-size: var(--apple-font-size-body);
-  font-weight: var(--apple-font-weight-regular);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 13px !important;
+  font-weight: var(--apple-font-weight-medium);
+  letter-spacing: -0.01em;
   cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
-  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
   box-shadow: none;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 button:hover {
-  background: var(--global-hover-bg);
-  color: var(--global-hover-color);
-  transform: translateY(-1px);
+  background: #e5e5ea;
+  color: var(--apple-label);
+  transform: none;
+}
+
+button:active {
+  background: var(--apple-blue);
+  color: #ffffff;
+  transform: none;
+  box-shadow: none;
 }
 
 .plan2d-floor-toggle {
@@ -777,60 +785,19 @@ button:hover {
   align-items: center;
   gap: 6px;
   padding: 0;
-  background: transparent;
-  border-radius: var(--apple-radius-medium);
-  box-shadow: none;
-}
-
-.plan2d-floor-toggle button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border: none;
   background: var(--apple-secondary-system-background);
-  color: var(--apple-label);
-  font-family: var(--apple-font-family);
-  font-weight: var(--apple-font-weight-regular);
-  font-size: 13px;
   border-radius: var(--apple-radius-medium);
-  cursor: pointer;
   box-shadow: none;
-  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
-.plan2d-floor-toggle button:hover {
-  background: var(--global-hover-bg);
-  color: var(--global-hover-color);
-  transform: translateY(-1px);
-}
+/* .plan2d-floor-toggle button inherits from shared block above */
 
 .plan2d-floor-toggle button.active {
   background: var(--apple-blue);
   color: #ffffff;
 }
 
-.plan2d-tool-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-width: 0;
-  padding: 0 12px;
-  height: 32px;
-  background: var(--apple-secondary-system-background);
-  color: var(--apple-label);
-  border-radius: 8px;
-  font-size: 13px;
-  font-family: var(--apple-font-family);
-  font-weight: var(--apple-font-weight-regular);
-  cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
-  box-shadow: none;
-  white-space: nowrap;
-}
+/* .plan2d-tool-btn inherits from shared block above */
 
 .plan2d-tool-btn .sf-icon {
   width: 16px;
@@ -838,14 +805,8 @@ button:hover {
   opacity: 0.9;
 }
 
-.plan2d-tool-btn:hover {
-  background: var(--global-hover-bg);
-  color: var(--global-hover-color);
-  transform: translateY(-1px);
-}
-
 .plan2d-tool-btn.selected {
-  background: var(--apple-blue);
+  background: var(--apple-blue) !important;
   color: #ffffff;
 }
 
@@ -854,28 +815,12 @@ button:hover {
 }
 
 .plan2d-tool-btn.selected:hover {
-  background: var(--apple-blue-hover);
+  background: var(--apple-blue-hover) !important;
   color: #ffffff;
+  transform: none;
 }
 
-[data-theme="dark"] .plan2d-tool-btn {
-  background: rgba(58, 58, 60, 0.35);
-  color: rgba(255, 255, 255, 0.9);
-}
-
-[data-theme="dark"] .plan2d-tool-btn:hover {
-  background: rgba(72, 72, 74, 0.55);
-}
-
-#plan2d-menubar-right button {
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12px;
-  gap: 6px;
-  border-radius: var(--apple-radius-medium);
-}
+/* #plan2d-menubar-right buttons inherit from shared block above */
 
 #plan2d-menubar-right button.secondary {
   background: var(--apple-secondary-system-background) !important;
@@ -885,40 +830,12 @@ button:hover {
 }
 
 #plan2d-menubar-right button.secondary:hover {
-  background: var(--global-hover-bg) !important;
-  color: var(--global-hover-color) !important;
+  background: #e5e5ea !important;
+  color: var(--apple-label) !important;
+  transform: none;
 }
 
-#plan2d-menubar-right .dropdown-button,
-#plan2d-menubar-right button:not(.secondary) {
-  font-family: var(--apple-font-family);
-  font-size: 13px;
-  font-weight: var(--apple-font-weight-regular);
-  line-height: 1;
-  height: 32px;
-  background: var(--apple-secondary-system-background);
-  color: var(--apple-label);
-  border-radius: var(--apple-radius-medium);
-  padding: 0 12px;
-  box-shadow: none;
-  transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
-}
-
-#plan2d-menubar-right .dropdown-button:hover,
-#plan2d-menubar-right button:not(.secondary):hover {
-  background: var(--global-hover-bg);
-  color: var(--global-hover-color);
-  transform: translateY(-1px);
-}
-
-#plan2d-menubar-right .dropdown.open .dropdown-button {
-  background: var(--apple-blue) !important;
-  color: #ffffff !important;
-}
-
-#plan2d-menubar-right .dropdown.open .dropdown-button .caret svg path {
-  stroke: #ffffff !important;
-}
+/* Dropdown open states inherit from global .dropdown.open above */
 
 #plan2d-page button.secondary {
   background: var(--apple-secondary-system-background) !important;
@@ -932,14 +849,15 @@ button:hover {
 }
 
 #plan2d-page button.secondary:hover {
-  background: var(--apple-tertiary-system-background) !important;
-  transform: scale(1.02);
+  background: #e5e5ea !important;
+  transform: none;
   box-shadow: none;
 }
 
 [data-theme="dark"] #plan2d-page button.secondary:hover {
-  background: var(--apple-tertiary-system-background) !important;
+  background: #3a3a3c !important;
   box-shadow: none;
+  transform: none;
 }
 
 #plan2d-clear:hover {
@@ -975,7 +893,7 @@ button:hover {
 #plan2d-close:hover {
   background: var(--global-hover-bg) !important;
   color: var(--global-hover-color) !important;
-  transform: translateY(-1px);
+  transform: none;
 }
 
 [data-theme="dark"] #plan2d-close:hover {
@@ -995,15 +913,18 @@ button:hover {
 }
 
 body.cad-mode #plan2d-toolbar-left button {
-  background: var(--apple-system-background) !important;
+  background: var(--apple-secondary-system-background, #f2f2f7) !important;
   color: var(--apple-label) !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 body.cad-mode #plan2d-toolbar-left button:hover,
 body.cad-mode #plan2d-toolbar-left button.selected {
-  background: var(--apple-blue) !important;
-  color: var(--apple-system-background) !important;
+  background: var(--global-hover-bg, #e5e5ea) !important;
+  color: var(--global-hover-color) !important;
   border: none !important;
+  box-shadow: none !important;
 }
 
 button.secondary {
@@ -1025,24 +946,27 @@ button.secondary:hover {
 /* Visualize controls */
 #visualize-view-grid button {
   position: relative;
-  padding: 10px 8px;
+  height: 32px;
+  padding: 0 12px;
   border-radius: 8px;
-  background: var(--apple-secondary-system-background);
+  background: var(--apple-secondary-system-background, #f2f2f7);
   color: var(--apple-label);
   font-weight: var(--apple-font-weight-regular);
-  font-size: 12px;
+  font-size: 13px !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
 }
 
 #visualize-view-grid button:hover:not(:disabled):not(.active) {
-  background: var(--apple-tertiary-system-fill);
-  transform: translateY(-1px);
+  background: #e5e5ea;
+  transform: none;
   box-shadow: none;
 }
 
 #visualize-view-grid button:active:not(:disabled) {
-  transform: translateY(0);
+  background: var(--apple-blue);
+  color: #ffffff;
+  transform: none;
   box-shadow: none;
 }
 
@@ -1055,6 +979,7 @@ button.secondary:hover {
 #visualize-view-grid button.active:hover {
   background: var(--apple-blue-hover);
   box-shadow: none;
+  transform: none;
 }
 
 #visualize-view-grid button.inactive,
@@ -1071,11 +996,12 @@ button.secondary:hover {
 
 #visualize-controls button {
   width: 100%;
-  padding: 10px 16px;
-  background: var(--apple-secondary-system-background);
+  height: 32px;
+  padding: 0 12px;
+  background: var(--apple-secondary-system-background, #f2f2f7);
   color: var(--apple-label);
-  border-radius: var(--apple-radius-medium);
-  font-size: 14px;
+  border-radius: 8px;
+  font-size: 13px !important;
   font-weight: var(--apple-font-weight-regular);
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1086,8 +1012,9 @@ button.secondary:hover {
 }
 
 #visualize-controls button:hover {
-  background: var(--apple-tertiary-system-fill);
+  background: #e5e5ea;
   box-shadow: none;
+  transform: none;
 }
 
 #visualize-controls button:not(.secondary) {
@@ -1098,6 +1025,7 @@ button.secondary:hover {
 #visualize-controls button:not(.secondary):hover {
   background: var(--apple-blue-hover);
   box-shadow: none;
+  transform: none;
 }
 
 /* Canvas overlay buttons */
@@ -1126,10 +1054,13 @@ button.secondary:hover {
   background: var(--apple-blue);
   color: #ffffff;
   box-shadow: none;
+  transform: translate(-50%, -50%);
 }
 
 .room-edit-btn:active {
-  transform: translate(-50%, -50%) scale(0.96);
+  transform: translate(-50%, -50%);
+  background: var(--apple-blue);
+  color: #ffffff;
 }
 
 .roof-rotate-btn {
@@ -1199,16 +1130,16 @@ button.secondary:hover {
 
 .close-button:hover {
   color: var(--apple-blue);
-  transform: scale(1.1);
+  transform: none;
 }
 
 #reset-confirmation-modal .modal-buttons button:hover {
-  transform: translateY(-1px);
+  transform: none;
   box-shadow: none;
 }
 
 #reset-confirmation-modal .modal-buttons button:active {
-  transform: translateY(0);
+  transform: none;
 }
 
 #reset-confirm-btn:hover {
@@ -1286,22 +1217,30 @@ button.secondary:hover {
 }
 
 .admin-header button {
-  background: var(--apple-tertiary-system-fill);
+  height: 32px;
+  padding: 0 12px;
+  background: var(--apple-secondary-system-background, #f2f2f7);
   color: var(--apple-label);
-  padding: 8px 16px;
-  border-radius: 10px;
-  font-size: 14px;
+  border-radius: 8px;
+  font-size: 13px !important;
   font-weight: var(--apple-font-weight-regular);
   display: flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
 .admin-header button:hover {
-  background: var(--apple-quaternary-system-fill);
-  transform: translateY(-1px);
+  background: #e5e5ea;
+  transform: none;
+  box-shadow: none;
+}
+
+.admin-header button:active {
+  background: var(--apple-blue);
+  color: #ffffff;
+  transform: none;
   box-shadow: none;
 }
 
@@ -1475,7 +1414,7 @@ button.secondary:hover {
 .projects-toolbar button.primary:hover {
   background: var(--apple-quaternary-system-fill);
   box-shadow: none;
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .projects-toolbar button.secondary {
@@ -1541,12 +1480,12 @@ button.secondary:hover {
 }
 
 .da-workflow-btn:hover {
-  transform: translateY(-1px);
+  transform: none;
   box-shadow: none;
 }
 
 .da-workflow-btn:active {
-  transform: translateY(0);
+  transform: none;
 }
 
 .da-workflow-btn .sf-icon {
@@ -1708,7 +1647,7 @@ button.secondary:hover {
 
 #btn-save-for-da {
   background: var(--apple-secondary-system-background) !important;
-  color: var(--apple-green) !important;
+  color: var(--apple-label) !important;
   font-weight: var(--apple-font-weight-regular);
   border: none !important;
   box-shadow: none;
@@ -1717,12 +1656,12 @@ button.secondary:hover {
 
 #btn-save-for-da:hover {
   background: var(--global-hover-bg) !important;
-  color: var(--apple-green-hover) !important;
-  transform: translateY(-1px);
+  color: var(--global-hover-color) !important;
+  transform: none;
 }
 
 #btn-save-for-da:active {
-  transform: translateY(0);
+  transform: none;
 }
 
 /* ============================================================================

@@ -18,7 +18,7 @@
 <link rel="stylesheet" href="css/apple-plan2d.css?v=20251205-4">
 <link rel="stylesheet" href="css/apple-splash.css?v=20251205-4">
 <link rel="stylesheet" href="css/apple-typography-override.css?v=20251205-4">
-<link rel="stylesheet" href="css/styles.css?v=20251206-15">
+<link rel="stylesheet" href="css/styles.css?v=20251209-1">
 <script>
 // Version verification - shows in console immediately
 console.log('%c🔄 GABLOK v1763716707 LOADED', 'color:#0f0;font-size:16px;font-weight:bold');
@@ -399,14 +399,14 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 
 <div id="controls">
 		<button onclick="addNewRoom()"><svg class="sf-icon" width="16" height="16"><use href="#sf-plus-square"/></svg> Add Room</button>
-	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor"><svg class="sf-icon" width="16" height="16"><use href="#sf-square-grid-2x2"/></svg> Floor Plan</button>
+	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor"><svg class="sf-icon" width="16" height="16"><use href="#sf-square-grid-2x2"/></svg> 2D View</button>
 	<button id="btn-save-for-da" class="secondary save-for-da" title="Save current design to project for DA submission" onclick="saveDesignForDA()"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-doc"/></svg> Save for DA</button>
 	<button id="btn-render-walls" class="secondary" title="Toggle wall render mode"><svg class="sf-icon" width="16" height="16"><use href="#sf-paintbrush"/></svg> <span class="render-label">Render: Lines</span></button>
 	<button id="btn-clean-view" class="secondary" title="Toggle clean view (hide UI)" onclick="toggleCleanView()"><svg class="sf-icon" width="16" height="16"><use href="#sf-eye"/></svg> Clean View</button>
 	<!-- Debug Dropdown: quick toggles for corner handles and debug logs -->
 	<div id="debugDropdown" class="dropdown" aria-label="Debug Menu">
 		<button id="debugButton" class="dropdown-button" type="button">
-			<span><svg class="sf-icon" width="16" height="16"><use href="#sf-hammer"/></svg> Debug</span>
+			<span><svg class="sf-icon" width="16" height="16"><use href="#sf-gear"/></svg> Debug</span>
 			<span class="caret">
 				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
 			</span>
@@ -1318,27 +1318,32 @@ document.addEventListener('DOMContentLoaded', () => {
 			<div id="plan2d-toolbar-left" class="plan2d-toolbar-rail">
 				<div class="plan2d-toolbar-primary">
 					<button id="plan2d-tool-select" class="plan2d-tool-btn" title="Select elements to edit/delete">
-						<svg class="sf-icon" width="20" height="20"><use href="#sf-cursor-rays"/></svg>
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-cursor-rays"/></svg>
 						<span>Select</span>
 					</button>
 					<button id="plan2d-tool-wall" class="plan2d-tool-btn" title="Draw Walls (300mm thick)">
-						<svg class="sf-icon" width="20" height="20"><use href="#sf-square-on-square-dashed"/></svg>
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-square-on-square-dashed"/></svg>
 						<span>Wall</span>
 					</button>
 					<button id="plan2d-tool-window" class="plan2d-tool-btn" title="Draw Windows">
-						<svg class="sf-icon" width="20" height="20"><use href="#sf-macwindow"/></svg>
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-macwindow"/></svg>
 						<span>Window</span>
 					</button>
 					<button id="plan2d-tool-door" class="plan2d-tool-btn" title="Draw Doors">
-						<svg class="sf-icon" width="20" height="20"><use href="#sf-door-left-hand-open"/></svg>
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-door-left-hand-open"/></svg>
 						<span>Door</span>
 					</button>
 					<button id="plan2d-tool-erase" class="plan2d-tool-btn" title="Erase elements">
-						<svg class="sf-icon" width="20" height="20"><use href="#sf-eraser"/></svg>
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-eraser"/></svg>
 						<span>Erase</span>
 					</button>
-					<button id="plan2d-close" class="plan2d-tool-btn" title="Close 2D editor">
-						<svg class="sf-icon" width="16" height="16"><use href="#sf-xmark"/></svg>
+					<button id="plan2d-tool-apply" class="plan2d-tool-btn" title="Apply plan to 3D" type="button" onclick="if(window.applyPlan2DTo3D) applyPlan2DTo3D();">
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-cube"/></svg>
+						<span>Apply</span>
+					</button>
+					<button id="plan2d-close" class="plan2d-tool-btn" title="Close 2D editor and return to 3D view">
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-cube"/></svg>
+						<span>3D View</span>
 					</button>
 				</div>
 				<div id="plan2d-menubar-right" class="plan2d-toolbar-dropdowns" aria-label="Plan menus">

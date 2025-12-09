@@ -230,16 +230,17 @@
 #reset-confirmation-modal button,
 .visualize-unsaved-popup button,
 .project-select-popup button {
-  font-family: var(--apple-font-family);
-  font-size: var(--apple-font-size-body);
-  font-weight: var(--apple-font-weight-semibold);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 13px !important;
+  font-weight: var(--apple-font-weight-medium);
   line-height: var(--apple-line-height-relaxed);
-  letter-spacing: var(--apple-tracking-normal);
-  padding: 10px 20px;
-  border-radius: var(--apple-radius-medium);
+  letter-spacing: -0.01em;
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 8px;
   border: none;
   cursor: pointer;
-  transition: all var(--apple-duration-fast) var(--apple-ease-default);
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
   background: var(--apple-blue);
   color: #ffffff;
   box-shadow: none;
@@ -272,8 +273,8 @@
 button#account-cancel,
 button#llm-test-connection,
 button#visualize-ai-configure {
-  background: var(--apple-secondary-fill);
-  color: var(--apple-blue);
+  background: var(--apple-secondary-system-background, #f2f2f7);
+  color: var(--apple-label);
 }
 
 [data-theme="dark"] #info-modal button.secondary,
@@ -303,7 +304,7 @@ button#visualize-ai-configure {
 #reset-confirmation-modal button:hover,
 .visualize-unsaved-popup button:hover,
 .project-select-popup button:hover {
-  transform: scale(1.02);
+  transform: none;
   box-shadow: none;
 }
 

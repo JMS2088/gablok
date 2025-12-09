@@ -94,8 +94,11 @@
           var dpr = window.devicePixelRatio || 1;
           var rtb = rt.getBoundingClientRect();
           var rlb = rl.getBoundingClientRect();
-          var targetTopW = Math.round(rtb.width * dpr), targetTopH = Math.round(rtb.height * dpr);
-          var targetLeftW = Math.round(rlb.width * dpr), targetLeftH = Math.round(rlb.height * dpr);
+          // Keep rulers locked to their CSS size (edge-to-edge) with no shrink on zoom or button presses
+          var targetTopW = Math.max(1, Math.round(rtb.width * dpr));
+          var targetTopH = Math.max(1, Math.round(rtb.height * dpr));
+          var targetLeftW = Math.max(1, Math.round(rlb.width * dpr));
+          var targetLeftH = Math.max(1, Math.round(rlb.height * dpr));
           if(rt.width !== targetTopW || rt.height !== targetTopH){ rt.width = targetTopW; rt.height = targetTopH; }
           if(rl.width !== targetLeftW || rl.height !== targetLeftH){ rl.width = targetLeftW; rl.height = targetLeftH; }
           plan2dDrawRulers(rt.getContext('2d'), rl.getContext('2d'));

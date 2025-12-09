@@ -9,7 +9,7 @@
 
 #controls {
   position: fixed;
-  top: 20px;
+  top: 35px;
   left: 20px;
   z-index: 100;
   background: transparent;
@@ -113,13 +113,35 @@ body.app-ready #controls {
   margin-bottom: 2px;
 }
 
+.dropdown-item .checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+}
+
+.dropdown-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--apple-blue);
+  flex-shrink: 0;
+}
+
 .dropdown-item:last-child {
   margin-bottom: 0;
 }
 
 .dropdown-item:hover {
-  background: var(--global-hover-bg);
-  color: var(--global-hover-color);
+  background: #e5e5ea;
+  color: var(--apple-label);
+}
+
+.dropdown-item:active {
+  background: var(--apple-blue);
+  color: #ffffff;
 }
 
 .dropdown-item.disabled {

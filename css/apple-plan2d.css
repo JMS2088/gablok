@@ -67,6 +67,8 @@ body.cad-mode #plan2d-canvas {
   background: var(--apple-secondary-system-background);
   border: 1px solid var(--apple-separator);
   box-shadow: none;
+  transition: none;
+  transform: none;
 }
 
 [data-theme="dark"] #plan2d-ruler-top,
@@ -85,7 +87,7 @@ body.cad-mode #plan2d-ruler-left {
 /* === TOOLBAR CONTAINERS - Transparent Apple Style === */
 #plan2d-toolbar-left {
   position: fixed;
-  top: 35px;
+  top: 41px;
   right: 35px;
   z-index: 120;
   display: flex;
@@ -97,6 +99,8 @@ body.cad-mode #plan2d-ruler-left {
   border: none;
 }
 
+/* Plan2D buttons and dropdowns now inherit global styles */
+
 .plan2d-toolbar-primary {
   display: inline-flex;
   align-items: center;
@@ -106,20 +110,20 @@ body.cad-mode #plan2d-ruler-left {
 .plan2d-toolbar-dropdowns,
 #plan2d-menubar-right {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  flex-direction: row;
+  align-items: center;
   gap: 8px;
-  width: 100%;
+  width: auto;
 }
 
 .plan2d-toolbar-dropdowns .dropdown,
 #plan2d-menubar-right .dropdown {
-  width: 100%;
+  width: auto;
 }
 
 .plan2d-toolbar-dropdowns .dropdown-button,
 #plan2d-menubar-right .dropdown-button {
-  width: 100%;
+  width: auto;
 }
 
 #plan2d-side-overlay {
@@ -129,7 +133,7 @@ body.cad-mode #plan2d-ruler-left {
   padding: 12px;
   background: transparent;
   position: fixed;
-  top: 96px;
+  top: 35px !important;
   left: 24px;
   right: auto;
   z-index: 105;
@@ -315,7 +319,7 @@ body.cad-mode #plan2d-ruler-left {
   
   #plan2d-side-overlay {
     left: 12px;
-    top: 88px;
+    top: 35px !important;
   }
   
   #plan2d-floor-center {

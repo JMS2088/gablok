@@ -722,17 +722,22 @@
         var rt=document.getElementById('plan2d-ruler-top');
         var rl=document.getElementById('plan2d-ruler-left');
         var l2=document.getElementById('labels-2d');
+        var stage=document.getElementById('plan2d-stage');
+        var container=document.getElementById('plan2d-content');
         if(!c||!ov) return;
         var rect=c.getBoundingClientRect();
         var dpr=window.devicePixelRatio||1;
+        // Use viewport dimensions for rulers so they remain full-span and don't shrink on zoom/button presses
+        var viewportWidth = Math.max(1, Math.floor((window.innerWidth || (container && container.clientWidth) || rect.width) * dpr));
+        var viewportHeight = Math.max(1, Math.floor((window.innerHeight || (container && container.clientHeight) || rect.height) * dpr));
         var W=Math.floor(rect.width*dpr), H=Math.floor(rect.height*dpr);
         if(c.width!==W||c.height!==H){ c.width=W; c.height=H; }
         if(ov.width!==W||ov.height!==H){ ov.width=W; ov.height=H; }
         if(l2 && (l2.width!==W||l2.height!==H)){ l2.width=W; l2.height=H; }
-        // Top ruler width should match drawing width, height fixed 28 CSS px
-        if(rt){ var stage=document.getElementById('plan2d-stage'); var sr=stage?stage.getBoundingClientRect():rect; var rtw=Math.floor(sr.width*dpr); var rth=Math.floor(28*dpr); if(rt.width!==rtw||rt.height!==rth){ rt.width=rtw; rt.height=rth; } }
-        // Left ruler spans from below top ruler to bottom of viewport; width fixed 28 CSS px
-        if(rl){ var rlw=Math.floor(28*dpr); var vh=Math.floor((window.innerHeight||document.documentElement.clientHeight||rect.height)*dpr) - Math.floor(28*dpr); if(vh<0) vh=0; if(rl.width!==rlw||rl.height!==vh){ rl.width=rlw; rl.height=vh; } }
+        // Top ruler spans the full viewport width; height fixed 28 CSS px
+        if(rt){ var rtw=viewportWidth; var rth=Math.floor(28*dpr); if(rt.width!==rtw||rt.height!==rth){ rt.width=rtw; rt.height=rth; } }
+        // Left ruler spans the full viewport height; width fixed 28 CSS px
+        if(rl){ var rlw=Math.floor(28*dpr); var rlh=viewportHeight; if(rlh<0) rlh=0; if(rl.width!==rlw||rl.height!==rlh){ rl.width=rlw; rl.height=rlh; } }
         plan2dDraw();
       } catch(e){}
     };
