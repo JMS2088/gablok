@@ -18,7 +18,7 @@
 <link rel="stylesheet" href="css/apple-plan2d.css?v=20251205-4">
 <link rel="stylesheet" href="css/apple-splash.css?v=20251205-4">
 <link rel="stylesheet" href="css/apple-typography-override.css?v=20251205-4">
-<link rel="stylesheet" href="css/styles.css?v=20251209-1">
+<link rel="stylesheet" href="css/styles.css?v=20251219-4">
 <script>
 // Version verification - shows in console immediately
 console.log('%c🔄 GABLOK v1763716707 LOADED', 'color:#0f0;font-size:16px;font-weight:bold');
@@ -874,34 +874,30 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 						<div class="dashboard-section">
 							<h2 class="section-title">Account</h2>
 							<div class="account-cards-grid">
+								<!-- Profile Card -->
 								<button class="account-card" data-view="profile">
-									<div class="account-card-top">
+									<div class="account-card-icon-wrapper">
 										<div class="account-card-icon">
-											<svg class="sf-icon" width="32" height="32"><use href="#sf-person"/></svg>
+											<svg class="sf-icon" width="100" height="100"><use href="#sf-person"/></svg>
 										</div>
-										<div class="account-card-heading">
-											<h3>Profile</h3>
-											<p class="account-card-description">Identity, contact, and company details.</p>
-										</div>
-										<span class="account-card-link">Open section</span>
 									</div>
+									<h3 class="account-card-title">Profile</h3>
+									<p class="account-card-intro">Identity, contact, and company details.</p>
 									<p class="account-card-detail">Keep your personal info, company name, office and mobile numbers ready for DA submissions.</p>
 									<div class="account-card-meta">
 										<span class="account-chip" data-account-count="profileFields" data-count-label="fields complete">0 fields complete</span>
 									</div>
 								</button>
 
+								<!-- Projects Card -->
 								<button class="account-card" data-view="projects">
-									<div class="account-card-top">
+									<div class="account-card-icon-wrapper">
 										<div class="account-card-icon">
-											<svg class="sf-icon" width="32" height="32"><use href="#sf-folder"/></svg>
+											<svg class="sf-icon" width="100" height="100"><use href="#sf-folder"/></svg>
 										</div>
-										<div class="account-card-heading">
-											<h3>Projects</h3>
-											<p class="account-card-description">Saved layouts, DA-ready plans, and images.</p>
-										</div>
-										<span class="account-card-link">Open projects</span>
 									</div>
+									<h3 class="account-card-title">Projects</h3>
+									<p class="account-card-intro">Saved layouts, DA-ready plans, and images.</p>
 									<p class="account-card-detail">Review every saved design, download exports, and keep AI imagery tied to each project.</p>
 									<div class="account-card-meta">
 										<span class="account-chip" data-account-count="projects" data-count-label="projects">0 projects</span>
@@ -910,34 +906,30 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 									</div>
 								</button>
 
+								<!-- Settings Card -->
 								<button class="account-card" data-view="settings">
-									<div class="account-card-top">
+									<div class="account-card-icon-wrapper">
 										<div class="account-card-icon">
-											<svg class="sf-icon" width="32" height="32"><use href="#sf-gear"/></svg>
+											<svg class="sf-icon" width="100" height="100"><use href="#sf-gear"/></svg>
 										</div>
-										<div class="account-card-heading">
-											<h3>Settings</h3>
-											<p class="account-card-description">AI providers, measurement units, and defaults.</p>
-										</div>
-										<span class="account-card-link">Adjust settings</span>
 									</div>
+									<h3 class="account-card-title">Settings</h3>
+									<p class="account-card-intro">AI providers, measurement units, and defaults.</p>
 									<p class="account-card-detail">Connect AI keys, choose units, and tune workflow preferences for every DA submission.</p>
 									<div class="account-card-meta">
 										<span class="account-chip" data-account-count="aiProviders" data-count-label="AI providers">0 AI providers</span>
 									</div>
 								</button>
 
+								<!-- Payments Card -->
 								<button class="account-card" data-view="payments">
-									<div class="account-card-top">
+									<div class="account-card-icon-wrapper">
 										<div class="account-card-icon">
-											<svg class="sf-icon" width="32" height="32"><use href="#sf-creditcard"/></svg>
+											<svg class="sf-icon" width="100" height="100"><use href="#sf-creditcard"/></svg>
 										</div>
-										<div class="account-card-heading">
-											<h3>Payments</h3>
-											<p class="account-card-description">Billing methods and invoicing.</p>
-										</div>
-										<span class="account-card-link">Manage billing</span>
 									</div>
+									<h3 class="account-card-title">Payments</h3>
+									<p class="account-card-intro">Billing methods and invoicing.</p>
 									<p class="account-card-detail">Store company cards or bank info so DA requests and visualization orders get cleared immediately.</p>
 									<div class="account-card-meta">
 										<span class="account-chip" data-account-count="payments" data-count-label="methods">0 methods</span>
