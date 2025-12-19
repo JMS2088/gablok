@@ -311,12 +311,14 @@
     line-height: 40px !important;
     border-radius: 10px;
     box-sizing: border-box;
+    margin-bottom: 8px;
   }
 
   .da-form-actions {
     display: flex;
     gap: 12px;
     justify-content: flex-end;
+    margin-top: 8px;
   }
 
   .da-form-actions button {
