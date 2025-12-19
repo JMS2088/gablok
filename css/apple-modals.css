@@ -226,7 +226,7 @@
 #floorplan-modal button,
 #pricing-modal button,
 #room-palette-modal button,
-#account-modal button,
+#account-modal button:not(.account-card):not(.account-chip),
 #reset-confirmation-modal button,
 .visualize-unsaved-popup button,
 .project-select-popup button {
@@ -253,7 +253,7 @@
 [data-theme="dark"] #floorplan-modal button,
 [data-theme="dark"] #pricing-modal button,
 [data-theme="dark"] #room-palette-modal button,
-[data-theme="dark"] #account-modal button,
+[data-theme="dark"] #account-modal button:not(.account-card):not(.account-chip),
 [data-theme="dark"] #reset-confirmation-modal button,
 [data-theme="dark"] .visualize-unsaved-popup button,
 [data-theme="dark"] .project-select-popup button {
@@ -269,7 +269,7 @@
 #floorplan-modal button.secondary,
 #pricing-modal button.secondary,
 #room-palette-modal button.secondary,
-#account-modal button.secondary,
+#account-modal button.secondary:not(.account-card):not(.account-chip),
 button#account-cancel,
 button#llm-test-connection,
 button#visualize-ai-configure {
@@ -284,7 +284,7 @@ button#visualize-ai-configure {
 [data-theme="dark"] #floorplan-modal button.secondary,
 [data-theme="dark"] #pricing-modal button.secondary,
 [data-theme="dark"] #room-palette-modal button.secondary,
-[data-theme="dark"] #account-modal button.secondary,
+[data-theme="dark"] #account-modal button.secondary:not(.account-card):not(.account-chip),
 [data-theme="dark"] button#account-cancel,
 [data-theme="dark"] button#llm-test-connection,
 [data-theme="dark"] button#visualize-ai-configure {
@@ -300,7 +300,7 @@ button#visualize-ai-configure {
 #floorplan-modal button:hover,
 #pricing-modal button:hover,
 #room-palette-modal button:hover,
-#account-modal button:hover,
+#account-modal button:hover:not(.account-card):not(.account-chip),
 #reset-confirmation-modal button:hover,
 .visualize-unsaved-popup button:hover,
 .project-select-popup button:hover {
@@ -315,7 +315,7 @@ button#visualize-ai-configure {
 [data-theme="dark"] #floorplan-modal button:hover,
 [data-theme="dark"] #pricing-modal button:hover,
 [data-theme="dark"] #room-palette-modal button:hover,
-[data-theme="dark"] #account-modal button:hover,
+[data-theme="dark"] #account-modal button:hover:not(.account-card):not(.account-chip),
 [data-theme="dark"] #reset-confirmation-modal button:hover,
 [data-theme="dark"] .visualize-unsaved-popup button:hover,
 [data-theme="dark"] .project-select-popup button:hover {
