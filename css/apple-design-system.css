@@ -1079,7 +1079,7 @@ button.secondary:hover {
 }
 
 .room-edit-btn:hover {
-  background: var(--apple-blue);
+  background: #8b5cf6;
   color: #ffffff;
   box-shadow: none;
   transform: translate(-50%, -50%);

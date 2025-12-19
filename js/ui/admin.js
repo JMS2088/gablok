@@ -115,6 +115,8 @@
     try { if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; } } catch(_e){}
     // Stop dashboard clock updates when modal is hidden (prevents background CPU churn)
     try { if (window.__dashboardTimeInterval) { clearInterval(window.__dashboardTimeInterval); window.__dashboardTimeInterval = null; } } catch(_e2){}
+    // Always reset to dashboard view before closing so multiple panels never stay open
+    try { returnToDashboard(); } catch(_e3){}
     m.__animating = true;
     m.classList.remove('showing');
     m.classList.add('closing');
@@ -263,9 +265,373 @@
   } else {
     setTimeout(wire, 0);
   }
+
+  function toggleAccountModal(force){
+    var modal = qs('account-modal');
+    if(!modal) return;
+    var isVisible = modal.classList.contains('visible') && !modal.classList.contains('closing');
+    if(force === 'show') {
+      showAccount();
+      return;
+    }
+    if(force === 'hide') {
+      hideAccount();
+      return;
+    }
+    if(isVisible) hideAccount();
+    else showAccount();
+  }
+
   // Expose for external triggers
   window.showAccount = showAccount;
   window.hideAccount = hideAccount;
+  window.toggleAccountModal = toggleAccountModal;
+})();
+
+// Account project storage + view rendering ----------------------------------------------------
+(function(){
+  if(window.__projectStorageInit) return; window.__projectStorageInit = true;
+  var STORAGE_PREFIX = 'gablok_projects_';
+
+  function getUserId(){
+    return window.__appUserId || localStorage.getItem('gablokUserId');
+  }
+
+  function getStorageKey(){
+    var uid = getUserId();
+    return uid ? (STORAGE_PREFIX + uid) : null;
+  }
+
+  function normalizeProjects(list){
+    return (Array.isArray(list) ? list : []).map(function(project){
+      if(!project || typeof project !== 'object') return {};
+      var clone = Object.assign({}, project);
+      if(!clone.id) {
+        clone.id = 'proj_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+      }
+      clone.name = (clone.name || 'Untitled Project').trim();
+      clone.createdAt = clone.createdAt || Date.now();
+      clone.updatedAt = clone.updatedAt || clone.createdAt;
+      if(!Array.isArray(clone.aiImages)) clone.aiImages = [];
+      return clone;
+    }).sort(function(a,b){
+      var aTime = (a && a.updatedAt) || 0;
+      var bTime = (b && b.updatedAt) || 0;
+      return bTime - aTime;
+    });
+  }
+
+  function loadProjects(){
+    var key = getStorageKey();
+    if(!key) return [];
+    try {
+      var raw = localStorage.getItem(key);
+      if(!raw) return [];
+      var data = JSON.parse(raw);
+      return normalizeProjects(data);
+    } catch(err){
+      console.error('[AccountProjects] Failed to load projects', err);
+      return [];
+    }
+  }
+
+  function persistProjects(projects){
+    var key = getStorageKey();
+    if(!key) return;
+    try {
+      var normalized = normalizeProjects(projects);
+      localStorage.setItem(key, JSON.stringify(normalized));
+      window.dispatchEvent(new CustomEvent('projects:updated'));
+    } catch(err){
+      console.error('[AccountProjects] Failed to save projects', err);
+      alert('Unable to save projects. Storage may be full.');
+    }
+  }
+
+  function saveProjects(projects){
+    persistProjects(Array.isArray(projects) ? projects : []);
+  }
+
+  function createProject(name, extra){
+    var projects = loadProjects();
+    var now = Date.now();
+    var project = Object.assign({
+      id: 'proj_' + now + '_' + Math.random().toString(36).slice(2,7),
+      name: (name && name.trim()) ? name.trim() : 'Untitled Project',
+      createdAt: now,
+      updatedAt: now,
+      hasDesign: false,
+      aiImages: [],
+      thumbnail: null,
+      designData: null
+    }, extra || {});
+    if(!Array.isArray(project.aiImages)) project.aiImages = [];
+    if(!project.createdAt) project.createdAt = now;
+    if(!project.updatedAt) project.updatedAt = now;
+    projects.push(project);
+    persistProjects(projects);
+    return project;
+  }
+
+  function updateProject(projectId, updates){
+    if(!projectId) return null;
+    var projects = loadProjects();
+    var updated = null;
+    var next = projects.map(function(project){
+      if(project.id !== projectId) return project;
+      var base = Object.assign({}, project);
+      var candidate = typeof updates === 'function' ? updates(base) : Object.assign(base, updates || {});
+      if(!candidate) candidate = base;
+      candidate.updatedAt = Date.now();
+      if(!Array.isArray(candidate.aiImages)) candidate.aiImages = [];
+      updated = candidate;
+      return candidate;
+    });
+    if(updated) persistProjects(next);
+    return updated;
+  }
+
+  function deleteProject(projectId){
+    if(!projectId) return false;
+    var projects = loadProjects();
+    var filtered = projects.filter(function(project){ return project.id !== projectId; });
+    if(filtered.length === projects.length) return false;
+    persistProjects(filtered);
+    return true;
+  }
+
+  window.ProjectStorage = {
+    getProjects: loadProjects,
+    saveProjects: saveProjects,
+    createProject: createProject,
+    updateProject: updateProject,
+    deleteProject: deleteProject
+  };
+})();
+
+(function(){
+  if(window.__accountProjectsUiInit) return; window.__accountProjectsUiInit = true;
+  var listEl = null;
+  var emptyEl = null;
+  var newBtn = null;
+  var refreshBtn = null;
+
+  function ensureElements(){
+    if(!listEl) listEl = document.getElementById('projects-list');
+    if(!emptyEl) emptyEl = document.getElementById('projects-empty');
+    if(!newBtn) newBtn = document.getElementById('projects-new-btn');
+    if(!refreshBtn) refreshBtn = document.getElementById('projects-refresh-btn');
+    return !!(listEl && emptyEl);
+  }
+
+  function formatDate(timestamp){
+    if(!timestamp) return 'Just now';
+    try {
+      var date = new Date(timestamp);
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + ' • ' + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    } catch(_e) {
+      return 'Recently';
+    }
+  }
+
+  function renderProjectsView(){
+    if(!ensureElements()) return;
+    var storage = window.ProjectStorage;
+    if(!storage){
+      listEl.innerHTML = '<p class="text-secondary">Project storage is unavailable.</p>';
+      emptyEl.classList.add('is-hidden');
+      return;
+    }
+    var projects = storage.getProjects();
+    listEl.innerHTML = '';
+    if(!projects.length){
+      emptyEl.classList.remove('is-hidden');
+      return;
+    }
+    emptyEl.classList.add('is-hidden');
+    projects.forEach(function(project){
+      listEl.appendChild(buildProjectCard(project));
+    });
+  }
+
+  function buildProjectCard(project){
+    var card = document.createElement('div');
+    card.className = 'project-card';
+    card.setAttribute('data-project-id', project.id);
+
+    var icon = document.createElement('div');
+    icon.className = 'project-card-icon';
+    icon.textContent = project.hasDesign ? '📐' : '📁';
+    card.appendChild(icon);
+
+    var info = document.createElement('div');
+    info.className = 'project-card-info';
+    var name = document.createElement('div');
+    name.className = 'project-card-name';
+    name.textContent = project.name || 'Untitled Project';
+    info.appendChild(name);
+    var meta = document.createElement('div');
+    meta.className = 'project-card-meta';
+    meta.textContent = 'Updated ' + formatDate(project.updatedAt);
+    info.appendChild(meta);
+
+    var badges = document.createElement('div');
+    badges.className = 'project-badges';
+    if(project.hasDesign || project.designData){
+      var designBadge = document.createElement('span');
+      designBadge.className = 'project-badge design';
+      designBadge.textContent = 'Design saved';
+      badges.appendChild(designBadge);
+    }
+    var aiCount = Array.isArray(project.aiImages) ? project.aiImages.length : 0;
+    if(aiCount > 0){
+      var aiBadge = document.createElement('span');
+      aiBadge.className = 'project-badge ai';
+      aiBadge.textContent = aiCount + ' AI renders';
+      badges.appendChild(aiBadge);
+    }
+    if(badges.children.length > 0){
+      info.appendChild(badges);
+    }
+
+    var imagesStrip = createImagesStrip(project);
+    if(imagesStrip){
+      info.appendChild(imagesStrip);
+    }
+
+    card.appendChild(info);
+
+    var actions = document.createElement('div');
+    actions.className = 'project-card-actions';
+    actions.appendChild(createActionButton('Continue Workflow', 'open-workflow', project.id));
+    actions.appendChild(createActionButton('Rename', 'rename-project', project.id, 'secondary'));
+    actions.appendChild(createActionButton('Delete', 'delete-project', project.id, 'secondary danger'));
+    card.appendChild(actions);
+
+    return card;
+  }
+
+  function createImagesStrip(project){
+    var sources = [];
+    if(project.thumbnail){
+      sources.push({ src: project.thumbnail, design: true });
+    }
+    if(Array.isArray(project.aiImages)){
+      project.aiImages.slice(0,3).forEach(function(img){
+        var src = typeof img === 'string' ? img : (img && (img.url || img.image));
+        if(src) sources.push({ src: src });
+      });
+    }
+    if(!sources.length) return null;
+    var wrap = document.createElement('div');
+    wrap.className = 'project-card-images';
+    sources.forEach(function(entry){
+      var img = document.createElement('img');
+      img.className = 'project-card-thumb' + (entry.design ? ' project-design-thumb' : '');
+      img.src = entry.src;
+      img.alt = 'Project preview';
+      img.loading = 'lazy';
+      wrap.appendChild(img);
+    });
+    return wrap;
+  }
+
+  function createActionButton(label, action, projectId, classes){
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = label;
+    btn.setAttribute('data-action', action);
+    btn.setAttribute('data-project-id', projectId);
+    if(classes) btn.className = classes;
+    return btn;
+  }
+
+  function handleCreateProject(){
+    var storage = window.ProjectStorage;
+    if(!storage){
+      alert('Project storage is not ready yet.');
+      return;
+    }
+    var name = prompt('Project name', 'DA Project ' + new Date().toLocaleDateString());
+    if(!name) return;
+    storage.createProject(name);
+    renderProjectsView();
+  }
+
+  function handleRename(projectId){
+    var storage = window.ProjectStorage;
+    if(!storage) return;
+    var projects = storage.getProjects();
+    var current = projects.find(function(p){ return p.id === projectId; });
+    var name = prompt('Project name', current ? current.name : 'Project');
+    if(!name) return;
+    storage.updateProject(projectId, function(existing){
+      existing.name = name.trim();
+      return existing;
+    });
+    renderProjectsView();
+  }
+
+  function handleDelete(projectId){
+    var storage = window.ProjectStorage;
+    if(!storage) return;
+    if(!confirm('Delete this project? This cannot be undone.')) return;
+    storage.deleteProject(projectId);
+    renderProjectsView();
+  }
+
+  function openWorkflow(projectId){
+    if(window.DAWorkflowUI && typeof window.DAWorkflowUI.open === 'function'){
+      if(window.toggleAccountModal) window.toggleAccountModal('hide');
+      window.DAWorkflowUI.open(projectId);
+    } else {
+      alert('DA Workflow is still loading. Please try again in a moment.');
+    }
+  }
+
+  function handleProjectListClick(event){
+    var action = event.target && event.target.getAttribute('data-action');
+    if(!action) return;
+    event.preventDefault();
+    var projectId = event.target.getAttribute('data-project-id');
+    if(!projectId) return;
+    if(action === 'open-workflow') openWorkflow(projectId);
+    else if(action === 'rename-project') handleRename(projectId);
+    else if(action === 'delete-project') handleDelete(projectId);
+  }
+
+  function wireEvents(){
+    if(!ensureElements()) return;
+    if(newBtn && !newBtn.__wired){
+      newBtn.__wired = true;
+      newBtn.addEventListener('click', handleCreateProject);
+    }
+    if(refreshBtn && !refreshBtn.__wired){
+      refreshBtn.__wired = true;
+      refreshBtn.addEventListener('click', renderProjectsView);
+    }
+    if(listEl && !listEl.__wired){
+      listEl.__wired = true;
+      listEl.addEventListener('click', handleProjectListClick);
+    }
+  }
+
+  function init(){
+    wireEvents();
+    renderProjectsView();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    setTimeout(init, 0);
+  }
+
+  window.addEventListener('projects:updated', function(){
+    renderProjectsView();
+  });
+
+  window.loadProjectsView = renderProjectsView;
 })();
 
 // LLM/AI API Settings Manager
@@ -641,64 +1007,63 @@
  * Called from 3D view "Save for DA" button
  */
 (function() {
+  function ensureProjectStorage() {
+    if (window.ProjectStorage && typeof window.ProjectStorage.getProjects === 'function') {
+      return window.ProjectStorage;
+    }
+    alert('Project storage is not ready yet. Please reload and try again.');
+    console.error('[SaveForDA] ProjectStorage unavailable');
+    return null;
+  }
+
+  function hasMeaningfulDesign(designJSON) {
+    try {
+      var parsed = JSON.parse(designJSON);
+      return (
+        (parsed.rooms && parsed.rooms.length) ||
+        (parsed.wallStrips && parsed.wallStrips.length) ||
+        (parsed.furniture && parsed.furniture.length) ||
+        (parsed.pergolas && parsed.pergolas.length) ||
+        (parsed.garages && parsed.garages.length) ||
+        (parsed.pools && parsed.pools.length) ||
+        (parsed.roofs && parsed.roofs.length) ||
+        (parsed.balconies && parsed.balconies.length) ||
+        (parsed.stairsList && parsed.stairsList.length)
+      );
+    } catch (err) {
+      console.error('Failed to inspect design payload', err);
+      return false;
+    }
+  }
+
   window.saveDesignForDA = function() {
-    // Check if user is logged in
     var currentUser = window.__appUserId;
     if (!currentUser) {
-      alert('Please log in to save your design for DA submission.');
-      if (window.toggleAccountModal) window.toggleAccountModal();
+      alert('Please log in via the Account panel before saving a DA project.');
+      if (window.toggleAccountModal) window.toggleAccountModal('show');
       return;
     }
-    
-    // Check if there's any design to save
+
     if (!window.serializeProject) {
       alert('Design system not loaded. Please refresh the page.');
       return;
     }
-    
+
     var designData = window.serializeProject();
-    
-    // Parse the JSON string to check if there's actual design data
-    try {
-      var parsedData = JSON.parse(designData);
-      
-      // Check if there's any meaningful design content
-      // Accept if there are rooms, wallStrips, furniture, or any other component
-      var hasDesign = (
-        (parsedData.rooms && parsedData.rooms.length > 0) ||
-        (parsedData.wallStrips && parsedData.wallStrips.length > 0) ||
-        (parsedData.furniture && parsedData.furniture.length > 0) ||
-        (parsedData.pergolas && parsedData.pergolas.length > 0) ||
-        (parsedData.garages && parsedData.garages.length > 0) ||
-        (parsedData.pools && parsedData.pools.length > 0) ||
-        (parsedData.roofs && parsedData.roofs.length > 0) ||
-        (parsedData.balconies && parsedData.balconies.length > 0) ||
-        (parsedData.stairsList && parsedData.stairsList.length > 0)
-      );
-      
-      if (!hasDesign) {
-        alert('Please create a design first before saving for DA submission.');
-        return;
-      }
-    } catch (e) {
-      console.error('Failed to parse design data:', e);
-      alert('Error validating design data. Please try again.');
+    if (!hasMeaningfulDesign(designData)) {
+      alert('Please create or update a design before saving for DA submission.');
       return;
     }
-    
-    // Capture snapshot of current view
+
+    var storage = ensureProjectStorage();
+    if (!storage) return;
+
     captureDesignSnapshot(function(snapshot) {
-      // Get user's projects
-      var projects = getProjects();
-      
-      // Always show project selection modal (even if no projects exist)
-      showProjectSelectionForDA(projects, designData, snapshot);
+      var projects = storage.getProjects();
+      showProjectSelectionForDA(storage, projects, designData, snapshot);
     });
   };
 
-  /**
-   * Capture a snapshot of the current 3D view
-   */
   function captureDesignSnapshot(callback) {
     try {
       var canvas = document.getElementById('canvas');
@@ -706,49 +1071,38 @@
         callback(null);
         return;
       }
-      
-      // Capture at lower resolution for thumbnail
       var tempCanvas = document.createElement('canvas');
       tempCanvas.width = 400;
       tempCanvas.height = 300;
       var ctx = tempCanvas.getContext('2d');
       ctx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height);
-      
-      var snapshot = tempCanvas.toDataURL('image/jpeg', 0.8);
-      callback(snapshot);
-    } catch (e) {
-      console.error('Failed to capture snapshot:', e);
+      callback(tempCanvas.toDataURL('image/jpeg', 0.8));
+    } catch (err) {
+      console.error('Failed to capture snapshot:', err);
       callback(null);
     }
   }
 
-  /**
-   * Show modal to select which project to save DA design to
-   */
-  function showProjectSelectionForDA(projects, designData, snapshot) {
+  function showProjectSelectionForDA(storage, projects, designData, snapshot) {
     var modal = document.createElement('div');
     modal.className = 'modal-overlay da-project-selector';
     modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:100000;display:flex;align-items:center;justify-content:center;';
-    
+
     var content = document.createElement('div');
     content.className = 'da-modal-content';
-    
-    content.innerHTML = `
+    content.innerHTML = '
       <h2 class="da-modal-title"><svg class="sf-icon" width="22" height="22"><use href="#sf-arrow-down-doc"/></svg> Save Design for DA Submission</h2>
       <p class="da-modal-subtitle">Select a project or create a new one:</p>
       <div id="da-project-list" class="da-project-list"></div>
       <div class="da-modal-actions">
         <button class="da-cancel-btn secondary">Cancel</button>
         <button id="da-new-project-btn" class="da-new-btn">+ New Project</button>
-      </div>
-    `;
-    
+      </div>';
+
     modal.appendChild(content);
     document.body.appendChild(modal);
-    
-    // Render project list
+
     var projectList = content.querySelector('#da-project-list');
-    
     if (projects.length === 0) {
       var emptyMsg = document.createElement('div');
       emptyMsg.className = 'da-project-empty';
@@ -758,145 +1112,65 @@
       projects.forEach(function(project) {
         var projectDiv = document.createElement('div');
         projectDiv.className = 'da-project-item';
-        
-        // Create thumbnail preview
-        var thumbnailHtml = '';
-        if (project.thumbnail || snapshot) {
-          thumbnailHtml = '<img src="' + (project.thumbnail || snapshot) + '" class="da-project-thumbnail" />';
-        } else {
-          thumbnailHtml = '<div class="da-project-thumbnail-empty"><svg class="sf-icon" width="30" height="30"><use href="#sf-house"/></svg></div>';
-        }
-        
-        projectDiv.innerHTML = `
-          ${thumbnailHtml}
+        var thumbnail = project.thumbnail || snapshot;
+        projectDiv.innerHTML = '
+          ' + (thumbnail ? '<img src="' + thumbnail + '" class="da-project-thumbnail" />' : '<div class="da-project-thumbnail-empty"><svg class="sf-icon" width="30" height="30"><use href="#sf-house"/></svg></div>') + '
           <div class="da-project-info">
-            <div class="da-project-name"><svg class="sf-icon" width="16" height="16"><use href="#sf-folder"/></svg> ${escapeHtml(project.name)}</div>
-            <div class="da-project-date">Updated: ${new Date(project.updatedAt).toLocaleDateString()}</div>
-            ${project.hasDesign ? '<div class="da-project-badge-wrap"><span class="da-project-badge"><svg class="sf-icon" width="11" height="11"><use href="#sf-square-and-pencil"/></svg> Design</span></div>' : ''}
-          </div>
-        `;
-        
-        projectDiv.onmouseover = function() { 
-          this.style.borderColor = 'var(--apple-blue)'; 
-          this.style.background = 'var(--apple-secondary-system-background)'; 
-        };
-        projectDiv.onmouseout = function() { 
-          this.style.borderColor = 'var(--apple-separator)'; 
-          this.style.background = 'var(--apple-system-background)'; 
-        };
+            <div class="da-project-name"><svg class="sf-icon" width="16" height="16"><use href="#sf-folder"/></svg> ' + escapeHtml(project.name) + '</div>
+            <div class="da-project-date">Updated: ' + new Date(project.updatedAt).toLocaleDateString() + '</div>
+            ' + (project.hasDesign ? '<div class="da-project-badge-wrap"><span class="da-project-badge"><svg class="sf-icon" width="11" height="11"><use href="#sf-square-and-pencil"/></svg> Design</span></div>' : '') + '
+          </div>';
+
         projectDiv.onclick = function() {
-          saveToExistingProject(project.id, designData, snapshot);
+          saveToExistingProject(storage, project.id, designData, snapshot);
           modal.remove();
         };
-        
+
         projectList.appendChild(projectDiv);
       });
     }
-    
-    // Cancel button
+
     content.querySelector('.da-cancel-btn').onclick = function() {
       modal.remove();
     };
-    
-    // New project button
+
     content.querySelector('#da-new-project-btn').onclick = function() {
       var projectName = prompt('Enter new project name:', 'DA Project ' + new Date().toLocaleDateString());
       if (!projectName) return;
-      
-      var projectId = 'proj_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-      var newProject = {
-        id: projectId,
-        name: projectName,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+      var created = storage.createProject(projectName, {
         aiImages: window.aiImages || [],
         thumbnail: snapshot,
         designData: designData,
         hasDesign: true
-      };
-      
-      var allProjects = getProjects();
-      allProjects.push(newProject);
-      saveProjects(allProjects);
-      
+      });
       modal.remove();
-      alert('✅ Design saved to "' + projectName + '"\n\nYou can now access the DA Workflow from the Projects tab.');
-      if (window.toggleAccountModal) window.toggleAccountModal();
+      if (created) {
+        alert('✅ Design saved to "' + created.name + '"\n\nYou can now access the DA Workflow from the Projects tab.');
+        if (window.toggleAccountModal) window.toggleAccountModal('show');
+      }
     };
   }
 
-  /**
-   * Save design to existing project
-   */
-  function saveToExistingProject(projectId, designData, snapshot) {
-    var projects = getProjects();
-    var project = projects.find(function(p) { return p.id === projectId; });
-    
-    if (!project) {
+  function saveToExistingProject(storage, projectId, designData, snapshot) {
+    var updated = storage.updateProject(projectId, function(project) {
+      project.designData = designData;
+      project.hasDesign = true;
+      project.aiImages = window.aiImages || project.aiImages || [];
+      if (snapshot) project.thumbnail = snapshot;
+      return project;
+    });
+
+    if (!updated) {
       alert('Error: Project not found.');
       return;
     }
-    
-    project.designData = designData;
-    project.hasDesign = true;
-    project.updatedAt = Date.now();
-    project.aiImages = window.aiImages || [];
-    
-    // Update thumbnail if new snapshot provided
-    if (snapshot) {
-      project.thumbnail = snapshot;
-    }
-    
-    saveProjects(projects);
-    
-    alert('✅ Design saved to "' + project.name + '"\n\nYou can now access the DA Workflow from the Projects tab.');
-    if (window.toggleAccountModal) window.toggleAccountModal();
+
+    alert('✅ Design saved to "' + updated.name + '"\n\nYou can now access the DA Workflow from the Projects tab.');
+    if (window.toggleAccountModal) window.toggleAccountModal('show');
   }
 
-  /**
-   * Get projects from localStorage
-   */
-  function getProjects() {
-    var userId = window.__appUserId;
-    if (!userId) return [];
-    
-    try {
-      var key = 'gablok_projects_' + userId;
-      var data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : [];
-    } catch(e) {
-      console.error('Error loading projects:', e);
-      return [];
-    }
-  }
-
-  /**
-   * Save projects to localStorage
-   */
-  function saveProjects(projects) {
-    var userId = window.__appUserId;
-    if (!userId) return;
-    
-    try {
-      var key = 'gablok_projects_' + userId;
-      localStorage.setItem(key, JSON.stringify(projects));
-    } catch(e) {
-      console.error('Error saving projects:', e);
-      alert('Error saving project. Storage may be full.');
-    }
-  }
-
-  /**
-   * Escape HTML to prevent XSS
-   */
   function escapeHtml(text) {
-    var map = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#039;'
-    };
-    return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+    var map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return (text || '').replace(/[&<>"']/g, function(m) { return map[m]; });
   }
 })();
