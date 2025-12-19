@@ -468,7 +468,7 @@
       window.dispatchEvent(new CustomEvent('projects:updated'));
     } catch(err){
       console.error('[AccountProjects] Failed to save projects', err);
-      alert('Unable to save projects. Storage may be full.');
+      showAppleAlert('Storage Error', 'Unable to save projects. Storage may be full.');
     }
   }
 
@@ -685,13 +685,14 @@
   function handleCreateProject(){
     var storage = window.ProjectStorage;
     if(!storage){
-      alert('Project storage is not ready yet.');
+      showAppleAlert('Error', 'Project storage is not ready yet.');
       return;
     }
-    var name = prompt('Project name', 'DA Project ' + new Date().toLocaleDateString());
-    if(!name) return;
-    storage.createProject(name);
-    renderProjectsView();
+    showApplePrompt('New Project', 'DA Project ' + new Date().toLocaleDateString(), function(name) {
+      if(!name) return;
+      storage.createProject(name);
+      renderProjectsView();
+    });
   }
 
   function handleRename(projectId){
@@ -699,21 +700,27 @@
     if(!storage) return;
     var projects = storage.getProjects();
     var current = projects.find(function(p){ return p.id === projectId; });
-    var name = prompt('Project name', current ? current.name : 'Project');
-    if(!name) return;
-    storage.updateProject(projectId, function(existing){
-      existing.name = name.trim();
-      return existing;
+    showApplePrompt('Rename Project', current ? current.name : 'Project', function(name) {
+      if(!name) return;
+      storage.updateProject(projectId, function(existing){
+        existing.name = name.trim();
+        return existing;
+      });
+      renderProjectsView();
     });
-    renderProjectsView();
   }
 
   function handleDelete(projectId){
     var storage = window.ProjectStorage;
     if(!storage) return;
-    if(!confirm('Delete this project? This cannot be undone.')) return;
-    storage.deleteProject(projectId);
-    renderProjectsView();
+    showAppleConfirm(
+      'Delete Project', 
+      'This action cannot be undone. Are you sure you want to delete this project?',
+      function() {
+        storage.deleteProject(projectId);
+        renderProjectsView();
+      }
+    );
   }
 
   function openWorkflow(projectId){
@@ -721,7 +728,7 @@
       if(window.toggleAccountModal) window.toggleAccountModal('hide');
       window.DAWorkflowUI.open(projectId);
     } else {
-      alert('DA Workflow is still loading. Please try again in a moment.');
+      showAppleAlert('Loading', 'DA Workflow is still loading. Please try again in a moment.');
     }
   }
 
@@ -1140,6 +1147,154 @@
 })();
 
 /**
+ * Theme Settings Manager - Per-Section Dark/Light Mode
+ */
+(function() {
+  if (window.__themeSettingsInit) return;
+  window.__themeSettingsInit = true;
+  
+  var THEME_STORAGE_KEY = 'gablokThemeSettings';
+  
+  var sectionSelectors = {
+    'main': 'body',
+    'plan2d': '#floorplan-modal',
+    'visualize': '#visualize-modal',
+    'da-workflow': '#da-workflow-overlay',
+    'account': '#account-modal'
+  };
+  
+  // Load saved theme preferences
+  function loadThemeSettings() {
+    try {
+      var saved = localStorage.getItem(THEME_STORAGE_KEY);
+      var settings = saved ? JSON.parse(saved) : {};
+      
+      // Apply saved themes to sections
+      Object.keys(sectionSelectors).forEach(function(section) {
+        var theme = settings[section] || 'light';
+        applyThemeToSection(section, theme);
+        
+        // Update checkbox state
+        var checkbox = document.getElementById('theme-' + section);
+        if (checkbox) {
+          checkbox.checked = theme === 'dark';
+        }
+      });
+      
+      return settings;
+    } catch (e) {
+      console.error('Failed to load theme settings:', e);
+      return {};
+    }
+  }
+  
+  // Save theme preferences
+  function saveThemeSettings(settings) {
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+      console.error('Failed to save theme settings:', e);
+    }
+  }
+  
+  // Apply theme to a specific section
+  function applyThemeToSection(section, theme) {
+    var selector = sectionSelectors[section];
+    if (!selector) return;
+    
+    var element = document.querySelector(selector);
+    if (element) {
+      element.setAttribute('data-theme', theme);
+    }
+  }
+  
+  // Initialize theme toggles
+  function initThemeToggles() {
+    var settings = loadThemeSettings();
+    
+    // Add event listeners to all theme checkboxes
+    Object.keys(sectionSelectors).forEach(function(section) {
+      var checkbox = document.getElementById('theme-' + section);
+      if (!checkbox) return;
+      
+      checkbox.addEventListener('change', function() {
+        var theme = this.checked ? 'dark' : 'light';
+        settings[section] = theme;
+        saveThemeSettings(settings);
+        applyThemeToSection(section, theme);
+        
+        // Show feedback
+        showThemeFeedback(section, theme);
+      });
+    });
+  }
+  
+  // Show visual feedback when theme changes
+  function showThemeFeedback(section, theme) {
+    var sectionNames = {
+      'main': 'Main Editor',
+      'plan2d': '2D Floor Plan',
+      'visualize': '3D Visualize',
+      'da-workflow': 'DA Workflow',
+      'account': 'Account Panel'
+    };
+    
+    var message = sectionNames[section] + ' switched to ' + (theme === 'dark' ? 'Dark' : 'Light') + ' mode';
+    
+    // Create temporary toast notification
+    var toast = document.createElement('div');
+    toast.className = 'theme-toast';
+    toast.textContent = message;
+    toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.9);color:white;padding:12px 20px;border-radius:12px;font-size:13px;z-index:100001;animation:toastIn 0.3s ease;';
+    document.body.appendChild(toast);
+    
+    setTimeout(function() {
+      toast.style.animation = 'toastOut 0.3s ease forwards';
+      setTimeout(function() {
+        toast.remove();
+      }, 300);
+    }, 2000);
+  }
+  
+  // Initialize when settings panel is loaded
+  function onSettingsPanelLoad() {
+    setTimeout(function() {
+      var settingsPanel = document.getElementById('account-view-settings');
+      if (settingsPanel && !settingsPanel.classList.contains('is-hidden')) {
+        initThemeToggles();
+      }
+    }, 100);
+  }
+  
+  // Watch for settings panel visibility
+  var observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+      if (mutation.attributeName === 'class') {
+        var settingsPanel = document.getElementById('account-view-settings');
+        if (settingsPanel && !settingsPanel.classList.contains('is-hidden')) {
+          initThemeToggles();
+        }
+      }
+    });
+  });
+  
+  // Start observing when DOM is ready
+  document.addEventListener('DOMContentLoaded', function() {
+    var settingsPanel = document.getElementById('account-view-settings');
+    if (settingsPanel) {
+      observer.observe(settingsPanel, { attributes: true });
+    }
+    
+    // Load initial themes on page load
+    loadThemeSettings();
+  });
+  
+  // Export functions
+  window.loadThemeSettings = loadThemeSettings;
+  window.applyThemeToSection = applyThemeToSection;
+})();
+
+/**
  * Save current design to project for DA submission
  * Called from 3D view "Save for DA" button
  */
@@ -1148,7 +1303,7 @@
     if (window.ProjectStorage && typeof window.ProjectStorage.getProjects === 'function') {
       return window.ProjectStorage;
     }
-    alert('Project storage is not ready yet. Please reload and try again.');
+    showAppleAlert('Error', 'Project storage is not ready yet. Please reload and try again.');
     console.error('[SaveForDA] ProjectStorage unavailable');
     return null;
   }
@@ -1176,19 +1331,19 @@
   window.saveDesignForDA = function() {
     var currentUser = window.__appUserId;
     if (!currentUser) {
-      alert('Please log in via the Account panel before saving a DA project.');
+      showAppleAlert('Login Required', 'Please log in via the Account panel before saving a DA project.');
       if (window.toggleAccountModal) window.toggleAccountModal('show');
       return;
     }
 
     if (!window.serializeProject) {
-      alert('Design system not loaded. Please refresh the page.');
+      showAppleAlert('Error', 'Design system not loaded. Please refresh the page.');
       return;
     }
 
     var designData = window.serializeProject();
     if (!hasMeaningfulDesign(designData)) {
-      alert('Please create or update a design before saving for DA submission.');
+      showAppleAlert('No Design', 'Please create or update a design before saving for DA submission.');
       return;
     }
 
@@ -1231,6 +1386,17 @@
       <h2 class="da-modal-title"><svg class="sf-icon" width="22" height="22"><use href="#sf-arrow-down-doc"/></svg> Save Design for DA Submission</h2>
       <p class="da-modal-subtitle">Select a project or create a new one:</p>
       <div id="da-project-list" class="da-project-list"></div>
+      <div id="da-new-project-form" class="da-new-project-form" style="display: none;">
+        <div class="da-form-header">
+          <h3 class="da-form-title">Create New Project</h3>
+          <p class="da-form-subtitle">Enter a name for your new project</p>
+        </div>
+        <input type="text" id="da-project-name-input" class="apple-input da-project-input" placeholder="DA Project name..." />
+        <div class="da-form-actions">
+          <button id="da-form-cancel-btn" class="secondary">Cancel</button>
+          <button id="da-form-create-btn" class="primary">Create Project</button>
+        </div>
+      </div>
       <div class="da-modal-actions">
         <button class="da-cancel-btn secondary">Cancel</button>
         <button id="da-new-project-btn" class="da-new-btn">+ New Project</button>
@@ -1278,19 +1444,83 @@
       modal.remove();
     };
 
-    content.querySelector('#da-new-project-btn').onclick = function() {
-      var projectName = prompt('Enter new project name:', 'DA Project ' + new Date().toLocaleDateString());
-      if (!projectName) return;
+    var newProjectForm = content.querySelector('#da-new-project-form');
+    var projectListEl = content.querySelector('#da-project-list');
+    var newProjectBtn = content.querySelector('#da-new-project-btn');
+    var modalSubtitle = content.querySelector('.da-modal-subtitle');
+    var projectInput = content.querySelector('#da-project-name-input');
+
+    newProjectBtn.onclick = function() {
+      // Animate transition to new project form
+      projectListEl.style.opacity = '0';
+      projectListEl.style.transform = 'translateY(-10px)';
+      modalSubtitle.style.opacity = '0';
+      
+      setTimeout(function() {
+        projectListEl.style.display = 'none';
+        modalSubtitle.textContent = 'Create a new project for this design:';
+        modalSubtitle.style.opacity = '1';
+        newProjectForm.style.display = 'block';
+        newProjectBtn.style.display = 'none';
+        
+        // Animate form in
+        setTimeout(function() {
+          newProjectForm.style.opacity = '1';
+          newProjectForm.style.transform = 'translateY(0)';
+          projectInput.focus();
+          projectInput.value = 'DA Project ' + new Date().toLocaleDateString();
+          projectInput.select();
+        }, 50);
+      }, 200);
+    };
+
+    content.querySelector('#da-form-cancel-btn').onclick = function() {
+      // Animate back to project list
+      newProjectForm.style.opacity = '0';
+      newProjectForm.style.transform = 'translateY(-10px)';
+      
+      setTimeout(function() {
+        newProjectForm.style.display = 'none';
+        modalSubtitle.textContent = 'Select a project or create a new one:';
+        projectListEl.style.display = 'flex';
+        newProjectBtn.style.display = 'block';
+        
+        setTimeout(function() {
+          projectListEl.style.opacity = '1';
+          projectListEl.style.transform = 'translateY(0)';
+        }, 50);
+      }, 200);
+    };
+
+    content.querySelector('#da-form-create-btn').onclick = function() {
+      var projectName = projectInput.value.trim();
+      if (!projectName) {
+        projectInput.focus();
+        return;
+      }
+      
       var created = storage.createProject(projectName, {
         aiImages: window.aiImages || [],
         thumbnail: snapshot,
         designData: designData,
         hasDesign: true
       });
+      
       modal.remove();
       if (created) {
-        alert('✅ Design saved to "' + created.name + '"\n\nYou can now access the DA Workflow from the Projects tab.');
+        showAppleAlert('Success', 'Design saved to "' + created.name + '". You can now access the DA Workflow from the Projects tab.');
         if (window.toggleAccountModal) window.toggleAccountModal('show');
+      }
+    };
+
+    // Handle Enter key in input
+    projectInput.onkeydown = function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        content.querySelector('#da-form-create-btn').click();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        content.querySelector('#da-form-cancel-btn').click();
       }
     };
   }
@@ -1305,11 +1535,11 @@
     });
 
     if (!updated) {
-      alert('Error: Project not found.');
+      showAppleAlert('Error', 'Project not found.');
       return;
     }
 
-    alert('✅ Design saved to "' + updated.name + '"\n\nYou can now access the DA Workflow from the Projects tab.');
+    showAppleAlert('Success', 'Design saved to "' + updated.name + '". You can now access the DA Workflow from the Projects tab.');
     if (window.toggleAccountModal) window.toggleAccountModal('show');
   }
 

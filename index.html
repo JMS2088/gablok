@@ -10,7 +10,7 @@
 <link rel="icon" type="image/x-icon" href="/favicon.ico" />
 <script>window.__ASSET_VERSION='20251129-26';</script>
 <!-- Apple Design System -->
-<link rel="stylesheet" href="css/apple-design-system.css?v=1766132477">
+<link rel="stylesheet" href="css/apple-design-system.css?v=1766132650">
 <link rel="stylesheet" href="css/da-workflow-apple.css?v=20251206-1">
 <link rel="stylesheet" href="css/apple-micro-animations.css?v=20251205-4">
 <link rel="stylesheet" href="css/apple-main-menu.css?v=20251205-4">
@@ -18,7 +18,7 @@
 <link rel="stylesheet" href="css/apple-plan2d.css?v=20251205-4">
 <link rel="stylesheet" href="css/apple-splash.css?v=20251205-4">
 <link rel="stylesheet" href="css/apple-typography-override.css?v=20251205-4">
-<link rel="stylesheet" href="css/styles.css?v=1766132477">
+<link rel="stylesheet" href="css/styles.css?v=1766135703">
 <script>
 // Version verification - shows in console immediately
 console.log('%c🔄 GABLOK v1763716707 LOADED', 'color:#0f0;font-size:16px;font-weight:bold');
@@ -804,6 +804,76 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 	</div>
 </div>
 
+<!-- Apple Input Modal -->
+<div id="apple-input-modal" class="apple-modal" style="display: none;">
+	<div class="apple-modal-backdrop"></div>
+	<div class="apple-modal-container">
+		<div class="apple-modal-header">
+			<h3 id="apple-input-title">Enter Value</h3>
+		</div>
+		<div class="apple-modal-body">
+			<input type="text" id="apple-input-field" class="apple-input" placeholder="Enter text..." />
+		</div>
+		<div class="apple-modal-actions">
+			<button id="apple-input-cancel" class="secondary">Cancel</button>
+			<button id="apple-input-confirm" class="primary">Confirm</button>
+		</div>
+	</div>
+</div>
+
+<!-- Apple Confirm Modal -->
+<div id="apple-confirm-modal" class="apple-modal" style="display: none;">
+	<div class="apple-modal-backdrop"></div>
+	<div class="apple-modal-container">
+		<div class="apple-modal-header">
+			<h3 id="apple-confirm-title">Confirm Action</h3>
+		</div>
+		<div class="apple-modal-body">
+			<p id="apple-confirm-message">Are you sure?</p>
+		</div>
+		<div class="apple-modal-actions">
+			<button id="apple-confirm-cancel" class="secondary">Cancel</button>
+			<button id="apple-confirm-ok" class="danger">Confirm</button>
+		</div>
+	</div>
+</div>
+
+<!-- Apple Contact Form Modal -->
+<div id="apple-contact-modal" class="apple-modal" style="display: none;">
+	<div class="apple-modal-backdrop"></div>
+	<div class="apple-modal-container" style="width: 480px;">
+		<div class="apple-modal-header">
+			<h3 id="apple-contact-title">Edit Contact</h3>
+		</div>
+		<div class="apple-modal-body">
+			<div class="apple-form-group">
+				<label>Name</label>
+				<input type="text" id="apple-contact-name" class="apple-input" placeholder="Full name" />
+			</div>
+			<div class="apple-form-group">
+				<label>Company/Organization</label>
+				<input type="text" id="apple-contact-company" class="apple-input" placeholder="Company name" />
+			</div>
+			<div class="apple-form-group">
+				<label>Phone Number</label>
+				<input type="tel" id="apple-contact-phone" class="apple-input" placeholder="Phone number" />
+			</div>
+			<div class="apple-form-group">
+				<label>Email Address</label>
+				<input type="email" id="apple-contact-email" class="apple-input" placeholder="email@example.com" />
+			</div>
+			<div class="apple-form-group">
+				<label>License Number (if applicable)</label>
+				<input type="text" id="apple-contact-license" class="apple-input" placeholder="License number" />
+			</div>
+		</div>
+		<div class="apple-modal-actions">
+			<button id="apple-contact-cancel" class="secondary">Cancel</button>
+			<button id="apple-contact-save" class="primary">Save</button>
+		</div>
+	</div>
+</div>
+
 <!-- Account Modal (full-screen splash with left nav) -->
 <div id="account-modal" aria-hidden="true">
 	<div id="account-splash"></div>
@@ -1146,6 +1216,87 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 						<input id="settings-autosave" type="checkbox" checked />
 					</div>
 				</div>
+				
+				<!-- Theme Settings Per Section -->
+				<div class="settings-group">
+					<h3>Appearance</h3>
+					<p class="settings-hint">Toggle dark or light mode for each section of the application.</p>
+					
+					<div class="settings-row theme-toggle-row">
+						<div class="theme-toggle-label">
+							<svg class="sf-icon" width="18" height="18"><use href="#sf-house"/></svg>
+							<span>Main Editor</span>
+						</div>
+						<label class="theme-switch">
+							<input type="checkbox" id="theme-main-editor" data-section="main" />
+							<span class="theme-slider"></span>
+							<span class="theme-labels">
+								<span class="theme-light-label">Light</span>
+								<span class="theme-dark-label">Dark</span>
+							</span>
+						</label>
+					</div>
+					
+					<div class="settings-row theme-toggle-row">
+						<div class="theme-toggle-label">
+							<svg class="sf-icon" width="18" height="18"><use href="#sf-square-grid-2x2"/></svg>
+							<span>2D Floor Plan</span>
+						</div>
+						<label class="theme-switch">
+							<input type="checkbox" id="theme-plan2d" data-section="plan2d" />
+							<span class="theme-slider"></span>
+							<span class="theme-labels">
+								<span class="theme-light-label">Light</span>
+								<span class="theme-dark-label">Dark</span>
+							</span>
+						</label>
+					</div>
+					
+					<div class="settings-row theme-toggle-row">
+						<div class="theme-toggle-label">
+							<svg class="sf-icon" width="18" height="18"><use href="#sf-cube"/></svg>
+							<span>3D Visualize</span>
+						</div>
+						<label class="theme-switch">
+							<input type="checkbox" id="theme-visualize" data-section="visualize" />
+							<span class="theme-slider"></span>
+							<span class="theme-labels">
+								<span class="theme-light-label">Light</span>
+								<span class="theme-dark-label">Dark</span>
+							</span>
+						</label>
+					</div>
+					
+					<div class="settings-row theme-toggle-row">
+						<div class="theme-toggle-label">
+							<svg class="sf-icon" width="18" height="18"><use href="#sf-doc-text"/></svg>
+							<span>DA Workflow</span>
+						</div>
+						<label class="theme-switch">
+							<input type="checkbox" id="theme-da-workflow" data-section="da-workflow" />
+							<span class="theme-slider"></span>
+							<span class="theme-labels">
+								<span class="theme-light-label">Light</span>
+								<span class="theme-dark-label">Dark</span>
+							</span>
+						</label>
+					</div>
+					
+					<div class="settings-row theme-toggle-row">
+						<div class="theme-toggle-label">
+							<svg class="sf-icon" width="18" height="18"><use href="#sf-person-circle"/></svg>
+							<span>Account Panel</span>
+						</div>
+						<label class="theme-switch">
+							<input type="checkbox" id="theme-account" data-section="account" />
+							<span class="theme-slider"></span>
+							<span class="theme-labels">
+								<span class="theme-light-label">Light</span>
+								<span class="theme-dark-label">Dark</span>
+							</span>
+						</label>
+					</div>
+				</div>
 			</div>
 		</section>
 		<section id="account-view-payments" class="account-panel is-hidden">
@@ -1423,6 +1574,8 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 	</div>
 </div>
 
+<!-- Apple modal system (must load before other UI scripts) -->
+<script src="js/ui/apple-modals.js?v=20251129-7"></script>
 <!-- Splash/progress overlay (non-deferred to show immediately) -->
 <script src="js/boot/splash.js?v=20251129-6"></script>
 <!-- Coordinated bootstrap: loads all modules with progress, then starts app -->

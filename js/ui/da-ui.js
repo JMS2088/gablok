@@ -735,7 +735,7 @@
    * Upload document (placeholder - implement file upload)
    */
   function uploadDocument(docName) {
-    alert('Document upload: ' + docName + '\n\nThis would open a file picker to upload the document.');
+    showAppleAlert('Document Upload', 'This would open a file picker to upload ' + docName + '.');
     // TODO: Implement actual file upload
   }
   
@@ -745,24 +745,13 @@
   function addEditContact(role) {
     var contact = getContactByRole(role) || {};
     
-    var name = prompt('Contact Name:', contact.name || '');
-    if (name === null) return;
-    
-    var company = prompt('Company/Organization:', contact.company || '');
-    var phone = prompt('Phone Number:', contact.phone || '');
-    var email = prompt('Email Address:', contact.email || '');
-    var license = prompt('License Number (if applicable):', contact.license || '');
-    
-    window.DAWorkflow.addContact(currentProjectId, role, {
-      name: name,
-      company: company,
-      phone: phone,
-      email: email,
-      license: license
+    showAppleContactForm('Edit ' + role, contact, function(data) {
+      if (!data) return;
+      
+      window.DAWorkflow.addContact(currentProjectId, role, data);
+      currentState = window.DAWorkflow.getWorkflowState(currentProjectId);
+      renderCurrentStep();
     });
-    
-    currentState = window.DAWorkflow.getWorkflowState(currentProjectId);
-    renderCurrentStep();
   }
   
   /**
@@ -771,14 +760,16 @@
   function shareWithContact(role) {
     var link = window.DAWorkflow.generateShareLink(currentProjectId, role, ['view', 'comment']);
     
-    prompt('Share this link with ' + role + ':\n\n(Link expires in 90 days)', link);
+    showApplePrompt('Share with ' + role, link, function(value) {
+      // User can copy the link from the input field
+    });
   }
   
   /**
    * Show contacts modal
    */
   function showContacts() {
-    alert('Contacts Manager\n\nThis would show all contacts for this project in a modal.');
+    showAppleAlert('Contacts Manager', 'This would show all contacts for this project in a modal.');
     // TODO: Implement contacts modal
   }
   
@@ -786,7 +777,7 @@
    * Show documents modal
    */
   function showDocuments() {
-    alert('Documents Manager\n\nThis would show all documents for this project in a modal.');
+    showAppleAlert('Documents Manager', 'This would show all documents for this project in a modal.');
     // TODO: Implement documents modal
   }
   
@@ -794,7 +785,7 @@
    * Show help modal
    */
   function showHelp() {
-    alert('Complete Building Workflow Help\n\nThis step-by-step guide walks you through the entire home building process in Australia - from planning to occupation.\n\nKey Features:\n- 8 major phases (0: Planning & Finance, A-G: DA to Occupation)\n- 50+ detailed steps with checklists\n- Progress payment tracking\n- Document tracking and uploads\n- Contact management for all stakeholders\n- Secure link sharing with professionals\n- Auto-save progress\n\nYour progress is automatically saved as you work through each stage.');
+    showAppleAlert('Complete Building Workflow', 'This step-by-step guide walks you through the entire home building process in Australia - from planning to occupation. Features include 8 major phases, 50+ detailed steps, progress tracking, document management, and contact management. Your progress is automatically saved.');
   }
 
   // ============================================================================

@@ -490,6 +490,7 @@ button,
 
 .apple-button-filled:hover {
   background: var(--apple-blue-hover);
+  color: #8e8e93;
 }
 
 .apple-button-filled:active {
