@@ -215,22 +215,26 @@
   }
   
   function addBackButton(viewName){
-    // Check if view has a back button area, if not create one
-    var view = qs('account-view-' + viewName);
-    if(!view) return;
+    // Check if back button already exists in main
+    var main = qs('account-main');
+    if(!main) return;
     
-    var existing = view.querySelector('.view-back-btn');
-    if(existing) return; // already has back button
+    var existing = main.querySelector('.view-back-btn');
+    if(existing) {
+      existing.style.display = 'inline-flex';
+      return;
+    }
     
     var backBtn = document.createElement('button');
     backBtn.className = 'view-back-btn secondary';
-    backBtn.innerHTML = '<svg class="sf-icon" width="16" height="16"><use href="#sf-chevron-left"/></svg> Dashboard';
+    backBtn.title = 'Back to Dashboard';
+    backBtn.innerHTML = '<svg class="sf-icon" width="20" height="20"><use href="#sf-speedometer"/></svg><span>Dashboard</span>';
     backBtn.addEventListener('click', function(){
       returnToDashboard();
     });
     
-    // Insert at top of view
-    view.insertBefore(backBtn, view.firstChild);
+    // Insert into main, positioned by CSS
+    main.appendChild(backBtn);
   }
   
   function returnToDashboard(){
@@ -242,6 +246,10 @@
       var sec = qs('account-view-' + v); 
       if(sec) sec.classList.add('is-hidden');
     });
+    
+    // Hide back button when on dashboard
+    var backBtn = document.querySelector('.view-back-btn');
+    if(backBtn) backBtn.style.display = 'none';
     
     // Clear active states
     var cards = document.querySelectorAll('.account-card');
@@ -575,10 +583,25 @@
     card.className = 'project-card';
     card.setAttribute('data-project-id', project.id);
 
-    var icon = document.createElement('div');
-    icon.className = 'project-card-icon';
-    icon.textContent = project.hasDesign ? '📐' : '📁';
-    card.appendChild(icon);
+    // Create thumbnail area (replaces icon)
+    var thumbWrapper = document.createElement('div');
+    thumbWrapper.className = 'project-card-thumb-wrapper';
+    
+    if(project.thumbnail){
+      var thumb = document.createElement('img');
+      thumb.className = 'project-card-main-thumb';
+      thumb.src = project.thumbnail;
+      thumb.alt = 'Project preview';
+      thumb.loading = 'lazy';
+      thumbWrapper.appendChild(thumb);
+    } else {
+      // Fallback icon if no thumbnail
+      var icon = document.createElement('div');
+      icon.className = 'project-card-icon-fallback';
+      icon.textContent = project.hasDesign ? '📐' : '📁';
+      thumbWrapper.appendChild(icon);
+    }
+    card.appendChild(thumbWrapper);
 
     var info = document.createElement('div');
     info.className = 'project-card-info';
@@ -610,10 +633,7 @@
       info.appendChild(badges);
     }
 
-    var imagesStrip = createImagesStrip(project);
-    if(imagesStrip){
-      info.appendChild(imagesStrip);
-    }
+    // Remove images strip - now using main thumbnail instead
 
     card.appendChild(info);
 

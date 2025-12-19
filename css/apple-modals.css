@@ -337,12 +337,19 @@ button#visualize-ai-configure {
   width: 32px;
   height: 32px;
   padding: 0;
-  border-radius: 50%;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--apple-secondary-fill);
   color: var(--apple-secondary-label);
+}
+
+#account-close svg,
+#visualize-photo-close svg,
+#project-select-close svg {
+  display: block;
+  margin: 0 auto;
 }
 
 [data-theme="dark"] .close-button,

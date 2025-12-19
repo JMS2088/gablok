@@ -1229,8 +1229,19 @@ button.secondary:hover {
 }
 
 .view-back-btn:hover {
-  background: var(--apple-quaternary-system-fill);
-  transform: translateX(-2px);
+  background: #e5e5ea !important;
+  transform: none;
+  box-shadow: none;
+}
+
+.view-back-btn:active {
+  background: var(--apple-blue) !important;
+  color: #ffffff !important;
+  transform: none;
+}
+
+.view-back-btn:active .sf-icon {
+  color: #ffffff !important;
 }
 
 .view-back-btn .sf-icon {
@@ -1455,40 +1466,11 @@ button.secondary:hover {
   box-shadow: none;
 }
 
+/* project-card-actions buttons now inherit global button styles */
 .project-card-actions button {
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: var(--apple-font-weight-regular);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.project-card-actions .load-btn {
-  background: var(--apple-tertiary-system-fill);
-  color: var(--apple-label);
-}
-
-.project-card-actions .load-btn:hover {
-  background: var(--apple-quaternary-system-fill);
-  box-shadow: none;
-}
-
-.project-card-actions .delete-btn {
-  background: rgba(255, 59, 48, 0.1);
-  color: var(--apple-red);
-}
-
-.project-card-actions .delete-btn:hover {
-  background: rgba(255, 59, 48, 0.15);
-}
-
-[data-theme="dark"] .project-card-actions .delete-btn {
-  background: rgba(255, 59, 48, 0.15);
-}
-
-[data-theme="dark"] .project-card-actions .delete-btn:hover {
-  background: rgba(255, 59, 48, 0.2);
+  /* Inherits global: height 32px, padding 0 12px, font-size 13px, border-radius 8px */
+  /* Inherits hover: background #e5e5ea, transform none */
+  /* Inherits active: background blue, color white */
 }
 
 .da-workflow-btn {
