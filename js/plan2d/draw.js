@@ -107,85 +107,136 @@
   // Grid: adapt appearance in CAD mode (light gray lines on white) or dark mode (existing slate scheme)
       var step=__plan2d.scale, w=c.width, h=c.height; 
       var originX = w/2 + (__plan2d.panX * step), originY = h/2 - (__plan2d.panY * step);
-      // Offscreen cached grid layer -------------------------------------
+      // Grid: use a small repeating pattern (avoids allocating a full-size offscreen canvas)
       (function(){
         try {
-              var gridCache = __plan2d.__gridCache || (__plan2d.__gridCache = {});
-              var needs = false;
-              // Only rebuild grid when scale or viewport size changes enough (>1px pan shift at world origin or scale delta)
-              var panShiftX = Math.abs((gridCache.panX||0) - __plan2d.panX) * step;
-              var panShiftY = Math.abs((gridCache.panY||0) - __plan2d.panY) * step;
-              var scaleChanged = (gridCache.scale !== step);
-              var sizeChanged = (gridCache.w !== w || gridCache.h !== h);
-              if (scaleChanged || sizeChanged || panShiftX > 1 || panShiftY > 1) needs = true;
-              if(!gridCache.canvas){ needs = true; gridCache.canvas = document.createElement('canvas'); }
-              if(needs){
-            gridCache.canvas.width = w; gridCache.canvas.height = h;
-            var gctx = gridCache.canvas.getContext('2d');
-            gctx.setTransform(1,0,0,1,0,0);
-            gctx.clearRect(0,0,w,h);
-            gctx.save(); gctx.lineWidth=1; // We'll manually place strokes at 0.5 for crisp 1px lines
-            // World-based grid iteration so lines always pass exactly through world integer coordinates (0,0 axis included)
-            var worldLeft = screenToWorld2D(0,0).x;
-            var worldRight = screenToWorld2D(w,0).x;
-            var worldTop = screenToWorld2D(0,0).y; // y increases upward in world, screenToWorld2D accounts for inversion
-            var worldBottom = screenToWorld2D(0,h).y;
-            // Minor (0.1m) lines when sufficiently spaced in pixels
-            var minorStepWorld = 0.1;
-            var minorStepPx = step * minorStepWorld;
-            if(minorStepPx >= 8){
-              gctx.strokeStyle = cadMode ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)';
-              var startMinorX = Math.ceil(worldLeft/minorStepWorld)*minorStepWorld;
-              for(var wx=startMinorX; wx<=worldRight; wx+=minorStepWorld){
-                if(Math.abs(wx - Math.round(wx)) < 1e-6) continue;
-                var sx = worldToScreen2D(wx,0).x + 0.5; // crisp line
-                gctx.beginPath(); gctx.moveTo(sx,0); gctx.lineTo(sx,h); gctx.stroke();
-              }
-              var startMinorY = Math.ceil(worldBottom/minorStepWorld)*minorStepWorld;
-              for(var wy=startMinorY; wy<=worldTop; wy+=minorStepWorld){
-                if(Math.abs(wy - Math.round(wy)) < 1e-6) continue;
-                var sy = worldToScreen2D(0,wy).y + 0.5;
-                gctx.beginPath(); gctx.moveTo(0,sy); gctx.lineTo(w,sy); gctx.stroke();
-              }
-            }
-            // Major (1m) lines
-            gctx.strokeStyle = cadMode ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.10)';
-            var startMajorX = Math.ceil(worldLeft);
-            for(var mx=startMajorX; mx<=worldRight; mx+=1){
-              var sxM = worldToScreen2D(mx,0).x + 0.5;
-              gctx.beginPath(); gctx.moveTo(sxM,0); gctx.lineTo(sxM,h); gctx.stroke();
-            }
-            var startMajorY = Math.ceil(worldBottom);
-            for(var my=startMajorY; my<=worldTop; my+=1){
-              var syM = worldToScreen2D(0,my).y + 0.5;
-              gctx.beginPath(); gctx.moveTo(0,syM); gctx.lineTo(w,syM); gctx.stroke();
-            }
-            gctx.strokeStyle = cadMode ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.16)';
-            // Central axes (world 0,0) pixel-perfect (use +0.5 since we avoided global 0.5 translate)
-            gctx.beginPath(); gctx.moveTo(originX + 0.5,0); gctx.lineTo(originX + 0.5,h); gctx.stroke();
-            gctx.beginPath(); gctx.moveTo(0,originY + 0.5); gctx.lineTo(w,originY + 0.5); gctx.stroke();
-            gctx.restore();
-            gridCache.scale=step; gridCache.panX=__plan2d.panX; gridCache.panY=__plan2d.panY; gridCache.w=w; gridCache.h=h; gridCache.lastBuildAt=(performance&&performance.now)?performance.now():Date.now();
+          var gridCache = __plan2d.__gridCache || (__plan2d.__gridCache = {});
+          var minorStepWorld = 0.1;
+          var minorStepPx = step * minorStepWorld;
+          var minorEnabled = minorStepPx >= 8;
+
+          // Build (or rebuild) the pattern when zoom/theme changes
+          var base = 100; // base px per 1m inside the pattern tile
+          var scaleFactor = step / base;
+          var canPatternTransform = false;
+
+          if (!gridCache._patternChecked) {
+            gridCache._patternChecked = true;
+            try {
+              var pTest = ctx.createPattern(document.createElement('canvas'), 'repeat');
+              canPatternTransform = !!(pTest && typeof pTest.setTransform === 'function');
+            } catch(_eP) { canPatternTransform = false; }
+            gridCache._canPatternTransform = canPatternTransform;
           }
-          // For incremental frames, only draw the slice that intersects the dirty rect
-          if(useDirty){
-            try{
+          canPatternTransform = !!gridCache._canPatternTransform;
+
+          var needsPattern = !gridCache.pattern || gridCache.scale !== step || gridCache.cadMode !== cadMode || gridCache.minorEnabled !== minorEnabled;
+          if (needsPattern && canPatternTransform) {
+            var tile = gridCache.tile || (gridCache.tile = document.createElement('canvas'));
+            tile.width = base;
+            tile.height = base;
+            var gctx = tile.getContext('2d');
+            gctx.setTransform(1,0,0,1,0,0);
+            gctx.clearRect(0,0,base,base);
+            gctx.save();
+            gctx.lineWidth = 1;
+
+            if (minorEnabled) {
+              gctx.strokeStyle = cadMode ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)';
+              var minorStep = base / 10;
+              for (var i=1; i<10; i++) {
+                var x = i*minorStep + 0.5;
+                gctx.beginPath(); gctx.moveTo(x,0); gctx.lineTo(x,base); gctx.stroke();
+                var y = i*minorStep + 0.5;
+                gctx.beginPath(); gctx.moveTo(0,y); gctx.lineTo(base,y); gctx.stroke();
+              }
+            }
+
+            // Major (1m) lines at tile origin only; repetition creates the full grid.
+            gctx.strokeStyle = cadMode ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.10)';
+            gctx.beginPath(); gctx.moveTo(0.5,0); gctx.lineTo(0.5,base); gctx.stroke();
+            gctx.beginPath(); gctx.moveTo(0,0.5); gctx.lineTo(base,0.5); gctx.stroke();
+
+            gctx.restore();
+
+            var pat = ctx.createPattern(tile, 'repeat');
+            if (pat && typeof pat.setTransform === 'function') {
+              pat.setTransform(new DOMMatrix().scale(scaleFactor, scaleFactor));
+            }
+            gridCache.pattern = pat;
+            gridCache.scale = step;
+            gridCache.cadMode = cadMode;
+            gridCache.minorEnabled = minorEnabled;
+          }
+
+          // Paint grid (either full frame or dirty slice) aligned to world origin
+          if (gridCache.pattern && canPatternTransform) {
+            ctx.save();
+            ctx.setTransform(1,0,0,1,0,0);
+            ctx.translate(originX, originY);
+            ctx.fillStyle = gridCache.pattern;
+
+            if (useDirty) {
               var aS = worldToScreen2D(__plan2d.dirtyRect.minX, __plan2d.dirtyRect.minY);
               var bS = worldToScreen2D(__plan2d.dirtyRect.maxX, __plan2d.dirtyRect.maxY);
               var minSX = Math.min(aS.x, bS.x) - clearPadPx;
               var minSY = Math.min(aS.y, bS.y) - clearPadPx;
               var wSX = Math.abs(bS.x - aS.x) + clearPadPx*2;
               var hSY = Math.abs(bS.y - aS.y) + clearPadPx*2;
-              ctx.drawImage(
-                gridCache.canvas,
-                Math.max(0,minSX), Math.max(0,minSY),
-                Math.max(0,Math.min(wSX, c.width - minSX)), Math.max(0,Math.min(hSY, c.height - minSY)),
-                Math.max(0,minSX), Math.max(0,minSY),
-                Math.max(0,Math.min(wSX, c.width - minSX)), Math.max(0,Math.min(hSY, c.height - minSY))
-              );
-            }catch(_dg){ ctx.drawImage(gridCache.canvas,0,0); }
+              ctx.fillRect(minSX - originX, minSY - originY, wSX, hSY);
+            } else {
+              ctx.fillRect(-originX, -originY, w, h);
+            }
+            ctx.restore();
+
+            // Central axes (world 0,0) emphasized
+            ctx.save();
+            ctx.setTransform(1,0,0,1,0,0);
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = cadMode ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.16)';
+            ctx.beginPath(); ctx.moveTo(originX + 0.5,0); ctx.lineTo(originX + 0.5,h); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0,originY + 0.5); ctx.lineTo(w,originY + 0.5); ctx.stroke();
+            ctx.restore();
           } else {
-            ctx.drawImage(gridCache.canvas,0,0);
+            // Fallback: draw grid directly (no large offscreen allocation)
+            ctx.save();
+            ctx.setTransform(1,0,0,1,0,0);
+            ctx.lineWidth = 1;
+            var worldLeft = screenToWorld2D(0,0).x;
+            var worldRight = screenToWorld2D(w,0).x;
+            var worldTop = screenToWorld2D(0,0).y;
+            var worldBottom = screenToWorld2D(0,h).y;
+
+            if(minorEnabled){
+              ctx.strokeStyle = cadMode ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)';
+              var startMinorX = Math.ceil(worldLeft/minorStepWorld)*minorStepWorld;
+              for(var wx=startMinorX; wx<=worldRight; wx+=minorStepWorld){
+                if(Math.abs(wx - Math.round(wx)) < 1e-6) continue;
+                var sx = worldToScreen2D(wx,0).x + 0.5;
+                ctx.beginPath(); ctx.moveTo(sx,0); ctx.lineTo(sx,h); ctx.stroke();
+              }
+              var startMinorY = Math.ceil(worldBottom/minorStepWorld)*minorStepWorld;
+              for(var wy=startMinorY; wy<=worldTop; wy+=minorStepWorld){
+                if(Math.abs(wy - Math.round(wy)) < 1e-6) continue;
+                var sy = worldToScreen2D(0,wy).y + 0.5;
+                ctx.beginPath(); ctx.moveTo(0,sy); ctx.lineTo(w,sy); ctx.stroke();
+              }
+            }
+            ctx.strokeStyle = cadMode ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.10)';
+            var startMajorX = Math.ceil(worldLeft);
+            for(var mx=startMajorX; mx<=worldRight; mx+=1){
+              var sxM = worldToScreen2D(mx,0).x + 0.5;
+              ctx.beginPath(); ctx.moveTo(sxM,0); ctx.lineTo(sxM,h); ctx.stroke();
+            }
+            var startMajorY = Math.ceil(worldBottom);
+            for(var my=startMajorY; my<=worldTop; my+=1){
+              var syM = worldToScreen2D(0,my).y + 0.5;
+              ctx.beginPath(); ctx.moveTo(0,syM); ctx.lineTo(w,syM); ctx.stroke();
+            }
+            ctx.strokeStyle = cadMode ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.16)';
+            ctx.beginPath(); ctx.moveTo(originX + 0.5,0); ctx.lineTo(originX + 0.5,h); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0,originY + 0.5); ctx.lineTo(w,originY + 0.5); ctx.stroke();
+            ctx.restore();
           }
         } catch(e){ /* grid fallback */ }
       })();
@@ -446,7 +497,19 @@
               var rounded = Math.round(segLenM*1000)/1000;
               var cache = __plan2d.__textCache || (__plan2d.__textCache={});
               var entry = cache[rounded];
-              if(!entry){ entry = { txt: formatMeters(rounded) + ' m', w: null }; cache[rounded]=entry; try{ __plan2d.__frameProfile.measureNew++; }catch(_pfnm){} }
+              if(!entry){
+                // Prevent unbounded growth when many unique lengths occur (memory safety)
+                var limit = __plan2d.__textCacheLimit || 2000;
+                __plan2d.__textCacheSize = (__plan2d.__textCacheSize||0) + 1;
+                if(__plan2d.__textCacheSize > limit){
+                  __plan2d.__textCache = {};
+                  cache = __plan2d.__textCache;
+                  __plan2d.__textCacheSize = 1;
+                }
+                entry = { txt: formatMeters(rounded) + ' m', w: null };
+                cache[rounded]=entry;
+                try{ __plan2d.__frameProfile.measureNew++; }catch(_pfnm){}
+              }
               else { try{ __plan2d.__frameProfile.measureHit++; }catch(_pfmh){} }
               var txt = entry.txt;
               var midx = midScreenX, midy = midScreenY;
@@ -480,42 +543,46 @@
               if(!thicknessMm) return;
               var label = thicknessMm + ' mm';
               var available = Math.max(0, halfPx * 2 - 2);
-              if(available < 10) return;
-              var fontPx = Math.min(12, Math.max(6, available - 4));
-              if(fontPx < 6) return;
-              var padBox = Math.max(2, Math.min(6, (available - fontPx) / 2));
-              var boxH = fontPx + padBox * 2;
-              if(boxH > available) {
-                padBox = Math.max(2, (available - fontPx)/2);
-                boxH = fontPx + padBox*2;
-              }
-              if(boxH > available) return;
+              // Larger label when zoom allows; still must fit inside wall thickness.
+              if(available < 12) return;
+              var fontPx = Math.min(18, Math.max(10, available - 2));
+              if(fontPx < 9) return;
+              // Requirement: keep thickness label horizontal (left-to-right) and inside the wall.
+              // We clip drawing to the wall polygon so the label doesn't spill outside on angled walls.
               var maxBoxW = Math.max(18, Ls - 12);
+
               ctx.save();
+              // Clip to wall polygon in screen space
+              ctx.beginPath();
+              ctx.moveTo(aSeg.x + nx*halfPx, aSeg.y + ny*halfPx);
+              ctx.lineTo(bSeg.x + nx*halfPx, bSeg.y + ny*halfPx);
+              ctx.lineTo(bSeg.x - nx*halfPx, bSeg.y - ny*halfPx);
+              ctx.lineTo(aSeg.x - nx*halfPx, aSeg.y - ny*halfPx);
+              ctx.closePath();
+              ctx.clip();
+
               ctx.translate(midScreenX, midScreenY);
-              ctx.rotate(segAngle);
               var fontStr = fontPx.toFixed(2).replace(/\.00$/,'') + 'px system-ui, sans-serif';
               ctx.font = fontStr;
-              ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
               var tw = ctx.measureText(label).width;
-              var boxW = tw + padBox*2;
+              var boxW = tw + 6;
               if(boxW > maxBoxW){
                 var scaleDown = maxBoxW / boxW;
                 if(scaleDown < 0.55){ ctx.restore(); return; }
                 fontPx *= scaleDown;
-                padBox *= scaleDown;
-                boxH *= scaleDown;
                 ctx.font = fontPx.toFixed(2).replace(/\.00$/,'') + 'px system-ui, sans-serif';
                 tw = ctx.measureText(label).width;
-                boxW = tw + padBox*2;
+                boxW = tw + 6;
               }
-              ctx.fillStyle = 'rgba(15,23,42,0.82)';
-              ctx.fillRect(-boxW/2, -boxH/2, boxW, boxH);
-              ctx.strokeStyle = 'rgba(148,163,184,0.45)';
-              ctx.lineWidth = 1;
-              ctx.strokeRect(-boxW/2, -boxH/2, boxW, boxH);
-              ctx.fillStyle = '#e0f2fe';
-              ctx.fillText(label, 0, 0);
+
+              // Subtle contrast without a rotated callout pill
+              ctx.lineWidth = 3;
+              ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+              ctx.strokeText(label, 0, 0.5);
+              ctx.fillStyle = '#0b1220';
+              ctx.fillText(label, 0, 0.5);
               ctx.restore();
               thicknessLabelDrawn = true;
             })();
@@ -1519,13 +1586,19 @@
         ctxTop.fillStyle = '#ffffff'; ctxTop.fillRect(0,0,ctxTop.canvas.width, ctxTop.canvas.height);
         ctxLeft.fillStyle = '#ffffff'; ctxLeft.fillRect(0,0,ctxLeft.canvas.width, ctxLeft.canvas.height);
 
+        var planRect = planCanvas.getBoundingClientRect ? planCanvas.getBoundingClientRect() : null;
+        var offsetXDpr = Math.round(((planRect && planRect.left) || 0) * dpr);
+        var offsetYDpr = Math.round(((planRect && planRect.top) || 0) * dpr);
         var planWidth = Math.max(1, planCanvas.width || ctxTop.canvas.width);
         var planHeight = Math.max(1, planCanvas.height || ctxLeft.canvas.height);
-        var scaleTop = ctxTop.canvas.width / planWidth;
-        var scaleLeft = ctxLeft.canvas.height / planHeight;
+        if (planRect) {
+          planWidth = Math.max(planWidth, Math.round(planRect.width * dpr));
+          planHeight = Math.max(planHeight, Math.round(planRect.height * dpr));
+        }
 
-        function planToTop(px){ return px * scaleTop; }
-        function planToLeft(py){ return py * scaleLeft; }
+        // Map plan canvas pixel coords to ruler canvas coords using the canvas' screen offset (no extra scaling).
+        function planToTop(px){ return offsetXDpr + px; }
+        function planToLeft(py){ return offsetYDpr + py; }
 
         function chooseStepWorld(){
           var targetPx = 100; // desired major spacing (plan pixels)

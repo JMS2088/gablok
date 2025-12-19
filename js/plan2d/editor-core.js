@@ -1415,8 +1415,21 @@
       }catch(_fit){}
       // Scale label refresh
       try{ var scl=document.getElementById('plan2d-scale'); if(scl) scl.textContent='1:'+Math.round(100*(100/(__plan2d.scale||100)))/100; }catch(_slbl){}
-      // Close button wiring
-      try{ var btnClose=document.getElementById('plan2d-close'); if(btnClose && !btnClose.__wired){ btnClose.__wired=true; btnClose.addEventListener('click', function(){ closePlan2DModal(); }); } }catch(_cbtn){}
+      // Account button wiring (top-right icon)
+      try{
+        var btnAccount=document.getElementById('plan2d-account');
+        if(btnAccount && !btnAccount.__wired){
+          btnAccount.__wired=true;
+          btnAccount.addEventListener('click', function(ev){
+            try{ if(ev){ ev.preventDefault(); ev.stopPropagation(); } }catch(_eEv){}
+            try{
+              if(typeof window.showAccount==='function') window.showAccount();
+              else if(typeof window.toggleAccountModal==='function') window.toggleAccountModal();
+            }catch(_acc){}
+            return false;
+          });
+        }
+      }catch(_acctBtn){}
   try{ if(window.updateStatus) updateStatus('2D editor opened'); }catch(_sts){}
   // Final highlight sync (defensive second pass in case buttons created late)
   try { if(typeof window.syncPlan2DFloorButtons==='function') window.syncPlan2DFloorButtons(); }catch(_flSync2){}

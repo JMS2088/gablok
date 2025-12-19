@@ -505,11 +505,6 @@
       ctx.fillText('S', cx, sY);
       ctx.fillText('E', cx + r - 10, cy);
       ctx.fillText('W', cx - r + 10, cy);
-      // North arrow: match 2D compass (black fill)
-      ctx.beginPath();
-      if (sgn === 1) { ctx.moveTo(cx, cy - r + 6); ctx.lineTo(cx - 5, cy - r + 14); ctx.lineTo(cx + 5, cy - r + 14); }
-      else { ctx.moveTo(cx, cy + r - 6); ctx.lineTo(cx - 5, cy + r - 14); ctx.lineTo(cx + 5, cy + r - 14); }
-      ctx.closePath(); ctx.fillStyle='#000000'; ctx.fill();
       ctx.restore();
     };
   }
@@ -549,14 +544,6 @@
         cx.fillText('S', x, sY);
         cx.fillText('E', x + r - 10, y);
         cx.fillText('W', x - r + 10, y);
-    // North arrow (static) to show absolute North regardless of camera (black fill)
-        cx.beginPath();
-        var tip = Math.max(4, Math.floor(r*0.22));
-        var base = Math.max(3, Math.floor(r*0.18));
-    if (sgn === 1) { cx.moveTo(x, y - r + tip); cx.lineTo(x - base, y - r + tip + (base*1.6)); cx.lineTo(x + base, y - r + tip + (base*1.6)); }
-    else { cx.moveTo(x, y + r - tip); cx.lineTo(x - base, y + r - tip - (base*1.6)); cx.lineTo(x + base, y + r - tip - (base*1.6)); }
-    cx.closePath(); cx.fillStyle='#000000'; cx.fill();
-
         // Camera heading needle: rotate with camera.yaw so users see direction of view
         try {
           var yaw = (window.camera && typeof camera.yaw==='number') ? camera.yaw : 0;

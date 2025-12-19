@@ -444,10 +444,23 @@
               rb.style.pointerEvents = 'none';
             }
             // Move the Edit button to the right of the rotate button, aligned center
+            // Size-aware placement: use the real Edit button width so long labels (e.g. "Roof Type") never overlap the rotate button.
             var editHalf = 22;
-            // Move the Edit button 8px closer to the label (leftwards) relative to rotate button
+            try {
+              // Only measure when visible/selected to avoid layout work for hidden buttons
+              if (rb.style.opacity !== '0') {
+                var ebRect = eb.getBoundingClientRect();
+                if (ebRect && ebRect.width) editHalf = Math.max(22, ebRect.width / 2);
+              }
+            } catch(_eMeas) {}
+
+            // Move the Edit button a bit closer to the label (leftwards) relative to rotate button
             var reduce = (typeof window.LABEL_EDIT_REDUCE==='number'? window.LABEL_EDIT_REDUCE : 8); // shift closer to label
+            // Prevent overlap even when reduce is large or the Edit label is wide
+            var minGapPx = 8;
+            var minCenter = rotCenterLeft + rRad + minGapPx + editHalf;
             var ebCenterLeft = Math.round(rotCenterLeft + rRad + gapAfterRotate + editHalf - reduce);
+            if (ebCenterLeft < minCenter) ebCenterLeft = Math.round(minCenter);
             eb.style.left = ebCenterLeft + 'px';
             eb.style.top = Math.round(top) + 'px';
           } catch(_posRot){}

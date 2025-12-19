@@ -48,11 +48,20 @@
   .rounded-6 { border-radius: 6px; }
   .rounded-8 { border-radius: 8px; }
   
-  /* Version badge */
-  #version-badge {
-    margin: 0 0 20px 0;
+  /* Build footer */
+  #build-footer {
+    position: fixed;
+    left: 16px;
+    bottom: 12px;
+    z-index: 1400;
     color: var(--apple-secondary-label);
-    font-size: 13px;
+    font-size: 12px;
+    letter-spacing: -0.01em;
+    background: rgba(242, 242, 247, 0.85);
+    padding: 6px 10px;
+    border-radius: 8px;
+    backdrop-filter: blur(20px) saturate(1.8);
+    border: 1px solid var(--apple-separator);
   }
   
   
@@ -123,7 +132,8 @@
   #plan2d-toolbar-left {
     position: fixed;
     top: 41px;
-    right: 35px;
+    /* 20px gap from the left edge of the fixed Plan2D Account button (right:28px, width:45px) */
+    right: calc(20px + 36px + 20px);
     z-index: 110;
     display: flex;
     flex-direction: column;
@@ -263,11 +273,11 @@
   }
   
   #measurements {
-    position: fixed; top: 90px; right: 35px; z-index: 100;
+    position: fixed; top: 35px; right: 35px; z-index: 100;
     background: var(--apple-material-regular);
     backdrop-filter: blur(20px) saturate(1.8);
     border: 1px solid var(--apple-separator);
-    padding: 16px; 
+    padding: 16px;
     border-radius: var(--apple-radius-large); 
     box-shadow: none;
     min-width: 200px; width: 340px; font-size: 12px;
@@ -277,26 +287,77 @@
   
   #measurements.visible { display: block; }
   
-  #measurements h3 {
-    margin: 0 0 12px 0; 
-    font-size: 13px; 
-    font-weight: 600; 
-    color: var(--apple-label);
-    text-align: center; 
-    font-family: var(--apple-font-family);
+  .measurements-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 0 12px 0;
+    border-bottom: none;
+  }
+  
+  .measurements-header h3 {
+    margin: 0;
+    flex: 1;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    line-height: 1.2;
+  }
+  
+  .measurements-header-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 12px;
+  }
+  
+  .measurements-icon-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--apple-label);
+    transition: background 0.2s ease;
+  }
+  
+  .measurements-icon-btn:hover {
+    background: var(--apple-tertiary-system-fill);
+  }
+
+  /* Force account icon to pure black inside measurements panel */
+  #measurements #account-button {
+    color: #000 !important;
+  }
+
+  #measurements #account-button svg *,
+  #measurements #account-button svg path,
+  #measurements #account-button svg circle {
+    stroke: #000 !important;
+    fill: none !important;
   }
   
   #measurements .measurement-item {
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    margin: 6px 0;
-    padding: 4px 0; 
-    border-bottom: 0.5px solid var(--apple-separator);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 8px 0;
+    padding: 0;
+  }
+
+  #measurements .measurement-item:first-of-type {
+    margin-top: 12px;
+  }
+
+  #measurements #save-measurements {
+    margin-top: 16px;
+    width: 100%;
   }
   
   #measurements .measurement-label { 
@@ -1096,7 +1157,7 @@
      Corner labels are canvas-drawn and unaffected by CSS.
      -------------------------------------------------------------- */
   :root {
-    --label-btn-font-size: 8px; /* was 10px */
+    --label-btn-font-size: 10px;
   }
   /* Generic controls */
   .dropdown-item { font-size: 13px !important; }

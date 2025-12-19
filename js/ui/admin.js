@@ -113,6 +113,8 @@
     if(m.__animating) return;
     // Stop any admin auto-refresh when closing
     try { if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; } } catch(_e){}
+    // Stop dashboard clock updates when modal is hidden (prevents background CPU churn)
+    try { if (window.__dashboardTimeInterval) { clearInterval(window.__dashboardTimeInterval); window.__dashboardTimeInterval = null; } } catch(_e2){}
     m.__animating = true;
     m.classList.remove('showing');
     m.classList.add('closing');
