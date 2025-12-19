@@ -410,6 +410,7 @@
     window.hideAccount = hideAccount;
     window.toggleAccountModal = toggleAccountModal;
     window.refreshAccountStats = refreshAccountStats;
+    window.returnToDashboard = returnToDashboard;
 })();
 
 // Account project storage + view rendering ----------------------------------------------------
@@ -1150,8 +1151,15 @@
  * Theme Settings Manager - Per-Section Dark/Light Mode
  */
 (function() {
-  if (window.__themeSettingsInit) return;
+  console.log('[Theme Settings] Module loading...');
+  
+  if (window.__themeSettingsInit) {
+    console.log('[Theme Settings] Already initialized, skipping');
+    return;
+  }
   window.__themeSettingsInit = true;
+  
+  console.log('[Theme Settings] Initializing theme settings manager');
   
   var THEME_STORAGE_KEY = 'gablokThemeSettings';
   
@@ -1160,7 +1168,7 @@
     'plan2d': '#floorplan-modal',
     'visualize': '#visualize-modal',
     'da-workflow': '#da-workflow-overlay',
-    'account': '#account-modal'
+    'account': '#account-modal, #account-dashboard, .account-panel'
   };
   
   // Load saved theme preferences
@@ -1169,15 +1177,30 @@
       var saved = localStorage.getItem(THEME_STORAGE_KEY);
       var settings = saved ? JSON.parse(saved) : {};
       
+      console.log('[Theme Settings] Loading saved settings:', settings);
+      
+      // Map of checkbox IDs to section keys
+      var checkboxToSection = {
+        'theme-main-editor': 'main',
+        'theme-plan2d': 'plan2d',
+        'theme-visualize': 'visualize',
+        'theme-da-workflow': 'da-workflow',
+        'theme-account': 'account'
+      };
+      
       // Apply saved themes to sections
-      Object.keys(sectionSelectors).forEach(function(section) {
+      Object.keys(checkboxToSection).forEach(function(checkboxId) {
+        var section = checkboxToSection[checkboxId];
         var theme = settings[section] || 'light';
+        
+        console.log('[Theme Settings] Applying saved theme for', section, ':', theme);
         applyThemeToSection(section, theme);
         
         // Update checkbox state
-        var checkbox = document.getElementById('theme-' + section);
+        var checkbox = document.getElementById(checkboxId);
         if (checkbox) {
           checkbox.checked = theme === 'dark';
+          console.log('[Theme Settings] Updated checkbox', checkboxId, 'to', theme);
         }
       });
       
@@ -1200,11 +1223,25 @@
   // Apply theme to a specific section
   function applyThemeToSection(section, theme) {
     var selector = sectionSelectors[section];
-    if (!selector) return;
+    if (!selector) {
+      console.warn('[Theme Settings] No selector for section:', section);
+      return;
+    }
     
-    var element = document.querySelector(selector);
-    if (element) {
+    console.log('[Theme Settings] Applying', theme, 'theme to section:', section, 'selector:', selector);
+    
+    // Apply to ALL matching elements (not just first)
+    var elements = document.querySelectorAll(selector);
+    console.log('[Theme Settings] Found', elements.length, 'elements for selector:', selector);
+    
+    elements.forEach(function(element) {
       element.setAttribute('data-theme', theme);
+      console.log('[Theme Settings] Applied theme to:', element.id || element.className);
+    });
+    
+    // Special handling for body (main section) - also needs to propagate
+    if (section === 'main' && elements.length > 0) {
+      document.documentElement.setAttribute('data-theme', theme);
     }
   }
   
@@ -1212,13 +1249,32 @@
   function initThemeToggles() {
     var settings = loadThemeSettings();
     
+    // Map of checkbox IDs to section keys
+    var checkboxMap = {
+      'theme-main-editor': 'main',
+      'theme-plan2d': 'plan2d',
+      'theme-visualize': 'visualize',
+      'theme-da-workflow': 'da-workflow',
+      'theme-account': 'account'
+    };
+    
+    console.log('[Theme Settings] Initializing toggles...', checkboxMap);
+    
     // Add event listeners to all theme checkboxes
-    Object.keys(sectionSelectors).forEach(function(section) {
-      var checkbox = document.getElementById('theme-' + section);
-      if (!checkbox) return;
+    Object.keys(checkboxMap).forEach(function(checkboxId) {
+      var section = checkboxMap[checkboxId];
+      var checkbox = document.getElementById(checkboxId);
+      
+      if (!checkbox) {
+        console.warn('[Theme Settings] Checkbox not found:', checkboxId);
+        return;
+      }
+      
+      console.log('[Theme Settings] Attaching listener to:', checkboxId, 'for section:', section);
       
       checkbox.addEventListener('change', function() {
         var theme = this.checked ? 'dark' : 'light';
+        console.log('[Theme Settings] Toggle changed:', section, 'to', theme);
         settings[section] = theme;
         saveThemeSettings(settings);
         applyThemeToSection(section, theme);
@@ -1227,16 +1283,19 @@
         showThemeFeedback(section, theme);
       });
     });
+    
+    console.log('[Theme Settings] Toggles initialized successfully');
   }
   
   // Show visual feedback when theme changes
   function showThemeFeedback(section, theme) {
     var sectionNames = {
       'main': 'Main Editor',
+      'main-editor': 'Main Editor',
       'plan2d': '2D Floor Plan',
       'visualize': '3D Visualize',
       'da-workflow': 'DA Workflow',
-      'account': 'Account Panel'
+      'account': 'Dashboard'
     };
     
     var message = sectionNames[section] + ' switched to ' + (theme === 'dark' ? 'Dark' : 'Light') + ' mode';
@@ -1272,26 +1331,287 @@
       if (mutation.attributeName === 'class') {
         var settingsPanel = document.getElementById('account-view-settings');
         if (settingsPanel && !settingsPanel.classList.contains('is-hidden')) {
+          console.log('[Theme Settings] Settings panel became visible, initializing...');
           initThemeToggles();
+          // Event delegation handles navigation automatically - no need to re-attach
         }
       }
     });
   });
   
   // Start observing when DOM is ready
-  document.addEventListener('DOMContentLoaded', function() {
+  function initializeThemeSystem() {
     var settingsPanel = document.getElementById('account-view-settings');
-    if (settingsPanel) {
+    if (settingsPanel && !observer.__observing) {
       observer.observe(settingsPanel, { attributes: true });
+      observer.__observing = true;
     }
     
-    // Load initial themes on page load
+    // Load initial themes
     loadThemeSettings();
-  });
+    
+    // Initialize theme label navigation (event delegation)
+    initThemeLabelNavigation();
+    
+    // Watch for modal visibility changes and reapply themes
+    watchModalVisibility();
+  }
+  
+  // Watch for modals becoming visible and reapply themes
+  function watchModalVisibility() {
+    var modalsToWatch = [
+      { id: 'floorplan-modal', section: 'plan2d' },
+      { id: 'visualize-modal', section: 'visualize' },
+      { id: 'da-workflow-overlay', section: 'da-workflow' },
+      { id: 'account-modal', section: 'account' }
+    ];
+    
+    modalsToWatch.forEach(function(modalInfo) {
+      var modal = document.getElementById(modalInfo.id);
+      if (modal) {
+        var modalObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.attributeName === 'class' || mutation.attributeName === 'style') {
+              var isVisible = modal.classList.contains('visible') || 
+                             modal.style.display === 'block' || 
+                             modal.style.display === 'flex';
+              
+              if (isVisible) {
+                // Reapply theme when modal becomes visible
+                var settings = loadThemeSettings();
+                var theme = settings[modalInfo.section] || 'light';
+                setTimeout(function() {
+                  applyThemeToSection(modalInfo.section, theme);
+                }, 50);
+              }
+            }
+          });
+        });
+        
+        modalObserver.observe(modal, { 
+          attributes: true, 
+          attributeFilter: ['class', 'style'] 
+        });
+      }
+    });
+  }
+  
+  // Call immediately if DOM is ready, otherwise wait
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeThemeSystem);
+  } else {
+    initializeThemeSystem();
+  }
+  
+  // Add navigation for theme labels using event delegation
+  var themeLabelsInitialized = false;
+  function initThemeLabelNavigation() {
+    if (themeLabelsInitialized) {
+      console.log('[Theme Navigation] Already initialized, skipping...');
+      return;
+    }
+    
+    console.log('[Theme Navigation] Initializing navigation...');
+    
+    // Use ONLY event delegation - do not attach direct onclick handlers
+    // This prevents handlers from overwriting each other
+    var clickHandler = function(e) {
+      var target = e.target;
+      
+      // Check if clicked on a theme label title
+      if (target && target.classList && target.classList.contains('theme-label-title') && target.hasAttribute('data-navigate')) {
+        e.preventDefault();
+        e.stopPropagation();
+        var section = target.getAttribute('data-navigate');
+        console.log('[Theme Navigation] Click detected on:', section);
+        navigateToSection(section);
+        return false;
+      }
+    };
+    
+    // Attach to document.body using capture phase to catch events early
+    document.body.addEventListener('click', clickHandler, true);
+    
+    // Also attach to window as backup
+    window.addEventListener('click', clickHandler, true);
+    
+    // Store reference for potential cleanup
+    window.__themeNavigationHandler = clickHandler;
+    
+    // Set cursor style for visual feedback
+    if (!document.getElementById('theme-nav-styles')) {
+      var style = document.createElement('style');
+      style.id = 'theme-nav-styles';
+      style.textContent = '.theme-label-title[data-navigate] { cursor: pointer; }';
+      document.head.appendChild(style);
+    }
+    
+    themeLabelsInitialized = true;
+    console.log('[Theme Navigation] Initialization complete - using event delegation only');
+  }
+  
+  // Expose for debugging
+  window.reinitThemeNavigation = function() {
+    themeLabelsInitialized = false;
+    initThemeLabelNavigation();
+  };
+  
+  // Watchdog: Ensure navigation handler stays active
+  // Re-check every time account modal becomes visible
+  var lastModalCheck = 0;
+  setInterval(function() {
+    var modal = document.getElementById('account-modal');
+    if (modal && modal.classList.contains('visible')) {
+      var now = Date.now();
+      if (now - lastModalCheck > 5000) { // Check every 5 seconds when modal is open
+        lastModalCheck = now;
+        var labels = document.querySelectorAll('.theme-label-title[data-navigate]');
+        if (labels.length > 0 && !themeLabelsInitialized) {
+          console.warn('[Theme Navigation] Handler lost, reinitializing...');
+          themeLabelsInitialized = false;
+          initThemeLabelNavigation();
+        }
+      }
+    }
+  }, 2000);
+  
+  function navigateToSection(section) {
+    console.log('[Theme Navigation] Navigating to:', section);
+    
+    // Close account modal first
+    if (window.toggleAccountModal) {
+      console.log('[Theme Navigation] Closing account modal');
+      window.toggleAccountModal('hide');
+    }
+    
+    // Navigate to the appropriate section
+    switch(section) {
+      case 'main':
+        // Main editor is always visible - just close modal
+        console.log('[Theme Navigation] Main editor (just closed modal)');
+        break;
+        
+      case 'plan2d':
+        // Show 2D floor plan
+        console.log('[Theme Navigation] Opening Plan2D modal');
+        setTimeout(function() {
+          if (typeof window.openPlan2DModal === 'function') {
+            console.log('[Theme Navigation] Using window.openPlan2DModal');
+            window.openPlan2DModal();
+          } else if (typeof openPlan2DModal === 'function') {
+            console.log('[Theme Navigation] Using openPlan2DModal');
+            openPlan2DModal();
+          } else {
+            // Trigger the button click as fallback
+            console.log('[Theme Navigation] Using button fallback');
+            var btn = document.getElementById('btn-floorplan');
+            if (btn) btn.click();
+          }
+        }, 300);
+        break;
+        
+      case 'visualize':
+        // Show 3D visualize
+        console.log('[Theme Navigation] Opening Visualize modal');
+        setTimeout(function() {
+          if (typeof showVisualize === 'function') {
+            console.log('[Theme Navigation] Using showVisualize');
+            showVisualize();
+          } else {
+            // Trigger via dropdown action as fallback
+            console.log('[Theme Navigation] Using dropdown fallback');
+            var dropdown = document.querySelector('.dropdown-item[data-action="visualize-photoreal"]');
+            if (dropdown) dropdown.click();
+          }
+        }, 300);
+        break;
+        
+      case 'da-workflow':
+        // Open DA Workflow
+        console.log('[Theme Navigation] Opening DA Workflow');
+        setTimeout(function() {
+          if (window.DAWorkflowUI && window.DAWorkflowUI.open) {
+            // Get current/active project or create demo
+            var projectId = 'demo-project';
+            if (window.ProjectStorage && window.ProjectStorage.getProjects) {
+              var projects = window.ProjectStorage.getProjects();
+              if (projects && projects.length > 0) {
+                projectId = projects[0].id;
+              }
+            }
+            console.log('[Theme Navigation] Opening DA Workflow for project:', projectId);
+            window.DAWorkflowUI.open(projectId);
+          } else {
+            console.log('[Theme Navigation] DAWorkflowUI not available');
+          }
+        }, 300);
+        break;
+        
+      case 'dashboard':
+      case 'account':
+        // Open account modal and ensure dashboard home is visible
+        console.log('[Theme Navigation] Opening Dashboard Home');
+        setTimeout(function() {
+          if (window.toggleAccountModal) {
+            window.toggleAccountModal('show');
+            // Ensure we're on dashboard home, not a sub-view
+            setTimeout(function() {
+              if (typeof window.returnToDashboard === 'function') {
+                window.returnToDashboard();
+              }
+            }, 100);
+          }
+        }, 300);
+        break;
+        
+      default:
+        console.log('[Theme Navigation] Unknown section:', section);
+    }
+  }
   
   // Export functions
   window.loadThemeSettings = loadThemeSettings;
   window.applyThemeToSection = applyThemeToSection;
+  
+  // Global theme refresh - reapplies all saved themes
+  window.refreshAllThemes = function() {
+    console.log('[Theme Settings] Refreshing all themes globally...');
+    var settings = loadThemeSettings();
+    
+    Object.keys(sectionSelectors).forEach(function(section) {
+      var theme = settings[section] || 'light';
+      applyThemeToSection(section, theme);
+    });
+    
+    console.log('[Theme Settings] All themes refreshed');
+  };
+  
+  // Force apply a theme to a section
+  window.forceTheme = function(section, theme) {
+    console.log('[Theme Settings] Force applying', theme, 'to', section);
+    applyThemeToSection(section, theme);
+    
+    var settings = loadThemeSettings();
+    settings[section] = theme;
+    saveThemeSettings(settings);
+    
+    // Update checkbox if exists
+    var checkboxMap = {
+      'main': 'theme-main-editor',
+      'plan2d': 'theme-plan2d',
+      'visualize': 'theme-visualize',
+      'da-workflow': 'theme-da-workflow',
+      'account': 'theme-account'
+    };
+    
+    var checkboxId = checkboxMap[section];
+    if (checkboxId) {
+      var checkbox = document.getElementById(checkboxId);
+      if (checkbox) {
+        checkbox.checked = theme === 'dark';
+      }
+    }
+  };
 })();
 
 /**

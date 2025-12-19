@@ -2417,7 +2417,9 @@
 
   [data-theme="dark"] .stat-card {
     background: rgba(30, 30, 30, 0.6);
-    backdrop-filter: blur(20px) saturate(180%);\n    -webkit-backdrop-filter: blur(20px) saturate(180%);\n    border-color: rgba(255,255,255,0.12);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-color: rgba(255,255,255,0.12);
     box-shadow: 
       0 8px 32px rgba(0,0,0,0.3),
       0 1px 2px rgba(0,0,0,0.2),
@@ -2865,10 +2867,46 @@
     font-size: 15px;
     font-weight: 500;
     color: var(--apple-label);
+    flex: 1;
   }
   
   .theme-toggle-label .sf-icon {
     color: var(--apple-blue);
+    flex-shrink: 0;
+  }
+  
+  .theme-label-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    pointer-events: auto;
+  }
+  
+  .theme-label-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--apple-label);
+    cursor: pointer !important;
+    transition: color 0.2s ease;
+    user-select: none;
+    position: relative;
+    z-index: 10;
+    pointer-events: auto !important;
+    display: inline-block;
+  }
+  
+  .theme-label-title:hover {
+    color: var(--apple-blue);
+    text-decoration: underline;
+  }
+  
+  .theme-label-description {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--apple-secondary-label);
+    line-height: 1.3;
+    pointer-events: none;
   }
   
   .theme-switch {
@@ -2910,13 +2948,13 @@
   }
   
   .theme-switch input:checked + .theme-slider {
-    background: #2c2c2e;
+    background: #34c759;
   }
   
   .theme-switch input:checked + .theme-slider::before {
     transform: translateX(20px);
-    background: #1c1c1e;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    background: white;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16);
   }
   
   .theme-labels {
@@ -2947,6 +2985,29 @@
   .theme-switch input:checked ~ .theme-labels .theme-dark-label {
     opacity: 1;
     color: var(--apple-label);
+  }
+  
+  /* Dark mode support for theme labels */
+  [data-theme="dark"] .theme-toggle-row {
+    background: rgba(28, 28, 30, 0.8);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+  
+  [data-theme="dark"] .theme-toggle-row:hover {
+    background: rgba(44, 44, 46, 0.9);
+    border-color: rgba(10, 132, 255, 0.3);
+  }
+  
+  [data-theme="dark"] .theme-label-title:hover {
+    color: #0a84ff;
+  }
+  
+  [data-theme="dark"] .theme-slider {
+    background: #3a3a3c;
+  }
+  
+  [data-theme="dark"] .theme-slider::before {
+    background: #636366;
   }
   
   /* Theme Toast Animations */

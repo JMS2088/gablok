@@ -241,6 +241,19 @@ function __wireAppUi(){
           case 'info': if (typeof showInfo==='function') showInfo(); break;
           case 'share': if (typeof showShare==='function') showShare(); break;
           case 'price': if (typeof showPricing==='function') showPricing(); break;
+          case 'open-project':
+            // Open Account Panel and navigate to Projects (Saved Designs)
+            if (window.toggleAccountModal) {
+              window.toggleAccountModal('show');
+              // Navigate to projects view after modal opens
+              setTimeout(function() {
+                var projectsCard = document.querySelector('.account-card[data-view="projects"]');
+                if (projectsCard) {
+                  projectsCard.click();
+                }
+              }, 300);
+            }
+            break;
           case 'visualize':
           case 'visualize-photoreal':
             if (typeof showVisualize === 'function') {

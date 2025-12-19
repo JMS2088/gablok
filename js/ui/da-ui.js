@@ -42,7 +42,7 @@
                   <use xlink:href="/css/sf-symbols.svg#sf-building-2" />
                 </svg>
                 <div class="da-header-text">
-                  <h1>Building Workflow</h1>
+                  <h1>DA Workflow</h1>
                   <p class="da-subtitle">Step-by-step guidance from planning to occupation</p>
                 </div>
               </div>
@@ -785,7 +785,7 @@
    * Show help modal
    */
   function showHelp() {
-    showAppleAlert('Complete Building Workflow', 'This step-by-step guide walks you through the entire home building process in Australia - from planning to occupation. Features include 8 major phases, 50+ detailed steps, progress tracking, document management, and contact management. Your progress is automatically saved.');
+    showAppleAlert('Complete DA Workflow', 'This step-by-step guide walks you through the entire home building process in Australia - from planning to occupation. Features include 8 major phases, 50+ detailed steps, progress tracking, document management, and contact management. Your progress is automatically saved.');
   }
 
   // ============================================================================

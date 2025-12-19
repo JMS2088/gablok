@@ -396,6 +396,20 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 			<circle cx="9" cy="11" r="2" stroke="currentColor" stroke-width="2"/>
 			<path d="M7 17L11 13L14 16L17 13L21 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 		</symbol>
+
+		<symbol id="sf-person-circle" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+			<circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2"/>
+			<path d="M6.5 18.5C7.5 16.5 9.5 15 12 15C14.5 15 16.5 16.5 17.5 18.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-doc-text" viewBox="0 0 24 24" fill="none">
+			<path d="M6 3H14L19 8V21H6V3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+			<path d="M14 3V8H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<line x1="9" y1="15" x2="15" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<line x1="9" y1="18" x2="12" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
 	</defs>
 </svg>
 
@@ -474,6 +488,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 			<div class="dropdown-item" data-action="reset"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-counterclockwise"/></svg> Reset</div>
 			<div class="dropdown-item separator" aria-hidden="true"></div>
 			<div class="dropdown-title">Project</div>
+			<div class="dropdown-item" data-action="open-project"><svg class="sf-icon" width="16" height="16"><use href="#sf-folder"/></svg> Projects</div>
 			<div class="dropdown-item" data-action="price"><svg class="sf-icon" width="16" height="16"><use href="#sf-dollarsign-circle"/></svg> Price</div>
 			<div class="dropdown-item" data-action="visualize-photoreal"><svg class="sf-icon" width="16" height="16"><use href="#sf-camera"/></svg> Visualize</div>
 			<div class="dropdown-item separator" aria-hidden="true"></div>
@@ -1220,12 +1235,15 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 				<!-- Theme Settings Per Section -->
 				<div class="settings-group">
 					<h3>Appearance</h3>
-					<p class="settings-hint">Toggle dark or light mode for each section of the application.</p>
+					<p class="settings-hint">Toggle dark or light mode for each section of the application. Click section names to navigate.</p>
 					
 					<div class="settings-row theme-toggle-row">
 						<div class="theme-toggle-label">
 							<svg class="sf-icon" width="18" height="18"><use href="#sf-house"/></svg>
-							<span>Main Editor</span>
+							<div class="theme-label-content">
+								<span class="theme-label-title" data-navigate="main">Main Editor</span>
+								<span class="theme-label-description">Top toolbar and main application interface</span>
+							</div>
 						</div>
 						<label class="theme-switch">
 							<input type="checkbox" id="theme-main-editor" data-section="main" />
@@ -1240,7 +1258,10 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 					<div class="settings-row theme-toggle-row">
 						<div class="theme-toggle-label">
 							<svg class="sf-icon" width="18" height="18"><use href="#sf-square-grid-2x2"/></svg>
-							<span>2D Floor Plan</span>
+							<div class="theme-label-content">
+								<span class="theme-label-title" data-navigate="plan2d">2D Floor Plan</span>
+								<span class="theme-label-description">Floor plan editor and drawing canvas</span>
+							</div>
 						</div>
 						<label class="theme-switch">
 							<input type="checkbox" id="theme-plan2d" data-section="plan2d" />
@@ -1255,7 +1276,10 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 					<div class="settings-row theme-toggle-row">
 						<div class="theme-toggle-label">
 							<svg class="sf-icon" width="18" height="18"><use href="#sf-cube"/></svg>
-							<span>3D Visualize</span>
+							<div class="theme-label-content">
+								<span class="theme-label-title" data-navigate="visualize">3D Visualize</span>
+								<span class="theme-label-description">3D rendering and visualization view</span>
+							</div>
 						</div>
 						<label class="theme-switch">
 							<input type="checkbox" id="theme-visualize" data-section="visualize" />
@@ -1270,7 +1294,10 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 					<div class="settings-row theme-toggle-row">
 						<div class="theme-toggle-label">
 							<svg class="sf-icon" width="18" height="18"><use href="#sf-doc-text"/></svg>
-							<span>DA Workflow</span>
+							<div class="theme-label-content">
+								<span class="theme-label-title" data-navigate="da-workflow">DA Workflow</span>
+								<span class="theme-label-description">Development approval workflow guide</span>
+							</div>
 						</div>
 						<label class="theme-switch">
 							<input type="checkbox" id="theme-da-workflow" data-section="da-workflow" />
@@ -1284,8 +1311,11 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 					
 					<div class="settings-row theme-toggle-row">
 						<div class="theme-toggle-label">
-							<svg class="sf-icon" width="18" height="18"><use href="#sf-person-circle"/></svg>
-							<span>Account Panel</span>
+							<svg class="sf-icon" width="18" height="18"><use href="#sf-speedometer"/></svg>
+							<div class="theme-label-content">
+								<span class="theme-label-title" data-navigate="dashboard">Dashboard</span>
+								<span class="theme-label-description">Account dashboard and all panels</span>
+							</div>
 						</div>
 						<label class="theme-switch">
 							<input type="checkbox" id="theme-account" data-section="account" />
@@ -1299,6 +1329,9 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 				</div>
 			</div>
 		</section>
+		
+		<!-- Theme navigation handled by event delegation in admin.js -->
+		
 		<section id="account-view-payments" class="account-panel is-hidden">
 			<div class="account-panel-header">
 				<div class="panel-icon panel-icon-amber">
