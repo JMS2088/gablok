@@ -48,34 +48,44 @@
   if(window.__accountUiInit) return; window.__accountUiInit = true;
   function qs(id){ return document.getElementById(id); }
   var __accountAdminRefreshTimer = null;
-  function loadProfile(){
-    try {
-      var data = JSON.parse(localStorage.getItem('gablokProfile')||'{}');
-      ['first','last','email','office','mobile','company'].forEach(function(k){
-        var el = qs('acc-' + (k==='first'?'first':k==='last'?'last':k));
-      });
-      if(qs('acc-first')) qs('acc-first').value = data.firstName||'';
-      if(qs('acc-last')) qs('acc-last').value = data.lastName||'';
-      if(qs('acc-email')) qs('acc-email').value = data.email||'';
-      if(qs('acc-office')) qs('acc-office').value = data.office||'';
-      if(qs('acc-mobile')) qs('acc-mobile').value = data.mobile||'';
-      if(qs('acc-company')) qs('acc-company').value = data.company||'';
-    } catch(e){}
-  }
-  function saveProfile(){
-    try {
-      var data = {
-        firstName: qs('acc-first') && qs('acc-first').value.trim(),
-        lastName: qs('acc-last') && qs('acc-last').value.trim(),
-        email: qs('acc-email') && qs('acc-email').value.trim(),
-        office: qs('acc-office') && qs('acc-office').value.trim(),
-        mobile: qs('acc-mobile') && qs('acc-mobile').value.trim(),
-        company: qs('acc-company') && qs('acc-company').value.trim()
-      };
-      localStorage.setItem('gablokProfile', JSON.stringify(data));
-      return data;
-    } catch(e){ return null; }
-  }
+    function getProfileData(){
+      try { return JSON.parse(localStorage.getItem('gablokProfile')||'{}'); }
+      catch(_e){ return {}; }
+    }
+    function countProfileFields(profile){
+      var keys = ['firstName','lastName','email','office','mobile','company'];
+      return keys.reduce(function(total, key){
+        var value = profile && profile[key];
+        return total + (value && String(value).trim() ? 1 : 0);
+      }, 0);
+    }
+    function loadProfile(){
+      try {
+        var data = getProfileData();
+        if(qs('acc-first')) qs('acc-first').value = data.firstName||'';
+        if(qs('acc-last')) qs('acc-last').value = data.lastName||'';
+        if(qs('acc-email')) qs('acc-email').value = data.email||'';
+        if(qs('acc-office')) qs('acc-office').value = data.office||'';
+        if(qs('acc-mobile')) qs('acc-mobile').value = data.mobile||'';
+        if(qs('acc-company')) qs('acc-company').value = data.company||'';
+        return data;
+      } catch(e){ return {}; }
+    }
+    function saveProfile(){
+      try {
+        var data = {
+          firstName: qs('acc-first') && qs('acc-first').value.trim(),
+          lastName: qs('acc-last') && qs('acc-last').value.trim(),
+          email: qs('acc-email') && qs('acc-email').value.trim(),
+          office: qs('acc-office') && qs('acc-office').value.trim(),
+          mobile: qs('acc-mobile') && qs('acc-mobile').value.trim(),
+          company: qs('acc-company') && qs('acc-company').value.trim()
+        };
+        localStorage.setItem('gablokProfile', JSON.stringify(data));
+        refreshAccountStats();
+        return data;
+      } catch(e){ return null; }
+    }
   function showAccount(){
     var m = qs('account-modal'); if(!m) return;
     if(m.__animating) return; // avoid re-entry during animation
@@ -107,6 +117,7 @@
     if(!window.__dashboardTimeInterval){
       window.__dashboardTimeInterval = setInterval(updateTime, 60000);
     }
+      refreshAccountStats();
   }
   function hideAccount(){
     var m = qs('account-modal'); if(!m) return;
@@ -160,47 +171,46 @@
     
     // Lazy-populate content for embedded views
     try {
-      if (target === 'projects' && typeof window.loadProjectsView === 'function') {
-        window.loadProjectsView();
-        if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; }
-      } else if (target === 'settings' && typeof window.loadLLMSettingsUI === 'function') {
-        window.loadLLMSettingsUI();
-        // Stop admin polling if leaving admin
-        if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; }
-      } else if (target === 'info' && typeof window.populateInfoControls === 'function') {
-        window.populateInfoControls('account-info-body');
-        // Stop admin polling if leaving admin
-        if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; }
-      } else if (target === 'share' && typeof window.fetchShareUrl === 'function') {
-        window.fetchShareUrl({ inputId: 'account-share-url', openId: 'account-share-open', hintId: 'account-share-hint' });
-        var openBtn = qs('account-share-open');
-        if (openBtn && !openBtn.__wired){
-          openBtn.__wired = true;
-          openBtn.addEventListener('click', function(){
-            var url = (qs('account-share-url')||{}).value || window.location.href;
-            try { window.open(url, '_blank', 'noopener'); } catch(e) { location.href = url; }
-          });
+        if (target === 'projects' && typeof window.loadProjectsView === 'function') {
+          window.loadProjectsView();
+          if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; }
+        } else if (target === 'settings' && typeof window.loadLLMSettingsUI === 'function') {
+          window.loadLLMSettingsUI();
+          if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; }
+        } else if (target === 'info' && typeof window.populateInfoControls === 'function') {
+          window.populateInfoControls('account-info-body');
+          setTimeout(refreshAccountStats, 250);
+          if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; }
+        } else if (target === 'share' && typeof window.fetchShareUrl === 'function') {
+          window.fetchShareUrl({ inputId: 'account-share-url', openId: 'account-share-open', hintId: 'account-share-hint' });
+          var openBtn = qs('account-share-open');
+          if (openBtn && !openBtn.__wired){
+            openBtn.__wired = true;
+            openBtn.addEventListener('click', function(){
+              var url = (qs('account-share-url')||{}).value || window.location.href;
+              try { window.open(url, '_blank', 'noopener'); } catch(e) { location.href = url; }
+            });
+          }
+          var copyBtn = qs('account-share-copy');
+          if (copyBtn && !copyBtn.__wired){
+            copyBtn.__wired = true;
+            copyBtn.addEventListener('click', function(){ if (typeof window.copyShareUrl==='function') window.copyShareUrl('account-share-url'); });
+          }
+          if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; }
+          setTimeout(refreshAccountStats, 250);
+        } else if (target === 'admin' && typeof window.loadAdminData === 'function') {
+          window.loadAdminData('account-admin-users','account-admin-errors','account-admin-spinner');
+          try { if (__accountAdminRefreshTimer) clearInterval(__accountAdminRefreshTimer); } catch(_e){}
+          __accountAdminRefreshTimer = setInterval(function(){
+            try { window.loadAdminData('account-admin-users','account-admin-errors','account-admin-spinner'); } catch(_e){}
+          }, 20000);
+          var refBtn = qs('account-admin-refresh');
+          if (refBtn && !refBtn.__wired) {
+            refBtn.__wired = true;
+            refBtn.addEventListener('click', function(){ window.loadAdminData('account-admin-users','account-admin-errors','account-admin-spinner'); });
+          }
+          setTimeout(refreshAccountStats, 250);
         }
-        var copyBtn = qs('account-share-copy');
-        if (copyBtn && !copyBtn.__wired){
-          copyBtn.__wired = true;
-          copyBtn.addEventListener('click', function(){ if (typeof window.copyShareUrl==='function') window.copyShareUrl('account-share-url'); });
-        }
-        if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; }
-      } else if (target === 'admin' && typeof window.loadAdminData === 'function') {
-        window.loadAdminData('account-admin-users','account-admin-errors','account-admin-spinner');
-        // Auto-refresh every 20s
-        try { if (__accountAdminRefreshTimer) clearInterval(__accountAdminRefreshTimer); } catch(_e){}
-        __accountAdminRefreshTimer = setInterval(function(){
-          try { window.loadAdminData('account-admin-users','account-admin-errors','account-admin-spinner'); } catch(_e){}
-        }, 20000);
-        // Wire refresh button once
-        var refBtn = qs('account-admin-refresh');
-        if (refBtn && !refBtn.__wired) {
-          refBtn.__wired = true;
-          refBtn.addEventListener('click', function(){ window.loadAdminData('account-admin-users','account-admin-errors','account-admin-spinner'); });
-        }
-      }
     } catch(e) {}
   }
   
@@ -237,6 +247,102 @@
     var cards = document.querySelectorAll('.account-card');
     cards.forEach(function(c){ c.classList.remove('active'); });
   }
+
+    function getProjectsSnapshot(){
+      if(window.ProjectStorage && typeof window.ProjectStorage.getProjects === 'function'){
+        try { return window.ProjectStorage.getProjects() || []; }
+        catch(_e) { return []; }
+      }
+      var uid = window.__appUserId;
+      if(!uid) return [];
+      try {
+        var raw = localStorage.getItem('gablok_projects_' + uid);
+        return raw ? JSON.parse(raw) : [];
+      } catch(_err){
+        return [];
+      }
+    }
+
+    function getLLMSettingsSnapshot(){
+      try { return JSON.parse(localStorage.getItem('gablokLLMSettings') || '{}'); }
+      catch(_e) { return {}; }
+    }
+
+    function getHelpDocsCount(){
+      if(typeof window.__accountHelpDocsCount === 'number'){
+        return window.__accountHelpDocsCount;
+      }
+      var body = qs('account-info-body');
+      if(!body) return 0;
+      var richNodes = body.querySelectorAll('p, li, article, section');
+      if(richNodes.length) return richNodes.length;
+      var text = body.textContent || '';
+      return text.trim() ? 1 : 0;
+    }
+
+    function getShareLinkCount(){
+      var input = qs('account-share-url');
+      if(input && input.value && input.value.trim()) return 1;
+      return 0;
+    }
+
+    function formatEstimate(projectTotal, renderTotal){
+      var sum = (projectTotal * 25000) + (renderTotal * 250);
+      if(!sum) return '$0';
+      try {
+        return '$' + sum.toLocaleString(undefined, { maximumFractionDigits: 0 });
+      } catch(_e) {
+        return '$' + sum;
+      }
+    }
+
+    function computeAccountStats(){
+      var profile = getProfileData();
+      var projects = getProjectsSnapshot();
+      var llm = getLLMSettingsSnapshot();
+      var stats = {
+        profileFields: countProfileFields(profile),
+        projects: Array.isArray(projects) ? projects.length : 0,
+        designs: 0,
+        aiImages: 0,
+        aiProviders: (llm && llm.provider) ? 1 : 0,
+        payments: window.__accountPaymentMethods || 0,
+        helpDocs: getHelpDocsCount(),
+        shareLinks: getShareLinkCount(),
+        adminPending: window.__daPendingApprovals || 0,
+        profile: profile,
+        estimate: '$0'
+      };
+      if(Array.isArray(projects) && projects.length){
+        stats.designs = projects.filter(function(project){
+          return project && (project.hasDesign || project.designData);
+        }).length;
+        stats.aiImages = projects.reduce(function(total, project){
+          var count = Array.isArray(project && project.aiImages) ? project.aiImages.length : 0;
+          return total + count;
+        }, 0);
+      }
+      stats.estimate = formatEstimate(stats.projects || 0, stats.aiImages || 0);
+      return stats;
+    }
+
+    function refreshAccountStats(){
+      var stats = computeAccountStats();
+      var projectValueEl = document.querySelector('[data-dashboard-stat="projects"]');
+      if(projectValueEl) projectValueEl.textContent = stats.projects || 0;
+      var renderValueEl = document.querySelector('[data-dashboard-stat="renders"]');
+      if(renderValueEl) renderValueEl.textContent = stats.aiImages || 0;
+      var estimateEl = document.querySelector('[data-dashboard-stat="estimate"]');
+      if(estimateEl) estimateEl.textContent = stats.estimate || '$0';
+      document.querySelectorAll('[data-account-count]').forEach(function(el){
+        var key = el.getAttribute('data-account-count');
+        if(!key) return;
+        var label = el.getAttribute('data-count-label') || '';
+        var value = (stats && stats.hasOwnProperty(key)) ? (stats[key] || 0) : 0;
+        el.textContent = label ? (value + ' ' + label) : value;
+      });
+      return stats;
+    }
   
   function wire(){
     var btn = qs('account-button'); if(btn && !btn.__wired){ btn.__wired=true; btn.addEventListener('click', showAccount); }
@@ -282,10 +388,20 @@
     else showAccount();
   }
 
-  // Expose for external triggers
-  window.showAccount = showAccount;
-  window.hideAccount = hideAccount;
-  window.toggleAccountModal = toggleAccountModal;
+    window.addEventListener('projects:updated', refreshAccountStats);
+    window.addEventListener('storage', function(ev){
+      if(!ev || !ev.key) return;
+      if(ev.key.indexOf('gablok_projects_') === 0 || ev.key === 'gablokProfile' || ev.key === 'gablokLLMSettings'){
+        refreshAccountStats();
+      }
+    });
+    refreshAccountStats();
+
+    // Expose for external triggers
+    window.showAccount = showAccount;
+    window.hideAccount = hideAccount;
+    window.toggleAccountModal = toggleAccountModal;
+    window.refreshAccountStats = refreshAccountStats;
 })();
 
 // Account project storage + view rendering ----------------------------------------------------
@@ -793,6 +909,7 @@
       };
       localStorage.setItem(LLM_STORAGE_KEY, JSON.stringify(data));
       showStatus('success', 'API settings saved successfully!');
+        if(typeof window.refreshAccountStats === 'function') window.refreshAccountStats();
       return data;
     } catch(e) {
       showStatus('error', 'Failed to save settings: ' + e.message);
@@ -1090,14 +1207,14 @@
 
     var content = document.createElement('div');
     content.className = 'da-modal-content';
-    content.innerHTML = '
+    content.innerHTML = `
       <h2 class="da-modal-title"><svg class="sf-icon" width="22" height="22"><use href="#sf-arrow-down-doc"/></svg> Save Design for DA Submission</h2>
       <p class="da-modal-subtitle">Select a project or create a new one:</p>
       <div id="da-project-list" class="da-project-list"></div>
       <div class="da-modal-actions">
         <button class="da-cancel-btn secondary">Cancel</button>
         <button id="da-new-project-btn" class="da-new-btn">+ New Project</button>
-      </div>';
+      </div>`;
 
     modal.appendChild(content);
     document.body.appendChild(modal);
@@ -1113,13 +1230,20 @@
         var projectDiv = document.createElement('div');
         projectDiv.className = 'da-project-item';
         var thumbnail = project.thumbnail || snapshot;
-        projectDiv.innerHTML = '
-          ' + (thumbnail ? '<img src="' + thumbnail + '" class="da-project-thumbnail" />' : '<div class="da-project-thumbnail-empty"><svg class="sf-icon" width="30" height="30"><use href="#sf-house"/></svg></div>') + '
+        var thumbMarkup = thumbnail
+          ? '<img src="' + thumbnail + '" class="da-project-thumbnail" />'
+          : '<div class="da-project-thumbnail-empty"><svg class="sf-icon" width="30" height="30"><use href="#sf-house"/></svg></div>';
+        var badgeMarkup = project.hasDesign
+          ? '<div class="da-project-badge-wrap"><span class="da-project-badge"><svg class="sf-icon" width="11" height="11"><use href="#sf-square-and-pencil"/></svg> Design</span></div>'
+          : '';
+        var updatedLabel = new Date(project.updatedAt).toLocaleDateString();
+        projectDiv.innerHTML = `
+          ${thumbMarkup}
           <div class="da-project-info">
-            <div class="da-project-name"><svg class="sf-icon" width="16" height="16"><use href="#sf-folder"/></svg> ' + escapeHtml(project.name) + '</div>
-            <div class="da-project-date">Updated: ' + new Date(project.updatedAt).toLocaleDateString() + '</div>
-            ' + (project.hasDesign ? '<div class="da-project-badge-wrap"><span class="da-project-badge"><svg class="sf-icon" width="11" height="11"><use href="#sf-square-and-pencil"/></svg> Design</span></div>' : '') + '
-          </div>';
+            <div class="da-project-name"><svg class="sf-icon" width="16" height="16"><use href="#sf-folder"/></svg> ${escapeHtml(project.name)}</div>
+            <div class="da-project-date">Updated: ${updatedLabel}</div>
+            ${badgeMarkup}
+          </div>`;
 
         projectDiv.onclick = function() {
           saveToExistingProject(storage, project.id, designData, snapshot);
