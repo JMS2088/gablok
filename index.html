@@ -27,98 +27,97 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 </script>
 </head>
 <body>
-
 <!-- SF Symbols Sprite -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
-  <defs>
-    <!-- Person Icons -->
-    <symbol id="sf-person" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
-      <path d="M6 20C6 16.6863 8.68629 14 12 14C15.3137 14 18 16.6863 18 20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </symbol>
-    
-    <symbol id="sf-person-2" viewBox="0 0 24 24" fill="none">
-      <circle cx="9" cy="7" r="3" stroke="currentColor" stroke-width="2"/>
-      <circle cx="15" cy="10" r="3" stroke="currentColor" stroke-width="2"/>
-      <path d="M4 18C4 15.7909 5.79086 14 8 14H10C11.1046 14 12 14.8954 12 16M13 20C13 17.7909 14.7909 16 17 16H17C19.2091 16 21 17.7909 21 20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </symbol>
-    
-    <!-- Folder -->
-    <symbol id="sf-folder" viewBox="0 0 24 24" fill="none">
-      <path d="M22 19C22 19.5304 21.7893 20.0391 21.4142 20.4142C21.0391 20.7893 20.5304 21 20 21H4C3.46957 21 2.96086 20.7893 2.58579 20.4142C2.21071 20.0391 2 19.5304 2 19V5C2 4.46957 2.21071 3.96086 2.58579 3.58579C2.96086 3.21071 3.46957 3 4 3H9L11 6H20C20.5304 6 21.0391 6.21071 21.4142 6.58579C21.7893 6.96086 22 7.46957 22 8V19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </symbol>
-    
-    <!-- Gear -->
-    <symbol id="sf-gear" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-      <path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </symbol>
-    
-    <!-- Credit Card -->
-    <symbol id="sf-creditcard" viewBox="0 0 24 24" fill="none">
-      <rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
-      <path d="M2 10H22" stroke="currentColor" stroke-width="2"/>
-    </symbol>
-    
-    <!-- Info Circle -->
-    <symbol id="sf-info-circle" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-      <path d="M12 16V12M12 8H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </symbol>
-    
-    <!-- Share -->
-    <symbol id="sf-square-and-arrow-up" viewBox="0 0 24 24" fill="none">
-      <path d="M17 9L12 4L7 9M12 4V16M5 20H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </symbol>
-    
-    <!-- Shield -->
-    <symbol id="sf-shield" viewBox="0 0 24 24" fill="none">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </symbol>
-    
-    <!-- Arrow Clockwise -->
-    <symbol id="sf-arrow-clockwise" viewBox="0 0 24 24" fill="none">
-      <path d="M23 4V10H17M1 20V14H7M20.49 9C19.9828 7.56678 19.1209 6.28536 17.9845 5.27542C16.8482 4.26548 15.4745 3.55976 13.9917 3.22426C12.5089 2.88875 10.9652 2.93443 9.50481 3.35677C8.04437 3.77912 6.71475 4.56479 5.64 5.64L1 10M23 14L18.36 18.36C17.2853 19.4352 15.9556 20.2209 14.4952 20.6432C13.0348 21.0656 11.4911 21.1112 10.0083 20.7757C8.52547 20.4402 7.1518 19.7345 6.01547 18.7246C4.87913 17.7146 4.01717 16.4332 3.51 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </symbol>
-    
-    <!-- Exclamation Triangle -->
-    <symbol id="sf-exclamationmark-triangle" viewBox="0 0 24 24" fill="none">
-      <path d="M10.29 3.86L1.82 18C1.64537 18.3024 1.55274 18.6453 1.55177 18.9945C1.55079 19.3437 1.64151 19.6871 1.81445 19.9905C1.98738 20.2939 2.23675 20.5467 2.53773 20.7239C2.83871 20.901 3.18082 20.9962 3.53 21H20.47C20.8192 20.9962 21.1613 20.901 21.4623 20.7239C21.7633 20.5467 22.0126 20.2939 22.1856 19.9905C22.3585 19.6871 22.4492 19.3437 22.4482 18.9945C22.4473 18.6453 22.3546 18.3024 22.18 18L13.71 3.86C13.5317 3.56611 13.2807 3.32312 12.9812 3.15448C12.6817 2.98585 12.3437 2.89725 12 2.89725C11.6563 2.89725 11.3183 2.98585 11.0188 3.15448C10.7193 3.32312 10.4683 3.56611 10.29 3.86V3.86Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M12 9V13M12 17H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </symbol>
-    
-    <!-- Checkmark Circle -->
-    <symbol id="sf-checkmark-circle" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
-      <path d="M8 12L11 15L16 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </symbol>
-    
-    <!-- Chart Bar -->
-    <symbol id="sf-chart-bar" viewBox="0 0 24 24" fill="none">
-      <path d="M18 20V10M12 20V4M6 20V14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </symbol>
-    
-    <!-- Arrow Down Doc -->
-    <symbol id="sf-arrow-down-doc" viewBox="0 0 24 24" fill="none">
-      <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2"/>
-      <path d="M14 2V8H20M12 11V17M9 14L12 17L15 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </symbol>
-    
-    <!-- X Mark -->
-    <symbol id="sf-xmark" viewBox="0 0 24 24" fill="none">
-      <path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </symbol>
-    
-    <!-- Trash -->
-    <symbol id="sf-trash" viewBox="0 0 24 24" fill="none">
-      <path d="M3 6H5H21M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </symbol>
-    
-    <!-- Hammer -->
-    <symbol id="sf-hammer" viewBox="0 0 24 24" fill="none">
-      <path d="M14.7 6.3L19.1 10.7C19.9 11.5 19.9 12.8 19.1 13.6L11.6 21.1C10.8 21.9 9.5 21.9 8.7 21.1L4.3 16.7C3.5 15.9 3.5 14.6 4.3 13.8L11.8 6.3C12.6 5.5 13.9 5.5 14.7 6.3Z" stroke="currentColor" stroke-width="2"/>
-      <path d="M14 7L6 3L3 6L7 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    </symbol>
+	<defs>
+		<!-- Person Icons -->
+		<symbol id="sf-person" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
+			<path d="M6 20C6 16.6863 8.68629 14 12 14C15.3137 14 18 16.6863 18 20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<symbol id="sf-person-2" viewBox="0 0 24 24" fill="none">
+			<circle cx="9" cy="7" r="3" stroke="currentColor" stroke-width="2"/>
+			<circle cx="15" cy="10" r="3" stroke="currentColor" stroke-width="2"/>
+			<path d="M4 18C4 15.7909 5.79086 14 8 14H10C11.1046 14 12 14.8954 12 16M13 20C13 17.7909 14.7909 16 17 16H17C19.2091 16 21 17.7909 21 20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<!-- Folder -->
+		<symbol id="sf-folder" viewBox="0 0 24 24" fill="none">
+			<path d="M22 19C22 19.5304 21.7893 20.0391 21.4142 20.4142C21.0391 20.7893 20.5304 21 20 21H4C3.46957 21 2.96086 20.7893 2.58579 20.4142C2.21071 20.0391 2 19.5304 2 19V5C2 4.46957 2.21071 3.96086 2.58579 3.58579C2.96086 3.21071 3.46957 3 4 3H9L11 6H20C20.5304 6 21.0391 6.21071 21.4142 6.58579C21.7893 6.96086 22 7.46957 22 8V19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- Gear -->
+		<symbol id="sf-gear" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+			<path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<!-- Credit Card -->
+		<symbol id="sf-creditcard" viewBox="0 0 24 24" fill="none">
+			<rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+			<path d="M2 10H22" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+		
+		<!-- Info Circle -->
+		<symbol id="sf-info-circle" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+			<path d="M12 16V12M12 8H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<!-- Share -->
+		<symbol id="sf-square-and-arrow-up" viewBox="0 0 24 24" fill="none">
+			<path d="M17 9L12 4L7 9M12 4V16M5 20H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- Shield -->
+		<symbol id="sf-shield" viewBox="0 0 24 24" fill="none">
+			<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- Arrow Clockwise -->
+		<symbol id="sf-arrow-clockwise" viewBox="0 0 24 24" fill="none">
+			<path d="M23 4V10H17M1 20V14H7M20.49 9C19.9828 7.56678 19.1209 6.28536 17.9845 5.27542C16.8482 4.26548 15.4745 3.55976 13.9917 3.22426C12.5089 2.88875 10.9652 2.93443 9.50481 3.35677C8.04437 3.77912 6.71475 4.56479 5.64 5.64L1 10M23 14L18.36 18.36C17.2853 19.4352 15.9556 20.2209 14.4952 20.6432C13.0348 21.0656 11.4911 21.1112 10.0083 20.7757C8.52547 20.4402 7.1518 19.7345 6.01547 18.7246C4.87913 17.7146 4.01717 16.4332 3.51 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- Exclamation Triangle -->
+		<symbol id="sf-exclamationmark-triangle" viewBox="0 0 24 24" fill="none">
+			<path d="M10.29 3.86L1.82 18C1.64537 18.3024 1.55274 18.6453 1.55177 18.9945C1.55079 19.3437 1.64151 19.6871 1.81445 19.9905C1.98738 20.2939 2.23675 20.5467 2.53773 20.7239C2.83871 20.901 3.18082 20.9962 3.53 21H20.47C20.8192 20.9962 21.1613 20.901 21.4623 20.7239C21.7633 20.5467 22.0126 20.2939 22.1856 19.9905C22.3585 19.6871 22.4492 19.3437 22.4482 18.9945C22.4473 18.6453 22.3546 18.3024 22.18 18L13.71 3.86C13.5317 3.56611 13.2807 3.32312 12.9812 3.15448C12.6817 2.98585 12.3437 2.89725 12 2.89725C11.6563 2.89725 11.3183 2.98585 11.0188 3.15448C10.7193 3.32312 10.4683 3.56611 10.29 3.86V3.86Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M12 9V13M12 17H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<!-- Checkmark Circle -->
+		<symbol id="sf-checkmark-circle" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+			<path d="M8 12L11 15L16 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- Chart Bar -->
+		<symbol id="sf-chart-bar" viewBox="0 0 24 24" fill="none">
+			<path d="M18 20V10M12 20V4M6 20V14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<!-- Arrow Down Doc -->
+		<symbol id="sf-arrow-down-doc" viewBox="0 0 24 24" fill="none">
+			<path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2"/>
+			<path d="M14 2V8H20M12 11V17M9 14L12 17L15 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- X Mark -->
+		<symbol id="sf-xmark" viewBox="0 0 24 24" fill="none">
+			<path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<!-- Trash -->
+		<symbol id="sf-trash" viewBox="0 0 24 24" fill="none">
+			<path d="M3 6H5H21M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- Hammer -->
+		<symbol id="sf-hammer" viewBox="0 0 24 24" fill="none">
+			<path d="M14.7 6.3L19.1 10.7C19.9 11.5 19.9 12.8 19.1 13.6L11.6 21.1C10.8 21.9 9.5 21.9 8.7 21.1L4.3 16.7C3.5 15.9 3.5 14.6 4.3 13.8L11.8 6.3C12.6 5.5 13.9 5.5 14.7 6.3Z" stroke="currentColor" stroke-width="2"/>
+			<path d="M14 7L6 3L3 6L7 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
 
 		<!-- Additional toolbar + workflow icons -->
 		<symbol id="sf-arrow-counterclockwise" viewBox="0 0 24 24" fill="none">
@@ -287,6 +286,64 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 			<circle cx="4" cy="6" r="1" fill="currentColor"/>
 			<circle cx="4" cy="12" r="1" fill="currentColor"/>
 			<circle cx="4" cy="18" r="1" fill="currentColor"/>
+		</symbol>
+
+		<symbol id="sf-location" viewBox="0 0 24 24" fill="none">
+			<path d="M12 22C12 22 5 15.418 5 10C5 6.134 8.134 3 12 3C15.866 3 19 6.134 19 10C19 15.418 12 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+
+		<symbol id="sf-macwindow" viewBox="0 0 24 24" fill="none">
+			<rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+			<line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="2"/>
+			<circle cx="7" cy="7" r="1" fill="currentColor"/>
+			<circle cx="11" cy="7" r="1" fill="currentColor"/>
+			<circle cx="15" cy="7" r="1" fill="currentColor"/>
+		</symbol>
+
+		<symbol id="sf-paintbrush" viewBox="0 0 24 24" fill="none">
+			<path d="M14 3L21 10L16 15L9 8L14 3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+			<path d="M8 9C8 9 7 12 4 13C4 16 6 20 10 20C11.657 20 13 18.657 13 17C13 13 8 9 8 9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-photo" viewBox="0 0 24 24" fill="none">
+			<rect x="3" y="6" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+			<circle cx="9" cy="11" r="2" stroke="currentColor" stroke-width="2"/>
+			<path d="M7 17L11 13L14 16L17 13L21 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-plus" viewBox="0 0 24 24" fill="none">
+			<path d="M12 5V19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-plus-square" viewBox="0 0 24 24" fill="none">
+			<rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
+			<path d="M12 8V16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M8 12H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-rectangle" viewBox="0 0 24 24" fill="none">
+			<rect x="4" y="7" width="16" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+
+		<symbol id="sf-ruler" viewBox="0 0 24 24" fill="none">
+			<rect x="4" y="6" width="16" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+			<path d="M8 6V10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M12 6V10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M16 6V10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M8 14V18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M12 14V18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M16 14V18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-square" viewBox="0 0 24 24" fill="none">
+			<rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+
+		<symbol id="sf-square-grid-2x2" viewBox="0 0 24 24" fill="none">
+			<rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
+			<line x1="12" y1="4" x2="12" y2="20" stroke="currentColor" stroke-width="2"/>
 			<line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" stroke-width="2"/>
 		</symbol>
 
@@ -294,106 +351,155 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 			<rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
 			<line x1="9.333" y1="4" x2="9.333" y2="20" stroke="currentColor" stroke-width="2"/>
 			<line x1="14.667" y1="4" x2="14.667" y2="20" stroke="currentColor" stroke-width="2"/>
+			<line x1="4" y1="9.333" x2="20" y2="9.333" stroke="currentColor" stroke-width="2"/>
+			<line x1="4" y1="14.667" x2="20" y2="14.667" stroke="currentColor" stroke-width="2"/>
 		</symbol>
-		</defs>
-	</svg>
 
-	<div id="controls" role="navigation" aria-label="Main toolbar">
-		<div id="debugDropdown" class="dropdown" aria-label="Debug Menu">
-			<button id="debugButton" class="dropdown-button" type="button">
-				<span><svg class="sf-icon" width="16" height="16"><use href="#sf-gear"/></svg> Debug</span>
-				<span class="caret">
-					<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-				</span>
-			</button>
-			<div id="debugList" class="dropdown-list" role="menu">
-				<div class="dropdown-item">
-					<label class="checkbox-label">
-						<input type="checkbox" id="chk-corner-handles" />
-						<span>Corner Handles</span>
-					</label>
-				</div>
-				<div class="dropdown-item">
-					<label class="checkbox-label">
-						<input type="checkbox" id="chk-corner-debug" />
-						<span>Corner Debug Logs</span>
-					</label>
-				</div>
+		<symbol id="sf-square-on-square-dashed" viewBox="0 0 24 24" fill="none">
+			<rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/>
+			<rect x="4" y="4" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+
+		<symbol id="sf-textformat" viewBox="0 0 24 24" fill="none">
+			<path d="M5 7H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M9 7V19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M15 7V15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M12 7L6 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-triangle" viewBox="0 0 24 24" fill="none">
+			<path d="M12 4L21 19H3L12 4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-wand-and-stars" viewBox="0 0 24 24" fill="none">
+			<path d="M4 20L16 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M6 4L6.5 6L8.5 6.5L6.5 7L6 9L5.5 7L3.5 6.5L5.5 6L6 4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+			<path d="M18 4L18.5 5.5L20 6L18.5 6.5L18 8L17.5 6.5L16 6L17.5 5.5L18 4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-wrench-and-screwdriver" viewBox="0 0 24 24" fill="none">
+			<path d="M9 3L11 5L9.5 7.5L12.5 10.5L10.5 12.5L7.5 9.5L5 11L3 9C5 7 7 5 9 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M14 6L21 13V19L19 21L13 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M16 8L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-speedometer" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+			<path d="M12 12L16 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M8 14H9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M12 16V17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M15 14H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-photo" viewBox="0 0 24 24" fill="none">
+			<rect x="3" y="6" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+			<circle cx="9" cy="11" r="2" stroke="currentColor" stroke-width="2"/>
+			<path d="M7 17L11 13L14 16L17 13L21 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+	</defs>
+</svg>
+
+<div id="controls" role="navigation" aria-label="Main toolbar">
+	<button onclick="addNewRoom()"><svg class="sf-icon" width="16" height="16"><use href="#sf-plus-square"/></svg> Add Room</button>
+	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor"><svg class="sf-icon" width="16" height="16"><use href="#sf-square-grid-2x2"/></svg> 2D View</button>
+	<button id="btn-save-for-da" class="secondary save-for-da" title="Save current design to project for DA submission" onclick="saveDesignForDA()"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-doc"/></svg> Save for DA</button>
+	<button id="btn-render-walls" class="secondary" title="Toggle wall render mode"><svg class="sf-icon" width="16" height="16"><use href="#sf-paintbrush"/></svg> <span class="render-label">Render: Lines</span></button>
+	<button id="btn-clean-view" class="secondary" title="Toggle clean view (hide UI)" onclick="toggleCleanView()"><svg class="sf-icon" width="16" height="16"><use href="#sf-eye"/></svg> Clean View</button>
+	<!-- Debug Dropdown: quick toggles for corner handles and debug logs -->
+	<div id="debugDropdown" class="dropdown" aria-label="Debug Menu">
+		<button id="debugButton" class="dropdown-button" type="button">
+			<span><svg class="sf-icon" width="16" height="16"><use href="#sf-gear"/></svg> Debug</span>
+			<span class="caret">
+				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+		</button>
+		<div id="debugList" class="dropdown-list" role="menu">
+			<div class="dropdown-item">
+				<label class="checkbox-label">
+					<input type="checkbox" id="chk-corner-handles" />
+					<span>Corner Handles</span>
+				</label>
 			</div>
-		</div>
-
-		<!-- Custom Level Dropdown (replaces native select) -->
-		<div id="levelDropdown" class="dropdown" aria-label="Level Menu">
-			<button id="levelButton" class="dropdown-button" type="button">
-				<span id="levelButtonText"><svg class="sf-icon" width="16" height="16"><use href="#sf-building-2"/></svg> Ground Floor</span>
-				<span class="caret">
-					<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-				</span>
-			</button>
-			<div id="levelList" class="dropdown-list" role="menu">
-				<div class="dropdown-item" data-value="0"><svg class="sf-icon" width="16" height="16"><use href="#sf-house"/></svg> Ground Floor</div>
-				<div class="dropdown-item" data-value="1"><svg class="sf-icon" width="16" height="16"><use href="#sf-building-2"/></svg> First Floor</div>
-				<div class="dropdown-item separator" aria-hidden="true"></div>
-				<div class="dropdown-item" data-value="stairs"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-right"/></svg> Stairs</div>
-				<div class="dropdown-item" data-value="pergola"><svg class="sf-icon" width="16" height="16"><use href="#sf-square-grid-3x3"/></svg> Pergola</div>
-				<div class="dropdown-item" data-value="garage"><svg class="sf-icon" width="16" height="16"><use href="#sf-car"/></svg> Garage</div>
-				<div class="dropdown-item" data-value="roof"><svg class="sf-icon" width="16" height="16"><use href="#sf-triangle"/></svg> Roof</div>
-				<div class="dropdown-item" data-value="pool"><svg class="sf-icon" width="16" height="16"><use href="#sf-drop"/></svg> Pool</div>
-				<div class="dropdown-item" data-value="balcony"><svg class="sf-icon" width="16" height="16"><use href="#sf-rectangle"/></svg> Balcony</div>
+			<div class="dropdown-item">
+				<label class="checkbox-label">
+					<input type="checkbox" id="chk-corner-debug" />
+					<span>Corner Debug Logs</span>
+				</label>
 			</div>
-		</div>
-
-		<!-- Hidden native select kept for fallback and API compatibility -->
-		<select id="levelSelect" onchange="switchLevel()">
-			<option value="0">Ground Floor</option>
-			<option value="1">First Floor</option>
-			<option value="stairs">+ Stairs</option>
-			<option value="pergola">+ Pergola</option>
-			<option value="garage">+ Garage</option>
-			<option value="roof">+ Roof</option>
-			<option value="pool">+ Pool</option>
-			<option value="balcony">+ Balcony</option>
-		</select>
-
-		<!-- Reset and Price moved into Main Menu -->
-		<div id="actionsDropdown" class="dropdown" aria-label="Main Menu">
-			<button id="actionsButton" class="dropdown-button" type="button">
-				<span><svg class="sf-icon" width="16" height="16"><use href="#sf-list-bullet"/></svg> Main Menu</span>
-				<span class="caret">
-					<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-				</span>
-			</button>
-			<div id="actionsList" class="dropdown-list" role="menu">
-				<div class="dropdown-item" data-action="reset"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-counterclockwise"/></svg> Reset</div>
-				<div class="dropdown-item separator" aria-hidden="true"></div>
-				<div class="dropdown-title">Project</div>
-				<div class="dropdown-item" data-action="price"><svg class="sf-icon" width="16" height="16"><use href="#sf-dollarsign-circle"/></svg> Price</div>
-				<div class="dropdown-item" data-action="visualize-photoreal"><svg class="sf-icon" width="16" height="16"><use href="#sf-camera"/></svg> Visualize</div>
-				<div class="dropdown-item separator" aria-hidden="true"></div>
-				<div class="dropdown-title">Export</div>
-				<div class="dropdown-item" data-action="obj"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> 3D - OBJ</div>
-				<div class="dropdown-item" data-action="pdf"><svg class="sf-icon" width="16" height="16"><use href="#sf-doc"/></svg> PDF (Export Views)</div>
-				<div class="dropdown-item" data-action="json-download"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> JSON</div>
-				<div class="dropdown-item" data-action="dxf-export"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> Floorplan (DXF)</div>
-				<div class="dropdown-item" data-action="dwg-export"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> Floorplan (DWG)</div>
-				<div class="dropdown-item separator" aria-hidden="true"></div>
-				<div class="dropdown-title">Import</div>
-				<div class="dropdown-item" data-action="obj-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> 3D - OBJ</div>
-				<div class="dropdown-item" data-action="pdf-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (PDF)</div>
-				<div class="dropdown-item" data-action="svg-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (SVG)</div>
-				<div class="dropdown-item" data-action="dxf-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (DXF)</div>
-				<div class="dropdown-item" data-action="dwg-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (DWG)</div>
-				<div class="dropdown-item" data-action="json-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> JSON</div>
-			</div>
-		</div>
-
-		<!-- Navigation Compass: sits next to Main Menu dropdown -->
-		<div id="nav-compass" aria-label="North" title="North">
-			<canvas id="nav-compass-canvas" width="44" height="44"></canvas>
 		</div>
 	</div>
 
-	<canvas id="canvas"></canvas>
+	<!-- Custom Level Dropdown (replaces native select) -->
+	<div id="levelDropdown" class="dropdown" aria-label="Level Menu">
+		<button id="levelButton" class="dropdown-button" type="button">
+			<span id="levelButtonText"><svg class="sf-icon" width="16" height="16"><use href="#sf-building-2"/></svg> Ground Floor</span>
+			<span class="caret">
+				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+		</button>
+		<div id="levelList" class="dropdown-list" role="menu">
+			<div class="dropdown-item" data-value="0"><svg class="sf-icon" width="16" height="16"><use href="#sf-house"/></svg> Ground Floor</div>
+			<div class="dropdown-item" data-value="1"><svg class="sf-icon" width="16" height="16"><use href="#sf-building-2"/></svg> First Floor</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-item" data-value="stairs"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-right"/></svg> Stairs</div>
+			<div class="dropdown-item" data-value="pergola"><svg class="sf-icon" width="16" height="16"><use href="#sf-square-grid-3x3"/></svg> Pergola</div>
+			<div class="dropdown-item" data-value="garage"><svg class="sf-icon" width="16" height="16"><use href="#sf-car"/></svg> Garage</div>
+			<div class="dropdown-item" data-value="roof"><svg class="sf-icon" width="16" height="16"><use href="#sf-triangle"/></svg> Roof</div>
+			<div class="dropdown-item" data-value="pool"><svg class="sf-icon" width="16" height="16"><use href="#sf-drop"/></svg> Pool</div>
+			<div class="dropdown-item" data-value="balcony"><svg class="sf-icon" width="16" height="16"><use href="#sf-rectangle"/></svg> Balcony</div>
+		</div>
+	</div>
+
+	<!-- Hidden native select kept for fallback and API compatibility -->
+	<select id="levelSelect" onchange="switchLevel()">
+		<option value="0">Ground Floor</option>
+		<option value="1">First Floor</option>
+		<option value="stairs">+ Stairs</option>
+		<option value="pergola">+ Pergola</option>
+		<option value="garage">+ Garage</option>
+		<option value="roof">+ Roof</option>
+		<option value="pool">+ Pool</option>
+		<option value="balcony">+ Balcony</option>
+	</select>
+
+	<!-- Reset and Price moved into Main Menu -->
+	<div id="actionsDropdown" class="dropdown" aria-label="Main Menu">
+		<button id="actionsButton" class="dropdown-button" type="button">
+			<span><svg class="sf-icon" width="16" height="16"><use href="#sf-list-bullet"/></svg> Main Menu</span>
+			<span class="caret">
+				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+		</button>
+		<div id="actionsList" class="dropdown-list" role="menu">
+			<div class="dropdown-item" data-action="reset"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-counterclockwise"/></svg> Reset</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-title">Project</div>
+			<div class="dropdown-item" data-action="price"><svg class="sf-icon" width="16" height="16"><use href="#sf-dollarsign-circle"/></svg> Price</div>
+			<div class="dropdown-item" data-action="visualize-photoreal"><svg class="sf-icon" width="16" height="16"><use href="#sf-camera"/></svg> Visualize</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-title">Export</div>
+			<div class="dropdown-item" data-action="obj"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> 3D - OBJ</div>
+			<div class="dropdown-item" data-action="pdf"><svg class="sf-icon" width="16" height="16"><use href="#sf-doc"/></svg> PDF (Export Views)</div>
+			<div class="dropdown-item" data-action="json-download"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> JSON</div>
+			<div class="dropdown-item" data-action="dxf-export"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> Floorplan (DXF)</div>
+			<div class="dropdown-item" data-action="dwg-export"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> Floorplan (DWG)</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-title">Import</div>
+			<div class="dropdown-item" data-action="obj-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> 3D - OBJ</div>
+			<div class="dropdown-item" data-action="pdf-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (PDF)</div>
+			<div class="dropdown-item" data-action="svg-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (SVG)</div>
+			<div class="dropdown-item" data-action="dxf-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (DXF)</div>
+			<div class="dropdown-item" data-action="dwg-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (DWG)</div>
+			<div class="dropdown-item" data-action="json-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> JSON</div>
+		</div>
+	</div>
+
+	<!-- Navigation Compass: sits next to Main Menu dropdown -->
+	<div id="nav-compass" aria-label="North" title="North">
+		<canvas id="nav-compass-canvas" width="44" height="44"></canvas>
+	</div>
+</div>
+<canvas id="canvas"></canvas>
 <div id="labels-3d"></div>
 <div id="status">Ready</div>
 
