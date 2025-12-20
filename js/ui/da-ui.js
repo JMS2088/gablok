@@ -70,12 +70,29 @@
       console.warn('[DA Workflow] Could not resolve theme preference:', e);
     }
 
+    // If the Account modal is currently visible, match its active theme so the selector
+    // doesn't feel like it "swaps" the UI behind it.
+    var effectiveTheme = savedTheme;
+    try {
+      var acc = document.getElementById('account-modal');
+      if (acc && acc.classList && acc.classList.contains('visible')) {
+        var accTheme2 = acc.getAttribute('data-theme');
+        if (accTheme2 !== 'dark' && accTheme2 !== 'light') {
+          var activePanel2 = acc.querySelector('.account-panel:not(.is-hidden)');
+          if (activePanel2) accTheme2 = activePanel2.getAttribute('data-theme');
+        }
+        if (accTheme2 === 'dark' || accTheme2 === 'light') {
+          effectiveTheme = accTheme2;
+        }
+      }
+    } catch (_eTheme2) {}
+
     // Reuse existing selector overlay (just update theme)
     if (existingSelectorOverlay) {
       try {
-        existingSelectorOverlay.setAttribute('data-theme', savedTheme);
+        existingSelectorOverlay.setAttribute('data-theme', effectiveTheme);
         if (typeof window.applyThemeToSection === 'function') {
-          window.applyThemeToSection('da-workflow', savedTheme);
+          window.applyThemeToSection('da-workflow', effectiveTheme);
         }
       } catch (_e2) {}
       return;
@@ -85,7 +102,7 @@
     var overlay = document.createElement('div');
     overlay.id = 'da-project-selector-overlay';
     overlay.className = 'da-project-selector-modal';
-    overlay.setAttribute('data-theme', savedTheme);
+    overlay.setAttribute('data-theme', effectiveTheme);
     
     var content = '';
     

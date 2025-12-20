@@ -2720,46 +2720,7 @@
     background: rgba(52, 199, 89, 0.25);
   }
 
-  /* Dark mode for settings section */
-  [data-theme="dark"] .settings-group {
-    background: linear-gradient(180deg, rgba(26,27,35,0.92), rgba(15,16,23,0.95));
-    border-color: rgba(255,255,255,0.08);
-    box-shadow: 0 28px 70px rgba(0,0,0,0.65);
-  }
-
-  [data-theme="dark"] .settings-group::after {
-    border-color: rgba(255,255,255,0.05);
-  }
-
-  [data-theme="dark"] .settings-group h3 {
-    color: var(--apple-label);
-  }
-
-  [data-theme="dark"] .settings-hint {
-    color: var(--apple-secondary-label);
-  }
-
-  [data-theme="dark"] .settings-row label {
-    color: var(--apple-label);
-  }
-
-  [data-theme="dark"] .settings-row input[type="text"],
-  [data-theme="dark"] .settings-row input[type="password"],
-  [data-theme="dark"] .settings-row input[type="url"],
-  [data-theme="dark"] .settings-row select {
-    background: rgba(38,40,56,0.9);
-    color: var(--apple-label);
-    border-color: rgba(255,255,255,0.07);
-  }
-
-  [data-theme="dark"] .settings-row input:focus,
-  [data-theme="dark"] .settings-row select:focus {
-    border-color: rgba(10,132,255,0.55);
-    box-shadow: 0 0 0 3px rgba(10,132,255,0.2);
-  }
-
-
-
+  /* Dark mode for settings section is handled via design-system variables */
 
   /* Inline Share layout */
   .share-inline { display: flex; flex-direction: column; gap: 10px; max-width: 640px; }
@@ -2773,32 +2734,27 @@
   /* Settings panel styles */
   .settings-group {
     position: relative;
-    background: linear-gradient(165deg, rgba(255,255,255,0.96), rgba(243,247,255,0.92));
-    border: 1px solid rgba(255,255,255,0.7);
-    border-radius: 26px;
-    box-shadow: 0 24px 60px rgba(15,23,42,0.08);
-    padding: 24px 28px;
+    background: var(--apple-material-regular);
+    border: 1px solid var(--apple-separator);
+    border-radius: var(--apple-radius-large);
+    box-shadow: none;
+    padding: var(--apple-space-6);
     margin-bottom: 24px;
     overflow: hidden;
   }
 
   .settings-group::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    border: 1px solid rgba(255,255,255,0.5);
-    pointer-events: none;
+    content: none;
   }
 
   .settings-group h3 {
     margin: 0 0 18px;
-    font-size: 18px;
-    font-weight: 600;
+    font-size: var(--apple-font-size-headline);
+    font-weight: var(--apple-font-weight-semibold);
     color: var(--apple-label);
   }
   .settings-hint { 
-    font-size: 13px; 
+    font-size: var(--apple-font-size-footnote);
     color: var(--apple-secondary-label); 
     margin-bottom: 16px; 
   }
@@ -2809,19 +2765,20 @@
     margin-bottom: 14px; 
   }
   .settings-row label { 
-    font-size: 14px; 
-    font-weight: 500; 
+    font-size: var(--apple-font-size-caption1);
+    font-weight: var(--apple-font-weight-medium);
     color: var(--apple-label); 
   }
   .settings-row input[type="text"],
   .settings-row input[type="password"],
   .settings-row input[type="url"],
   .settings-row select {
-    padding: 12px 14px;
-    border: 1px solid rgba(15,23,42,0.1);
-    border-radius: 14px;
-    font-size: 14px;
-    background: rgba(249,250,255,0.9);
+    padding: 10px 12px;
+    border: 1px solid var(--apple-separator);
+    border-radius: var(--apple-radius-medium);
+    font-size: var(--apple-font-size-footnote) !important;
+    line-height: var(--apple-line-height-relaxed);
+    background: var(--apple-secondary-system-background);
     color: var(--apple-label);
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
@@ -2829,8 +2786,8 @@
   .settings-row input:focus,
   .settings-row select:focus {
     outline: none;
-    border-color: rgba(0,122,255,0.35);
-    box-shadow: 0 0 0 3px rgba(0,122,255,0.12);
+    border-color: var(--apple-blue);
+    box-shadow: 0 0 0 3px var(--apple-blue-light);
   }
   .settings-row input[type="checkbox"] { 
     width: 18px; 
@@ -2844,6 +2801,26 @@
   .input-with-toggle input { 
     flex: 1; 
   }
+
+  /* Account → Settings: ensure AI dropdowns match design system */
+  #account-view-settings .settings-row select,
+  #account-view-settings #llm-provider,
+  #account-view-settings #llm-model {
+    background: var(--apple-secondary-system-background) !important;
+    color: var(--apple-label) !important;
+    border-color: var(--apple-separator) !important;
+    font-size: var(--apple-font-size-footnote) !important;
+    font-weight: var(--apple-font-weight-regular) !important;
+    letter-spacing: var(--apple-tracking-normal);
+  }
+
+  [data-theme="dark"] #account-view-settings .settings-row select,
+  [data-theme="dark"] #account-view-settings #llm-provider,
+  [data-theme="dark"] #account-view-settings #llm-model {
+    background: var(--apple-secondary-system-background) !important;
+    color: var(--apple-label) !important;
+    border-color: var(--apple-separator) !important;
+  }
   
   /* Theme Toggle Switches */
   .theme-toggle-row {
@@ -2851,16 +2828,16 @@
     align-items: center;
     justify-content: space-between;
     padding: 16px;
-    background: rgba(249, 250, 255, 0.5);
-    border: 1px solid rgba(0, 0, 0, 0.06);
-    border-radius: 14px;
+    background: var(--apple-secondary-system-background);
+    border: 1px solid var(--apple-separator);
+    border-radius: var(--apple-radius-medium);
     margin-bottom: 12px;
     transition: all 0.2s ease;
   }
   
   .theme-toggle-row:hover {
-    background: rgba(249, 250, 255, 0.9);
-    border-color: rgba(0, 122, 255, 0.15);
+    background: var(--apple-tertiary-system-fill);
+    border-color: var(--apple-separator);
   }
   
   .theme-toggle-label {

@@ -1841,15 +1841,23 @@ svg use {
 #da-project-selector-overlay.da-project-selector-modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
+  /* Dim + blur the underlying DA workflow view; content floats above (no panel). */
+  background: rgba(0, 0, 0, 0.32);
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
   z-index: 20000;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 20px;
+  padding: 40px 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   animation: fadeIn var(--apple-duration-normal) var(--apple-ease-out);
+}
+
+/* Dark theme: slightly stronger dim, same blur */
+#da-project-selector-overlay.da-project-selector-modal[data-theme="dark"] {
+  background: rgba(0, 0, 0, 0.42);
 }
 
 @keyframes fadeIn {
@@ -1858,18 +1866,18 @@ svg use {
 }
 
 #da-project-selector-overlay .da-selector-container {
-  /* Use a solid system background so the panel reads as "white" in light mode. */
-  background: var(--apple-system-background);
-  border: 1px solid var(--apple-separator);
+  /* Float content over the backdrop (no enclosing panel/card). */
+  background: transparent;
+  border: none;
   border-radius: var(--apple-radius-large);
   max-width: 980px;
   width: 100%;
-  max-height: 90vh;
-  overflow: hidden;
+  max-height: none;
+  overflow: visible;
   display: flex;
   flex-direction: column;
-  backdrop-filter: blur(40px) saturate(180%);
-  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   box-shadow: none;
   animation: slideUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -1887,7 +1895,7 @@ svg use {
 
 #da-project-selector-overlay .da-selector-header {
   padding: var(--apple-space-8) var(--apple-space-8) var(--apple-space-6);
-  border-bottom: 1px solid var(--apple-separator);
+  border-bottom: none;
   position: relative;
   background: transparent;
 }
@@ -1943,26 +1951,8 @@ svg use {
 
 #da-project-selector-overlay .da-selector-body {
   padding: var(--apple-space-6) var(--apple-space-8);
-  overflow-y: auto;
+  overflow: visible;
   flex: 1;
-  -webkit-overflow-scrolling: touch;
-}
-
-#da-project-selector-overlay .da-selector-body::-webkit-scrollbar {
-  width: 8px;
-}
-
-#da-project-selector-overlay .da-selector-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-#da-project-selector-overlay .da-selector-body::-webkit-scrollbar-thumb {
-  background: var(--apple-tertiary-fill);
-  border-radius: 4px;
-}
-
-#da-project-selector-overlay .da-selector-body::-webkit-scrollbar-thumb:hover {
-  background: var(--apple-secondary-fill);
 }
 
 #da-project-selector-overlay .projects-toolbar {
@@ -1998,7 +1988,7 @@ svg use {
 
 #da-project-selector-overlay .da-selector-footer {
   padding: var(--apple-space-4) var(--apple-space-8) var(--apple-space-6);
-  border-top: 1px solid var(--apple-separator);
+  border-top: none;
   display: flex;
   justify-content: center;
   background: transparent;

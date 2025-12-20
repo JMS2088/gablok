@@ -765,19 +765,18 @@
 
   function openWorkflow(projectId){
     if(window.DAWorkflowUI && typeof window.DAWorkflowUI.open === 'function'){
-      // Hide the account modal BEFORE opening DA Workflow.
-      // The account modal uses a closing animation; during that time it can still
-      // sit on top of the page and intercept clicks, making DA Workflow feel "locked".
-      try {
-        if(window.toggleAccountModal) window.toggleAccountModal('hide');
-        var acc = document.getElementById('account-modal');
-        if(acc){
-          acc.classList.remove('showing', 'closing', 'visible');
-          acc.__animating = false;
-        }
-      } catch(_eHide) {}
-      // If projectId provided, open directly; otherwise show selector
+      // If projectId provided, open fullscreen DA workflow and hide Account to avoid stacked UIs.
+      // If no projectId, show the selector OVER the current Account view (e.g., Settings) so the
+      // backdrop is the Account UI rather than the 3D canvas.
       if (projectId) {
+        try {
+          if(window.toggleAccountModal) window.toggleAccountModal('hide');
+          var acc = document.getElementById('account-modal');
+          if(acc){
+            acc.classList.remove('showing', 'closing', 'visible');
+            acc.__animating = false;
+          }
+        } catch(_eHide) {}
         window.DAWorkflowUI.open(projectId);
       } else {
         window.DAWorkflowUI.open();
@@ -1558,23 +1557,35 @@
   
   function navigateToSection(section) {
     console.log('[Theme Navigation] Navigating to:', section);
-    
-    // Close account modal first
-    if (window.toggleAccountModal) {
-      console.log('[Theme Navigation] Closing account modal');
-      window.toggleAccountModal('hide');
+
+    function hideAccountForNavigation() {
+      try {
+        if (typeof window.hideAccount === 'function') {
+          window.hideAccount();
+        } else if (window.toggleAccountModal) {
+          window.toggleAccountModal('hide');
+        }
+        // Ensure it can't sit on top and intercept clicks.
+        var acc = document.getElementById('account-modal');
+        if (acc) {
+          acc.classList.remove('showing', 'closing', 'visible');
+          acc.__animating = false;
+        }
+      } catch (_eNavHide) {}
     }
     
     // Navigate to the appropriate section
     switch(section) {
       case 'main':
-        // Main editor is always visible - just close modal
-        console.log('[Theme Navigation] Main editor (just closed modal)');
+        // Main editor is always visible - hide Account if it is open
+        console.log('[Theme Navigation] Main editor');
+        hideAccountForNavigation();
         break;
         
       case 'plan2d':
         // Show 2D floor plan
         console.log('[Theme Navigation] Opening Plan2D modal');
+        hideAccountForNavigation();
         setTimeout(function() {
           if (typeof window.openPlan2DModal === 'function') {
             console.log('[Theme Navigation] Using window.openPlan2DModal');
@@ -1594,6 +1605,7 @@
       case 'visualize':
         // Show 3D visualize
         console.log('[Theme Navigation] Opening Visualize modal');
+        hideAccountForNavigation();
         setTimeout(function() {
           if (typeof showVisualize === 'function') {
             console.log('[Theme Navigation] Using showVisualize');
@@ -1610,20 +1622,6 @@
       case 'da-workflow':
         // Open DA Workflow - let it show project selector
         console.log('[Theme Navigation] Opening DA Workflow');
-        // If the Account/Dashboard modal is open, hide it first to avoid two stacked panels.
-        // hideAccount() uses a closing animation, so we also hard-hide synchronously to prevent visible overlap.
-        try {
-          if (typeof window.hideAccount === 'function') {
-            window.hideAccount();
-          } else if (window.toggleAccountModal) {
-            window.toggleAccountModal('hide');
-          }
-          var acc = document.getElementById('account-modal');
-          if (acc) {
-            acc.classList.remove('showing', 'closing', 'visible');
-            acc.__animating = false;
-          }
-        } catch (_e) {}
         setTimeout(function() {
           if (window.DAWorkflowUI && window.DAWorkflowUI.open) {
             console.log('[Theme Navigation] Opening DA Workflow with selector');
