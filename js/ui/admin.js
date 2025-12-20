@@ -727,7 +727,12 @@
   function openWorkflow(projectId){
     if(window.DAWorkflowUI && typeof window.DAWorkflowUI.open === 'function'){
       if(window.toggleAccountModal) window.toggleAccountModal('hide');
-      window.DAWorkflowUI.open(projectId);
+      // If projectId provided, open directly; otherwise show selector
+      if (projectId) {
+        window.DAWorkflowUI.open(projectId);
+      } else {
+        window.DAWorkflowUI.open();
+      }
     } else {
       showAppleAlert('Loading', 'DA Workflow is still loading. Please try again in a moment.');
     }
@@ -1167,7 +1172,7 @@
     'main': 'body',
     'plan2d': '#floorplan-modal',
     'visualize': '#visualize-modal',
-    'da-workflow': '#da-workflow-overlay',
+    'da-workflow': '#da-workflow-overlay, #da-project-selector-overlay',
     'account': '#account-modal, #account-dashboard, .account-panel'
   };
   
@@ -1363,9 +1368,11 @@
       { id: 'floorplan-modal', section: 'plan2d' },
       { id: 'visualize-modal', section: 'visualize' },
       { id: 'da-workflow-overlay', section: 'da-workflow' },
-      { id: 'account-modal', section: 'account' }
+      { id: 'account-modal', section: 'account' },
+      { id: 'da-project-selector-overlay', section: 'da-workflow' }
     ];
     
+    // Watch existing modals
     modalsToWatch.forEach(function(modalInfo) {
       var modal = document.getElementById(modalInfo.id);
       if (modal) {
@@ -1393,6 +1400,31 @@
           attributeFilter: ['class', 'style'] 
         });
       }
+    });
+    
+    // Also watch for new elements being added (like dynamically created project selector)
+    var bodyObserver = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        mutation.addedNodes.forEach(function(node) {
+          if (node.nodeType === 1) { // Element node
+            modalsToWatch.forEach(function(modalInfo) {
+              if (node.id === modalInfo.id || (node.querySelector && node.querySelector('#' + modalInfo.id))) {
+                var settings = loadThemeSettings();
+                var theme = settings[modalInfo.section] || 'light';
+                setTimeout(function() {
+                  applyThemeToSection(modalInfo.section, theme);
+                  console.log('[Theme Settings] Applied theme to newly created element:', modalInfo.id);
+                }, 10);
+              }
+            });
+          }
+        });
+      });
+    });
+    
+    bodyObserver.observe(document.body, {
+      childList: true,
+      subtree: true
     });
   }
   
@@ -1527,24 +1559,30 @@
         break;
         
       case 'da-workflow':
-        // Open DA Workflow
+        // Open DA Workflow - let it show project selector
         console.log('[Theme Navigation] Opening DA Workflow');
+        // If the Account/Dashboard modal is open, hide it first to avoid two stacked panels.
+        // hideAccount() uses a closing animation, so we also hard-hide synchronously to prevent visible overlap.
+        try {
+          if (typeof window.hideAccount === 'function') {
+            window.hideAccount();
+          } else if (window.toggleAccountModal) {
+            window.toggleAccountModal('hide');
+          }
+          var acc = document.getElementById('account-modal');
+          if (acc) {
+            acc.classList.remove('showing', 'closing', 'visible');
+            acc.__animating = false;
+          }
+        } catch (_e) {}
         setTimeout(function() {
           if (window.DAWorkflowUI && window.DAWorkflowUI.open) {
-            // Get current/active project or create demo
-            var projectId = 'demo-project';
-            if (window.ProjectStorage && window.ProjectStorage.getProjects) {
-              var projects = window.ProjectStorage.getProjects();
-              if (projects && projects.length > 0) {
-                projectId = projects[0].id;
-              }
-            }
-            console.log('[Theme Navigation] Opening DA Workflow for project:', projectId);
-            window.DAWorkflowUI.open(projectId);
+            console.log('[Theme Navigation] Opening DA Workflow with selector');
+            window.DAWorkflowUI.open(); // No projectId = show selector
           } else {
             console.log('[Theme Navigation] DAWorkflowUI not available');
           }
-        }, 300);
+        }, 120);
         break;
         
       case 'dashboard':

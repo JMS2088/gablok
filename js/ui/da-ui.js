@@ -15,6 +15,241 @@
   var currentState = null;
 
   // ============================================================================
+  // PROJECT SELECTION
+  // ============================================================================
+  
+  /**
+   * Show project selector or start wizard before opening workflow
+   */
+  function showProjectSelector() {
+    // If selector is already open, don't create another panel.
+    var existingSelectorOverlay = document.getElementById('da-project-selector-overlay');
+
+    // Get available projects
+    var projects = [];
+    if (window.ProjectStorage && typeof window.ProjectStorage.getProjects === 'function') {
+      try {
+        projects = window.ProjectStorage.getProjects() || [];
+      } catch (e) {
+        console.error('[DA Workflow] Failed to get projects:', e);
+      }
+    }
+    
+    // Resolve the best theme to use for the selector.
+    // Priority:
+    // 1) existing DA workflow overlay (if already open)
+    // 2) saved per-section preference (da-workflow)
+    // 3) account/dashboard theme (fallback)
+    // 4) document theme
+    var savedTheme = 'light';
+    try {
+      var existingWorkflow = document.getElementById('da-workflow-overlay');
+      var existingTheme = existingWorkflow && existingWorkflow.getAttribute('data-theme');
+      if (existingTheme === 'dark' || existingTheme === 'light') {
+        savedTheme = existingTheme;
+      } else {
+        var themeSettings = JSON.parse(localStorage.getItem('gablokThemeSettings') || '{}');
+        if (themeSettings['da-workflow'] === 'dark' || themeSettings['da-workflow'] === 'light') {
+          savedTheme = themeSettings['da-workflow'];
+        } else {
+          var accountModal = document.getElementById('account-modal');
+          var accountTheme = accountModal && accountModal.getAttribute('data-theme');
+          if (accountTheme === 'dark' || accountTheme === 'light') {
+            savedTheme = accountTheme;
+          } else if (themeSettings['account'] === 'dark' || themeSettings['account'] === 'light') {
+            savedTheme = themeSettings['account'];
+          } else {
+            var docTheme = document.documentElement && document.documentElement.getAttribute('data-theme');
+            if (docTheme === 'dark' || docTheme === 'light') {
+              savedTheme = docTheme;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[DA Workflow] Could not resolve theme preference:', e);
+    }
+
+    // Reuse existing selector overlay (just update theme)
+    if (existingSelectorOverlay) {
+      try {
+        existingSelectorOverlay.setAttribute('data-theme', savedTheme);
+        if (typeof window.applyThemeToSection === 'function') {
+          window.applyThemeToSection('da-workflow', savedTheme);
+        }
+      } catch (_e2) {}
+      return;
+    }
+    
+    // Create selector overlay
+    var overlay = document.createElement('div');
+    overlay.id = 'da-project-selector-overlay';
+    overlay.className = 'da-project-selector-modal';
+    overlay.setAttribute('data-theme', savedTheme);
+    
+    var content = '';
+    
+    if (projects.length > 0) {
+      // Show project list (Dashboard/Account projects styling)
+      content = `
+        <div class="da-selector-container">
+          <div class="da-selector-header">
+            <h2>Select a Project for DA Workflow</h2>
+            <p>Choose an existing project to continue your Development Application workflow</p>
+            <button class="da-selector-close" onclick="window.DAWorkflowUI.closeSelector()">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M6 6L14 14M14 6L6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="da-selector-body">
+            <div class="projects-list">`;
+      
+      projects.forEach(function(project) {
+        var date = new Date(project.updatedAt || project.createdAt).toLocaleDateString();
+        var thumbnail = project.thumbnail || '';
+        var thumbnailHTML = thumbnail
+          ? '<img src="' + thumbnail + '" class="project-card-main-thumb" alt="Project preview" loading="lazy" />'
+          : '<div class="project-card-icon-fallback">' + (project.hasDesign ? '📐' : '📁') + '</div>';
+
+        content += `
+          <div class="project-card" data-project-id="${project.id}">
+            <div class="project-card-thumb-wrapper">${thumbnailHTML}</div>
+            <div class="project-card-info">
+              <div class="project-card-name">${escapeHtml(project.name || 'Untitled Project')}</div>
+              <div class="project-card-meta">Updated: ${date}</div>
+              ${project.hasDesign ? '<div class="project-badges"><span class="project-badge design">Design saved</span></div>' : ''}
+            </div>
+            <div class="project-card-actions">
+              <button type="button" class="primary" onclick="window.DAWorkflowUI.openWithProject('${project.id}')">Continue Workflow</button>
+            </div>
+          </div>`;
+      });
+      
+      content += `
+            </div>
+            <div class="da-selector-footer projects-toolbar">
+              <button type="button" class="primary" onclick="window.DAWorkflowUI.createNewProject()">Start New Project</button>
+              <button type="button" class="secondary" onclick="window.DAWorkflowUI.closeSelector()">Cancel</button>
+            </div>
+          </div>
+        </div>`;
+    } else {
+      // Show welcome screen for new users
+      content = `
+        <div class="da-selector-container da-selector-welcome">
+          <div class="da-selector-header">
+            <h2>Welcome to DA Workflow</h2>
+            <button class="da-selector-close" onclick="window.DAWorkflowUI.closeSelector()">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M6 6L14 14M14 6L6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="da-selector-body da-welcome-body">
+            <div class="da-welcome-icon">
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <use href="/css/sf-symbols.svg#sf-building-2" />
+              </svg>
+            </div>
+            <h3>Get Started with Your First Project</h3>
+            <p>The DA Workflow helps you navigate the Development Application process in Australia step by step. From planning through to occupation certificate, we'll guide you through every stage.</p>
+            <ul class="da-welcome-features">
+              <li><svg width="20" height="20"><use href="#sf-checkmark-circle"/></svg> 8 Major workflow phases</li>
+              <li><svg width="20" height="20"><use href="#sf-checkmark-circle"/></svg> 50+ Detailed steps</li>
+              <li><svg width="20" height="20"><use href="#sf-checkmark-circle"/></svg> Progress tracking</li>
+              <li><svg width="20" height="20"><use href="#sf-checkmark-circle"/></svg> Document management</li>
+              <li><svg width="20" height="20"><use href="#sf-checkmark-circle"/></svg> Contact management</li>
+            </ul>
+            <div class="da-welcome-actions">
+              <button class="da-btn-primary" onclick="window.DAWorkflowUI.createNewProject()">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M10 5v10M5 10h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                Start Your First Project
+              </button>
+              <button class="da-btn-secondary" onclick="window.DAWorkflowUI.closeSelector()">Cancel</button>
+            </div>
+          </div>
+        </div>`;
+    }
+    
+    overlay.innerHTML = content;
+    document.body.appendChild(overlay);
+
+    // Ensure the global theme system re-applies the theme (in case settings changed
+    // or the selector is created before watchers run).
+    try {
+      if (typeof window.applyThemeToSection === 'function') {
+        window.applyThemeToSection('da-workflow', savedTheme);
+      }
+    } catch (e) {
+      console.warn('[DA Workflow] Failed to force-apply theme:', e);
+    }
+    
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+  }
+  
+  /**
+   * Close project selector
+   */
+  function closeProjectSelector() {
+    var overlay = document.getElementById('da-project-selector-overlay');
+    if (overlay) {
+      overlay.remove();
+    }
+    document.body.style.overflow = '';
+  }
+  
+  /**
+   * Create new project and open workflow
+   */
+  function createNewProject() {
+    if (window.showApplePrompt) {
+      window.showApplePrompt('New Project', 'Enter a name for your DA project', function(name) {
+        if (!name || !name.trim()) return;
+        
+        if (window.ProjectStorage && typeof window.ProjectStorage.createProject === 'function') {
+          var project = window.ProjectStorage.createProject(name.trim());
+          if (project && project.id) {
+            closeProjectSelector();
+            openDAWorkflow(project.id);
+          }
+        }
+      });
+    } else {
+      var name = prompt('Enter a name for your DA project:');
+      if (!name || !name.trim()) return;
+      
+      if (window.ProjectStorage && typeof window.ProjectStorage.createProject === 'function') {
+        var project = window.ProjectStorage.createProject(name.trim());
+        if (project && project.id) {
+          closeProjectSelector();
+          openDAWorkflow(project.id);
+        }
+      }
+    }
+  }
+  
+  /**
+   * Open workflow with selected project
+   */
+  function openWithProject(projectId) {
+    closeProjectSelector();
+    openDAWorkflow(projectId);
+  }
+  
+  /**
+   * Helper function to escape HTML
+   */
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // ============================================================================
   // OPEN WORKFLOW INTERFACE
   // ============================================================================
   
@@ -22,14 +257,36 @@
    * Open DA workflow in fullscreen mode for a project
    */
   function openDAWorkflow(projectId) {
+    // Ensure only one workflow panel exists.
+    try {
+      var existingWorkflowOverlay = document.getElementById('da-workflow-overlay');
+      if (existingWorkflowOverlay) existingWorkflowOverlay.remove();
+      var existingSelector = document.getElementById('da-project-selector-overlay');
+      if (existingSelector) existingSelector.remove();
+    } catch (_e0) {}
+
     currentProjectId = projectId;
     currentState = window.DAWorkflow.getWorkflowState(projectId);
+
+    // Resolve theme for the workflow overlay.
+    var workflowTheme = 'light';
+    try {
+      var docTheme = document.documentElement && document.documentElement.getAttribute('data-theme');
+      if (docTheme === 'dark' || docTheme === 'light') {
+        workflowTheme = docTheme;
+      } else {
+        var themeSettings = JSON.parse(localStorage.getItem('gablokThemeSettings') || '{}');
+        workflowTheme = themeSettings['da-workflow'] || 'light';
+      }
+    } catch (e) {
+      console.warn('[DA Workflow] Could not resolve workflow theme preference:', e);
+    }
     
     // Create fullscreen overlay
     var overlay = document.createElement('div');
     overlay.id = 'da-workflow-overlay';
     overlay.className = 'da-workflow-fullscreen';
-    overlay.setAttribute('data-theme', 'light'); // Apple theme attribute
+    overlay.setAttribute('data-theme', workflowTheme); // Apple theme attribute
     
     overlay.innerHTML = `
       <div class="da-workflow-container">
@@ -868,15 +1125,36 @@
       label.textContent = isDark ? 'Light View' : 'Dark View';
     }
     
-    // Save preference
+    // Save preference (sync with global per-section theme system)
     try {
-      localStorage.setItem('da_theme', newTheme);
+      var current = JSON.parse(localStorage.getItem('gablokThemeSettings') || '{}');
+      current['da-workflow'] = newTheme;
+      localStorage.setItem('gablokThemeSettings', JSON.stringify(current));
     } catch (e) {}
+
+    try {
+      if (typeof window.applyThemeToSection === 'function') {
+        window.applyThemeToSection('da-workflow', newTheme);
+      }
+    } catch (e) {}
+
+    // Back-compat for older preference key (can be removed later)
+    try { localStorage.setItem('da_theme', newTheme); } catch (_e2) {}
   }
   
   function loadDarkModePreference() {
     try {
-      var pref = localStorage.getItem('da_theme') || 'light';
+      var pref = 'light';
+      try {
+        var themeSettings = JSON.parse(localStorage.getItem('gablokThemeSettings') || '{}');
+        if (themeSettings['da-workflow'] === 'dark' || themeSettings['da-workflow'] === 'light') {
+          pref = themeSettings['da-workflow'];
+        } else {
+          pref = localStorage.getItem('da_theme') || 'light';
+        }
+      } catch (_e) {
+        pref = localStorage.getItem('da_theme') || 'light';
+      }
       var overlay = document.getElementById('da-workflow-overlay');
       if (overlay) {
         overlay.setAttribute('data-theme', pref);
@@ -894,7 +1172,17 @@
   // ============================================================================
   
   window.DAWorkflowUI = {
-    open: openDAWorkflow,
+    open: function(projectId) {
+      // If no projectId provided, show selector first
+      if (!projectId) {
+        showProjectSelector();
+      } else {
+        openDAWorkflow(projectId);
+      }
+    },
+    openWithProject: openWithProject,
+    createNewProject: createNewProject,
+    closeSelector: closeProjectSelector,
     close: closeDAWorkflow,
     nextStep: nextStep,
     previousStep: previousStep,

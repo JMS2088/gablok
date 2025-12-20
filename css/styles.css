@@ -1566,11 +1566,11 @@
     position: relative;
     width: 400px;
     max-width: 90vw;
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--apple-material-regular);
     backdrop-filter: blur(30px) saturate(180%);
-    border-radius: 16px;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    border-radius: var(--apple-radius-large);
+    border: 1px solid var(--apple-separator);
+    box-shadow: none;
     overflow: hidden;
     animation: appleModalAppear 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
@@ -1588,14 +1588,15 @@
   
   .apple-modal-header {
     padding: 20px 24px 16px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    border-bottom: 1px solid var(--apple-separator);
+    background: var(--apple-secondary-system-background);
   }
   
   .apple-modal-header h3 {
     margin: 0;
     font-size: 17px;
     font-weight: 600;
-    color: #000000;
+    color: var(--apple-label);
     letter-spacing: -0.4px;
   }
   
@@ -1608,7 +1609,7 @@
     margin: 0;
     font-size: 13px;
     line-height: 1.5;
-    color: #3c3c43;
+    color: var(--apple-secondary-label);
   }
   
   .apple-form-group {
@@ -1626,9 +1627,9 @@
     font-size: 12px;
     font-weight: 500;
     line-height: 1.4;
-    color: #3c3c43;
+    color: var(--apple-secondary-label);
     letter-spacing: -0.2px;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--apple-font-family);
   }
   
   .apple-input {
@@ -1636,20 +1637,20 @@
     height: 36px;
     padding: 0 12px !important;
     margin: 0;
-    border: 1px solid rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--apple-separator);
     border-radius: 8px;
-    background: #ffffff;
+    background: var(--apple-system-background);
     font-size: 13px;
     line-height: 36px;
-    color: #000000;
+    color: var(--apple-label);
     box-sizing: border-box;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--apple-font-family);
   }
   
   .apple-input:focus {
     outline: none;
-    border-color: #007aff;
+    border-color: var(--apple-blue);
     box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
   }
   
@@ -1658,7 +1659,7 @@
     display: flex;
     gap: 12px;
     justify-content: flex-end;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    border-top: 1px solid var(--apple-separator);
   }
   
   .apple-modal-actions button {
@@ -1670,26 +1671,26 @@
     border: none;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--apple-font-family);
   }
   
   .apple-modal-actions button.secondary {
-    background: #e5e5ea;
-    color: #000000;
+    background: var(--apple-secondary-system-background);
+    color: var(--apple-label);
   }
   
   .apple-modal-actions button.secondary:hover {
-    background: #d1d1d6;
+    background: var(--apple-tertiary-system-background);
   }
   
   .apple-modal-actions button.primary {
-    background: #007aff;
+    background: var(--apple-blue);
     color: #ffffff;
   }
   
   .apple-modal-actions button.primary:hover {
-    background: #0051d5;
-    color: #8e8e93;
+    background: var(--apple-blue);
+    color: #ffffff;
   }
   
   .apple-modal-actions button.danger {

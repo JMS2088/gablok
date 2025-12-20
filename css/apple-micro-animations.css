@@ -8,7 +8,7 @@
    MICRO-ANIMATIONS - Buttons & Interactive Elements
    ============================================================================ */
 
-/* Button press animation */
+#da-workflow-overlay[data-theme="dark"] {
 .da-btn-mode,
 .da-btn-icon,
 .da-btn-close,
@@ -136,7 +136,7 @@
   transform: translateY(-50%);
   width: 3px;
   height: 0;
-  background: var(--apple-system-blue);
+  background: var(--apple-blue);
   border-radius: 0 2px 2px 0;
   transition: height var(--apple-duration-fast) var(--apple-ease-spring);
 }
@@ -147,7 +147,7 @@
 }
 
 .da-stage-item.current {
-  background: var(--apple-system-blue-tint);
+  background: var(--apple-blue-light);
 }
 
 /* Icon pulse animation for current stage */
@@ -172,7 +172,7 @@
 }
 
 .da-stage-item.complete .complete-icon {
-  color: var(--apple-system-green);
+  color: var(--apple-green);
   animation: checkmark-bounce 0.5s var(--apple-ease-spring);
 }
 
@@ -424,14 +424,14 @@
 }
 
 /* Smooth color transitions for all elements */
-* {
+#da-workflow-overlay * {
   transition-property: background-color, border-color, color, fill, stroke;
   transition-duration: var(--apple-duration-fast);
   transition-timing-function: var(--apple-ease-out);
 }
 
 /* Prevent transition on transform and other layout properties */
-*:not(.da-btn-mode):not(.da-btn-icon):not(.da-nav-btn) {
+#da-workflow-overlay *:not(.da-btn-mode):not(.da-btn-icon):not(.da-nav-btn) {
   transition-property: background-color, border-color, color, fill, stroke;
 }
 

@@ -114,7 +114,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--apple-system-blue) 0%, var(--apple-system-indigo) 100%);
+  background: linear-gradient(135deg, var(--apple-blue) 0%, var(--apple-indigo) 100%);
   border-radius: var(--apple-radius-large);
   box-shadow: none;
   animation: icon-float 3s ease-in-out infinite;
@@ -1054,7 +1054,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--apple-system-blue);
+  color: var(--apple-blue);
   font-size: 16px;
   transition: all var(--apple-duration-fast) var(--apple-ease-out);
 }
@@ -1097,7 +1097,7 @@
   flex-shrink: 0;
   font-size: 20px;
   font-weight: var(--apple-font-weight-semibold);
-  color: var(--apple-system-teal);
+  color: var(--apple-teal);
 }
 
 .da-contact-info {
@@ -1134,7 +1134,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--apple-system-blue);
+  color: var(--apple-blue);
   font-size: 18px;
   transition: all var(--apple-duration-fast) var(--apple-ease-out);
 }
@@ -1164,18 +1164,18 @@
 }
 
 .da-btn-small.primary {
-  background: var(--apple-system-blue);
+  background: var(--apple-blue);
   color: white;
   box-shadow: 0 10px 20px rgba(0,122,255,0.25);
 }
 
 .da-btn-small.primary:hover {
-  background: var(--apple-system-blue-hover);
+  background: var(--apple-blue-hover);
   box-shadow: 0 12px 26px rgba(0,122,255,0.35);
 }
 
 .da-btn-small.primary:active {
-  background: var(--apple-system-blue-active);
+  background: var(--apple-blue-hover);
   transform: scale(0.97);
 }
 
@@ -1196,13 +1196,13 @@
 
 .da-btn-small.outline {
   background: transparent;
-  color: var(--apple-system-blue);
+  color: var(--apple-blue);
   border: 1px solid var(--apple-separator);
 }
 
 .da-btn-small.outline:hover {
-  background: var(--apple-system-blue-tint);
-  border-color: var(--apple-system-blue);
+  background: var(--apple-blue-light);
+  border-color: var(--apple-blue);
 }
 
 .da-btn-small.outline:active {
@@ -1214,8 +1214,8 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-top: var(--apple-spacing-6);
-  padding-top: var(--apple-spacing-6);
+  margin-top: var(--apple-space-6);
+  padding-top: var(--apple-space-6);
   border-top: 1px solid rgba(15,23,42,0.08);
 }
 
@@ -1294,7 +1294,7 @@
   padding: 18px 20px;
   background: rgba(255,214,10,0.12);
   border-radius: 20px;
-  border-left: 4px solid var(--apple-system-yellow);
+  border-left: 4px solid var(--apple-yellow);
   display: flex;
   gap: 12px;
 }
@@ -1432,7 +1432,7 @@
 
 .da-info-icon {
   font-size: 18px;
-  color: var(--apple-system-blue);
+  color: var(--apple-blue);
 }
 
 .da-info-title {
@@ -1452,13 +1452,13 @@
 .da-separator {
   height: 1px;
   background: var(--apple-separator);
-  margin: var(--apple-spacing-6) 0;
+  margin: var(--apple-space-6) 0;
 }
 
 .da-separator-thick {
   height: 8px;
   background: var(--apple-fill);
-  margin: var(--apple-spacing-6) calc(-1 * var(--apple-spacing-5));
+  margin: var(--apple-space-6) calc(-1 * var(--apple-space-5));
 }
 
 /* Step indicators */
@@ -1467,7 +1467,7 @@
   gap: 8px;
   align-items: center;
   justify-content: center;
-  padding: var(--apple-spacing-4) 0;
+  padding: var(--apple-space-4) 0;
 }
 
 .da-step-dot {
@@ -1479,12 +1479,12 @@
 }
 
 .da-step-dot.complete {
-  background: var(--apple-system-blue);
+  background: var(--apple-blue);
   width: 8px;
 }
 
 .da-step-dot.current {
-  background: var(--apple-system-blue);
+  background: var(--apple-blue);
   width: 24px;
   border-radius: 4px;
 }
@@ -1514,11 +1514,11 @@
   }
 
   .da-progress-ring-container {
-    margin: var(--apple-spacing-4) auto;
+    margin: var(--apple-space-4) auto;
   }
 
   .da-main-content {
-    padding: var(--apple-spacing-4);
+    padding: var(--apple-space-4);
   }
 
   .da-step-header {
@@ -1753,7 +1753,7 @@ svg use {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: var(--apple-system-blue);
+  color: var(--apple-blue);
 }
 
 .da-doc-icon svg,
@@ -1764,19 +1764,395 @@ svg use {
 
 .da-document-item.complete .da-doc-icon,
 .da-contact-item.complete .da-contact-icon {
-  color: var(--apple-system-green);
+  color: var(--apple-green);
 }
 
 /* Complete/Checkmark Icons */
 .da-stage-item.complete .complete-icon {
-  color: var(--apple-system-green);
+  color: var(--apple-green);
 }
 
 .da-stage-item.current .complete-icon {
-  color: var(--apple-system-blue);
+  color: var(--apple-blue);
 }
 
 /* Time/Clock Icons */
 .da-time-estimate svg {
   color: var(--apple-secondary-label);
+}
+
+/* ============================================================================
+   PROJECT SELECTOR MODAL
+   ============================================================================ */
+
+/* Keep the selector isolated from any legacy/global button rules */
+#da-project-selector-overlay,
+#da-project-selector-overlay * {
+  box-sizing: border-box;
+}
+
+#da-project-selector-overlay button {
+  font: inherit;
+  color: inherit;
+}
+
+#da-project-selector-overlay.da-project-selector-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn var(--apple-duration-normal) var(--apple-ease-out);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+#da-project-selector-overlay .da-selector-container {
+  background: var(--apple-material-regular);
+  border: 1px solid var(--apple-separator);
+  border-radius: var(--apple-radius-large);
+  max-width: 980px;
+  width: 100%;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  box-shadow: none;
+  animation: slideUp 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+#da-project-selector-overlay .da-selector-header {
+  padding: var(--apple-space-8) var(--apple-space-8) var(--apple-space-6);
+  border-bottom: 1px solid var(--apple-separator);
+  position: relative;
+  background: transparent;
+}
+
+#da-project-selector-overlay .da-selector-header h2 {
+  font-size: var(--apple-font-size-title2);
+  font-weight: var(--apple-font-weight-bold);
+  color: var(--apple-label);
+  margin: 0 0 var(--apple-space-2);
+  letter-spacing: var(--apple-tracking-normal);
+  padding-right: 40px; /* Space for close button */
+}
+
+#da-project-selector-overlay .da-selector-header p {
+  font-size: var(--apple-font-size-subheadline);
+  font-weight: var(--apple-font-weight-regular);
+  color: var(--apple-secondary-label);
+  margin: 0;
+  line-height: var(--apple-line-height-relaxed);
+}
+
+#da-project-selector-overlay .da-selector-close {
+  position: absolute;
+  top: var(--apple-space-6);
+  right: var(--apple-space-6);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--apple-radius-full);
+  border: none;
+  background: var(--apple-quaternary-fill);
+  color: var(--apple-label);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--apple-duration-fast) var(--apple-ease-out);
+  font-family: var(--apple-font-family);
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 0;
+  line-height: 1;
+}
+
+#da-project-selector-overlay .da-selector-close:hover {
+  background: var(--apple-tertiary-fill);
+  transform: scale(1.05);
+}
+
+#da-project-selector-overlay .da-selector-close:active {
+  transform: scale(0.95);
+  transition-duration: var(--apple-duration-instant);
+}
+
+#da-project-selector-overlay .da-selector-body {
+  padding: var(--apple-space-6) var(--apple-space-8);
+  overflow-y: auto;
+  flex: 1;
+  -webkit-overflow-scrolling: touch;
+}
+
+#da-project-selector-overlay .da-selector-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+#da-project-selector-overlay .da-selector-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#da-project-selector-overlay .da-selector-body::-webkit-scrollbar-thumb {
+  background: var(--apple-tertiary-fill);
+  border-radius: 4px;
+}
+
+#da-project-selector-overlay .da-selector-body::-webkit-scrollbar-thumb:hover {
+  background: var(--apple-secondary-fill);
+}
+
+#da-project-selector-overlay .projects-toolbar {
+  justify-content: center;
+}
+
+#da-project-selector-overlay .da-selector-footer {
+  padding: var(--apple-space-4) var(--apple-space-8) var(--apple-space-6);
+  border-top: 1px solid var(--apple-separator);
+  display: flex;
+  justify-content: center;
+  background: transparent;
+}
+
+#da-project-selector-overlay .da-btn-new-project {
+  padding: var(--apple-space-3) var(--apple-space-6);
+  background: var(--apple-blue);
+  color: white;
+  border: none;
+  border-radius: var(--apple-radius-large);
+  font-size: var(--apple-font-size-subheadline);
+  font-weight: var(--apple-font-weight-semibold);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--apple-space-2);
+  transition: all var(--apple-duration-fast) var(--apple-ease-out);
+  font-family: var(--apple-font-family);
+  -webkit-appearance: none;
+  appearance: none;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+#da-project-selector-overlay .da-btn-new-project:hover {
+  background: var(--apple-blue-hover);
+  transform: scale(1.02);
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+}
+
+#da-project-selector-overlay .da-btn-new-project:active {
+  transform: scale(0.98);
+  transition-duration: var(--apple-duration-instant);
+}
+
+/* Welcome Screen Styles */
+#da-project-selector-overlay .da-selector-welcome .da-welcome-body {
+  text-align: center;
+  max-width: 500px;
+  margin: 0 auto;
+  padding: var(--apple-space-4) 0;
+}
+
+#da-project-selector-overlay .da-welcome-icon {
+  margin: var(--apple-space-5) auto var(--apple-space-6);
+  color: var(--apple-blue);
+  opacity: 0.9;
+}
+
+#da-project-selector-overlay .da-welcome-body h3 {
+  font-size: var(--apple-font-size-title3);
+  font-weight: var(--apple-font-weight-bold);
+  color: var(--apple-label);
+  margin: 0 0 var(--apple-space-4);
+  letter-spacing: var(--apple-tracking-tight);
+}
+
+#da-project-selector-overlay .da-welcome-body p {
+  font-size: var(--apple-font-size-subheadline);
+  font-weight: var(--apple-font-weight-regular);
+  color: var(--apple-secondary-label);
+  line-height: var(--apple-line-height-relaxed);
+  margin: 0 0 var(--apple-space-6);
+}
+
+#da-project-selector-overlay .da-welcome-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--apple-space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--apple-space-3);
+  text-align: left;
+}
+
+#da-project-selector-overlay .da-welcome-features li {
+  display: flex;
+  align-items: center;
+  gap: var(--apple-space-3);
+  font-size: var(--apple-font-size-subheadline);
+  font-weight: var(--apple-font-weight-regular);
+  color: var(--apple-label);
+}
+
+#da-project-selector-overlay .da-welcome-features svg {
+  color: var(--apple-green);
+  flex-shrink: 0;
+}
+
+#da-project-selector-overlay .da-welcome-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--apple-space-3);
+}
+
+#da-project-selector-overlay .da-btn-primary {
+  padding: var(--apple-space-4) var(--apple-space-7);
+  background: var(--apple-blue);
+  color: white;
+  border: none;
+  border-radius: var(--apple-radius-xlarge);
+  font-size: var(--apple-font-size-headline);
+  font-weight: var(--apple-font-weight-semibold);
+  font-family: var(--apple-font-family);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--apple-space-2);
+  transition: all var(--apple-duration-fast) var(--apple-ease-out);
+  -webkit-appearance: none;
+  appearance: none;
+  line-height: 1.4;
+  width: 100%;
+}
+
+#da-project-selector-overlay .da-btn-primary:hover {
+  background: var(--apple-blue-hover);
+  transform: scale(1.02);
+  box-shadow: 0 6px 16px rgba(0, 122, 255, 0.3);
+}
+
+#da-project-selector-overlay .da-btn-primary:active {
+  transform: scale(0.98);
+  transition-duration: var(--apple-duration-instant);
+}
+
+#da-project-selector-overlay .da-btn-secondary {
+  padding: var(--apple-space-3) var(--apple-space-6);
+  background: transparent;
+  color: var(--apple-label);
+  border: 1px solid var(--apple-separator);
+  border-radius: var(--apple-radius-xlarge);
+  font-size: var(--apple-font-size-subheadline);
+  font-weight: var(--apple-font-weight-medium);
+  font-family: var(--apple-font-family);
+  cursor: pointer;
+  transition: all var(--apple-duration-fast) var(--apple-ease-out);
+  -webkit-appearance: none;
+  appearance: none;
+  line-height: 1.4;
+  width: 100%;
+}
+
+#da-project-selector-overlay .da-btn-secondary:hover {
+  background: var(--apple-quaternary-fill);
+  border-color: var(--apple-tertiary-label);
+}
+
+#da-project-selector-overlay .da-btn-secondary:active {
+  background: var(--apple-tertiary-fill);
+  transform: scale(0.98);
+  transition-duration: var(--apple-duration-instant);
+}
+
+/* Dark Theme for Selector */
+#da-project-selector-overlay[data-theme="dark"] {
+  background: rgba(0, 0, 0, 0.90);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  #da-project-selector-overlay .da-selector-container {
+    max-width: 95vw;
+    max-height: 95vh;
+  }
+  
+  #da-project-selector-overlay .da-selector-header {
+    padding: var(--apple-space-6) var(--apple-space-6) var(--apple-space-5);
+  }
+  
+  #da-project-selector-overlay .da-selector-header h2 {
+    font-size: var(--apple-font-size-title3);
+  }
+  
+  #da-project-selector-overlay .da-selector-body {
+    padding: var(--apple-space-5) var(--apple-space-6);
+  }
+  
+  #da-project-selector-overlay .da-projects-grid {
+    grid-template-columns: 1fr;
+    gap: var(--apple-space-3);
+  }
+  
+  #da-project-selector-overlay .da-selector-footer {
+    padding: var(--apple-space-3) var(--apple-space-6) var(--apple-space-5);
+  }
+}
+
+@media (max-width: 480px) {
+  #da-project-selector-overlay.da-project-selector-modal {
+    padding: var(--apple-space-2);
+  }
+  
+  #da-project-selector-overlay .da-selector-container {
+    border-radius: var(--apple-radius-2xlarge);
+  }
+  
+  #da-project-selector-overlay .da-selector-header {
+    padding: var(--apple-space-5);
+  }
+  
+  #da-project-selector-overlay .da-selector-header h2 {
+    font-size: var(--apple-font-size-headline);
+    padding-right: 36px;
+  }
+  
+  #da-project-selector-overlay .da-selector-header p {
+    font-size: var(--apple-font-size-footnote);
+  }
+  
+  #da-project-selector-overlay .da-selector-body {
+    padding: var(--apple-space-4) var(--apple-space-5);
+  }
+  
+  #da-project-selector-overlay .da-selector-close {
+    top: var(--apple-space-4);
+    right: var(--apple-space-4);
+    width: 28px;
+    height: 28px;
+  }
+  
+  #da-project-selector-overlay .da-project-card {
+    padding: var(--apple-space-3);
+  }
 }
