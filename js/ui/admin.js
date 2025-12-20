@@ -88,6 +88,9 @@
     }
   function showAccount(){
     var m = qs('account-modal'); if(!m) return;
+    // Invalidate any pending close completion (animationend/timeout).
+    // This prevents a stale close finishing *after* we reopen, which looks like a jump/double-open.
+    try { m.__closeToken = null; } catch(_eTok0) {}
     // If the modal was mid-close (closing animation), cancel the pending hide.
     // Otherwise the old animationend/timeout will still fire and hide the modal
     // right after we show it (looks like an unwanted redirect back to 3D).
@@ -104,7 +107,13 @@
       m.__animating = false;
       m.classList.remove('closing');
     } catch(_eCancel) {}
-    if(m.__animating) return; // avoid re-entry during animation
+    // If already open (and not closing), don't restart animations.
+    if (m.classList.contains('visible') && !m.classList.contains('closing')) {
+      loadProfile();
+      updateDashboard();
+      m.classList.add('showing');
+      return;
+    }
     loadProfile();
     updateDashboard(); // Update dashboard stats
     m.classList.remove('closing');
@@ -147,6 +156,10 @@
     m.__animating = true;
     m.classList.remove('showing');
     m.classList.add('closing');
+
+    // Tokenize this close attempt so a stale completion can't apply after a reopen.
+    var closeToken = (Date.now().toString(36) + Math.random().toString(36).slice(2));
+    try { m.__closeToken = closeToken; } catch(_eTok1) {}
     // End after splash circle out animation ends
     var splash = document.getElementById('account-splash');
     // Clear any previous pending handler/timer to avoid stacking.
@@ -158,6 +171,12 @@
     } catch(_eClearPrev) {}
 
     var done = function(){
+      try {
+        if (m.__closeToken !== closeToken) {
+          // Modal has been reopened; ignore stale close completion.
+          return;
+        }
+      } catch(_eTok2) {}
       m.classList.remove('visible','closing');
       m.__animating = false;
       try {
@@ -167,6 +186,7 @@
         }
         m.__hideSplash = null;
         m.__hideDone = null;
+        try { m.__closeToken = null; } catch(_eTok3) {}
       } catch(_e3) {}
       splash && splash.removeEventListener('animationend', done);
     };

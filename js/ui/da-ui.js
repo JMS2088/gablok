@@ -14,6 +14,195 @@
   var currentProjectId = null;
   var currentState = null;
 
+  function getCurrentProject() {
+    if (!currentProjectId) return null;
+    try {
+      if (window.ProjectStorage && typeof window.ProjectStorage.getProjects === 'function') {
+        var projects = window.ProjectStorage.getProjects() || [];
+        return projects.find(function(p) { return p && p.id === currentProjectId; }) || null;
+      }
+    } catch (_e) {}
+    return null;
+  }
+
+  function hasMeaningfulDesignJSON(designJSON) {
+    try {
+      if (!designJSON || typeof designJSON !== 'string') return false;
+      var parsed = JSON.parse(designJSON);
+      return (
+        (parsed.rooms && parsed.rooms.length) ||
+        (parsed.wallStrips && parsed.wallStrips.length) ||
+        (parsed.furniture && parsed.furniture.length) ||
+        (parsed.pergolas && parsed.pergolas.length) ||
+        (parsed.garages && parsed.garages.length) ||
+        (parsed.pools && parsed.pools.length) ||
+        (parsed.roofs && parsed.roofs.length) ||
+        (parsed.balconies && parsed.balconies.length) ||
+        (parsed.stairsList && parsed.stairsList.length)
+      );
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  function captureCanvasThumbnail(callback) {
+    try {
+      var canvas = document.getElementById('canvas');
+      if (!canvas || !canvas.width || !canvas.height) {
+        callback(null);
+        return;
+      }
+      var tempCanvas = document.createElement('canvas');
+      tempCanvas.width = 400;
+      tempCanvas.height = 300;
+      var ctx = tempCanvas.getContext('2d');
+      ctx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height);
+      callback(tempCanvas.toDataURL('image/jpeg', 0.8));
+    } catch (_e) {
+      callback(null);
+    }
+  }
+
+  function teardownDAOverlay(options) {
+    var opts = options || {};
+    var overlay = document.getElementById('da-workflow-overlay');
+    if (overlay) overlay.remove();
+    document.body.style.overflow = '';
+
+    // Restore the global account chrome button.
+    try {
+      var globalAccountBtn = document.getElementById('account-button');
+      if (globalAccountBtn && globalAccountBtn.__daHidden) {
+        globalAccountBtn.style.display = globalAccountBtn.__daPrevDisplay || '';
+        globalAccountBtn.__daHidden = false;
+      }
+    } catch (_eAccShow) {}
+
+    if (opts.resetState !== false) {
+      currentProjectId = null;
+      currentState = null;
+    }
+  }
+
+  function leaveDAWorkflowToEditor() {
+    // Close the DA overlay but do not force Account open.
+    teardownDAOverlay({ returnToAccount: false, resetState: false });
+  }
+
+  function openCurrentProjectIn3D() {
+    var project = getCurrentProject();
+    if (!project) {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Project not found.');
+      return;
+    }
+    if (!project.designData) {
+      if (window.showAppleAlert) window.showAppleAlert('No Design Saved', 'This project does not have a saved 3D design yet.');
+      return;
+    }
+    if (typeof window.restoreProject !== 'function') {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Design system not loaded. Please refresh the page.');
+      return;
+    }
+
+    leaveDAWorkflowToEditor();
+
+    try {
+      window.restoreProject(project.designData);
+      if (typeof window.updateStatus === 'function') window.updateStatus('Loaded DA project: ' + (project.name || 'Project'));
+      if (typeof window.renderLoop === 'function') window.renderLoop();
+    } catch (e) {
+      console.error('[DA Workflow] Failed to restore project:', e);
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Failed to load the project design.');
+    }
+  }
+
+  function saveCurrentDesignToDAProject() {
+    var project = getCurrentProject();
+    if (!project) {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Project not found.');
+      return;
+    }
+    if (typeof window.serializeProject !== 'function') {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Design system not loaded. Please refresh the page.');
+      return;
+    }
+    if (!window.ProjectStorage || typeof window.ProjectStorage.updateProject !== 'function') {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Project storage is not ready yet.');
+      return;
+    }
+
+    var designData = '';
+    try { designData = window.serializeProject(); } catch (_e) { designData = ''; }
+    if (!hasMeaningfulDesignJSON(designData)) {
+      if (window.showAppleAlert) window.showAppleAlert('No Design', 'Please create or update a design before saving.');
+      return;
+    }
+
+    captureCanvasThumbnail(function(snapshot) {
+      try {
+        var images = Array.isArray(window.__projectAiImages) ? window.__projectAiImages.slice() : (Array.isArray(project.aiImages) ? project.aiImages.slice() : []);
+        var updated = window.ProjectStorage.updateProject(currentProjectId, function(p) {
+          p.designData = designData;
+          p.hasDesign = true;
+          p.aiImages = images;
+          if (snapshot) p.thumbnail = snapshot;
+          return p;
+        });
+        if (window.showAppleAlert) window.showAppleAlert('Saved', 'Design saved to "' + ((updated && updated.name) || (project.name || 'Project')) + '".');
+      } catch (e) {
+        console.error('[DA Workflow] Save failed:', e);
+        if (window.showAppleAlert) window.showAppleAlert('Error', 'Unable to save project.');
+      }
+    });
+  }
+
+  function openVisualizeFromDA() {
+    if (typeof window.showVisualize !== 'function' && typeof showVisualize !== 'function') {
+      if (window.showAppleAlert) window.showAppleAlert('Unavailable', 'Visualization tools are not available right now.');
+      return;
+    }
+
+    leaveDAWorkflowToEditor();
+
+    setTimeout(function() {
+      try {
+        if (typeof window.showVisualize === 'function') window.showVisualize();
+        else if (typeof showVisualize === 'function') showVisualize();
+      } catch (e) {
+        console.error('[DA Workflow] Failed to open visualize:', e);
+      }
+    }, 120);
+  }
+
+  function syncVisualizationsToDAProject() {
+    var project = getCurrentProject();
+    if (!project) {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Project not found.');
+      return;
+    }
+    if (!window.ProjectStorage || typeof window.ProjectStorage.updateProject !== 'function') {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Project storage is not ready yet.');
+      return;
+    }
+    var images = Array.isArray(window.__projectAiImages) ? window.__projectAiImages.slice() : [];
+    if (!images.length) {
+      if (window.showAppleAlert) window.showAppleAlert('No Images', 'No visualization images found in this session yet.');
+      return;
+    }
+    try {
+      var updated = window.ProjectStorage.updateProject(currentProjectId, function(p) {
+        p.aiImages = images;
+        return p;
+      });
+      if (window.showAppleAlert) window.showAppleAlert('Synced', 'Saved ' + images.length + ' image(s) to "' + ((updated && updated.name) || (project.name || 'Project')) + '".');
+      // Refresh current step so the thumbnails update.
+      try { renderCurrentStep(); } catch (_eRe) {}
+    } catch (e) {
+      console.error('[DA Workflow] Sync images failed:', e);
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Unable to save images to project.');
+    }
+  }
+
   // ============================================================================
   // PROJECT SELECTION
   // ============================================================================
@@ -323,6 +512,21 @@
    * Open DA workflow in fullscreen mode for a project
    */
   function openDAWorkflow(projectId) {
+    // If we're opening a specific workflow, it should take over the screen.
+    // Hide Account if it's currently open; otherwise the workflow can render behind it.
+    try {
+      if (typeof window.hideAccount === 'function') {
+        window.hideAccount();
+      } else if (window.toggleAccountModal) {
+        window.toggleAccountModal('hide');
+      }
+      var acc = document.getElementById('account-modal');
+      if (acc) {
+        acc.classList.remove('showing', 'closing', 'visible');
+        acc.__animating = false;
+      }
+    } catch (_eHideAcc) {}
+
     // Ensure only one workflow panel exists.
     try {
       var existingWorkflowOverlay = document.getElementById('da-workflow-overlay');
@@ -481,23 +685,7 @@
    * Close DA workflow interface and return to admin section
    */
   function closeDAWorkflow() {
-    var overlay = document.getElementById('da-workflow-overlay');
-    if (overlay) {
-      overlay.remove();
-    }
-    document.body.style.overflow = '';
-
-    // Restore the global account chrome button.
-    try {
-      var globalAccountBtn = document.getElementById('account-button');
-      if (globalAccountBtn && globalAccountBtn.__daHidden) {
-        globalAccountBtn.style.display = globalAccountBtn.__daPrevDisplay || '';
-        globalAccountBtn.__daHidden = false;
-      }
-    } catch (_eAccShow) {}
-
-    currentProjectId = null;
-    currentState = null;
+    teardownDAOverlay({ returnToAccount: true, resetState: true });
     
     // Return to the Account dashboard.
     // IMPORTANT: the Account modal can be mid-close (closing animation) when DA was opened.
@@ -607,8 +795,49 @@
     // Render next steps preview
     renderNextStepsPreview(nextStepsPreview, stage, step);
     
+    // Project tools (3D + Visualizations)
+    var project = getCurrentProject();
+    var hasDesign = !!(project && project.designData);
+    var imageList = (project && Array.isArray(project.aiImages)) ? project.aiImages : [];
+    var imageCount = imageList.length;
+    var imageThumbs = imageList.slice(0, 6).map(function(src) {
+      return '<img class="da-ai-thumb" src="' + src + '" alt="Visualization image" loading="lazy" />';
+    }).join('');
+    var imagesHtml = imageCount
+      ? '<div class="da-ai-thumb-grid">' + imageThumbs + '</div>' + (imageCount > 6 ? '<div class="da-ai-more">+' + (imageCount - 6) + ' more</div>' : '')
+      : '<div class="da-ai-empty">No images saved yet.</div>';
+
     // Main content with modern card layout
     var html = `
+      <!-- 3D View Card -->
+      <div class="da-card da-project-design-card">
+        <div class="da-card-header">
+          <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#sf-cube" /></svg> 3D View</h3>
+          <span class="da-card-badge">${hasDesign ? 'Design saved' : 'No design saved'}</span>
+        </div>
+        <div class="da-card-body">
+          <div class="da-project-actions">
+            <button class="da-btn-small primary" ${hasDesign ? '' : 'disabled'} onclick="window.DAWorkflowUI.openProjectIn3D()">Open Design in 3D</button>
+            <button class="da-btn-small secondary" onclick="window.DAWorkflowUI.saveCurrentDesignToProject()">Save Current 3D Design</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Visualizations Card -->
+      <div class="da-card da-project-visualizations-card">
+        <div class="da-card-header">
+          <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#sf-photo" /></svg> Visualizations</h3>
+          <span class="da-card-badge">${imageCount} image${imageCount === 1 ? '' : 's'}</span>
+        </div>
+        <div class="da-card-body">
+          <div class="da-project-actions">
+            <button class="da-btn-small primary" onclick="window.DAWorkflowUI.openVisualize()">Open Visualize</button>
+            <button class="da-btn-small secondary" onclick="window.DAWorkflowUI.syncVisualizationsToProject()">Save Images to Project</button>
+          </div>
+          ${imagesHtml}
+        </div>
+      </div>
+
       <!-- Checklist Card -->
       <div class="da-card da-checklist-card">
         <div class="da-card-header">
@@ -1279,7 +1508,11 @@
     showContacts: showContacts,
     showDocuments: showDocuments,
     showHelp: showHelp,
-    toggleDarkMode: toggleDarkMode
+    toggleDarkMode: toggleDarkMode,
+    openProjectIn3D: openCurrentProjectIn3D,
+    saveCurrentDesignToProject: saveCurrentDesignToDAProject,
+    openVisualize: openVisualizeFromDA,
+    syncVisualizationsToProject: syncVisualizationsToDAProject
   };
   
   console.log('[DA Workflow UI] Interface ready');

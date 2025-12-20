@@ -716,21 +716,23 @@
   #save-measurements { margin-top: 10px; padding: 6px 16px; }
   
   /* Info modal */
-  #info-modal { display: none; position: fixed; inset: 0; z-index: 11000; align-items: center; justify-content: center; }
-  /* Ensure Info modal shows when JS toggles 'visible' */
-  #info-modal.visible { display: flex; }
+  /* Use opacity/visibility transitions (avoid display-toggling jump) */
+  #info-modal { display: flex; position: fixed; inset: 0; z-index: 11000; align-items: center; justify-content: center; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 220ms; }
+  #info-modal.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s; }
   #info-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
-  #info-content { position: relative; width: min(980px, 96vw); max-height: calc(100vh - 40px); overflow: auto; background: #fff; border-radius: 12px; border: 1px solid var(--apple-separator); box-shadow: none; }
+  #info-content { position: relative; width: min(980px, 96vw); max-height: calc(100vh - 40px); overflow: auto; background: #fff; border-radius: 12px; border: 1px solid var(--apple-separator); box-shadow: none; opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
+  #info-modal.visible #info-content { opacity: 1; transform: translateY(0) scale(1); }
   #info-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; position: sticky; top: 0; z-index: 1; }
   #info-header strong { flex: 1; }
   #info-body { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 18px; }
 
   /* Share modal */
-  #share-modal { display: none; position: fixed; inset: 0; z-index: 11000; align-items: center; justify-content: center; }
-  /* Ensure Share modal shows when JS toggles 'visible' */
-  #share-modal.visible { display: flex; }
+  /* Use opacity/visibility transitions (avoid display-toggling jump) */
+  #share-modal { display: flex; position: fixed; inset: 0; z-index: 11000; align-items: center; justify-content: center; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 220ms; }
+  #share-modal.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s; }
   #share-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.45); }
-  #share-content { position: relative; width: min(720px, 95vw); background: #fff; border-radius: 12px; border: 1px solid var(--apple-separator); box-shadow: none; display: flex; flex-direction: column; overflow: hidden; }
+  #share-content { position: relative; width: min(720px, 95vw); background: #fff; border-radius: 12px; border: 1px solid var(--apple-separator); box-shadow: none; display: flex; flex-direction: column; overflow: hidden; opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
+  #share-modal.visible #share-content { opacity: 1; transform: translateY(0) scale(1); }
   #share-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; }
   #share-body { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
   #share-note { font-size: 13px; color: #334155; }
@@ -808,9 +810,12 @@
   #plan2d-overlay, #labels-2d { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; display:block; }
 
   /* Floorplan import modal */
-  #floorplan-modal { display:none; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center; }
+  /* Use opacity/visibility transitions (avoid display-toggling jump) */
+  #floorplan-modal { display:flex; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 220ms; }
+  #floorplan-modal.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s; }
   #floorplan-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
-  #floorplan-content { position:relative; width: min(1200px, 95vw); height: calc(100vh - 40px); max-height:100vh; background:#fff; border-radius:12px; border: 1px solid var(--apple-separator); box-shadow: none; display:flex; flex-direction:column; overflow:hidden; }
+  #floorplan-content { position:relative; width: min(1200px, 95vw); height: calc(100vh - 40px); max-height:100vh; background:#fff; border-radius:12px; border: 1px solid var(--apple-separator); box-shadow: none; display:flex; flex-direction:column; overflow:hidden; opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
+  #floorplan-modal.visible #floorplan-content { opacity: 1; transform: translateY(0) scale(1); }
   #floorplan-stage { display:flex; min-height:0; height:100%; }
   #floorplan-stage-main { flex:1; position:relative; background:#0b1020; display:flex; align-items:stretch; justify-content:stretch; }
   #floorplan-canvas { width:100%; height:100%; background:#0b1020; display:block; }
@@ -820,7 +825,9 @@
   #fp-commit { flex:1; }
 
   /* Reset confirmation modal */
-  #reset-confirmation-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:20000; align-items:center; justify-content:center; }
+  /* Use opacity/visibility transitions (avoid display-toggling jump) */
+  #reset-confirmation-modal { display:flex; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:20000; align-items:center; justify-content:center; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 220ms; }
+  #reset-confirmation-modal.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s; }
   #reset-dialog { background:#ffffff; border-radius:16px; border: 1px solid var(--apple-separator); box-shadow: none; max-width:440px; width:90%; padding:32px 28px; animation:slideUp 0.3s ease; }
   #reset-titlebar { text-align:center; margin-bottom:24px; }
   #reset-icon { width:64px; height:64px; margin:0 auto 16px; background:linear-gradient(135deg, #ef4444, #dc2626); border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow: none; }
@@ -855,48 +862,42 @@
   #roof-controls.visible { display:inline-flex; }
   .roof-label { font-size:12px; color:#374151; }
 
-  /* Floorplan modal remaining inline styles */
-  #floorplan-modal { display:none; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center; }
-  #floorplan-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
-  #floorplan-content { position:relative; width:min(1200px,95vw); height:calc(100vh - 40px); max-height:100vh; background:#fff; border-radius:12px; border: 1px solid var(--apple-separator); box-shadow: none; display:flex; flex-direction:column; overflow:hidden; }
-  .floorplan-header { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid #e5e7eb; background:#f8fafc; }
-  .floorplan-header strong { flex:1; }
-  #floorplan-stage { display:flex; min-height:0; height:100%; }
-  #floorplan-stage-main { flex:1; position:relative; background:#0b1020; display:flex; align-items:stretch; justify-content:stretch; }
-  #floorplan-canvas { width:100%; height:100%; background:#0b1020; display:block; }
-  #floorplan-overlay { position:absolute; inset:0; pointer-events:none; }
-  #floorplan-sidebar { width:280px; border-left:1px solid #e5e7eb; padding:10px; display:flex; flex-direction:column; gap:10px; background:#fff; overflow:auto; }
-  .floorplan-page-row { display:flex; align-items:center; gap:6px; }
-  .floorplan-page-label { font-size:12px; color:#374151; }
-  #fp-page-input { width:56px; }
-  .floorplan-steps-title { font-weight:600; margin-bottom:6px; }
-  .floorplan-steps-list { margin:0 0 6px 18px; padding:0; }
-  .floorplan-tools-row { display:flex; gap:6px; flex-wrap:wrap; }
-  .floorplan-distances-column { display:flex; flex-direction:column; gap:6px; }
-  .floorplan-small-label { font-size:12px; color:#374151; }
-  .floorplan-auto-box { display:flex; flex-direction:column; gap:4px; background:#f8fafc; padding:8px; border:1px solid #e5e7eb; border-radius:8px; }
-  .floorplan-auto-title { font-size:12px; font-weight:600; color:#1e293b; display:flex; align-items:center; gap:4px; }
-  .floorplan-auto-label { font-size:11px; color:#475569; display:flex; flex-direction:column; gap:2px; }
-  /* Inputs inside auto box should be compact and full width */
-  .floorplan-auto-label input { width:100%; font-size:11px; }
-  .floorplan-small-text { font-size:12px; color:#374151; }
-  .floorplan-commit-row { margin-top:auto; display:flex; gap:8px; }
-  #fp-commit { flex:1; }
-
   /* Pricing modal remaining inline styles */
-  #pricing-modal { display:none; position:fixed; inset:0; z-index:15000; align-items:center; justify-content:center; }
-  /* Ensure Pricing modal shows when JS toggles 'visible' */
-  #pricing-modal.visible { display:flex; }
-  #pricing-content { position:relative; width:min(880px,95vw); max-height:calc(100vh - 40px); overflow:auto; background:#fff; border-radius:12px; border: 1px solid var(--apple-separator); box-shadow: none; padding:24px; }
+  /* Use opacity/visibility transitions (avoid display-toggling jump) */
+  #pricing-modal { 
+    display:flex;
+    position:fixed;
+    inset:0;
+    z-index:15000;
+    align-items:center;
+    justify-content:center;
+    /* Dim + blur the 3D room behind the pricing popover */
+    background: rgba(0,0,0,0.32);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 220ms;
+  }
+  [data-theme="dark"] #pricing-modal {
+    background: rgba(0,0,0,0.42);
+  }
+  #pricing-modal.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s; }
+  #pricing-content { position:relative; z-index:1; width:min(880px,95vw); max-height:calc(100vh - 40px); overflow:auto; background:#fff; border-radius:12px; border: 1px solid var(--apple-separator); box-shadow: none; padding:24px; opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
+  #pricing-modal.visible #pricing-content { opacity: 1; transform: translateY(0) scale(1); }
   .pricing-settings-row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin:8px 0 12px; padding:10px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; }
   .pricing-field-label { font-size:12px; color:#374151; display:flex; flex-direction:column; gap:4px; }
   #pricing-slab-mm, #pricing-soil-per-m3 { width:120px; }
 
   /* Room palette modal */
-  #room-palette-modal { display:none; position:fixed; inset:0; z-index:13000; align-items:center; justify-content:center; }
-  #room-palette-content { position:relative; width:min(960px,96vw); max-height:calc(100vh - 40px); background:#fff; border-radius:12px; border: 1px solid var(--apple-separator); box-shadow: none; display:flex; padding:18px; gap:18px; }
-  #room-palette-left { display:flex; flex-direction:column; gap:10px; }
-  #room-palette-right { display:flex; flex-direction:column; gap:10px; flex:1; }
+  /* Use opacity/visibility transitions (avoid display-toggling jump) */
+  #room-palette-modal { display:flex; position:fixed; inset:0; z-index:13000; align-items:center; justify-content:center; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 220ms; }
+  #room-palette-modal.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s; }
+  #room-palette-content { position:relative; width: 95vw; height: 95vh; background:#fff; border-radius:24px; border: 1px solid var(--apple-separator); box-shadow: none; display: grid; grid-template-columns: minmax(420px, calc(50% + 200px)) minmax(360px, calc(50% - 200px)); overflow: hidden; opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
+  #room-palette-modal.visible #room-palette-content { opacity: 1; transform: translateY(0) scale(1); }
+  #room-palette-left { display:flex; flex-direction:column; gap:10px; min-height: 0; }
+  #room-palette-right { display:flex; flex-direction:column; gap:10px; min-height: 0; }
   .room-palette-actions { display:flex; gap:8px; align-items:center; justify-content:center; margin-bottom:8px; }
   #room-palette-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
 
@@ -929,8 +930,9 @@
   #pricing-content li, #pricing-content ul { line-height: 2.4 !important; }
 
   /* Visualize render overlay */
-  #visualize-modal { display:none; position:fixed; inset:0; z-index:16000; }
-  #visualize-modal.visible { display:block; }
+  /* Use opacity/visibility transitions (avoid display-toggling jump) */
+  #visualize-modal { display:block; position:fixed; inset:0; z-index:16000; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 220ms; }
+  #visualize-modal.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s; }
   #visualize-backdrop { display:none; }
   #visualize-content { position:fixed; inset:0; width:100vw; height:100vh; max-width:100vw; max-height:100vh; background:transparent; border-radius:0; box-shadow: none; display:block; overflow:hidden; }
   /* Header removed in HTML, style class kept for safety but unused */
@@ -1386,17 +1388,8 @@
   /* External edit button for room labels handled by apple-design-system.css */
   
   /* Legacy modal styles: restrict to Info only to avoid overriding Pricing z-index/display */
-  #info-modal {
-    display: none; position: fixed; top: 0; left: 0;
-    width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200;
-  }
-  
-  #info-content {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    background: white; padding: 30px; border-radius: 12px; max-width: 700px;
-    width: 700px;
-    box-shadow: none;
-  }
+  /* NOTE: Info modal layout/visibility is defined earlier using opacity/visibility transitions.
+     Avoid reintroducing display:none or absolute centering rules here. */
   
   #info-content h2, #pricing-content h2 {
     margin: 0 0 20px 0; color: #333; font-size: 24px;
@@ -1440,15 +1433,6 @@
   
   .total-section .pricing-item { font-size: 16px; font-weight: 700; }
   
-
-  /* Room palette modal */
-  #room-palette-modal { position: fixed; inset: 0; display: none; z-index: 9999; align-items: center; justify-content: center; }
-  /* When opened via JS (class 'visible'), display the flex container so children layout. Without this, Edit buttons appeared broken because modal stayed hidden. */
-  #room-palette-modal.visible { display: flex; }
-  #room-palette-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1; }
-  #room-palette-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 95vw; height: 95vh; background: #fff; border-radius: 24px; border: 1px solid var(--apple-separator); box-shadow: none; display: grid; grid-template-columns: minmax(420px, calc(50% + 200px)) minmax(360px, calc(50% - 200px)); overflow: hidden; z-index: 2; }
-  #room-palette-content .close-button { z-index: 2; }
-
   /* --------------------------------------------------------------
      Global font-size downsizing (-2px across UI)
      Corner labels are canvas-drawn and unaffected by CSS.
@@ -1510,10 +1494,12 @@
   }
 
   /* Admin modal */
-  #admin-modal { display: none; position: fixed; inset: 0; z-index: 16000; align-items: center; justify-content: center; }
-  #admin-modal.visible { display: flex; }
+  /* Use opacity/visibility transitions (avoid display-toggling jump) */
+  #admin-modal { display: flex; position: fixed; inset: 0; z-index: 16000; align-items: center; justify-content: center; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 220ms; }
+  #admin-modal.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s; }
   #admin-backdrop { position: absolute; inset: 0; background: var(--apple-system-background); opacity: 0.75; }
-  #admin-content { position: relative; width: min(980px, 96vw); max-height: calc(100vh - 40px); overflow: auto; background: var(--apple-material-regular); border-radius: var(--apple-radius-large); box-shadow: none; border: 1px solid var(--apple-separator); }
+  #admin-content { position: relative; width: min(980px, 96vw); max-height: calc(100vh - 40px); overflow: auto; background: var(--apple-material-regular); border-radius: var(--apple-radius-large); box-shadow: none; border: 1px solid var(--apple-separator); opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
+  #admin-modal.visible #admin-content { opacity: 1; transform: translateY(0) scale(1); }
   #admin-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--apple-separator); background: var(--apple-secondary-system-background); position: sticky; top: 0; z-index: 1; }
   #admin-header strong { flex: 1; }
   #admin-body { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 18px; }

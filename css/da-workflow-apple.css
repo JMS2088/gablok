@@ -961,6 +961,54 @@
   padding: 20px 24px 24px;
 }
 
+/* ==========================================================================
+   PROJECT ACTIONS (3D + VISUALIZATIONS)
+   ========================================================================= */
+
+.da-project-actions {
+  display: flex;
+  gap: var(--apple-space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--apple-space-4);
+}
+
+.da-project-actions .da-btn-small[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.da-ai-thumb-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--apple-space-2);
+}
+
+@media (max-width: 900px) {
+  .da-ai-thumb-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.da-ai-thumb {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--apple-radius-lg);
+  border: 1px solid var(--apple-separator);
+  background: var(--apple-secondary-fill);
+}
+
+.da-ai-empty {
+  color: var(--apple-secondary-label);
+  font-size: var(--apple-font-size-subheadline);
+}
+
+.da-ai-more {
+  margin-top: var(--apple-space-2);
+  color: var(--apple-secondary-label);
+  font-size: var(--apple-font-size-footnote);
+}
+
 /* ============================================================================
    CHECKLIST ITEMS
    ============================================================================ */
