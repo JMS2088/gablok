@@ -88,6 +88,22 @@
     }
   function showAccount(){
     var m = qs('account-modal'); if(!m) return;
+    // If the modal was mid-close (closing animation), cancel the pending hide.
+    // Otherwise the old animationend/timeout will still fire and hide the modal
+    // right after we show it (looks like an unwanted redirect back to 3D).
+    try {
+      if (m.__hideTimer) {
+        clearTimeout(m.__hideTimer);
+        m.__hideTimer = null;
+      }
+      if (m.__hideSplash && m.__hideDone) {
+        try { m.__hideSplash.removeEventListener('animationend', m.__hideDone); } catch(_e0) {}
+        m.__hideSplash = null;
+        m.__hideDone = null;
+      }
+      m.__animating = false;
+      m.classList.remove('closing');
+    } catch(_eCancel) {}
     if(m.__animating) return; // avoid re-entry during animation
     loadProfile();
     updateDashboard(); // Update dashboard stats
@@ -133,14 +149,37 @@
     m.classList.add('closing');
     // End after splash circle out animation ends
     var splash = document.getElementById('account-splash');
+    // Clear any previous pending handler/timer to avoid stacking.
+    try {
+      if (m.__hideTimer) { clearTimeout(m.__hideTimer); m.__hideTimer = null; }
+      if (m.__hideSplash && m.__hideDone) {
+        try { m.__hideSplash.removeEventListener('animationend', m.__hideDone); } catch(_e1) {}
+      }
+    } catch(_eClearPrev) {}
+
     var done = function(){
       m.classList.remove('visible','closing');
       m.__animating = false;
+      try {
+        if (m.__hideTimer) { clearTimeout(m.__hideTimer); m.__hideTimer = null; }
+        if (m.__hideSplash && m.__hideDone) {
+          try { m.__hideSplash.removeEventListener('animationend', m.__hideDone); } catch(_e2) {}
+        }
+        m.__hideSplash = null;
+        m.__hideDone = null;
+      } catch(_e3) {}
       splash && splash.removeEventListener('animationend', done);
     };
+    // Track the pending hide so showAccount() can cancel it.
+    try {
+      m.__hideDone = done;
+      m.__hideSplash = splash || null;
+    } catch(_eTrack) {}
     // If no splash, fallback timeout
     if(splash){ splash.addEventListener('animationend', done); }
-    else { setTimeout(done, 520); }
+    else {
+      m.__hideTimer = setTimeout(done, 520);
+    }
   }
   function switchView(target){
     // Hide dashboard, show target view
@@ -726,7 +765,17 @@
 
   function openWorkflow(projectId){
     if(window.DAWorkflowUI && typeof window.DAWorkflowUI.open === 'function'){
-      if(window.toggleAccountModal) window.toggleAccountModal('hide');
+      // Hide the account modal BEFORE opening DA Workflow.
+      // The account modal uses a closing animation; during that time it can still
+      // sit on top of the page and intercept clicks, making DA Workflow feel "locked".
+      try {
+        if(window.toggleAccountModal) window.toggleAccountModal('hide');
+        var acc = document.getElementById('account-modal');
+        if(acc){
+          acc.classList.remove('showing', 'closing', 'visible');
+          acc.__animating = false;
+        }
+      } catch(_eHide) {}
       // If projectId provided, open directly; otherwise show selector
       if (projectId) {
         window.DAWorkflowUI.open(projectId);

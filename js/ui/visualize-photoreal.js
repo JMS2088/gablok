@@ -2561,14 +2561,20 @@
       width = Math.max(width, 800);
       height = Math.max(height, 600);
       
-      // NOTE: pixelRatio is handled by renderer.setPixelRatio() in ensureRenderer()
-      // We pass CSS dimensions to setSize and Three.js multiplies internally
-      var pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+      // NOTE: ensureRenderer() sets an initial pixel ratio; we override it here
+      // with a clamped value to avoid huge WebGL buffers and toDataURL freezes.
+      var deviceRatio = window.devicePixelRatio || 1;
+      var requestedPixelRatio = Math.min(deviceRatio, 2);
+      var MAX_RENDER_PIXELS = 5_000_000; // safety budget for drawing buffer
+      var maxRatioByPixels = Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, width * height));
+      var pixelRatio = Math.max(1, Math.min(requestedPixelRatio, maxRatioByPixels));
       
-      console.log('[Photoreal] Stage dimensions:', width, 'x', height, '(pixelRatio:', pixelRatio, ')');
+      console.log('[Photoreal] Stage dimensions:', width, 'x', height, '(pixelRatio:', pixelRatio, 'requested:', requestedPixelRatio, ')');
 
       // Step 3: Setup renderer and scene
       ensureRenderer();
+      // Override pixel ratio from ensureRenderer() to our clamped value.
+      renderer.setPixelRatio(pixelRatio);
       // Pass CSS dimensions - renderer.setPixelRatio already handles the internal scaling
       renderer.setSize(width, height, false);
       
@@ -2896,13 +2902,27 @@
     var aiPanel = document.getElementById('visualize-ai-panel');
     var aiSetup = document.getElementById('visualize-ai-setup');
     var providerBadge = document.getElementById('visualize-ai-provider');
+
+    // Action buttons (disabled until AI settings exist)
+    var enhanceBtn = document.getElementById('visualize-ai-enhance');
+    var variationsBtn = document.getElementById('visualize-ai-variations');
+    var saveBtn = document.getElementById('visualize-ai-save');
     
     console.log('[AI] Panel elements:', { aiPanel: !!aiPanel, aiSetup: !!aiSetup, providerBadge: !!providerBadge });
     
-    if (checkAIConfiguration()) {
-      console.log('[AI] Showing AI panel');
-      if (aiPanel) aiPanel.style.display = 'block';
+    // Always show the panel so the prompt controls are available.
+    if (aiPanel) {
+      aiPanel.classList.remove('is-hidden');
+      aiPanel.style.display = '';
+    }
+
+    var configured = checkAIConfiguration();
+    if (configured) {
+      console.log('[AI] Configured: enabling AI actions');
       if (aiSetup) aiSetup.style.display = 'none';
+      if (enhanceBtn) enhanceBtn.disabled = false;
+      if (variationsBtn) variationsBtn.disabled = false;
+      if (saveBtn) saveBtn.disabled = false;
       if (providerBadge) {
         var providerNames = {
           'openai': 'OpenAI',
@@ -2914,11 +2934,18 @@
           'freepik': 'Freepik'
         };
         providerBadge.textContent = providerNames[aiState.provider] || aiState.provider;
+        providerBadge.style.display = '';
       }
     } else {
-      console.log('[AI] Hiding AI panel, showing setup');
-      if (aiPanel) aiPanel.style.display = 'none';
+      console.log('[AI] Not configured: showing setup and disabling actions');
       if (aiSetup) aiSetup.style.display = 'block';
+      if (enhanceBtn) enhanceBtn.disabled = true;
+      if (variationsBtn) variationsBtn.disabled = true;
+      if (saveBtn) saveBtn.disabled = true;
+      if (providerBadge) {
+        providerBadge.textContent = '';
+        providerBadge.style.display = 'none';
+      }
     }
   }
   

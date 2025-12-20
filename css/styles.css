@@ -1666,8 +1666,11 @@
     height: 32px;
     padding: 0 16px;
     border-radius: 8px;
-    font-size: 13px;
+    /* Override apple-typography-override's global `button` typography */
+    font-size: 13px !important;
+    line-height: 1 !important;
     font-weight: 500;
+    letter-spacing: -0.01em;
     border: none;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -1840,22 +1843,20 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.6) !important;
-    backdrop-filter: blur(20px) saturate(150%) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(150%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.8) !important;
-    box-shadow: 
-      0 4px 12px rgba(0, 0, 0, 0.08),
-      inset 0 1px 1px rgba(255, 255, 255, 0.9) !important;
+    background: var(--apple-material-regular);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--apple-separator);
+    box-shadow: none;
     flex-shrink: 0;
-    color: #000000;
+    color: var(--apple-label);
   }
   .panel-icon .sf-icon { 
-    color: #000000;
+    color: currentColor;
     width: 36px;
     height: 36px;
   }
-  /* All panel icons now use consistent glass styling with black icons */
+  /* All panel icons inherit theme-aware label color */
   .panel-icon-blue,
   .panel-icon-indigo,
   .panel-icon-teal,
@@ -1864,7 +1865,7 @@
   .panel-icon-green,
   .panel-icon-red,
   .panel-icon-navy { 
-    color: #000000;
+    color: inherit;
   }
   .panel-heading {
     flex: 1;
@@ -2105,12 +2106,14 @@
   }
 
   [data-theme="dark"] .account-card {
-    background: rgba(30, 30, 30, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    /* Base .account-card uses !important for light styles; mirror it here so dark mode wins. */
+    background: rgba(30, 30, 30, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    color: #f5f5f7 !important;
     box-shadow: 
       0 8px 32px rgba(0, 0, 0, 0.3),
       0 1px 2px rgba(0, 0, 0, 0.2),
-      inset 0 1px 1px rgba(255, 255, 255, 0.08);
+      inset 0 1px 1px rgba(255, 255, 255, 0.08) !important;
   }
 
   .account-card::before {
@@ -2394,11 +2397,11 @@
     border: none;
     box-shadow: none;
   }
-    [data-theme="dark"] .panel-icon {
-      background: rgba(255,255,255,0.06);
-      border-color: rgba(255,255,255,0.12);
-      color: rgba(255,255,255,0.9);
-    }
+  [data-theme="dark"] .panel-icon {
+    background: var(--apple-material-regular);
+    border-color: var(--apple-separator);
+    color: var(--apple-label);
+  }
   [data-theme="dark"] .account-panel {
     background: transparent;
     border: none;
@@ -2417,10 +2420,11 @@
 
 
   [data-theme="dark"] .stat-card {
-    background: rgba(30, 30, 30, 0.6);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border-color: rgba(255,255,255,0.12);
+    /* Base .stat-card uses !important for light styles; mirror it here so dark mode wins. */
+    background: rgba(30, 30, 30, 0.6) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    border-color: rgba(255,255,255,0.12) !important;
     box-shadow: 
       0 8px 32px rgba(0,0,0,0.3),
       0 1px 2px rgba(0,0,0,0.2),
@@ -2442,9 +2446,7 @@
   }
   
   [data-theme="dark"] .panel-icon-navy {
-    color: #ffffff;
-    background: rgba(255, 255, 255, 0.15) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    color: inherit;
   }
   
   [data-theme="dark"] .dashboard-title {

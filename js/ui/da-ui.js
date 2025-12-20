@@ -122,6 +122,8 @@
             </div>
             <div class="project-card-actions">
               <button type="button" class="primary" onclick="window.DAWorkflowUI.openWithProject('${project.id}')">Continue Workflow</button>
+              <button type="button" class="secondary" onclick="window.DAWorkflowUI.renameProject('${project.id}')">Rename</button>
+              <button type="button" class="secondary danger" onclick="window.DAWorkflowUI.deleteProject('${project.id}')">Delete</button>
             </div>
           </div>`;
       });
@@ -161,14 +163,14 @@
               <li><svg width="20" height="20"><use href="#sf-checkmark-circle"/></svg> Document management</li>
               <li><svg width="20" height="20"><use href="#sf-checkmark-circle"/></svg> Contact management</li>
             </ul>
-            <div class="da-welcome-actions">
-              <button class="da-btn-primary" onclick="window.DAWorkflowUI.createNewProject()">
+            <div class="projects-toolbar da-welcome-actions">
+              <button type="button" class="primary" onclick="window.DAWorkflowUI.createNewProject()">
                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                   <path d="M10 5v10M5 10h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                 </svg>
                 Start Your First Project
               </button>
-              <button class="da-btn-secondary" onclick="window.DAWorkflowUI.closeSelector()">Cancel</button>
+              <button type="button" class="secondary" onclick="window.DAWorkflowUI.closeSelector()">Cancel</button>
             </div>
           </div>
         </div>`;
@@ -231,6 +233,53 @@
       }
     }
   }
+
+  function refreshProjectSelector() {
+    try { closeProjectSelector(); } catch (_e0) {}
+    try { showProjectSelector(); } catch (_e1) {}
+  }
+
+  function renameProject(projectId) {
+    if (!projectId) return;
+    var storage = window.ProjectStorage;
+    if (!storage || typeof storage.getProjects !== 'function' || typeof storage.updateProject !== 'function') return;
+
+    var projects = [];
+    try { projects = storage.getProjects() || []; } catch (_e2) {}
+    var current = projects.find(function(p){ return p && p.id === projectId; });
+    var currentName = (current && current.name) ? String(current.name) : 'Project';
+
+    var onName = function(name) {
+      if (!name || !String(name).trim()) return;
+      try { storage.updateProject(projectId, { name: String(name).trim() }); }
+      catch (e) { console.error('[DA Workflow] Rename failed:', e); }
+      refreshProjectSelector();
+    };
+
+    if (window.showApplePrompt) {
+      window.showApplePrompt('Rename Project', currentName, onName);
+    } else {
+      onName(prompt('Rename Project', currentName));
+    }
+  }
+
+  function deleteProject(projectId) {
+    if (!projectId) return;
+    var storage = window.ProjectStorage;
+    if (!storage || typeof storage.deleteProject !== 'function') return;
+
+    var doDelete = function(){
+      try { storage.deleteProject(projectId); }
+      catch (e) { console.error('[DA Workflow] Delete failed:', e); }
+      refreshProjectSelector();
+    };
+
+    if (window.showAppleConfirm) {
+      window.showAppleConfirm('Delete Project', 'This action cannot be undone. Are you sure you want to delete this project?', doDelete);
+    } else {
+      if (confirm('Delete this project? This cannot be undone.')) doDelete();
+    }
+  }
   
   /**
    * Open workflow with selected project
@@ -268,6 +317,16 @@
     currentProjectId = projectId;
     currentState = window.DAWorkflow.getWorkflowState(projectId);
 
+    // Resolve current project name (for sidebar header)
+    var currentProjectName = 'Project';
+    try {
+      if (window.ProjectStorage && typeof window.ProjectStorage.getProjects === 'function') {
+        var projects = window.ProjectStorage.getProjects() || [];
+        var match = projects.find(function(p){ return p && p.id === projectId; });
+        if (match && match.name) currentProjectName = String(match.name);
+      }
+    } catch (_eProjName) {}
+
     // Resolve theme for the workflow overlay.
     var workflowTheme = 'light';
     try {
@@ -290,48 +349,19 @@
     
     overlay.innerHTML = `
       <div class="da-workflow-container">
-        <!-- Modern Header -->
-        <div class="da-workflow-header">
-          <div class="da-header-content">
-            <div class="da-header-left">
-              <div class="da-header-icon-wrapper">
-                <svg class="da-header-icon" width="32" height="32" viewBox="0 0 32 32">
-                  <use xlink:href="/css/sf-symbols.svg#sf-building-2" />
-                </svg>
-                <div class="da-header-text">
-                  <h1>DA Workflow</h1>
-                  <p class="da-subtitle">Step-by-step guidance from planning to occupation</p>
-                </div>
-              </div>
-            </div>
-            <div class="da-header-right">
-              <button class="da-btn-mode" onclick="window.DAWorkflowUI.toggleDarkMode()" title="Toggle Dark Mode">
-                <svg class="dark-mode-icon" width="20" height="20" viewBox="0 0 20 20">
-                  <use class="dark-mode-symbol" xlink:href="/css/sf-symbols.svg#sf-moon" />
-                </svg>
-                <span class="dark-mode-label">Dark View</span>
-              </button>
-              <button class="da-btn-icon" onclick="window.DAWorkflowUI.showHelp()" title="Help">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="da-icon-svg">
-                  <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.5"/>
-                  <path d="M10 14v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <path d="M10 11c0-1.5 2-1.5 2-3 0-1.1-.9-2-2-2s-2 .9-2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-              </button>
-              <button class="da-btn-close" onclick="window.DAWorkflowUI.close()">
-                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" class="da-icon-svg">
-                  <path d="M6 6L14 14M14 6L6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
+        <button class="da-workflow-account-btn" onclick="window.DAWorkflowUI.close()" title="Account" aria-label="Account">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+            <path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </svg>
+        </button>
         
         <!-- Main Content -->
         <div class="da-workflow-body">
           <!-- Compact Sidebar: Stage Progress -->
           <div class="da-sidebar">
             <div class="da-sidebar-header">
+              <div class="da-project-name" id="da-project-name">${escapeHtml(currentProjectName)}</div>
               <h3>Overall Progress</h3>
               <div class="da-overall-progress">
                 <div class="da-progress-ring">
@@ -409,9 +439,17 @@
     `;
     
     document.body.appendChild(overlay);
-    
-    // Load dark mode preference
-    loadDarkModePreference();
+
+    // Hide the global (3D) account chrome button while DA workflow is open.
+    // DA has its own top-right account button.
+    try {
+      var globalAccountBtn = document.getElementById('account-button');
+      if (globalAccountBtn && !globalAccountBtn.__daHidden) {
+        globalAccountBtn.__daHidden = true;
+        globalAccountBtn.__daPrevDisplay = globalAccountBtn.style.display;
+        globalAccountBtn.style.display = 'none';
+      }
+    } catch (_eAccHide) {}
     
     // Render initial state
     renderStagesList();
@@ -431,13 +469,39 @@
       overlay.remove();
     }
     document.body.style.overflow = '';
+
+    // Restore the global account chrome button.
+    try {
+      var globalAccountBtn = document.getElementById('account-button');
+      if (globalAccountBtn && globalAccountBtn.__daHidden) {
+        globalAccountBtn.style.display = globalAccountBtn.__daPrevDisplay || '';
+        globalAccountBtn.__daHidden = false;
+      }
+    } catch (_eAccShow) {}
+
     currentProjectId = null;
     currentState = null;
     
-    // Open admin section to return to projects
-    if (window.toggleAccountModal) {
-      window.toggleAccountModal();
-    }
+    // Return to the Account dashboard.
+    // IMPORTANT: the Account modal can be mid-close (closing animation) when DA was opened.
+    // In that state, `toggleAccountModal()` may call `showAccount()` but it will no-op due
+    // to `__animating`, and then the close animation finishes and hides the modal, dropping
+    // the user back to the 3D area.
+    try {
+      var acc = document.getElementById('account-modal');
+      if (acc) {
+        acc.classList.remove('closing');
+        acc.__animating = false;
+      }
+      if (typeof window.returnToDashboard === 'function') {
+        window.returnToDashboard();
+      }
+      if (typeof window.toggleAccountModal === 'function') {
+        window.toggleAccountModal('show');
+      } else if (typeof window.showAccount === 'function') {
+        window.showAccount();
+      }
+    } catch (_eAcc) {}
   }
 
   // ============================================================================
@@ -1182,6 +1246,8 @@
     },
     openWithProject: openWithProject,
     createNewProject: createNewProject,
+    renameProject: renameProject,
+    deleteProject: deleteProject,
     closeSelector: closeProjectSelector,
     close: closeDAWorkflow,
     nextStep: nextStep,

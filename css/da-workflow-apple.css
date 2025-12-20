@@ -24,7 +24,8 @@
   display: flex;
   flex-direction: column;
   transition: background-color var(--apple-duration-normal) var(--apple-ease-out);
-  overflow: hidden;
+  /* Allow a single full-page scroll for the workflow (no internal scrollers) */
+  overflow: auto;
 }
 
 .da-workflow-fullscreen::before,
@@ -61,11 +62,40 @@
 /* Container */
 .da-workflow-container {
   width: 100%;
-  height: 100%;
+  height: auto;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   position: relative;
   z-index: 1;
+}
+
+/* Top-right account button (same placement concept as 3D account chrome) */
+.da-workflow-account-btn {
+  position: absolute;
+  top: 28px;
+  right: 28px;
+  z-index: 5;
+  width: 45px;
+  height: 45px;
+  border-radius: 999px;
+  background: var(--apple-material-regular);
+  color: var(--apple-label);
+  border: 0;
+  box-shadow: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s ease, background-color 0.2s ease;
+}
+
+.da-workflow-account-btn:hover {
+  transform: scale(1.05);
+}
+
+.da-workflow-account-btn:active {
+  transform: scale(0.95);
 }
 
 /* ============================================================================
@@ -267,9 +297,9 @@
    ============================================================================ */
 
 .da-workflow-body {
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
-  overflow: hidden;
+  overflow: visible;
   padding: clamp(16px, 3vw, 36px);
   gap: clamp(16px, 2vw, 32px);
   background: transparent;
@@ -310,13 +340,26 @@
   background: transparent;
 }
 
-.da-sidebar-header h3 {
-  font-size: var(--apple-font-size-caption1);
+.da-project-name {
+  font-size: var(--apple-font-size-title3);
   font-weight: var(--apple-font-weight-semibold);
+  color: var(--apple-label);
+  letter-spacing: var(--apple-tracking-normal);
+  margin: 0 0 6px 0;
+  line-height: var(--apple-line-height-tight);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.da-sidebar-header h3 {
+  /* Smaller label requested for "Overall Progress" */
+  font-size: var(--apple-font-size-caption2);
+  font-weight: var(--apple-font-weight-regular);
   color: var(--apple-secondary-label);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 0 0 var(--apple-space-4) 0;
+  text-transform: none;
+  letter-spacing: var(--apple-tracking-normal);
+  margin: 0 0 var(--apple-space-2) 0;
 }
 
 /* Progress Ring */
@@ -366,10 +409,9 @@
 
 /* Stages List */
 .da-stages-list {
-  flex: 1;
-  overflow-y: auto;
+  flex: 0 0 auto;
+  overflow: visible;
   padding: var(--apple-space-2);
-  -webkit-overflow-scrolling: touch;
 }
 
 .da-stages-list::-webkit-scrollbar {
@@ -582,16 +624,16 @@
 
 .da-main-content {
   flex: 1;
-  overflow-y: auto;
+  overflow: visible;
   padding: clamp(24px, 4vw, 52px);
   max-width: 1100px;
   margin: 0 auto;
   width: 100%;
-  -webkit-overflow-scrolling: touch;
-  background: rgba(255,255,255,0.88);
-  border: 1px solid rgba(255,255,255,0.7);
-  border-radius: 40px;
-  box-shadow: 0 35px 90px rgba(15,23,42,0.14);
+  /* Remove the large background card; let inner sections provide structure */
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   position: relative;
 }
 
@@ -1600,9 +1642,9 @@
 }
 
 [data-theme="dark"] .da-main-content {
-  background: linear-gradient(180deg, rgba(24,25,36,0.95), rgba(13,13,18,0.98));
-  border-color: rgba(255,255,255,0.08);
-  box-shadow: 0 40px 100px rgba(0,0,0,0.75);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 [data-theme="dark"] .da-step-header-card {
@@ -1792,8 +1834,8 @@ svg use {
 }
 
 #da-project-selector-overlay button {
-  font: inherit;
-  color: inherit;
+  /* Let global button styles control sizing/weight; only inherit family. */
+  font-family: inherit;
 }
 
 #da-project-selector-overlay.da-project-selector-modal {
@@ -1816,7 +1858,8 @@ svg use {
 }
 
 #da-project-selector-overlay .da-selector-container {
-  background: var(--apple-material-regular);
+  /* Use a solid system background so the panel reads as "white" in light mode. */
+  background: var(--apple-system-background);
   border: 1px solid var(--apple-separator);
   border-radius: var(--apple-radius-large);
   max-width: 980px;
@@ -1926,6 +1969,33 @@ svg use {
   justify-content: center;
 }
 
+/*
+  In the selector overlay, the primary CTA buttons must stay blue in dark mode.
+  Global project/account CSS includes !important hover rules that can wash these out,
+  so we override them here with higher specificity.
+*/
+#da-project-selector-overlay[data-theme="dark"] .project-card-actions button.primary,
+#da-project-selector-overlay[data-theme="dark"] .projects-toolbar button.primary {
+  background: var(--apple-blue) !important;
+  color: #ffffff !important;
+  border-color: var(--apple-blue) !important;
+}
+
+#da-project-selector-overlay[data-theme="dark"] .project-card-actions button.primary:hover,
+#da-project-selector-overlay[data-theme="dark"] .projects-toolbar button.primary:hover {
+  background: var(--apple-blue-hover) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+#da-project-selector-overlay[data-theme="dark"] .project-card-actions button.primary:active,
+#da-project-selector-overlay[data-theme="dark"] .projects-toolbar button.primary:active {
+  background: var(--apple-blue) !important;
+  color: #ffffff !important;
+  transform: none !important;
+}
+
 #da-project-selector-overlay .da-selector-footer {
   padding: var(--apple-space-4) var(--apple-space-8) var(--apple-space-6);
   border-top: 1px solid var(--apple-separator);
@@ -2023,6 +2093,18 @@ svg use {
   display: flex;
   flex-direction: column;
   gap: var(--apple-space-3);
+}
+
+/* Reuse Saved Designs (Projects) button styling, but keep vertical layout here */
+#da-project-selector-overlay .da-welcome-actions.projects-toolbar {
+  margin-bottom: 0;
+  justify-content: center;
+  align-items: stretch;
+  flex-wrap: nowrap;
+}
+
+#da-project-selector-overlay .da-welcome-actions.projects-toolbar button {
+  width: 100%;
 }
 
 #da-project-selector-overlay .da-btn-primary {

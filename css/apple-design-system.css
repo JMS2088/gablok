@@ -1440,7 +1440,10 @@ button.secondary:hover {
 .projects-toolbar button {
   padding: 10px 18px;
   border-radius: 8px;
-  font-size: 13px;
+  /* Force 3D-style button sizing (overrides apple-typography-override's 17px !important) */
+  font-size: 13px !important;
+  line-height: 1 !important;
+  letter-spacing: -0.01em;
   font-weight: var(--apple-font-weight-regular);
   cursor: pointer;
   transition: all 0.15s;
@@ -1469,9 +1472,10 @@ button.secondary:hover {
 
 /* project-card-actions buttons now inherit global button styles */
 .project-card-actions button {
-  /* Inherits global: height 32px, padding 0 12px, font-size 13px, border-radius 8px */
-  /* Inherits hover: background #e5e5ea, transform none */
-  /* Inherits active: background blue, color white */
+  /* Match the 3D UI button typography even under apple-typography-override */
+  font-size: 13px !important;
+  line-height: 1 !important;
+  letter-spacing: -0.01em;
 }
 
 .da-workflow-btn {

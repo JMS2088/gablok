@@ -758,44 +758,90 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 					</div>
 				</div>
 			</div>
-			<div id="visualize-controls">
-				<button id="visualize-close" class="secondary" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
-			<p id="visualize-capture-status" class="visualize-hint" aria-live="polite"></p>
-			<div class="visualize-buttons mt-20">
-				<button id="visualize-generate"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-clockwise"/></svg> Re-Render</button>
-				<button id="visualize-download" class="secondary"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> Download PNG</button>
-			</div>				<!-- AI Enhancement Panel - shown when LLM is configured -->
-				<div id="visualize-ai-panel" class="visualize-ai-panel is-hidden">
-					<div class="visualize-ai-header">
-						<span class="visualize-ai-title"><svg class="sf-icon" width="18" height="18"><use href="#sf-wand-and-stars"/></svg> AI Enhancement</span>
-						<span id="visualize-ai-provider" class="visualize-ai-badge"></span>
+				<div id="visualize-controls">
+					<button id="visualize-close" class="secondary" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+					<p id="visualize-capture-status" class="visualize-hint" aria-live="polite"></p>
+					<div class="visualize-buttons mt-20">
+						<button id="visualize-generate" type="button"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-clockwise"/></svg> Re-Render</button>
+						<button id="visualize-download" class="secondary" type="button"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> Download PNG</button>
 					</div>
-					
-					<div class="visualize-ai-section">
-						<label for="visualize-ai-style">Style Preset</label>
-						<select id="visualize-ai-style">
-							<option value="">-- Select Style --</option>
-							<option value="photorealistic">Photorealistic</option>
-							<option value="architectural">Architectural Visualization</option>
-							<option value="modern-luxury">Modern Luxury</option>
-							<option value="scandinavian">Scandinavian Minimal</option>
-							<option value="industrial">Industrial Loft</option>
-							<option value="tropical">Tropical Resort</option>
-							<option value="evening">Evening Ambiance</option>
-							<option value="magazine">Magazine Cover</option>
-						</select>
-					</div>
-					
-					<div class="visualize-ai-section">
-						<label for="visualize-ai-prompt">Custom Prompt</label>
-						<textarea id="visualize-ai-prompt" rows="3" placeholder="Describe the look you want... e.g., 'warm sunset lighting, lush garden, modern furniture'"></textarea>
-					</div>
-					</div>
-				</div><!-- /visualize-ai-panel -->
-			</div><!-- /visualize-controls -->
-		</div><!-- /visualize-body -->
+					<p id="visualize-footnote" class="visualize-footnote"></p>
+					<div id="visualize-gallery" class="visualize-gallery-grid"></div>
+
+					<!-- AI Enhancement Panel (prompt controls + configuration) -->
+					<div id="visualize-ai-panel" class="visualize-ai-panel">
+						<div id="visualize-ai-setup" class="visualize-ai-setup">
+							<p>Configure your AI provider to enable enhancements.</p>
+							<button id="visualize-ai-configure" class="secondary" type="button">Configure AI Settings</button>
+						</div>
+
+						<div class="visualize-ai-header">
+							<span class="visualize-ai-title"><svg class="sf-icon" width="18" height="18"><use href="#sf-wand-and-stars"/></svg> AI Enhancement</span>
+							<span id="visualize-ai-provider" class="visualize-ai-badge"></span>
+						</div>
+
+						<div class="visualize-ai-section">
+							<label for="visualize-ai-style">Style Preset</label>
+							<select id="visualize-ai-style">
+								<option value="">-- Select Style --</option>
+								<option value="photorealistic">Photorealistic</option>
+								<option value="architectural">Architectural Visualization</option>
+								<option value="modern-luxury">Modern Luxury</option>
+								<option value="scandinavian">Scandinavian Minimal</option>
+								<option value="industrial">Industrial Loft</option>
+								<option value="tropical">Tropical Resort</option>
+								<option value="evening">Evening Ambiance</option>
+								<option value="magazine">Magazine Cover</option>
+							</select>
+						</div>
+
+						<div class="visualize-ai-section">
+							<label for="visualize-ai-prompt">Custom Prompt</label>
+							<textarea id="visualize-ai-prompt" rows="3" placeholder="Describe the look you want... e.g., 'warm sunset lighting, lush garden, modern furniture'"></textarea>
+						</div>
+
+						<div class="visualize-ai-section">
+							<label for="visualize-ai-quality">Quality</label>
+							<select id="visualize-ai-quality">
+								<option value="draft">Draft (Fast)</option>
+								<option value="standard" selected>Standard</option>
+								<option value="high">High</option>
+								<option value="ultra">Ultra</option>
+							</select>
+						</div>
+
+						<div class="visualize-ai-section">
+							<label>Enhancements</label>
+							<div class="visualize-ai-options">
+								<label class="visualize-ai-checkbox"><input id="visualize-ai-landscaping" type="checkbox" /> Landscaping</label>
+								<label class="visualize-ai-checkbox"><input id="visualize-ai-furniture" type="checkbox" /> Furniture</label>
+								<label class="visualize-ai-checkbox"><input id="visualize-ai-people" type="checkbox" /> People</label>
+								<label class="visualize-ai-checkbox"><input id="visualize-ai-vehicles" type="checkbox" /> Vehicles</label>
+								<label class="visualize-ai-checkbox"><input id="visualize-ai-weather" type="checkbox" /> Weather</label>
+								<label class="visualize-ai-checkbox"><input id="visualize-ai-hdr" type="checkbox" /> HDR Lighting</label>
+							</div>
+						</div>
+
+						<div class="visualize-ai-actions">
+							<button id="visualize-ai-enhance" type="button">Enhance With AI</button>
+							<button id="visualize-ai-variations" class="secondary" type="button">Generate Variations</button>
+						</div>
+
+						<div id="visualize-ai-status" class="visualize-ai-status" aria-live="polite"></div>
+
+						<div id="visualize-ai-results" class="visualize-ai-results is-hidden">
+							<label>Results</label>
+							<div id="visualize-ai-gallery" class="visualize-ai-gallery"></div>
+							<div class="visualize-ai-save-row">
+								<button id="visualize-ai-save" type="button">Save to Project</button>
+								<span id="visualize-ai-save-status" class="save-status"></span>
+							</div>
+						</div>
+					</div><!-- /visualize-ai-panel -->
+				</div><!-- /visualize-controls -->
+			</div><!-- /visualize-body -->
 		</div><!-- /visualize-content -->
-		</div><!-- /visualize-modal -->
+	</div><!-- /visualize-modal -->
 
 
 <!-- Project Selection Popup for saving AI images -->
