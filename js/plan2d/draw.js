@@ -6,6 +6,7 @@
   function plan2dDrawImmediate(){ var c=document.getElementById('plan2d-canvas'); var ov=document.getElementById('plan2d-overlay'); if(!c||!ov) return; var ctx=c.getContext('2d'); var ovCtx=ov.getContext('2d'); var ox=ovCtx; ctx.setTransform(1,0,0,1,0,0);
     // CAD MODE BACKGROUND: if body has class 'cad-mode', enforce pure white canvas clear instead of dark theme.
     var cadMode = false; try { cadMode = document.body && document.body.classList.contains('cad-mode'); } catch(_cad) {}
+    var baseBg = cadMode ? '#ffffff' : '#0b1220';
     // ------------------------------------------------------------------
     // Per-frame profiling counters (reset at frame start)
     try {
@@ -64,8 +65,11 @@
         var minSY = Math.min(aS.y, bS.y) - clearPadPx;
         var wSX = Math.abs(bS.x - aS.x) + clearPadPx*2;
         var hSY = Math.abs(bS.y - aS.y) + clearPadPx*2;
-        if(cadMode){ ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#ffffff'; ctx.fillRect(minSX, minSY, wSX, hSY); ctx.restore(); }
-        else { ctx.clearRect(minSX, minSY, wSX, hSY); }
+        ctx.save();
+        ctx.globalCompositeOperation='source-over';
+        ctx.fillStyle = baseBg;
+        ctx.fillRect(minSX, minSY, wSX, hSY);
+        ctx.restore();
         ovCtx.setTransform(1,0,0,1,0,0);
         ovCtx.clearRect(minSX, minSY, wSX, hSY);
         try {
@@ -80,8 +84,7 @@
       }catch(_cdr){ ctx.clearRect(0,0,c.width,c.height); ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height); useDirty=false; }
     } else {
       // Full clear path (optimize by using fill instead of clearRect which can trigger full layer invalidation)
-      if(cadMode){ ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,c.width,c.height); ctx.restore(); }
-      else { ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,c.width,c.height); ctx.restore(); }
+      ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.fillStyle=baseBg; ctx.fillRect(0,0,c.width,c.height); ctx.restore();
       ovCtx.setTransform(1,0,0,1,0,0); ovCtx.clearRect(0,0,ov.width,ov.height);
     }
     var perfSections = __plan2d.__perfSections = { grid:0, walls:0, openings:0, labels:0, overlay:0, total:0 };

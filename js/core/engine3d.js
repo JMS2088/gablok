@@ -391,9 +391,41 @@
     window.clearCanvas = function clearCanvas(){
       if (!ctx || !canvas) return;
       try { window.__dbgGfx.clearCalls++; } catch(_e) {}
+      function __getTheme(){
+        try {
+          var root = document && document.documentElement;
+          var t = root && root.getAttribute('data-theme');
+          if (t) return t;
+          var b = document && document.body;
+          var tb = b && b.getAttribute && b.getAttribute('data-theme');
+          return tb || 'light';
+        } catch(_t) { return 'light'; }
+      }
+      function __cssVar(name, fallback){
+        try {
+          var root = document && document.documentElement;
+          if (!root || typeof getComputedStyle !== 'function') return fallback;
+          var v = getComputedStyle(root).getPropertyValue(name);
+          v = (v || '').trim();
+          return v || fallback;
+        } catch(_cv) { return fallback; }
+      }
+      function __bg(){
+        try {
+          var theme = __getTheme();
+          var cache = window.__engine3dBgCache || (window.__engine3dBgCache = {});
+          if (cache.theme === theme && cache.value) return cache.value;
+          var val = (theme === 'dark')
+            ? __cssVar('--apple-secondary-system-background', 'rgba(28, 28, 30, 1)')
+            : __cssVar('--apple-system-background', '#ffffff');
+          cache.theme = theme;
+          cache.value = val;
+          return val;
+        } catch(_bg) { return '#ffffff'; }
+      }
       ctx.setTransform(1,0,0,1,0,0);
       ctx.clearRect(0,0,canvas.width,canvas.height);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = __bg();
       ctx.fillRect(0,0,canvas.width,canvas.height);
     };
   }
@@ -414,24 +446,30 @@
        */
       if (!ctx || !canvas) return;
       try { window.__dbgGfx.gridCalls++; } catch(_e) {}
+      var isDark = false;
+      try { isDark = (document && document.documentElement && document.documentElement.getAttribute('data-theme') === 'dark'); } catch(_td) { isDark = false; }
       var range = 40;
       var minX = Math.floor(camera.targetX - range), maxX = Math.ceil(camera.targetX + range);
       var minZ = Math.floor(camera.targetZ - range), maxZ = Math.ceil(camera.targetZ + range);
       ctx.save();
 
-      // Improve contrast so grid is visible on light backgrounds
+      // Improve contrast so grid is visible on both light and dark backgrounds
       ctx.lineWidth = 1.25;
       for (var x=minX; x<=maxX; x+=GRID_SPACING){
         var a=project3D(x,0,minZ), b=project3D(x,0,maxZ);
         if(a&&b){
-          ctx.strokeStyle=(x===0?'rgba(0,0,0,0.35)':'rgba(0,0,0,0.12)');
+          ctx.strokeStyle = isDark
+            ? (x===0 ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.10)')
+            : (x===0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.12)');
           ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
         }
       }
       for (var z=minZ; z<=maxZ; z+=GRID_SPACING){
         var a2=project3D(minX,0,z), b2=project3D(maxX,0,z);
         if(a2&&b2){
-          ctx.strokeStyle=(z===0?'rgba(0,0,0,0.35)':'rgba(0,0,0,0.12)');
+          ctx.strokeStyle = isDark
+            ? (z===0 ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.10)')
+            : (z===0 ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.12)');
           ctx.beginPath(); ctx.moveTo(a2.x,a2.y); ctx.lineTo(b2.x,b2.y); ctx.stroke();
         }
       }
@@ -485,17 +523,31 @@
       var cy = (canvas.height - (margin + r));
       var sgn = (window.__plan2d && (window.__plan2d.yFromWorldZSign===-1 || window.__plan2d.yFromWorldZSign===1)) ? window.__plan2d.yFromWorldZSign : 1;
       var alpha = (typeof window.__uiFadeAlpha==='number') ? (0.85 * window.__uiFadeAlpha) : 0.85;
+      var isDark = false;
+      try { isDark = (document && document.documentElement && document.documentElement.getAttribute('data-theme') === 'dark'); } catch(_tdc) { isDark = false; }
+      function __cssVar(name, fallback){
+        try {
+          var root = document && document.documentElement;
+          if (!root || typeof getComputedStyle !== 'function') return fallback;
+          var v = getComputedStyle(root).getPropertyValue(name);
+          v = (v || '').trim();
+          return v || fallback;
+        } catch(_cv) { return fallback; }
+      }
+      var compFill = isDark ? __cssVar('--apple-tertiary-system-background', 'rgba(44, 44, 46, 1)') : '#ffffff';
+      var compStroke = isDark ? __cssVar('--apple-separator', 'rgba(84, 84, 88, 0.6)') : '#000000';
+      var compText = isDark ? __cssVar('--apple-label', '#ffffff') : '#000000';
       ctx.save();
       ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-      // Base circle (white background)
-      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle='#ffffff'; ctx.fill(); ctx.strokeStyle='#000000'; ctx.lineWidth=1; ctx.stroke();
-  // Cross hairs (black) — inset so lines do not touch letters at rim
-  ctx.strokeStyle='#000000';
+      // Base circle
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fillStyle=compFill; ctx.fill(); ctx.strokeStyle=compStroke; ctx.lineWidth=1; ctx.stroke();
+  // Cross hairs — inset so lines do not touch letters at rim
+  ctx.strokeStyle=compText;
   var inset = 14; // must be > letter offset (10)
   ctx.beginPath(); ctx.moveTo(cx - r + 4 + inset, cy); ctx.lineTo(cx + r - 4 - inset, cy); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx, cy - r + 4 + inset); ctx.lineTo(cx, cy + r - 4 - inset); ctx.stroke();
       // Cardinal labels: flip N/S based on 2D orientation sign to match 2D compass (black letters)
-      ctx.fillStyle = '#000000';
+      ctx.fillStyle = compText;
       var fontPx3D = 8; // fixed 8px
       ctx.font = 'bold ' + fontPx3D + 'px system-ui, sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -2598,8 +2650,20 @@
       ctx.save();
       ctx.globalAlpha = Math.max(0, Math.min(1, uiA));
 
+      var isDark = false;
+      try { isDark = (document && document.documentElement && document.documentElement.getAttribute('data-theme') === 'dark'); } catch(_tdh) { isDark = false; }
+      function __cssVar(name, fallback){
+        try {
+          var root = document && document.documentElement;
+          if (!root || typeof getComputedStyle !== 'function') return fallback;
+          var v = getComputedStyle(root).getPropertyValue(name);
+          v = (v || '').trim();
+          return v || fallback;
+        } catch(_cv) { return fallback; }
+      }
+
       // Draw main vertical line at the chosen corner
-      ctx.strokeStyle = '#111827'; // near-black for visibility
+      ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.55)' : '#111827'; // near-black / soft-white
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(p0.x, p0.y);
@@ -2609,7 +2673,8 @@
       // Draw ticks and labels every 0.5m
       var step = 0.5; // meters
       var ticks = Math.round(h / step);
-      ctx.lineWidth = 1.5; ctx.strokeStyle = '#4b5563';
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.32)' : '#4b5563';
       ctx.font = 'bold 13px system-ui, sans-serif';
       for (var t=0; t<=ticks; t++){
         var yy = baseY + Math.min(h, t*step);
@@ -2620,7 +2685,7 @@
         // Label text on the right of tick
         var val = (t*step).toFixed(1).replace(/\.0$/, '.0');
         var label = val + ' m';
-        ctx.fillStyle = '#111827';
+        ctx.fillStyle = isDark ? __cssVar('--apple-label', '#ffffff') : '#111827';
         ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
         ctx.fillText(label, pt.x + lenPx + 4, pt.y);
       }

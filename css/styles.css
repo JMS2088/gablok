@@ -9,6 +9,13 @@
     --global-hover-color: var(--apple-label);
     --global-hover-border: #8e8e93;
   }
+
+  [data-theme="dark"],
+  .dark-mode {
+    --global-hover-bg: var(--apple-secondary-fill);
+    --global-hover-color: var(--apple-label);
+    --global-hover-border: var(--apple-separator);
+  }
   /* Utility visibility classes */
   .is-hidden { display: none !important; }
   .is-invisible { visibility: hidden !important; }
@@ -628,16 +635,16 @@
     background: var(--apple-tertiary-system-fill);
   }
 
-  /* Force account icon to pure black inside measurements panel */
+  /* Account icon should follow theme (uses currentColor) */
   #measurements #account-button {
-    color: #000 !important;
+    color: var(--apple-label);
   }
 
   #measurements #account-button svg *,
   #measurements #account-button svg path,
   #measurements #account-button svg circle {
-    stroke: #000 !important;
-    fill: none !important;
+    stroke: currentColor;
+    fill: none;
   }
   
   #measurements .measurement-item {
@@ -771,7 +778,7 @@
   #info-modal.visible #info-content { opacity: 1; transform: translateY(0) scale(1); }
   #info-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid #e5e7eb; background: #f8fafc; position: sticky; top: 0; z-index: 1; }
   #info-header strong { flex: 1; }
-  #info-body { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 18px; }
+  #info-body { padding: 16px 16px calc(16px + 500px); display: grid; grid-template-columns: 1fr; gap: 18px; }
 
   /* Share modal */
   /* Use opacity/visibility transitions (avoid display-toggling jump) */
@@ -931,7 +938,7 @@
     background: rgba(0,0,0,0.42);
   }
   #pricing-modal.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s; }
-  #pricing-content { position:relative; z-index:1; width:min(880px,95vw); max-height:calc(100vh - 40px); overflow:auto; background:#fff; border-radius:12px; border: 1px solid var(--apple-separator); box-shadow: none; padding:24px; opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
+  #pricing-content { position:relative; z-index:1; width:min(880px,95vw); max-height:calc(100vh - 40px); overflow:auto; background:#fff; border-radius:12px; border: 1px solid var(--apple-separator); box-shadow: none; padding:24px 24px calc(24px + 500px); opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
   #pricing-modal.visible #pricing-content { opacity: 1; transform: translateY(0) scale(1); }
   .pricing-settings-row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin:8px 0 12px; padding:10px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:8px; }
   .pricing-field-label { font-size:12px; color:#374151; display:flex; flex-direction:column; gap:4px; }
@@ -941,12 +948,12 @@
   /* Use opacity/visibility transitions (avoid display-toggling jump) */
   #room-palette-modal { display:flex; position:fixed; inset:0; z-index:13000; align-items:center; justify-content:center; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 220ms; }
   #room-palette-modal.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s; }
-  #room-palette-content { position:relative; width: 95vw; height: 95vh; background:#fff; border-radius:24px; border: 1px solid var(--apple-separator); box-shadow: none; display: grid; grid-template-columns: minmax(420px, calc(50% + 200px)) minmax(360px, calc(50% - 200px)); overflow: hidden; opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
+  #room-palette-content { position:relative; z-index: 1; width: 95vw; height: 95vh; padding: 0; background:#fff; border-radius:24px; border: 1px solid var(--apple-separator); box-shadow: none; display: grid; grid-template-columns: minmax(420px, calc(50% + 200px)) minmax(360px, calc(50% - 200px)); overflow: hidden; opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
   #room-palette-modal.visible #room-palette-content { opacity: 1; transform: translateY(0) scale(1); }
   #room-palette-left { display:flex; flex-direction:column; gap:10px; min-height: 0; }
   #room-palette-right { display:flex; flex-direction:column; gap:10px; min-height: 0; }
   .room-palette-actions { display:flex; gap:8px; align-items:center; justify-content:center; margin-bottom:8px; }
-  #room-palette-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
+  #room-palette-backdrop { position:absolute; inset:0; z-index: 0; background:rgba(0,0,0,0.45); }
 
   /* Info modal section titles & lists */
   .info-section-title { margin:0 0 8px; }
@@ -1398,6 +1405,10 @@
     pointer-events: none; /* Disable interaction until visible */
     transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
   }
+
+  [data-theme="dark"] #canvas {
+    background: var(--apple-secondary-system-background);
+  }
   
   body.app-ready #canvas {
     opacity: 1;
@@ -1449,10 +1460,195 @@
   #pricing-content ul { margin: 0 0 15px 20px; color: #555; }
   #info-content ul { margin: 0 0 15px 20px; color: #555; line-height: 2.4 !important; }
   /* Account > Information & Help view: match Info modal spacing */
-  #account-info-body { font-size: var(--apple-font-size-callout); }
-  #account-info-body p { margin: 0 0 15px 0; line-height: var(--apple-line-height-relaxed) !important; color: var(--apple-secondary-label); }
-  #account-info-body ul { margin: 0 0 15px 20px; color: var(--apple-secondary-label); line-height: var(--apple-line-height-relaxed) !important; }
-  #account-info-body li { margin-bottom: 14px; line-height: var(--apple-line-height-relaxed) !important; }
+  #account-info-body { font-size: var(--apple-font-size-callout); width: 100%; }
+  /* Legacy (non-card) info content only. The Help & Docs cards provide their own spacing. */
+  #account-info-body:not(.helpdocs-ready) p { margin: 0 0 15px 0; line-height: var(--apple-line-height-relaxed) !important; color: var(--apple-secondary-label); }
+  #account-info-body:not(.helpdocs-ready) ul { margin: 0 0 15px 20px; color: var(--apple-secondary-label); line-height: var(--apple-line-height-relaxed) !important; }
+  #account-info-body:not(.helpdocs-ready) li { margin-bottom: 14px; line-height: var(--apple-line-height-relaxed) !important; }
+
+  /* Account > Information (Help & Docs) - Apple layout */
+  #account-info-body .helpdocs-layout {
+    display: flex;
+    flex-direction: column;
+    gap: var(--apple-space-6);
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  #account-info-body .helpdocs-hero {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: var(--apple-space-8);
+    padding: var(--apple-space-8);
+    border-radius: var(--apple-radius-3xlarge);
+    border: 1px solid var(--apple-separator);
+    background: var(--apple-material-regular);
+    box-shadow: none;
+  }
+
+  #account-info-body .helpdocs-hero-text {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--apple-space-3);
+  }
+
+  #account-info-body .helpdocs-hero-eyebrow {
+    font-size: var(--apple-font-size-caption1);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--apple-secondary-label);
+  }
+
+  #account-info-body .helpdocs-hero-title {
+    margin: 0;
+    font-size: var(--apple-font-size-title1);
+    font-weight: var(--apple-font-weight-bold);
+    color: var(--apple-label);
+    letter-spacing: var(--apple-tracking-tight);
+    line-height: var(--apple-line-height-tight);
+  }
+
+  #account-info-body .helpdocs-hero-subtitle {
+    margin: 0;
+    max-width: 58ch;
+    color: var(--apple-secondary-label);
+  }
+
+  #account-info-body .helpdocs-hero-media {
+    width: min(320px, 36%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: var(--apple-blue);
+  }
+
+  #account-info-body .helpdocs-hero-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  #account-info-body .helpdocs-grid {
+    display: grid !important;
+    /* Match dashboard card density so this view doesn't feel narrower */
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--apple-space-6);
+    grid-auto-rows: auto;
+    grid-auto-flow: row;
+    align-items: stretch;
+    justify-items: stretch;
+    position: relative;
+  }
+
+  #account-info-body .helpdoc-card {
+    position: relative !important;
+    display: flex;
+    flex-direction: column;
+    gap: var(--apple-space-5);
+    padding: var(--apple-space-7);
+    border-radius: var(--apple-radius-3xlarge);
+    border: 1px solid var(--apple-separator);
+    background: var(--apple-material-regular);
+    box-shadow: none;
+    min-width: 0;
+  }
+
+  #account-info-body .helpdoc-header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--apple-space-2);
+  }
+
+  #account-info-body .helpdoc-thumb {
+    height: 132px;
+    border-radius: var(--apple-radius-2xlarge);
+    border: 1px solid var(--apple-separator);
+    background: var(--apple-tertiary-system-background);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #account-info-body .helpdoc-thumb-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  #account-info-body .helpdoc-card[data-tint="blue"] .helpdoc-thumb { color: var(--apple-blue); }
+  #account-info-body .helpdoc-card[data-tint="indigo"] .helpdoc-thumb { color: var(--apple-indigo); }
+  #account-info-body .helpdoc-card[data-tint="green"] .helpdoc-thumb { color: var(--apple-green); }
+  #account-info-body .helpdoc-card[data-tint="orange"] .helpdoc-thumb { color: var(--apple-orange); }
+  #account-info-body .helpdoc-card:not([data-tint]) .helpdoc-thumb { color: var(--apple-blue); }
+
+  #account-info-body .helpdoc-title {
+    display: flex;
+    align-items: center;
+    gap: var(--apple-space-3);
+    font-size: var(--apple-font-size-headline);
+    font-weight: var(--apple-font-weight-semibold);
+    color: var(--apple-label);
+    margin: 0;
+  }
+
+  #account-info-body .helpdoc-desc {
+    margin: 0;
+    color: var(--apple-secondary-label);
+  }
+
+  /* Ensure Help & Docs typography isn't affected by legacy #account-info-body p/ul/li rules */
+  #account-info-body.helpdocs-ready .helpdocs-hero-subtitle,
+  #account-info-body.helpdocs-ready .helpdoc-desc {
+    line-height: var(--apple-line-height-relaxed) !important;
+  }
+  #account-info-body.helpdocs-ready .helpdoc-bullets {
+    margin: 0;
+  }
+  #account-info-body.helpdocs-ready .helpdoc-bullets li {
+    margin-bottom: 10px;
+    line-height: var(--apple-line-height-relaxed) !important;
+  }
+
+  #account-info-body .helpdoc-bullets {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--apple-secondary-label);
+  }
+
+  #account-info-body .helpdoc-bullets li { margin-bottom: 10px; }
+
+  #account-info-body .helpdoc-actions {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--apple-space-4);
+  }
+
+  #account-info-body .helpdoc-action {
+    text-decoration: none;
+  }
+
+  @media (max-width: 860px) {
+    #account-info-body .helpdocs-hero {
+      flex-direction: column;
+    }
+    #account-info-body .helpdocs-hero-media {
+      width: 100%;
+    }
+
+    #account-info-body .helpdocs-grid {
+      grid-template-columns: 1fr;
+      gap: var(--apple-space-6);
+    }
+  }
   
   #info-content li, #pricing-content li { margin-bottom: 8px; }
 
@@ -1507,9 +1703,9 @@
   #share-note { font-size: 11px !important; }
   #share-hint { font-size: 10px !important; }
   #room-palette-left { padding: 20px 20px 28px 20px; border-right: 1px solid #eee; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-  #room-palette-right { padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 0; }
+  #room-palette-right { padding: 20px; display: flex; flex-direction: column; align-items: stretch; min-height: 0; }
   #room-palette-right > h3 { margin: 0 0 8px 0; text-align: center; align-self: center; }
-  #palette-list { margin-top: 10px; overflow: auto; border: 1px solid #eee; border-radius: 8px; padding: 12px; gap: 12px; display: grid; grid-template-columns: 1fr; width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; justify-items: stretch; flex: 1 1 auto; min-height: 0; }
+  #palette-list { margin-top: 10px; overflow-y: auto; max-height: none; border: 1px solid #eee; border-radius: 8px; padding: 12px; gap: 12px; display: grid; grid-template-columns: 1fr; width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; justify-items: stretch; flex: 1 1 auto; min-height: 0; }
   .palette-item { border: 1px solid #ddd; border-radius: 8px; padding: 12px; cursor: pointer; display: grid; grid-template-columns: 110px 1fr; gap: 8px; align-items: center; transition:  transform 0.1s ease; background: #fff; }
   .palette-item:hover { box-shadow: none; }
   .palette-item:active { transform: scale(0.98); }
@@ -1544,12 +1740,255 @@
   /* Use opacity/visibility transitions (avoid display-toggling jump) */
   #admin-modal { display: flex; position: fixed; inset: 0; z-index: 16000; align-items: center; justify-content: center; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 220ms; }
   #admin-modal.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s; }
-  #admin-backdrop { position: absolute; inset: 0; background: var(--apple-system-background); opacity: 0.75; }
+  #admin-backdrop {
+    position: absolute;
+    inset: 0;
+    background: var(--apple-system-background);
+    opacity: 0.75;
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+  }
   #admin-content { position: relative; width: min(980px, 96vw); max-height: calc(100vh - 40px); overflow: auto; background: var(--apple-material-regular); border-radius: var(--apple-radius-large); box-shadow: none; border: 1px solid var(--apple-separator); opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
   #admin-modal.visible #admin-content { opacity: 1; transform: translateY(0) scale(1); }
+
+  /* Apple Doc Reader (Markdown rendered as a readable page) */
+  #doc-modal {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 18000;
+    align-items: center;
+    justify-content: center;
+    padding: var(--apple-space-6);
+    box-sizing: border-box;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 220ms;
+  }
+  #doc-modal.visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s;
+  }
+  #doc-backdrop {
+    position: absolute;
+    inset: 0;
+    /* Match other popovers: dark translucent overlay + blur (works in both themes). */
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+  }
+
+  [data-theme="dark"] #doc-backdrop {
+    background: rgba(0,0,0,0.65);
+  }
+  #doc-content {
+    position: relative;
+    width: min(980px, 96vw);
+    max-height: calc(100vh - 40px);
+    overflow: hidden;
+    border-radius: var(--apple-radius-large);
+    border: 1px solid var(--apple-separator);
+    background: var(--apple-material-regular);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: none;
+    color: var(--apple-label);
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+    transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out);
+  }
+  #doc-modal.visible #doc-content {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  #doc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--apple-separator);
+    background: var(--apple-secondary-system-background);
+  }
+
+  #doc-header .sf-icon {
+    color: var(--apple-label);
+  }
+  #doc-header .doc-header-left {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+  }
+  #doc-title {
+    font-size: var(--apple-font-size-headline);
+    color: var(--apple-label);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #doc-body {
+    padding: 18px 18px calc(22px + 500px);
+    overflow: auto;
+    max-height: calc(100vh - 40px - 52px);
+    color: var(--apple-secondary-label);
+  }
+  #doc-body:focus { outline: none; }
+
+  #doc-body .doc-loading,
+  #doc-body .doc-error {
+    padding: 14px;
+    border-radius: 12px;
+    border: 1px solid var(--apple-separator);
+    background: var(--apple-material-thin);
+    color: var(--apple-label);
+    font-size: var(--apple-font-size-subheadline);
+  }
+  #doc-body .doc-error-meta {
+    margin-top: 6px;
+    color: var(--apple-secondary-label);
+    font-size: var(--apple-font-size-footnote);
+  }
+
+  /* Rendered Markdown typography */
+  #doc-body .doc-page {
+    font-family: var(--apple-font-family);
+    font-size: var(--apple-font-size-subheadline);
+    line-height: 1.65;
+    color: var(--apple-secondary-label);
+  }
+  #doc-body .doc-page h1 {
+    font-size: var(--apple-font-size-title1);
+    line-height: 1.15;
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  #doc-body .doc-page h2 {
+    font-size: var(--apple-font-size-title2);
+    line-height: 1.2;
+    margin: 18px 0 10px;
+    letter-spacing: -0.01em;
+  }
+  #doc-body .doc-page h3 {
+    font-size: var(--apple-font-size-title3);
+    line-height: 1.25;
+    margin: 16px 0 8px;
+  }
+  #doc-body .doc-page h4,
+  #doc-body .doc-page h5,
+  #doc-body .doc-page h6 {
+    font-size: var(--apple-font-size-headline);
+    line-height: 1.3;
+    margin: 14px 0 6px;
+  }
+  #doc-body .doc-paragraph {
+    margin: 10px 0;
+    color: var(--apple-secondary-label);
+  }
+  #doc-body .doc-link {
+    color: var(--apple-blue);
+    text-decoration: none;
+  }
+  #doc-body .doc-link:hover { text-decoration: underline; }
+
+  #doc-body .doc-list,
+  #doc-body .doc-olist {
+    margin: 10px 0;
+    padding-left: 22px;
+    color: var(--apple-secondary-label);
+  }
+  #doc-body .doc-list li,
+  #doc-body .doc-olist li {
+    margin: 6px 0;
+  }
+
+  #doc-body .doc-quote {
+    margin: 12px 0;
+    padding: 10px 12px;
+    border-left: 3px solid var(--apple-separator);
+    background: var(--apple-material-thin);
+    border-radius: 12px;
+  }
+
+  #doc-body .doc-inline-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.92em;
+    padding: 2px 6px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.06);
+    border: 1px solid var(--apple-separator);
+  }
+  [data-theme="dark"] #doc-body .doc-inline-code {
+    background: rgba(255,255,255,0.08);
+  }
+
+  #doc-body .doc-code {
+    margin: 12px 0;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid var(--apple-separator);
+    background: var(--apple-material-thin);
+    overflow: auto;
+  }
+  #doc-body .doc-code code {
+    display: block;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--apple-label);
+    white-space: pre;
+  }
+
+  /* Two-column reading layout (desktop) */
+  @media (min-width: 960px) {
+    #doc-body .doc-page {
+      column-count: 2;
+      column-gap: var(--apple-space-7);
+    }
+
+    /* Keep headings and non-prose blocks full width */
+    #doc-body .doc-page h1,
+    #doc-body .doc-page h2,
+    #doc-body .doc-page h3,
+    #doc-body .doc-page h4,
+    #doc-body .doc-page h5,
+    #doc-body .doc-page h6,
+    #doc-body .doc-code,
+    #doc-body .doc-table,
+    #doc-body .doc-quote {
+      column-span: all;
+    }
+  }
+
+  #doc-body .doc-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    border: 1px solid var(--apple-separator);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--apple-material-thin);
+  }
+  #doc-body .doc-table th,
+  #doc-body .doc-table td {
+    padding: 10px 10px;
+    border-bottom: 1px solid var(--apple-separator);
+    text-align: left;
+    vertical-align: top;
+    font-size: var(--apple-font-size-subheadline);
+  }
+  #doc-body .doc-table th {
+    color: var(--apple-label);
+    background: rgba(0,0,0,0.03);
+  }
+  [data-theme="dark"] #doc-body .doc-table th {
+    background: rgba(255,255,255,0.06);
+  }
   #admin-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--apple-separator); background: var(--apple-secondary-system-background); position: sticky; top: 0; z-index: 1; }
   #admin-header strong { flex: 1; }
-  #admin-body { padding: 16px; display: grid; grid-template-columns: 1fr; gap: 18px; }
+  #admin-body { padding: 16px 16px calc(16px + 500px); display: grid; grid-template-columns: 1fr; gap: 18px; }
   .admin-section { border: 1px solid var(--apple-separator); border-radius: var(--apple-radius-medium); padding: 12px; background: var(--apple-tertiary-system-background); }
   .admin-section h3 { margin: 0 0 10px 0; }
   .admin-list { list-style: none; padding: 0; margin: 0; }
@@ -1739,15 +2178,22 @@
   }
 
 
-  /* Account modal + splash animation */
+  /* Account modal: single simple open (fade + slight twist). */
   #account-modal { position: fixed; inset: 0; display: none; z-index: 17000; }
   #account-modal.visible { display: block; }
-  /*
-    Smooth open: keep #account-main visually in the 0% keyframe during the delay
-    (prevents the brief flash/jump before the animation begins).
-  */
-  #account-modal.showing #account-main { animation: accountMainIn 520ms cubic-bezier(0.2,0.8,0.2,1) both 240ms; }
-  #account-modal.closing #account-main { animation: accountMainOut 360ms ease both; }
+
+  /* Drive everything with one transition: the whole dashboard moves as a unit. */
+  #account-modal.visible #account-main,
+  #account-modal.visible #account-splash {
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+  }
+
+  /* Start pose (visible but not yet showing): enables the fade+twist transition. */
+  #account-modal.visible:not(.showing):not(.closing) #account-main {
+    opacity: 0;
+    transform: scale(0.99);
+  }
   
   /* Account background: Modern dark house interior with overlay */
   #account-splash {
@@ -1758,8 +2204,8 @@
       url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080"%3E%3Crect fill="%23181820" width="1920" height="1080"/%3E%3Cg opacity="0.4"%3E%3Crect x="50" y="100" width="600" height="800" rx="20" fill="%23252530" stroke="%23404050" stroke-width="2"/%3E%3Crect x="700" y="150" width="500" height="700" rx="15" fill="%231a1a24" stroke="%23353545" stroke-width="2"/%3E%3Ccircle cx="1400" cy="300" r="200" fill="url(%23light1)"/%3E%3Cellipse cx="300" cy="700" rx="150" ry="100" fill="url(%23light2)"/%3E%3Cpath d="M 0 900 Q 960 850 1920 900 L 1920 1080 L 0 1080 Z" fill="%23222228"/%3E%3C/g%3E%3Cdefs%3E%3CradialGradient id="light1"%3E%3Cstop offset="0%25" stop-color="%23f5f3e8" stop-opacity="0.6"/%3E%3Cstop offset="50%25" stop-color="%23e8d5a5" stop-opacity="0.3"/%3E%3Cstop offset="100%25" stop-color="%23181820" stop-opacity="0"/%3E%3C/radialGradient%3E%3CradialGradient id="light2"%3E%3Cstop offset="0%25" stop-color="%23fef9e7" stop-opacity="0.5"/%3E%3Cstop offset="100%25" stop-color="%23181820" stop-opacity="0"/%3E%3C/radialGradient%3E%3C/defs%3E%3C/svg%3E');
     background-size: cover;
     background-position: center;
-    animation: accountSplashIn 480ms cubic-bezier(0.2,0.8,0.2,1) forwards;
-    will-change: transform, opacity;
+    opacity: 0;
+    transition: opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
     overflow: hidden;
   }
 
@@ -1796,17 +2242,8 @@
     opacity: 0.3;
   }
   
-  /* Closing state: add slight blur+fade */
-  #account-modal.closing #account-splash { animation: accountSplashOut 420ms ease forwards; }
-  @keyframes accountSplashIn {
-    0% { opacity: 0; transform: scale(0.975); }
-    60% { opacity: 1; transform: scale(1.008); }
-    100% { opacity: 1; transform: scale(1); }
-  }
-  @keyframes accountSplashOut {
-    0% { opacity: 1; transform: scale(1); }
-    100% { opacity: 0; transform: scale(0.985); }
-  }
+  #account-modal.showing #account-splash { opacity: 1; }
+  #account-modal.closing #account-splash { opacity: 0; }
   #account-sheet {
     position: absolute;
     inset: 0;
@@ -1836,25 +2273,46 @@
   
   /* OLD account-nav removed - now using card grid */
   
-  /* Base state: keep the main content hidden until the showing/open animation runs */
-  @keyframes accountMainIn { 0% { transform: translateY(24px) scale(.95); opacity: 0; } 60% { opacity:1; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
-  @keyframes accountMainOut { 0% { transform: translateY(0) scale(1); opacity:1; } 100% { transform: translateY(16px) scale(.95); opacity:0; } }
-  @keyframes cardFadeIn { 
-    0% { opacity: 0; transform: translateY(20px) scale(0.95); } 
-    100% { opacity: 1; transform: translateY(0) scale(1); } 
+    /* Disable per-card animations inside the account modal.
+      The dashboard animates as one unit for a simple, elegant feel. */
+    #account-modal .account-card { animation: none !important; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #account-splash,
+    #account-modal.visible #account-main { transition: none !important; }
+    #account-modal.visible #account-splash { opacity: 1 !important; }
+    #account-modal.visible #account-main { opacity: 1 !important; transform: none !important; }
   }
+  @keyframes cardFadeIn {
+    0% { opacity: 0; transform: translate3d(0, 16px, 0); }
+    100% { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
+  /* Main dashboard transition (single fade+twist) */
+  #account-modal #account-main {
+    opacity: 1;
+    transform: scale(1);
+    transition:
+      transform 520ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 420ms cubic-bezier(0.16, 1, 0.3, 1);
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+  }
+
+  #account-modal.closing #account-main {
+    opacity: 0;
+    transform: scale(0.99);
+  }
+
   #account-main {
     width: min(1200px, calc(100% - 80px));
     max-height: none;
     overflow: visible;
-    opacity: 0;
-    transform: translateY(24px) scale(.95);
-    will-change: transform, opacity;
     background: transparent;
     border: none;
     border-radius: 0;
     box-shadow: none;
     padding: clamp(24px, 4vw, 40px);
+    padding-bottom: calc(clamp(24px, 4vw, 40px) + 500px);
     position: relative;
     z-index: 1;
   }
@@ -1987,7 +2445,7 @@
     font-size: 34px;
     font-weight: 700;
     letter-spacing: -0.02em;
-    color: #000000;
+    color: var(--apple-label);
     margin: 0 0 8px 0;
   }
   
@@ -2278,7 +2736,7 @@
     font-weight: var(--apple-font-weight-semibold);
     letter-spacing: -0.02em;
     line-height: 1.25;
-    color: #1d1d1f !important;
+    color: var(--apple-label) !important;
     margin: 0 0 10px 0;
     width: 100%;
     max-width: 100%;
@@ -2297,7 +2755,7 @@
     font-weight: var(--apple-font-weight-medium);
     line-height: 1.47;
     letter-spacing: -0.01em;
-    color: #424245 !important;
+    color: var(--apple-secondary-label) !important;
     margin: 0 0 12px 0;
     width: 100%;
     max-width: 100%;
@@ -2314,7 +2772,7 @@
     font-weight: var(--apple-font-weight-regular);
     line-height: 1.54;
     letter-spacing: -0.01em;
-    color: #6e6e73 !important;
+    color: var(--apple-tertiary-label) !important;
     margin: 0 0 auto 0;
     padding-bottom: 16px;
     width: 100%;
@@ -2490,7 +2948,7 @@
   }
   
   [data-theme="dark"] .dashboard-title {
-    color: #ffffff;
+    color: var(--apple-label);
   }
 
 

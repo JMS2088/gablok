@@ -760,9 +760,7 @@
         <div class="da-stage-item ${isActive ? 'active' : ''} ${isComplete ? 'complete' : ''}" 
              onclick="window.DAWorkflowUI.goToStage('${stage.id}')">
           <div class="da-stage-badge-indicator" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" focusable="false">
-              <use href="/css/sf-symbols.svg#${stage.icon}" />
-            </svg>
+            ${escapeHtml(String(stage.code || ''))}
           </div>
           <div class="da-stage-info">
             <div class="da-stage-title">${stage.title}</div>
@@ -999,7 +997,7 @@
         container.innerHTML = `
           <div class="da-next-stage-banner">
             <div class="da-next-stage-label">Up Next</div>
-            <div class="da-next-stage-title">${nextStage.icon} ${nextStage.title}</div>
+            <div class="da-next-stage-title">Stage ${escapeHtml(String(nextStage.code || ''))} • ${escapeHtml(String(nextStage.title || ''))}</div>
             <div class="da-next-stage-steps">
               ${nextSteps.map(function(s) { 
                 return '<div class="da-next-step-mini">' + s.title + '</div>'; 
@@ -1142,18 +1140,22 @@
       var isComplete = docState && docState.status === 'complete';
       
       return `
-        <div class="da-document-item ${isComplete ? 'complete' : ''}">
-          <svg class="da-doc-icon" width="24" height="24" viewBox="0 0 24 24">
-            <use xlink:href="/css/sf-symbols.svg#${isComplete ? 'sf-checkmark-circle' : 'sf-doc-text'}" />
-          </svg>
+        <div class="da-doc-item da-document-item ${isComplete ? 'complete' : ''}">
+          <div class="da-doc-icon" aria-hidden="true">
+            <svg class="da-doc-icon-svg" width="20" height="20" viewBox="0 0 24 24" focusable="false">
+              <use xlink:href="/css/sf-symbols.svg#${isComplete ? 'sf-checkmark-circle' : 'sf-doc-text'}" />
+            </svg>
+          </div>
           <div class="da-doc-info">
             <div class="da-doc-name">${doc}</div>
             ${isComplete ? '<div class="da-doc-status">Uploaded ' + formatDate(docState.uploadedAt) + '</div>' : ''}
           </div>
-          <button class="da-btn da-btn-small ${isComplete ? 'da-btn-outline' : 'da-btn-primary'}" 
-                  onclick="window.DAWorkflowUI.uploadDocument('${doc}')">
-            ${isComplete ? '<svg width="12" height="12" viewBox="0 0 12 12" style="vertical-align: middle;"><use xlink:href="/css/sf-symbols.svg#sf-arrow-down-doc" /></svg> Replace' : '<svg width="12" height="12" viewBox="0 0 12 12" style="vertical-align: middle;"><use xlink:href="/css/sf-symbols.svg#sf-arrow-down-doc" /></svg> Upload'}
-          </button>
+          <div class="da-doc-actions">
+            <button class="da-btn-small ${isComplete ? 'outline' : 'primary'}" onclick="window.DAWorkflowUI.uploadDocument('${doc}')">
+              <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/css/sf-symbols.svg#sf-arrow-down-doc" /></svg>
+              ${isComplete ? 'Replace' : 'Upload'}
+            </button>
+          </div>
         </div>
       `;
     }).join('');
@@ -1183,14 +1185,14 @@
             ` : '<div class="da-contact-placeholder">Not added yet</div>'}
           </div>
           <div class="da-contact-actions">
-            <button class="da-btn da-btn-small da-btn-outline" 
-                    onclick="window.DAWorkflowUI.addEditContact('${role}')">
-              ${hasContact ? '<svg width="12" height="12" viewBox="0 0 12 12" style="vertical-align: middle;"><use xlink:href="/css/sf-symbols.svg#sf-pencil" /></svg> Edit' : '<svg width="12" height="12" viewBox="0 0 12 12" style="vertical-align: middle;"><use xlink:href="/css/sf-symbols.svg#sf-plus" /></svg> Add'}
+            <button class="da-btn-small outline" onclick="window.DAWorkflowUI.addEditContact('${role}')">
+              <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/css/sf-symbols.svg#${hasContact ? 'sf-pencil' : 'sf-plus'}" /></svg>
+              ${hasContact ? 'Edit' : 'Add'}
             </button>
             ${hasContact ? `
-              <button class="da-btn da-btn-small da-btn-secondary" 
-                      onclick="window.DAWorkflowUI.shareWithContact('${role}')">
-                <svg width="12" height="12" viewBox="0 0 24 24" style="vertical-align: middle;"><use href="/css/sf-symbols.svg#sf-link" /></svg> Share
+              <button class="da-btn-small secondary" onclick="window.DAWorkflowUI.shareWithContact('${role}')">
+                <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/css/sf-symbols.svg#sf-link" /></svg>
+                Share
               </button>
             ` : ''}
           </div>

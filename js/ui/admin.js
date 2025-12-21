@@ -86,12 +86,13 @@
         return data;
       } catch(e){ return null; }
     }
-  function showAccount(){
+  function showAccount(initialView){
     var m = qs('account-modal'); if(!m) return;
     // If the modal is already open and stable, avoid restarting open animations.
     if (m.classList.contains('visible') && m.classList.contains('showing') && !m.classList.contains('closing')) {
       loadProfile();
       updateDashboard();
+      try { if (initialView) switchView(String(initialView)); } catch(_eView0) {}
       return;
     }
 
@@ -141,11 +142,14 @@
     if (m.classList.contains('visible') && !m.classList.contains('closing')) {
       loadProfile();
       updateDashboard();
+      try { if (initialView) switchView(String(initialView)); } catch(_eView1) {}
       scheduleShow();
       return;
     }
     loadProfile();
     updateDashboard(); // Update dashboard stats
+    // Preselect target view BEFORE showing modal to avoid dashboard flash.
+    try { if (initialView) switchView(String(initialView)); } catch(_eView2) {}
     m.classList.remove('closing');
     m.classList.add('visible');
     scheduleShow();
@@ -175,6 +179,8 @@
   function hideAccount(){
     var m = qs('account-modal'); if(!m) return;
     if(m.__animating) return;
+    // Never leave the doc reader open when the Account modal closes.
+    try { if (typeof window.hideDoc === 'function') window.hideDoc(); } catch(_eDoc1) {}
     // Cancel any pending open animation so it can't fight the close.
     try { m.__openToken = null; m.__opening = false; } catch(_eOpenTok) {}
     // Stop any admin auto-refresh when closing
@@ -190,7 +196,8 @@
     // Tokenize this close attempt so a stale completion can't apply after a reopen.
     var closeToken = (Date.now().toString(36) + Math.random().toString(36).slice(2));
     try { m.__closeToken = closeToken; } catch(_eTok1) {}
-    // End after splash circle out animation ends
+    // End after the closing transition completes.
+    var main = document.getElementById('account-main');
     var splash = document.getElementById('account-splash');
     // Clear any previous pending handler/timer to avoid stacking.
     try {
@@ -218,20 +225,40 @@
         m.__hideDone = null;
         try { m.__closeToken = null; } catch(_eTok3) {}
       } catch(_e3) {}
-      splash && splash.removeEventListener('animationend', done);
+      try {
+        if (main) main.removeEventListener('transitionend', onEnd);
+        if (splash) splash.removeEventListener('transitionend', onEnd);
+      } catch(_eRmEnd) {}
+    };
+
+    // Only complete once (either transition end or timeout).
+    var ended = false;
+    var onEnd = function(ev){
+      if (ended) return;
+      // Only react to opacity/transform transitions (ignore nested transitions).
+      try {
+        if (ev && ev.target && ev.target !== main && ev.target !== splash) return;
+        var prop = ev && ev.propertyName;
+        if (prop && prop !== 'opacity' && prop !== 'transform') return;
+      } catch(_eProp) {}
+      ended = true;
+      done();
     };
     // Track the pending hide so showAccount() can cancel it.
     try {
       m.__hideDone = done;
       m.__hideSplash = splash || null;
     } catch(_eTrack) {}
-    // If no splash, fallback timeout
-    if(splash){ splash.addEventListener('animationend', done); }
-    else {
-      m.__hideTimer = setTimeout(done, 520);
-    }
+    // Transition end (preferred) + fallback timeout
+    try {
+      if (main) main.addEventListener('transitionend', onEnd);
+      if (splash) splash.addEventListener('transitionend', onEnd);
+    } catch(_eAddEnd) {}
+    m.__hideTimer = setTimeout(function(){ if (!ended) { ended = true; done(); } }, 700);
   }
   function switchView(target){
+    // Keep doc reader scoped to the Account UI.
+    try { if (typeof window.hideDoc === 'function') window.hideDoc(); } catch(_eDoc0) {}
     // Hide dashboard, show target view
     var dashboard = qs('account-dashboard');
     if(dashboard) dashboard.classList.add('is-hidden');
@@ -327,6 +354,8 @@
   }
   
   function returnToDashboard(){
+    // Ensure any nested overlays are closed when leaving a panel.
+    try { if (typeof window.hideDoc === 'function') window.hideDoc(); } catch(_eDoc2) {}
     var dashboard = qs('account-dashboard');
     if(dashboard) dashboard.classList.remove('is-hidden');
     
@@ -476,12 +505,12 @@
     setTimeout(wire, 0);
   }
 
-  function toggleAccountModal(force){
+  function toggleAccountModal(force, view){
     var modal = qs('account-modal');
     if(!modal) return;
     var isVisible = modal.classList.contains('visible') && !modal.classList.contains('closing');
     if(force === 'show') {
-      showAccount();
+      showAccount(view);
       return;
     }
     if(force === 'hide') {
@@ -489,7 +518,7 @@
       return;
     }
     if(isVisible) hideAccount();
-    else showAccount();
+    else showAccount(view);
   }
 
     window.addEventListener('projects:updated', refreshAccountStats);
@@ -1449,7 +1478,7 @@
   
   var sectionSelectors = {
     'main': 'body',
-    'plan2d': '#floorplan-modal',
+    'plan2d': '#plan2d-page, #floorplan-modal',
     'visualize': '#visualize-modal',
     'da-workflow': '#da-workflow-overlay, #da-project-selector-overlay',
     'account': '#account-modal, #account-dashboard, .account-panel'

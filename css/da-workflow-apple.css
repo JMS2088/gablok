@@ -70,6 +70,18 @@
   z-index: 1;
 }
 
+/* Match Dashboard button typography (override global 17px button style) */
+#da-workflow-overlay button,
+#da-project-selector-overlay button,
+#da-workflow-overlay input[type="button"],
+#da-workflow-overlay input[type="submit"],
+#da-workflow-overlay input[type="reset"],
+#da-project-selector-overlay input[type="button"],
+#da-project-selector-overlay input[type="submit"],
+#da-project-selector-overlay input[type="reset"] {
+  font-size: var(--apple-font-size-footnote) !important;
+}
+
 /* Top-right account button (same placement concept as 3D account chrome) */
 .da-workflow-account-btn {
   position: absolute;
@@ -412,6 +424,9 @@
   flex: 0 0 auto;
   overflow: visible;
   padding: var(--apple-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .da-stages-list::-webkit-scrollbar {
@@ -432,7 +447,7 @@
   align-items: center;
   gap: var(--apple-space-3);
   padding: 14px 16px;
-  margin-bottom: 8px;
+  margin-bottom: 0;
   background: rgba(255,255,255,0.85);
   border-radius: 20px;
   cursor: pointer;
@@ -757,6 +772,24 @@
   flex-wrap: wrap;
 }
 
+/* ==========================================================================
+   STEP CONTENT - Vertical Rhythm
+   ========================================================================== */
+
+.da-step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.da-step-content > .da-card {
+  margin-bottom: 0;
+}
+
+.da-step-content > .da-info-section {
+  margin: 0;
+}
+
 /* Complete Button */
 .da-btn-complete {
   display: inline-flex;
@@ -916,6 +949,11 @@
   border: 1px solid rgba(255,255,255,0.7);
 }
 
+/* When cards are inside the step content stack, spacing is controlled by the parent gap. */
+.da-step-content .da-card {
+  margin-bottom: 0;
+}
+
 [data-theme="dark"] .da-card {
   background: rgba(58, 58, 60, 0.3);
   border-color: rgba(84, 84, 88, 0.3);
@@ -966,6 +1004,15 @@
 
 .da-card-body {
   padding: 20px 24px 24px;
+}
+
+/* Consistent list spacing inside common cards */
+.da-checklist-card .da-card-body,
+.da-documents-card .da-card-body,
+.da-contacts-card .da-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--apple-space-3);
 }
 
 /* ==========================================================================
@@ -1025,7 +1072,7 @@
   align-items: flex-start;
   gap: var(--apple-space-3);
   padding: var(--apple-space-4);
-  margin-bottom: var(--apple-space-2);
+  margin-bottom: 0;
   background: rgba(248,250,255,0.9);
   border-radius: 20px;
   cursor: pointer;
@@ -1085,7 +1132,8 @@
 }
 
 /* Document items */
-.da-doc-item {
+.da-doc-item,
+.da-document-item {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1097,12 +1145,15 @@
   box-shadow: 0 10px 24px rgba(15,23,42,0.08);
 }
 
-.da-doc-item:hover {
+.da-doc-item:hover,
+.da-document-item:hover {
   background: rgba(0,122,255,0.05);
   box-shadow: 0 16px 32px rgba(15,23,42,0.12);
 }
 
-.da-doc-icon {
+/* Icon pill (scoped so it isn't overridden by the generic icon system) */
+.da-doc-item .da-doc-icon,
+.da-document-item .da-doc-icon {
   width: 44px;
   height: 44px;
   border-radius: 14px;
@@ -1111,7 +1162,19 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 20px;
+  color: var(--apple-blue);
+}
+
+.da-doc-item.complete .da-doc-icon,
+.da-document-item.complete .da-doc-icon {
+  background: rgba(52,199,89,0.14);
+  color: var(--apple-green);
+}
+
+.da-doc-item .da-doc-icon-svg,
+.da-document-item .da-doc-icon-svg {
+  width: 20px;
+  height: 20px;
 }
 
 .da-doc-info {
@@ -1139,6 +1202,16 @@
 .da-doc-actions {
   display: flex;
   gap: 8px;
+}
+
+.da-doc-item .da-doc-actions,
+.da-document-item .da-doc-actions {
+  flex-shrink: 0;
+}
+
+.da-doc-item .da-doc-actions .da-btn-small,
+.da-document-item .da-doc-actions .da-btn-small {
+  white-space: nowrap;
 }
 
 .da-doc-action {
@@ -1542,6 +1615,20 @@
   border-radius: 20px;
   border: 1px solid rgba(255,255,255,0.6);
   box-shadow: 0 12px 24px rgba(15,23,42,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: var(--apple-space-4);
+}
+
+.da-info-section .da-info-header {
+  margin-bottom: 0;
+}
+
+/* Helpful resources block (links stack) */
+.da-links-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--apple-space-3);
 }
 
 .da-info-header {

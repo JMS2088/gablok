@@ -490,7 +490,7 @@ button,
 
 .apple-button-filled:hover {
   background: var(--apple-blue-hover);
-  color: #8e8e93;
+  color: #ffffff;
 }
 
 .apple-button-filled:active {
@@ -504,7 +504,7 @@ button,
 }
 
 .apple-button-gray:hover {
-  background: #e5e5ea;
+  background: var(--global-hover-bg, #e5e5ea);
 }
 
 /* Tinted Button */
@@ -524,7 +524,7 @@ button,
 }
 
 .apple-button-borderless:hover {
-  background: #e5e5ea;
+  background: var(--global-hover-bg, #e5e5ea);
 }
 
 /* Button Sizes */
@@ -596,7 +596,7 @@ button,
 #plan2d-menubar-right .dropdown-button:hover,
 #plan2d-menubar-right button:not(.secondary):hover {
   /* Solid hover color (no alpha) to match 3D buttons */
-  background: #e5e5ea !important;
+  background: var(--global-hover-bg, #e5e5ea) !important;
   color: var(--apple-label) !important;
   box-shadow: none;
   transform: none;
@@ -675,7 +675,7 @@ button,
 }
 
 .dropdown-button:hover {
-  background: #e5e5ea !important;
+  background: var(--global-hover-bg, #e5e5ea) !important;
   box-shadow: none;
   transform: none;
   color: var(--apple-label) !important;
@@ -769,7 +769,7 @@ button {
 }
 
 button:hover {
-  background: #e5e5ea;
+  background: var(--global-hover-bg, #e5e5ea);
   color: var(--apple-label);
   transform: none;
 }

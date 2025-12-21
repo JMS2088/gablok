@@ -97,6 +97,22 @@ body.app-ready #controls {
   display: block;
 }
 
+/* Dark mode dropdown surfaces (3D navigation toolbar) */
+[data-theme="dark"] #controls .dropdown-list {
+  background: var(--apple-material-thick);
+  border-color: var(--apple-separator);
+}
+
+[data-theme="dark"] #controls .dropdown-item:hover {
+  background: var(--apple-secondary-fill);
+  color: var(--apple-label);
+}
+
+[data-theme="dark"] #controls .dropdown-item.disabled:hover {
+  background: transparent;
+  color: var(--apple-tertiary-label);
+}
+
 /* Dropdown Items */
 .dropdown-item {
   padding: 8px 12px;

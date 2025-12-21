@@ -244,14 +244,8 @@ function __wireAppUi(){
           case 'open-project':
             // Open Account Panel and navigate to Projects (Saved Designs)
             if (window.toggleAccountModal) {
-              window.toggleAccountModal('show');
-              // Navigate to projects view after modal opens
-              setTimeout(function() {
-                var projectsCard = document.querySelector('.account-card[data-view="projects"]');
-                if (projectsCard) {
-                  projectsCard.click();
-                }
-              }, 300);
+              // Open directly on Projects to avoid dashboard flash.
+              window.toggleAccountModal('show', 'projects');
             }
             break;
           case 'visualize':

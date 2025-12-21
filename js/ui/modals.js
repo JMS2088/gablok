@@ -84,10 +84,278 @@
   };
   window.hideAdmin = function(){ var m=document.getElementById('admin-modal'); if(m) m.classList.remove('visible'); };
 
+  // Doc reader modal (renders Markdown as an Apple-styled page)
+  window.hideDoc = function(){
+    var modal = document.getElementById('doc-modal');
+    if (modal) modal.classList.remove('visible');
+  };
+
+  function escapeHtml(text){
+    try {
+      var div = document.createElement('div');
+      div.textContent = String(text == null ? '' : text);
+      return div.innerHTML;
+    } catch (_e) {
+      return '';
+    }
+  }
+
+  function escapeAttr(text){
+    return escapeHtml(String(text == null ? '' : text)).replace(/"/g, '&quot;');
+  }
+
+  function renderMarkdownInline(text){
+    var s = escapeHtml(text);
+
+    // Inline code
+    s = s.replace(/`([^`]+)`/g, function(_m, code){
+      return '<code class="doc-inline-code">' + escapeHtml(code) + '</code>';
+    });
+
+    // Links
+    s = s.replace(/\[([^\]]+)\]\(([^\)]+)\)/g, function(_m, label, href){
+      var safeHref = String(href || '').trim();
+      return '<a class="doc-link" href="' + escapeAttr(safeHref) + '">' + escapeHtml(label) + '</a>';
+    });
+
+    // Bold / italic
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+    return s;
+  }
+
+  function renderMarkdownToHtml(markdownText){
+    var md = String(markdownText == null ? '' : markdownText);
+    md = md.replace(/\r\n/g, '\n');
+    md = md.replace(/\t/g, '    ');
+
+    var lines = md.split('\n');
+    var i = 0;
+    var html = '';
+
+    function isBlank(line){
+      return !line || !String(line).trim();
+    }
+
+    function readUntilBlank(startIdx){
+      var out = [];
+      var idx = startIdx;
+      while (idx < lines.length && !isBlank(lines[idx])) {
+        out.push(lines[idx]);
+        idx++;
+      }
+      return { lines: out, next: idx };
+    }
+
+    function parseTableAt(idx){
+      // Minimal GitHub-style table:
+      // Header row with pipes, second row separator with ---
+      if (idx + 1 >= lines.length) return null;
+      var headerLine = lines[idx];
+      var sepLine = lines[idx + 1];
+      if (!/\|/.test(headerLine)) return null;
+      if (!/^\s*\|?\s*:?[-]{3,}:?\s*(\|\s*:?[-]{3,}:?\s*)+\|?\s*$/.test(sepLine)) return null;
+
+      function splitRow(row){
+        var r = String(row).trim();
+        if (r.startsWith('|')) r = r.slice(1);
+        if (r.endsWith('|')) r = r.slice(0, -1);
+        return r.split('|').map(function(c){ return String(c).trim(); });
+      }
+
+      var headerCells = splitRow(headerLine);
+      var rowIdx = idx + 2;
+      var bodyRows = [];
+      while (rowIdx < lines.length && /\|/.test(lines[rowIdx]) && !isBlank(lines[rowIdx])) {
+        bodyRows.push(splitRow(lines[rowIdx]));
+        rowIdx++;
+      }
+
+      if (!headerCells.length) return null;
+      var t = '<table class="doc-table"><thead><tr>' +
+        headerCells.map(function(c){ return '<th>' + renderMarkdownInline(c) + '</th>'; }).join('') +
+        '</tr></thead><tbody>' +
+        bodyRows.map(function(r){
+          return '<tr>' + headerCells.map(function(_c, j){
+            return '<td>' + renderMarkdownInline(r[j] == null ? '' : r[j]) + '</td>';
+          }).join('') + '</tr>';
+        }).join('') +
+        '</tbody></table>';
+
+      return { html: t, next: rowIdx };
+    }
+
+    while (i < lines.length) {
+      var line = lines[i];
+
+      // Fenced code block
+      var fenceMatch = /^\s*```\s*([^\s]*)\s*$/.exec(line);
+      if (fenceMatch) {
+        var lang = (fenceMatch[1] || '').trim();
+        i++;
+        var codeLines = [];
+        while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) {
+          codeLines.push(lines[i]);
+          i++;
+        }
+        if (i < lines.length) i++;
+        html += '<pre class="doc-code"><code' + (lang ? (' data-lang="' + escapeAttr(lang) + '"') : '') + '>' + escapeHtml(codeLines.join('\n')) + '</code></pre>';
+        continue;
+      }
+
+      // Skip blanks
+      if (isBlank(line)) { i++; continue; }
+
+      // Headings
+      var h = /^(#{1,6})\s+(.+)$/.exec(line);
+      if (h) {
+        var level = h[1].length;
+        var title = String(h[2] || '').trim();
+        var id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
+        html += '<h' + level + (id ? (' id="' + escapeAttr(id) + '"') : '') + '>' + renderMarkdownInline(title) + '</h' + level + '>';
+        i++;
+        continue;
+      }
+
+      // Table
+      var tRes = parseTableAt(i);
+      if (tRes) {
+        html += tRes.html;
+        i = tRes.next;
+        continue;
+      }
+
+      // Blockquote
+      if (/^\s*>\s?/.test(line)) {
+        var qLines = [];
+        while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+          qLines.push(lines[i].replace(/^\s*>\s?/, ''));
+          i++;
+        }
+        html += '<blockquote class="doc-quote">' + renderMarkdownToHtml(qLines.join('\n')) + '</blockquote>';
+        continue;
+      }
+
+      // Unordered list
+      if (/^\s*[-*+]\s+/.test(line)) {
+        var items = [];
+        while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+          items.push(lines[i].replace(/^\s*[-*+]\s+/, ''));
+          i++;
+        }
+        html += '<ul class="doc-list">' + items.map(function(it){ return '<li>' + renderMarkdownInline(it) + '</li>'; }).join('') + '</ul>';
+        continue;
+      }
+
+      // Ordered list
+      if (/^\s*\d+\.\s+/.test(line)) {
+        var oItems = [];
+        while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
+          oItems.push(lines[i].replace(/^\s*\d+\.\s+/, ''));
+          i++;
+        }
+        html += '<ol class="doc-olist">' + oItems.map(function(it){ return '<li>' + renderMarkdownInline(it) + '</li>'; }).join('') + '</ol>';
+        continue;
+      }
+
+      // Paragraph
+      var paraRes = readUntilBlank(i);
+      var paraText = paraRes.lines.join(' ').replace(/\s+/g, ' ').trim();
+      html += '<p class="doc-paragraph">' + renderMarkdownInline(paraText) + '</p>';
+      i = paraRes.next;
+    }
+
+    return html;
+  }
+
+  async function openDocReader(opts){
+    try {
+      if (typeof opts === 'string') opts = { href: opts, title: arguments[1] };
+      opts = opts || {};
+      var href = String(opts.href || '').trim();
+      if (!href) return;
+
+      var modal = document.getElementById('doc-modal');
+      var titleEl = document.getElementById('doc-title');
+      var bodyEl = document.getElementById('doc-body');
+      if (!modal || !titleEl || !bodyEl) {
+        console.warn('doc modal missing in DOM');
+        return;
+      }
+
+      titleEl.textContent = String(opts.title || 'Document');
+      bodyEl.innerHTML = '<div class="doc-loading">Loading…</div>';
+      modal.classList.add('visible');
+
+      var resp = await fetch(href, { cache: 'no-store' });
+      if (!resp.ok) {
+        bodyEl.innerHTML = '<div class="doc-error"><strong>Could not load this document.</strong><div class="doc-error-meta">HTTP ' + escapeHtml(resp.status) + '</div></div>';
+        return;
+      }
+
+      var md = await resp.text();
+      var contentHtml = renderMarkdownToHtml(md);
+      bodyEl.innerHTML = '<article class="doc-page">' + contentHtml + '</article>';
+      bodyEl.scrollTop = 0;
+
+      // Intercept clicks on markdown links so .md stays in-app.
+      if (!bodyEl.__docLinkBound) {
+        bodyEl.addEventListener('click', function(ev){
+          try {
+            var a = ev.target && ev.target.closest ? ev.target.closest('a') : null;
+            if (!a) return;
+            var url = a.getAttribute('href') || '';
+            if (!url) return;
+
+            // Only handle local markdown links.
+            if (/\.md(#[^\s]*)?$/i.test(url) && !/^(https?:)?\/\//i.test(url)) {
+              ev.preventDefault();
+              var parts = url.split('#');
+              openDocReader({ href: parts[0], title: parts[0] });
+              // Allow anchor jump after load (best-effort)
+              var hash = parts[1];
+              if (hash) {
+                setTimeout(function(){
+                  var el = document.getElementById(hash);
+                  if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' });
+                }, 50);
+              }
+              return;
+            }
+
+            // External links should open in a new tab.
+            if (/^https?:\/\//i.test(url)) {
+              a.setAttribute('target', '_blank');
+              a.setAttribute('rel', 'noopener');
+            }
+          } catch (_e) {}
+        });
+        bodyEl.__docLinkBound = true;
+      }
+    } catch (e) {
+      console.warn('openDocReader failed', e);
+    }
+  }
+
+  window.openDocReader = openDocReader;
+
   // Dynamically populate the Info modal with current control + shortcut documentation.
   function populateInfoControls(targetId){
     var body = document.getElementById(targetId || 'info-body'); if(!body) return;
     if (body.__populatedOnce) return;
+
+    // Account > Information panel uses a richer Help & Docs layout.
+    if ((targetId || '') === 'account-info-body') {
+      try {
+        populateAccountHelpDocs(body);
+        body.__populatedOnce = true;
+      } catch (e) {
+        console.warn('[Account] Help & Docs render failed:', e);
+      }
+      return;
+    }
+
     var isMac = /Mac|iPhone|iPad/.test(navigator.platform || '') || /Mac OS/.test(navigator.userAgent || '');
     var MOD = isMac ? 'Cmd' : 'Ctrl';
     var redoKeys = isMac ? 'Shift+'+MOD+'+Z' : MOD+'+Y / Shift+'+MOD+'+Z';
@@ -204,6 +472,122 @@
     );
     body.innerHTML = html;
     body.__populatedOnce = true;
+  }
+
+  function populateAccountHelpDocs(body){
+    try { body.classList.add('helpdocs-ready'); } catch(_eClass) {}
+    var docs = [
+      {
+        title: 'DA Workflow Quick Start',
+        description: 'A fast overview of the end-to-end DA Workflow and how to use it inside Gablok.',
+        href: 'DA_WORKFLOW_QUICK_START.md',
+        icon: 'sf-list-bullet',
+        tint: 'blue',
+        bullets: ['Stages, steps, and progress tracking', 'Where documents & contacts live', 'How to resume a saved workflow']
+      },
+      {
+        title: 'DA Workflow Readme',
+        description: 'Deeper reference for the workflow structure, state, and UI behaviors.',
+        href: 'DA_WORKFLOW_README.md',
+        icon: 'sf-doc-text',
+        tint: 'indigo',
+        bullets: ['Workflow data model', 'Persistence & project linkage', 'UI/UX conventions']
+      },
+      {
+        title: 'Project Design Guide',
+        description: 'Practical guidance for creating, editing, and iterating designs in 3D and 2D.',
+        href: 'PROJECT_DESIGN_GUIDE.md',
+        icon: 'sf-ruler',
+        tint: 'green',
+        bullets: ['3D room + component workflow', 'Floor plan editor basics', 'Best practices for clean outputs']
+      },
+      {
+        title: 'Apple Design System',
+        description: 'Implementation notes for the Apple-style UI (tokens, components, and modal behavior).',
+        href: 'APPLE_DESIGN_SYSTEM_IMPLEMENTATION.md',
+        icon: 'sf-macwindow',
+        tint: 'blue',
+        bullets: ['Token usage & typography', 'Buttons, cards, and overlays', 'Dark mode conventions']
+      },
+      {
+        title: 'Photorealistic Rendering Guide',
+        description: 'How to generate and manage photorealistic renders, including pipelines and outputs.',
+        href: 'PHOTOREALISTIC_RENDERING_GUIDE.md',
+        icon: 'sf-photo',
+        tint: 'indigo',
+        bullets: ['Render pipeline overview', 'Saving and reviewing outputs', 'Common troubleshooting']
+      },
+      {
+        title: 'Testing & Debug',
+        description: 'Notes and workflows for testing, debugging, and validating changes safely.',
+        href: 'TESTING.md',
+        icon: 'sf-wrench-and-screwdriver',
+        tint: 'orange',
+        bullets: ['Local testing checklist', 'Debug windows tips', 'Known pitfalls & recovery']
+      }
+    ];
+
+    function escape(text){
+      try {
+        var div = document.createElement('div');
+        div.textContent = String(text == null ? '' : text);
+        return div.innerHTML;
+      } catch (_e) {
+        return '';
+      }
+    }
+
+    var cardsHtml = docs.map(function(doc){
+      var bullets = Array.isArray(doc.bullets) ? doc.bullets : [];
+      return (
+        '<article class="helpdoc-card" data-tint="' + escape(doc.tint || 'blue') + '">'+
+          '<div class="helpdoc-thumb" aria-hidden="true">'+
+            '<svg viewBox="0 0 160 96" class="helpdoc-thumb-svg" focusable="false">'+
+              '<rect x="10" y="10" width="140" height="76" rx="18" fill="currentColor" opacity="0.10" />'+
+              '<rect x="24" y="26" width="84" height="10" rx="5" fill="currentColor" opacity="0.16" />'+
+              '<rect x="24" y="44" width="68" height="10" rx="5" fill="currentColor" opacity="0.14" />'+
+              '<rect x="24" y="62" width="52" height="10" rx="5" fill="currentColor" opacity="0.12" />'+
+              '<use href="#' + escape(doc.icon || 'sf-doc') + '" x="118" y="22" width="28" height="28" />'+
+            '</svg>'+
+          '</div>'+
+          '<div class="helpdoc-header">'+
+            '<div class="helpdoc-title">'+
+              '<svg class="sf-icon" width="18" height="18" aria-hidden="true"><use href="#' + escape(doc.icon || 'sf-doc') + '" /></svg>'+
+              '<span>' + escape(doc.title) + '</span>'+
+            '</div>'+
+            '<p class="helpdoc-desc">' + escape(doc.description) + '</p>'+
+          '</div>'+
+          '<ul class="helpdoc-bullets">'+
+            bullets.map(function(b){ return '<li>' + escape(b) + '</li>'; }).join('')+
+          '</ul>'+
+          '<div class="helpdoc-actions">'+
+            '<a class="apple-button apple-button-gray helpdoc-action" href="' + escape(doc.href) + '" data-doc-href="' + escape(doc.href) + '" data-doc-title="' + escape(doc.title) + '">Open</a>'+
+          '</div>'+
+        '</article>'
+      );
+    }).join('');
+
+    body.innerHTML =
+      '<div class="helpdocs-layout">'+
+        '<div class="helpdocs-grid">' + cardsHtml + '</div>'+
+      '</div>';
+
+    // Make Help & Docs open inside the doc reader (no raw .md navigation)
+    if (!body.__helpDocsClickBound) {
+      body.addEventListener('click', function(ev){
+        try {
+          var a = ev.target && ev.target.closest ? ev.target.closest('a.helpdoc-action') : null;
+          if (!a) return;
+          var href = a.getAttribute('data-doc-href') || a.getAttribute('href') || '';
+          var title = a.getAttribute('data-doc-title') || a.textContent || 'Document';
+          ev.preventDefault();
+          openDocReader({ href: href, title: title });
+        } catch (_e) {}
+      });
+      body.__helpDocsClickBound = true;
+    }
+
+    try { window.__accountHelpDocsCount = docs.length; } catch (_eCount) {}
   }
   // Expose for embedded account view usage
   window.populateInfoControls = populateInfoControls;

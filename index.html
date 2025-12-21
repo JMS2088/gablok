@@ -695,6 +695,23 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 	</div>
 </div>
 
+<!-- Apple Doc Reader (renders Markdown as a styled page; avoids raw .md navigation) -->
+<div id="doc-modal" role="dialog" aria-modal="true" aria-label="Document">
+	<div id="doc-backdrop" onclick="hideDoc()"></div>
+	<div id="doc-content">
+		<div id="doc-header">
+			<div class="doc-header-left">
+				<svg class="sf-icon" width="18" height="18" aria-hidden="true"><use href="#sf-doc-text"/></svg>
+				<strong id="doc-title">Document</strong>
+			</div>
+			<div class="doc-header-right">
+				<button class="secondary" onclick="hideDoc()" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+			</div>
+		</div>
+		<div id="doc-body" tabindex="0"></div>
+	</div>
+</div>
+
 <!-- Global build footer -->
 <div id="build-footer">© Copyright Brandlab 2025 - v20251129-26</div>
 
