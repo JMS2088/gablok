@@ -106,6 +106,11 @@
 
     leaveDAWorkflowToEditor();
 
+    // Ensure the active project label (3D/2D) reflects what we're opening.
+    try {
+      if (typeof window.setActiveProject === 'function') window.setActiveProject(project);
+    } catch(_eMeta) {}
+
     try {
       window.restoreProject(project.designData);
       if (typeof window.updateStatus === 'function') window.updateStatus('Loaded DA project: ' + (project.name || 'Project'));
@@ -148,6 +153,9 @@
           if (snapshot) p.thumbnail = snapshot;
           return p;
         });
+        try {
+          if (updated && typeof window.setActiveProject === 'function') window.setActiveProject(updated);
+        } catch(_eMeta2) {}
         if (window.showAppleAlert) window.showAppleAlert('Saved', 'Design saved to "' + ((updated && updated.name) || (project.name || 'Project')) + '".');
       } catch (e) {
         console.error('[DA Workflow] Save failed:', e);

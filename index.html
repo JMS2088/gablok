@@ -512,6 +512,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 	<!-- Navigation Compass: sits next to Main Menu dropdown -->
 	<div id="nav-compass" aria-label="North" title="North">
 		<canvas id="nav-compass-canvas" width="44" height="44"></canvas>
+		<div id="active-project-meta-3d" class="active-project-meta is-hidden" aria-live="polite"></div>
 	</div>
 </div>
 <canvas id="canvas"></canvas>
@@ -1831,6 +1832,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		<!-- Navigation Compass -->
 		<div id="plan2d-compass-nav" aria-label="North" title="North">
 			<canvas id="plan2d-compass-canvas" width="44" height="44"></canvas>
+			<div id="active-project-meta-2d" class="active-project-meta is-hidden" aria-live="polite"></div>
 		</div>
 
 		<!-- Absolute-positioned rulers and stage to match resize logic -->

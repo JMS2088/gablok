@@ -88,6 +88,35 @@
     }
   function showAccount(){
     var m = qs('account-modal'); if(!m) return;
+    // If the modal is already open and stable, avoid restarting open animations.
+    if (m.classList.contains('visible') && m.classList.contains('showing') && !m.classList.contains('closing')) {
+      loadProfile();
+      updateDashboard();
+      return;
+    }
+
+    // Helper: stage the 'showing' class on the next frame (smoother than forced reflow)
+    function scheduleShow(){
+      try {
+        if (m.__opening) return;
+        m.__opening = true;
+        var token = (Date.now().toString(36) + Math.random().toString(36).slice(2));
+        m.__openToken = token;
+        requestAnimationFrame(function(){
+          try {
+            if (m.__openToken !== token) return;
+            m.classList.add('showing');
+          } finally {
+            m.__opening = false;
+          }
+        });
+      } catch (_e) {
+        // Fallback: best-effort
+        try { m.classList.add('showing'); } catch(_e2) {}
+        m.__opening = false;
+      }
+    }
+
     // Invalidate any pending close completion (animationend/timeout).
     // This prevents a stale close finishing *after* we reopen, which looks like a jump/double-open.
     try { m.__closeToken = null; } catch(_eTok0) {}
@@ -107,20 +136,19 @@
       m.__animating = false;
       m.classList.remove('closing');
     } catch(_eCancel) {}
-    // If already open (and not closing), don't restart animations.
+
+    // If already visible (and not closing), ensure we end up in 'showing' without restarting.
     if (m.classList.contains('visible') && !m.classList.contains('closing')) {
       loadProfile();
       updateDashboard();
-      m.classList.add('showing');
+      scheduleShow();
       return;
     }
     loadProfile();
     updateDashboard(); // Update dashboard stats
     m.classList.remove('closing');
     m.classList.add('visible');
-    // Force reflow then add showing to trigger staged animations
-    void m.offsetWidth; // reflow
-    m.classList.add('showing');
+    scheduleShow();
   }
   
   function updateDashboard(){
@@ -147,6 +175,8 @@
   function hideAccount(){
     var m = qs('account-modal'); if(!m) return;
     if(m.__animating) return;
+    // Cancel any pending open animation so it can't fight the close.
+    try { m.__openToken = null; m.__opening = false; } catch(_eOpenTok) {}
     // Stop any admin auto-refresh when closing
     try { if (__accountAdminRefreshTimer) { clearInterval(__accountAdminRefreshTimer); __accountAdminRefreshTimer = null; } } catch(_e){}
     // Stop dashboard clock updates when modal is hidden (prevents background CPU churn)
@@ -412,7 +442,14 @@
     }
   
   function wire(){
-    var btn = qs('account-button'); if(btn && !btn.__wired){ btn.__wired=true; btn.addEventListener('click', showAccount); }
+    var btn = qs('account-button');
+    if(btn && !btn.__wired){
+      btn.__wired=true;
+      btn.addEventListener('click', function(e){
+        try { if (e) { e.preventDefault(); e.stopPropagation(); } } catch(_e1) {}
+        showAccount();
+      });
+    }
     var close = qs('account-close'); if(close) close.addEventListener('click', hideAccount);
     
     // Wire account cards instead of nav buttons
@@ -470,6 +507,115 @@
     window.toggleAccountModal = toggleAccountModal;
     window.refreshAccountStats = refreshAccountStats;
     window.returnToDashboard = returnToDashboard;
+
+    // ---------------------------------------------------------------------------
+    // Active project meta (shown under the 3D/2D navigation compasses)
+    // ---------------------------------------------------------------------------
+    function formatMetaDate(ts, includeTime){
+      if (!ts) return '';
+      try {
+        var d = new Date(ts);
+        var date = d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'2-digit' });
+        if (!includeTime) return date;
+        var time = d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+        return date + ' ' + time;
+      } catch(_e) {
+        return '';
+      }
+    }
+
+    function escapeHtmlLocal(text) {
+      try {
+        return String(text == null ? '' : text)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      } catch(_e) {
+        return '';
+      }
+    }
+
+    function renderActiveProjectMeta(meta){
+      try {
+        var el3d = document.getElementById('active-project-meta-3d');
+        var el2d = document.getElementById('active-project-meta-2d');
+        var has = !!(meta && meta.id && meta.name);
+        var html = '';
+        if (has) {
+          var created = formatMetaDate(meta.createdAt, false);
+          var saved = formatMetaDate(meta.updatedAt || meta.lastSavedAt, true);
+          var name = String(meta.name || 'Project');
+          html =
+            '<div class="active-project-meta-title">ACTIVE PROJECT</div>' +
+            '<div class="active-project-meta-name">' + escapeHtmlLocal(name) + '</div>' +
+            '<div class="active-project-meta-dates">CREATED ' + escapeHtmlLocal(created || '—') + ' \u00B7 LAST SAVED ' + escapeHtmlLocal(saved || '—') + '</div>';
+        }
+        [el3d, el2d].forEach(function(el){
+          if(!el) return;
+          if(!has){
+            el.innerHTML = '';
+            el.classList.add('is-hidden');
+            el.removeAttribute('title');
+            return;
+          }
+          el.innerHTML = html;
+          el.classList.remove('is-hidden');
+          el.title = String(meta.name || 'Project');
+        });
+      } catch(_e) {}
+    }
+
+    function resolveProjectById(projectId){
+      try {
+        if (!projectId) return null;
+        if (window.ProjectStorage && typeof window.ProjectStorage.getProjects === 'function') {
+          var projects = window.ProjectStorage.getProjects() || [];
+          return projects.find(function(p){ return p && p.id === projectId; }) || null;
+        }
+      } catch(_e) {}
+      return null;
+    }
+
+    // Public API: call with a project object or project id
+    window.setActiveProject = function(projectOrId){
+      try {
+        var project = null;
+        if (projectOrId && typeof projectOrId === 'object') project = projectOrId;
+        else project = resolveProjectById(projectOrId);
+        if (!project) {
+          window.__activeProjectMeta = null;
+          window.__activeProjectId = null;
+          renderActiveProjectMeta(null);
+          return;
+        }
+        window.__activeProjectId = project.id;
+        window.__activeProjectMeta = {
+          id: project.id,
+          name: project.name || 'Project',
+          createdAt: project.createdAt || null,
+          updatedAt: project.updatedAt || null,
+          lastSavedAt: project.updatedAt || null
+        };
+        renderActiveProjectMeta(window.__activeProjectMeta);
+      } catch(_e) {}
+    };
+
+    window.refreshActiveProjectMeta = function(){
+      try {
+        if (!window.__activeProjectId) {
+          renderActiveProjectMeta(null);
+          return;
+        }
+        var p = resolveProjectById(window.__activeProjectId);
+        if (p) window.setActiveProject(p);
+        else renderActiveProjectMeta(null);
+      } catch(_e) {}
+    };
+
+    // Render on load if we already have an active project id
+    setTimeout(function(){ try{ if (window.refreshActiveProjectMeta) window.refreshActiveProjectMeta(); }catch(_e){} }, 0);
 })();
 
 // Account project storage + view rendering ----------------------------------------------------
@@ -699,7 +845,10 @@
 
     var actions = document.createElement('div');
     actions.className = 'project-card-actions';
-    actions.appendChild(createActionButton('Continue Workflow', 'open-workflow', project.id));
+    // Primary action: load the saved design back into the editor.
+    var hasDesign = !!(project && (project.designData || project.hasDesign));
+    actions.appendChild(createActionButton('Continue Work', 'open-design', project.id, hasDesign ? 'primary' : 'secondary', { disabled: !hasDesign }));
+    actions.appendChild(createActionButton('DA Workflow', 'open-workflow', project.id, 'secondary'));
     actions.appendChild(createActionButton('Rename', 'rename-project', project.id, 'secondary'));
     actions.appendChild(createActionButton('Delete', 'delete-project', project.id, 'secondary danger'));
     card.appendChild(actions);
@@ -732,14 +881,66 @@
     return wrap;
   }
 
-  function createActionButton(label, action, projectId, classes){
+  function createActionButton(label, action, projectId, classes, opts){
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.textContent = label;
     btn.setAttribute('data-action', action);
     btn.setAttribute('data-project-id', projectId);
     if(classes) btn.className = classes;
+    if (opts && opts.disabled) {
+      btn.disabled = true;
+      btn.setAttribute('aria-disabled', 'true');
+    }
     return btn;
+  }
+
+  function openDesign(projectId){
+    if(!projectId) return;
+    var storage = window.ProjectStorage;
+    if(!storage || typeof storage.getProjects !== 'function'){
+      showAppleAlert('Error', 'Project storage is not ready yet.');
+      return;
+    }
+    if(typeof window.restoreProject !== 'function'){
+      showAppleAlert('Error', 'Design system not loaded. Please refresh the page.');
+      return;
+    }
+    var projects = [];
+    try { projects = storage.getProjects() || []; } catch(_e) { projects = []; }
+    var project = projects.find(function(p){ return p && p.id === projectId; }) || null;
+    if(!project){
+      showAppleAlert('Error', 'Project not found.');
+      return;
+    }
+    if(!project.designData){
+      showAppleAlert('No Design Saved', 'This project does not have a saved 3D design yet.');
+      return;
+    }
+
+    // Update the tiny project badge near the navigation compasses.
+    try {
+      if (typeof window.setActiveProject === 'function') window.setActiveProject(project);
+    } catch(_eMeta) {}
+
+    // Hide Account before restoring to avoid stacked UIs.
+    try {
+      if(window.toggleAccountModal) window.toggleAccountModal('hide');
+      var acc = document.getElementById('account-modal');
+      if(acc){
+        acc.classList.remove('showing', 'closing', 'visible');
+        acc.__animating = false;
+      }
+    } catch(_eHideAcc) {}
+
+    try {
+      window.restoreProject(project.designData);
+      if(typeof window.updateStatus === 'function') window.updateStatus('Loaded project: ' + (project.name || 'Project'));
+      if(typeof window.renderLoop === 'function') window.renderLoop();
+    } catch(e) {
+      console.error('[AccountProjects] Failed to restore project:', e);
+      showAppleAlert('Error', 'Failed to load the project design.');
+    }
   }
 
   function handleCreateProject(){
@@ -807,12 +1008,14 @@
   }
 
   function handleProjectListClick(event){
-    var action = event.target && event.target.getAttribute('data-action');
+    var btn = event.target && event.target.closest ? event.target.closest('button[data-action]') : null;
+    var action = btn && btn.getAttribute('data-action');
     if(!action) return;
     event.preventDefault();
-    var projectId = event.target.getAttribute('data-project-id');
+    var projectId = btn.getAttribute('data-project-id');
     if(!projectId) return;
-    if(action === 'open-workflow') openWorkflow(projectId);
+    if(action === 'open-design') openDesign(projectId);
+    else if(action === 'open-workflow') openWorkflow(projectId);
     else if(action === 'rename-project') handleRename(projectId);
     else if(action === 'delete-project') handleDelete(projectId);
   }
@@ -1965,6 +2168,12 @@
     }
 
     showAppleAlert('Success', 'Design saved to "' + updated.name + '". You can now access the DA Workflow from the Projects tab.');
+
+    // If the user is working on this project, reflect the new save timestamp in the UI.
+    try {
+      if (typeof window.setActiveProject === 'function') window.setActiveProject(updated);
+    } catch(_eMeta) {}
+
     if (window.toggleAccountModal) window.toggleAccountModal('show');
   }
 
