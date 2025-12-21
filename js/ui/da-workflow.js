@@ -31,7 +31,7 @@
         title: 'Planning & Finance (Pre-DA)',
         description: 'Set foundation for your project, budget, and legal right to build',
         estimatedDays: '14-30 days',
-        icon: '💰',
+        icon: 'sf-dollarsign-circle',
         steps: [
           {
             id: 'p1',
@@ -120,7 +120,7 @@
         title: 'Research & Prepare Concept',
         description: 'Understand what you can build on your land',
         estimatedDays: '7-14 days',
-        icon: '🔍',
+        icon: 'sf-info-circle',
         steps: [
           {
             id: 'a1',
@@ -190,7 +190,7 @@
         title: 'Engage Team & Prepare Documentation',
         description: 'Hire professionals and create all required plans',
         estimatedDays: '30-90 days',
-        icon: '📋',
+        icon: 'sf-doc-text',
         steps: [
           {
             id: 'b1',
@@ -353,7 +353,7 @@
         title: 'Lodge Development Application',
         description: 'Submit complete DA package to council',
         estimatedDays: '1-3 days',
-        icon: '📤',
+        icon: 'sf-square-and-arrow-up',
         steps: [
           {
             id: 'c1',
@@ -432,7 +432,7 @@
         title: 'Assessment & Notification',
         description: 'Council reviews and community is notified',
         estimatedDays: '14-40 days',
-        icon: '⏳',
+        icon: 'sf-clock',
         steps: [
           {
             id: 'd1',
@@ -521,7 +521,7 @@
         title: 'Determination (Decision)',
         description: 'Council approves, refuses, or defers',
         estimatedDays: '1-7 days after assessment',
-        icon: '⚖️',
+        icon: 'sf-checkmark-circle',
         steps: [
           {
             id: 'e1',
@@ -613,7 +613,7 @@
         title: 'Construction Certificate & Certifier',
         description: 'Get building approval before starting work',
         estimatedDays: '14-30 days',
-        icon: '🏗️',
+        icon: 'sf-hammer',
         steps: [
           {
             id: 'f1',
@@ -728,7 +728,7 @@
         title: 'Construction & Occupation',
         description: 'Build and get final occupation approval',
         estimatedDays: '180-365+ days',
-        icon: '🏠',
+        icon: 'sf-house',
         steps: [
           {
             id: 'g1',
@@ -1050,6 +1050,33 @@
       return false;
     }
   }
+
+  /**
+   * Check if a project already has a persisted workflow state.
+   * Used for Start vs Continue labels.
+   */
+  function hasWorkflowState(projectId) {
+    try {
+      var key = 'gablok_da_workflow_' + projectId;
+      return !!localStorage.getItem(key);
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  /**
+   * Ensure a project has a persisted workflow state.
+   * If none exists yet, save a fresh state immediately.
+   */
+  function ensureWorkflowState(projectId) {
+    try {
+      var key = 'gablok_da_workflow_' + projectId;
+      if (localStorage.getItem(key)) return true;
+      return saveWorkflowState(projectId, createFreshWorkflowState());
+    } catch (_e2) {
+      return false;
+    }
+  }
   
   /**
    * Create fresh workflow state for new project
@@ -1173,6 +1200,8 @@
     workflow: DA_WORKFLOW,
     getWorkflowState: getWorkflowState,
     saveWorkflowState: saveWorkflowState,
+    hasWorkflowState: hasWorkflowState,
+    ensureWorkflowState: ensureWorkflowState,
     createFreshWorkflowState: createFreshWorkflowState,
     addContact: addContact,
     generateShareLink: generateShareLink,

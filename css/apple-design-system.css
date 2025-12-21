@@ -635,14 +635,14 @@ button,
   box-shadow: none;
 }
 
-#controls button.save-for-da {
+#controls button.save-project {
   background: var(--apple-secondary-system-background) !important;
   color: var(--apple-label) !important;
   border: none !important;
   font-weight: var(--apple-font-weight-regular) !important;
 }
 
-#controls button.save-for-da:hover {
+#controls button.save-project:hover {
   background: var(--global-hover-bg) !important;
   color: var(--global-hover-color) !important;
 }
@@ -1660,7 +1660,7 @@ button.secondary:hover {
   transform: translateY(-2px);
 }
 
-#btn-save-for-da {
+#btn-save-project {
   background: var(--apple-secondary-system-background) !important;
   color: var(--apple-label) !important;
   font-weight: var(--apple-font-weight-regular);
@@ -1669,13 +1669,13 @@ button.secondary:hover {
   transition: background 0.2s ease, color 0.2s ease, transform 0.2s ease;
 }
 
-#btn-save-for-da:hover {
+#btn-save-project:hover {
   background: var(--global-hover-bg) !important;
   color: var(--global-hover-color) !important;
   transform: none;
 }
 
-#btn-save-for-da:active {
+#btn-save-project:active {
   transform: none;
 }
 

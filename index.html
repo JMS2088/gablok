@@ -414,9 +414,12 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 </svg>
 
 <div id="controls" role="navigation" aria-label="Main toolbar">
-	<button onclick="addNewRoom()"><svg class="sf-icon" width="16" height="16"><use href="#sf-plus-square"/></svg> Add Room</button>
+	<div class="controls-add-room-wrap">
+		<button onclick="addNewRoom()"><svg class="sf-icon" width="16" height="16"><use href="#sf-plus-square"/></svg> Add Room</button>
+		<div id="active-project-meta-3d" class="active-project-meta active-project-meta--toolbar is-hidden" aria-live="polite"></div>
+	</div>
 	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor"><svg class="sf-icon" width="16" height="16"><use href="#sf-square-grid-2x2"/></svg> 2D View</button>
-	<button id="btn-save-for-da" class="secondary save-for-da" title="Save current design to project for DA submission" onclick="saveDesignForDA()"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-doc"/></svg> Save for DA</button>
+	<button id="btn-save-project" class="secondary save-project" title="Save current design to a project" onclick="saveProjectFrom3D()"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-doc"/></svg> Save Project</button>
 	<button id="btn-render-walls" class="secondary" title="Toggle wall render mode"><svg class="sf-icon" width="16" height="16"><use href="#sf-paintbrush"/></svg> <span class="render-label">Render: Lines</span></button>
 	<button id="btn-clean-view" class="secondary" title="Toggle clean view (hide UI)" onclick="toggleCleanView()"><svg class="sf-icon" width="16" height="16"><use href="#sf-eye"/></svg> Clean View</button>
 	<!-- Debug Dropdown: quick toggles for corner handles and debug logs -->
@@ -512,7 +515,6 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 	<!-- Navigation Compass: sits next to Main Menu dropdown -->
 	<div id="nav-compass" aria-label="North" title="North">
 		<canvas id="nav-compass-canvas" width="44" height="44"></canvas>
-		<div id="active-project-meta-3d" class="active-project-meta is-hidden" aria-live="polite"></div>
 	</div>
 </div>
 <canvas id="canvas"></canvas>

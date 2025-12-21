@@ -804,7 +804,7 @@
       // Fallback icon if no thumbnail
       var icon = document.createElement('div');
       icon.className = 'project-card-icon-fallback';
-      icon.textContent = project.hasDesign ? '📐' : '📁';
+      icon.innerHTML = '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" aria-hidden="true"><use href="/css/sf-symbols.svg#' + (project.hasDesign ? 'sf-doc-text' : 'sf-folder') + '" /></svg>';
       thumbWrapper.appendChild(icon);
     }
     card.appendChild(thumbWrapper);
@@ -848,7 +848,15 @@
     // Primary action: load the saved design back into the editor.
     var hasDesign = !!(project && (project.designData || project.hasDesign));
     actions.appendChild(createActionButton('Continue Work', 'open-design', project.id, hasDesign ? 'primary' : 'secondary', { disabled: !hasDesign }));
-    actions.appendChild(createActionButton('DA Workflow', 'open-workflow', project.id, 'secondary'));
+    var hasDAState = false;
+    try {
+      if (window.DAWorkflow && typeof window.DAWorkflow.hasWorkflowState === 'function') {
+        hasDAState = window.DAWorkflow.hasWorkflowState(project.id);
+      } else {
+        hasDAState = !!localStorage.getItem('gablok_da_workflow_' + project.id);
+      }
+    } catch (_eDAState) {}
+    actions.appendChild(createActionButton(hasDAState ? 'Continue DA Workflow' : 'Start DA Workflow', 'open-workflow', project.id, 'secondary'));
     actions.appendChild(createActionButton('Rename', 'rename-project', project.id, 'secondary'));
     actions.appendChild(createActionButton('Delete', 'delete-project', project.id, 'secondary danger'));
     card.appendChild(actions);
@@ -949,7 +957,7 @@
       showAppleAlert('Error', 'Project storage is not ready yet.');
       return;
     }
-    showApplePrompt('New Project', 'DA Project ' + new Date().toLocaleDateString(), function(name) {
+    showApplePrompt('New Project', 'Project ' + new Date().toLocaleDateString(), function(name) {
       if(!name) return;
       storage.createProject(name);
       renderProjectsView();
@@ -1923,8 +1931,8 @@
 })();
 
 /**
- * Save current design to project for DA submission
- * Called from 3D view "Save for DA" button
+ * Save current design (and any visualizations) to a Project
+ * Called from 3D view "Save Project" button
  */
 (function() {
   function ensureProjectStorage() {
@@ -1932,7 +1940,7 @@
       return window.ProjectStorage;
     }
     showAppleAlert('Error', 'Project storage is not ready yet. Please reload and try again.');
-    console.error('[SaveForDA] ProjectStorage unavailable');
+    console.error('[SaveProject] ProjectStorage unavailable');
     return null;
   }
 
@@ -1956,10 +1964,10 @@
     }
   }
 
-  window.saveDesignForDA = function() {
+  function saveProjectFrom3D() {
     var currentUser = window.__appUserId;
     if (!currentUser) {
-      showAppleAlert('Login Required', 'Please log in via the Account panel before saving a DA project.');
+      showAppleAlert('Login Required', 'Please log in via the Account panel before saving a project.');
       if (window.toggleAccountModal) window.toggleAccountModal('show');
       return;
     }
@@ -1971,7 +1979,7 @@
 
     var designData = window.serializeProject();
     if (!hasMeaningfulDesign(designData)) {
-      showAppleAlert('No Design', 'Please create or update a design before saving for DA submission.');
+      showAppleAlert('No Design', 'Please create or update a design before saving a project.');
       return;
     }
 
@@ -1980,9 +1988,14 @@
 
     captureDesignSnapshot(function(snapshot) {
       var projects = storage.getProjects();
-      showProjectSelectionForDA(storage, projects, designData, snapshot);
+      showProjectSelectionForSave(storage, projects, designData, snapshot);
     });
-  };
+  }
+
+  // New API (used by the 3D toolbar)
+  window.saveProjectFrom3D = saveProjectFrom3D;
+  // Back-compat (older markup / callers)
+  window.saveDesignForDA = saveProjectFrom3D;
 
   function captureDesignSnapshot(callback) {
     try {
@@ -2003,7 +2016,7 @@
     }
   }
 
-  function showProjectSelectionForDA(storage, projects, designData, snapshot) {
+  function showProjectSelectionForSave(storage, projects, designData, snapshot) {
     var modal = document.createElement('div');
     modal.className = 'modal-overlay da-project-selector';
     modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:100000;display:flex;align-items:center;justify-content:center;';
@@ -2011,15 +2024,15 @@
     var content = document.createElement('div');
     content.className = 'da-modal-content';
     content.innerHTML = `
-      <h2 class="da-modal-title"><svg class="sf-icon" width="22" height="22"><use href="#sf-arrow-down-doc"/></svg> Save Design for DA Submission</h2>
-      <p class="da-modal-subtitle">Select a project or create a new one:</p>
+      <h2 class="da-modal-title"><svg class="sf-icon" width="22" height="22"><use href="#sf-arrow-down-doc"/></svg> Save Project</h2>
+      <p class="da-modal-subtitle">Select an existing project, or create a new one:</p>
       <div id="da-project-list" class="da-project-list"></div>
       <div id="da-new-project-form" class="da-new-project-form" style="display: none;">
         <div class="da-form-header">
           <h3 class="da-form-title">Create New Project</h3>
           <p class="da-form-subtitle">Enter a name for your new project</p>
         </div>
-        <input type="text" id="da-project-name-input" class="apple-input da-project-input" placeholder="DA Project name..." />
+        <input type="text" id="da-project-name-input" class="apple-input da-project-input" placeholder="Project name..." />
         <div class="da-form-actions">
           <button id="da-form-cancel-btn" class="secondary">Cancel</button>
           <button id="da-form-create-btn" class="primary">Create Project</button>
@@ -2096,7 +2109,7 @@
           newProjectForm.style.opacity = '1';
           newProjectForm.style.transform = 'translateY(0)';
           projectInput.focus();
-          projectInput.value = 'DA Project ' + new Date().toLocaleDateString();
+          projectInput.value = 'Project ' + new Date().toLocaleDateString();
           projectInput.select();
         }, 50);
       }, 200);
@@ -2136,7 +2149,7 @@
       
       modal.remove();
       if (created) {
-        showAppleAlert('Success', 'Design saved to "' + created.name + '". You can now access the DA Workflow from the Projects tab.');
+        showAppleAlert('Success', 'Saved to "' + created.name + '". You can share it, continue work, or start DA Workflow later.');
         if (window.toggleAccountModal) window.toggleAccountModal('show');
       }
     };
@@ -2167,7 +2180,7 @@
       return;
     }
 
-    showAppleAlert('Success', 'Design saved to "' + updated.name + '". You can now access the DA Workflow from the Projects tab.');
+    showAppleAlert('Success', 'Saved to "' + updated.name + '". You can share it, continue work, or start DA Workflow later.');
 
     // If the user is working on this project, reflect the new save timestamp in the UI.
     try {

@@ -510,6 +510,13 @@
   transition: all 0.3s ease;
 }
 
+.da-stage-badge-indicator svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  fill: currentColor;
+}
+
 .da-stage-item.complete .da-stage-badge-indicator {
   background: linear-gradient(135deg, #34C759, #30D158);
   box-shadow: 0 10px 20px rgba(52,199,89,0.25);
@@ -1394,6 +1401,13 @@
   flex-shrink: 0;
 }
 
+.da-tip-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  fill: currentColor;
+}
+
 .da-tip-content {
   flex: 1;
 }
@@ -1443,6 +1457,23 @@
   justify-content: center;
   flex-shrink: 0;
   font-size: 16px;
+}
+
+.da-resource-icon svg,
+.da-resource-arrow svg {
+  display: block;
+  fill: currentColor;
+}
+
+.da-nav-btn svg {
+  display: block;
+  fill: currentColor;
+}
+
+/* Slightly smaller selector buttons (matches DA nav sizing) */
+#da-project-selector-overlay .project-card-actions button,
+#da-project-selector-overlay .projects-toolbar button {
+  font-size: 13px !important;
 }
 
 .da-resource-info {

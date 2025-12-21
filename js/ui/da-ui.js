@@ -309,7 +309,7 @@
         <div class="da-selector-container">
           <div class="da-selector-header">
             <h2>Select a Project for DA Workflow</h2>
-            <p>Choose an existing project to continue your Development Application workflow</p>
+            <p>DA Workflow is optional — pick any project to start or continue.</p>
             <button class="da-selector-close" onclick="window.DAWorkflowUI.closeSelector()">
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path d="M6 6L14 14M14 6L6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -324,7 +324,22 @@
         var thumbnail = project.thumbnail || '';
         var thumbnailHTML = thumbnail
           ? '<img src="' + thumbnail + '" class="project-card-main-thumb" alt="Project preview" loading="lazy" />'
-          : '<div class="project-card-icon-fallback">' + (project.hasDesign ? '📐' : '📁') + '</div>';
+          : (
+              '<div class="project-card-icon-fallback" aria-hidden="true">' +
+                '<svg width="44" height="44" viewBox="0 0 24 24" fill="none">' +
+                  '<use href="/css/sf-symbols.svg#' + (project.hasDesign ? 'sf-doc-text' : 'sf-folder') + '" />' +
+                '</svg>' +
+              '</div>'
+            );
+
+        var hasDAState = false;
+        try {
+          if (window.DAWorkflow && typeof window.DAWorkflow.hasWorkflowState === 'function') {
+            hasDAState = window.DAWorkflow.hasWorkflowState(project.id);
+          } else {
+            hasDAState = !!localStorage.getItem('gablok_da_workflow_' + project.id);
+          }
+        } catch (_eState) {}
 
         content += `
           <div class="project-card" data-project-id="${project.id}">
@@ -335,7 +350,7 @@
               ${project.hasDesign ? '<div class="project-badges"><span class="project-badge design">Design saved</span></div>' : ''}
             </div>
             <div class="project-card-actions">
-              <button type="button" class="primary" onclick="window.DAWorkflowUI.openWithProject('${project.id}')">Continue Workflow</button>
+              <button type="button" class="primary" onclick="window.DAWorkflowUI.openWithProject('${project.id}')">${hasDAState ? 'Continue Workflow' : 'Start Workflow'}</button>
               <button type="button" class="secondary" onclick="window.DAWorkflowUI.renameProject('${project.id}')">Rename</button>
               <button type="button" class="secondary danger" onclick="window.DAWorkflowUI.deleteProject('${project.id}')">Delete</button>
             </div>
@@ -371,11 +386,11 @@
             <h3>Get Started with Your First Project</h3>
             <p>The DA Workflow helps you navigate the Development Application process in Australia step by step. From planning through to occupation certificate, we'll guide you through every stage.</p>
             <ul class="da-welcome-features">
-              <li><svg width="20" height="20"><use href="#sf-checkmark-circle"/></svg> 8 Major workflow phases</li>
-              <li><svg width="20" height="20"><use href="#sf-checkmark-circle"/></svg> 50+ Detailed steps</li>
-              <li><svg width="20" height="20"><use href="#sf-checkmark-circle"/></svg> Progress tracking</li>
-              <li><svg width="20" height="20"><use href="#sf-checkmark-circle"/></svg> Document management</li>
-              <li><svg width="20" height="20"><use href="#sf-checkmark-circle"/></svg> Contact management</li>
+              <li><svg width="20" height="20" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-checkmark-circle"/></svg> 8 Major workflow phases</li>
+              <li><svg width="20" height="20" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-checkmark-circle"/></svg> 50+ Detailed steps</li>
+              <li><svg width="20" height="20" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-checkmark-circle"/></svg> Progress tracking</li>
+              <li><svg width="20" height="20" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-checkmark-circle"/></svg> Document management</li>
+              <li><svg width="20" height="20" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-checkmark-circle"/></svg> Contact management</li>
             </ul>
             <div class="projects-toolbar da-welcome-actions">
               <button type="button" class="primary" onclick="window.DAWorkflowUI.createNewProject()">
@@ -544,6 +559,13 @@
     } catch (_e0) {}
 
     currentProjectId = projectId;
+    // Treat opening the workflow as "submitting" the project to DA Workflow:
+    // ensure an initial persisted state exists so the project can be continued later.
+    try {
+      if (window.DAWorkflow && typeof window.DAWorkflow.ensureWorkflowState === 'function') {
+        window.DAWorkflow.ensureWorkflowState(projectId);
+      }
+    } catch (_eEnsure) {}
     currentState = window.DAWorkflow.getWorkflowState(projectId);
 
     // Resolve current project name (for sidebar header)
@@ -649,17 +671,17 @@
             </div>
             
             <!-- Navigation -->
-            <div class="da-navigation">
-              <button class="da-nav-btn da-nav-prev" id="da-prev-btn" onclick="window.DAWorkflowUI.previousStep()">
-                <span class="da-nav-icon">←</span>
+            <div class="da-nav-buttons">
+              <button class="da-nav-btn back" id="da-prev-btn" onclick="window.DAWorkflowUI.previousStep()">
+                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/css/sf-symbols.svg#sf-chevron-left" /></svg>
                 <span class="da-nav-label">Previous</span>
               </button>
-              <div class="da-step-indicator" id="da-step-indicator">
+              <div class="da-step-indicators" id="da-step-indicator">
                 <!-- Step dots -->
               </div>
-              <button class="da-nav-btn da-nav-next" id="da-next-btn" onclick="window.DAWorkflowUI.nextStep()">
+              <button class="da-nav-btn next" id="da-next-btn" onclick="window.DAWorkflowUI.nextStep()">
                 <span class="da-nav-label">Next</span>
-                <span class="da-nav-icon">→</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/css/sf-symbols.svg#sf-chevron-right" /></svg>
               </button>
             </div>
           </div>
@@ -737,18 +759,16 @@
       html += `
         <div class="da-stage-item ${isActive ? 'active' : ''} ${isComplete ? 'complete' : ''}" 
              onclick="window.DAWorkflowUI.goToStage('${stage.id}')">
-          <div class="da-stage-icon">${stage.icon}</div>
-          <div class="da-stage-info">
-            <div class="da-stage-code">${stage.code}</div>
-            <div class="da-stage-title">${stage.title}</div>
-            <div class="da-stage-progress-mini">
-              <div class="da-progress-bar-mini">
-                <div class="da-progress-fill-mini" style="width: ${stageProgress}%"></div>
-              </div>
-              <span>${stageProgress}%</span>
-            </div>
+          <div class="da-stage-badge-indicator" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" focusable="false">
+              <use href="/css/sf-symbols.svg#${stage.icon}" />
+            </svg>
           </div>
-          ${isComplete ? '<div class="da-complete-badge"><svg width="16" height="16" viewBox="0 0 16 16"><use xlink:href="/css/sf-symbols.svg#sf-checkmark-circle" /></svg></div>' : ''}
+          <div class="da-stage-info">
+            <div class="da-stage-title">${stage.title}</div>
+            <div class="da-stage-progress">${stageProgress}% complete</div>
+          </div>
+          ${isComplete ? '<div class="da-complete-badge"><svg width="16" height="16" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-checkmark-circle" /></svg></div>' : ''}
         </div>
       `;
     });
@@ -780,10 +800,17 @@
     if (headerCard) {
       var stepIndex = stage.steps.findIndex(function(s) { return s.id === step.id; }) + 1;
       var stepCode = stage.code + stepIndex;
+      var requiredDocsCount = (step.documents && step.documents.length) ? step.documents.length : 0;
+      var requiredContactsCount = (step.contacts && step.contacts.length) ? step.contacts.length : 0;
+      var requirementsSummary = (requiredDocsCount || requiredContactsCount)
+        ? (' • Need: ' + (requiredDocsCount ? (requiredDocsCount + ' doc' + (requiredDocsCount === 1 ? '' : 's')) : '') +
+           (requiredDocsCount && requiredContactsCount ? ', ' : '') +
+           (requiredContactsCount ? (requiredContactsCount + ' contact' + (requiredContactsCount === 1 ? '' : 's')) : ''))
+        : '';
       headerCard.innerHTML = `
         <div class="da-step-badge-graphic">${stepCode}</div>
         <div class="da-step-header-content">
-          <div class="da-step-stage-label">Stage ${stage.code} • Step ${stepIndex} of ${stage.steps.length}</div>
+          <div class="da-step-stage-label">Stage ${stage.code} • Step ${stepIndex} of ${stage.steps.length}${requirementsSummary}</div>
           <h2 class="da-step-title">${step.title}</h2>
           <p class="da-step-description">${step.description}</p>
           <div class="da-step-actions">
@@ -887,19 +914,48 @@
       <div class="da-info-section">
         ${step.tips ? `
           <div class="da-tip-card">
-            <div class="da-tip-icon">💡</div>
+            <div class="da-tip-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" focusable="false">
+                <use href="/css/sf-symbols.svg#sf-info-circle" />
+              </svg>
+            </div>
             <div class="da-tip-content">
-              <strong>Pro Tip</strong>
-              <p>${step.tips}</p>
+              <div class="da-tip-title">Pro Tip</div>
+              <div class="da-tip-text">${step.tips}</div>
             </div>
           </div>
         ` : ''}
         
         ${step.links && step.links.length > 0 ? `
           <div class="da-links-card">
-            <h4>🔗 Helpful Resources</h4>
+            <div class="da-info-header">
+              <div class="da-info-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" focusable="false">
+                  <use href="/css/sf-symbols.svg#sf-link" />
+                </svg>
+              </div>
+              <div class="da-info-title">Helpful Resources</div>
+            </div>
             ${step.links.map(function(link) {
-              return '<a href="' + link + '" target="_blank" class="da-resource-link">' + getDomainName(link) + ' →</a>';
+              var domain = getDomainName(link);
+              return (
+                '<a href="' + link + '" target="_blank" rel="noopener noreferrer" class="da-resource-link">' +
+                  '<div class="da-resource-icon" aria-hidden="true">' +
+                    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" focusable="false">' +
+                      '<use href="/css/sf-symbols.svg#sf-arrow-up-right" />' +
+                    '</svg>' +
+                  '</div>' +
+                  '<div class="da-resource-info">' +
+                    '<div class="da-resource-title">' + domain + '</div>' +
+                    '<div class="da-resource-url">' + link + '</div>' +
+                  '</div>' +
+                  '<div class="da-resource-arrow" aria-hidden="true">' +
+                    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" focusable="false">' +
+                      '<use href="/css/sf-symbols.svg#sf-chevron-right" />' +
+                    '</svg>' +
+                  '</div>' +
+                '</a>'
+              );
             }).join('')}
           </div>
         ` : ''}
@@ -908,7 +964,7 @@
       <!-- Notes Card -->
       <div class="da-card da-notes-card">
         <div class="da-card-header">
-          <h3><span class="da-icon">📝</span> Your Notes</h3>
+          <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-pencil" /></svg> Your Notes</h3>
         </div>
         <div class="da-card-body">
           <textarea class="da-notes-input" 
@@ -1134,7 +1190,7 @@
             ${hasContact ? `
               <button class="da-btn da-btn-small da-btn-secondary" 
                       onclick="window.DAWorkflowUI.shareWithContact('${role}')">
-                🔗 Share
+                <svg width="12" height="12" viewBox="0 0 24 24" style="vertical-align: middle;"><use href="/css/sf-symbols.svg#sf-link" /></svg> Share
               </button>
             ` : ''}
           </div>
