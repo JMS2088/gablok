@@ -95,10 +95,6 @@
       if (window.showAppleAlert) window.showAppleAlert('Error', 'Project not found.');
       return;
     }
-    if (!project.designData) {
-      if (window.showAppleAlert) window.showAppleAlert('No Design Saved', 'This project does not have a saved 3D design yet.');
-      return;
-    }
     if (typeof window.restoreProject !== 'function') {
       if (window.showAppleAlert) window.showAppleAlert('Error', 'Design system not loaded. Please refresh the page.');
       return;
@@ -110,6 +106,14 @@
     try {
       if (typeof window.setActiveProject === 'function') window.setActiveProject(project);
     } catch(_eMeta) {}
+
+    if (!project.designData) {
+      // No saved design yet — still send the user to the editor with the correct project selected.
+      try {
+        if (typeof window.updateStatus === 'function') window.updateStatus('No saved design yet for: ' + (project.name || 'Project'));
+      } catch (_eMsg) {}
+      return;
+    }
 
     try {
       window.restoreProject(project.designData);
@@ -165,6 +169,12 @@
   }
 
   function openVisualizeFromDA() {
+    // Ensure the visualize session is associated with the active account project.
+    try {
+      var project = getCurrentProject();
+      if (project && typeof window.setActiveProject === 'function') window.setActiveProject(project);
+    } catch (_eMeta) {}
+
     if (typeof window.showVisualize !== 'function' && typeof showVisualize !== 'function') {
       if (window.showAppleAlert) window.showAppleAlert('Unavailable', 'Visualization tools are not available right now.');
       return;
@@ -834,11 +844,26 @@
     var imageList = (project && Array.isArray(project.aiImages)) ? project.aiImages : [];
     var imageCount = imageList.length;
     var imageThumbs = imageList.slice(0, 6).map(function(src) {
-      return '<img class="da-ai-thumb" src="' + src + '" alt="Visualization image" loading="lazy" />';
+      var safeSrc = escapeHtml(String(src || ''));
+      if (!safeSrc) return '';
+      return '<a class="da-ai-thumb-link" href="' + safeSrc + '" target="_blank" rel="noopener noreferrer">' +
+               '<img class="da-ai-thumb" src="' + safeSrc + '" alt="Visualization image" loading="lazy" />' +
+             '</a>';
     }).join('');
     var imagesHtml = imageCount
       ? '<div class="da-ai-thumb-grid">' + imageThumbs + '</div>' + (imageCount > 6 ? '<div class="da-ai-more">+' + (imageCount - 6) + ' more</div>' : '')
       : '<div class="da-ai-empty">No images saved yet.</div>';
+
+    var thumbnail = project && project.thumbnail ? String(project.thumbnail) : '';
+    var designPreviewHtml = thumbnail
+      ? (
+          '<a class="da-project-preview-link" href="' + escapeHtml(thumbnail) + '" target="_blank" rel="noopener noreferrer">' +
+            '<img class="da-project-preview-img" src="' + escapeHtml(thumbnail) + '" alt="3D design preview" loading="lazy" />' +
+          '</a>'
+        )
+      : (
+          '<div class="da-project-preview-empty">No preview yet.</div>'
+        );
 
     // Main content with modern card layout
     var html = `
@@ -850,8 +875,11 @@
         </div>
         <div class="da-card-body">
           <div class="da-project-actions">
-            <button class="da-btn-small primary" ${hasDesign ? '' : 'disabled'} onclick="window.DAWorkflowUI.openProjectIn3D()">Open Design in 3D</button>
+            <button class="da-btn-small primary" onclick="window.DAWorkflowUI.openProjectIn3D()">Open in 3D</button>
             <button class="da-btn-small secondary" onclick="window.DAWorkflowUI.saveCurrentDesignToProject()">Save Current 3D Design</button>
+          </div>
+          <div class="da-project-preview">
+            ${designPreviewHtml}
           </div>
         </div>
       </div>
@@ -886,7 +914,7 @@
       ${step.documents.length > 0 ? `
         <div class="da-card da-documents-card">
           <div class="da-card-header">
-            <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#sf-folder" /></svg> Required Documents</h3>
+            <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#sf-doc" /></svg> Required Documents</h3>
             <span class="da-card-badge">${getDocumentsProgress(step)} of ${step.documents.length}</span>
           </div>
           <div class="da-card-body">
@@ -1143,7 +1171,7 @@
         <div class="da-doc-item da-document-item ${isComplete ? 'complete' : ''}">
           <div class="da-doc-icon" aria-hidden="true">
             <svg class="da-doc-icon-svg" width="20" height="20" viewBox="0 0 24 24" focusable="false">
-              <use xlink:href="/css/sf-symbols.svg#${isComplete ? 'sf-checkmark-circle' : 'sf-doc-text'}" />
+              <use xlink:href="/css/sf-symbols.svg#sf-doc-text" />
             </svg>
           </div>
           <div class="da-doc-info">

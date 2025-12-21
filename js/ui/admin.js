@@ -766,6 +766,31 @@
     updateProject: updateProject,
     deleteProject: deleteProject
   };
+
+  // Cross-screen helper: allow other surfaces (e.g., Visualize) to persist assets
+  // into the currently active Account project.
+  window.syncActiveProjectAIImages = function(images) {
+    try {
+      var projectId = window.__activeProjectId;
+      if (!projectId) return null;
+      if (!window.ProjectStorage || typeof window.ProjectStorage.updateProject !== 'function') return null;
+
+      var list = Array.isArray(images) ? images.slice() : (Array.isArray(window.__projectAiImages) ? window.__projectAiImages.slice() : []);
+
+      var updated = window.ProjectStorage.updateProject(projectId, function(project) {
+        project.aiImages = list;
+        return project;
+      });
+
+      try {
+        if (updated && typeof window.setActiveProject === 'function') window.setActiveProject(updated);
+      } catch (_eMeta) {}
+
+      return updated || null;
+    } catch (_e) {
+      return null;
+    }
+  };
 })();
 
 (function(){
@@ -2170,7 +2195,7 @@
       }
       
       var created = storage.createProject(projectName, {
-        aiImages: window.aiImages || [],
+        aiImages: (Array.isArray(window.__projectAiImages) ? window.__projectAiImages : (window.aiImages || [])),
         thumbnail: snapshot,
         designData: designData,
         hasDesign: true
@@ -2199,7 +2224,7 @@
     var updated = storage.updateProject(projectId, function(project) {
       project.designData = designData;
       project.hasDesign = true;
-      project.aiImages = window.aiImages || project.aiImages || [];
+      project.aiImages = (Array.isArray(window.__projectAiImages) ? window.__projectAiImages : (window.aiImages || project.aiImages || []));
       if (snapshot) project.thumbnail = snapshot;
       return project;
     });

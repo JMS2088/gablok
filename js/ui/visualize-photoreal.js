@@ -663,7 +663,7 @@
   function wireButtons(){
     // Generate button now manually triggers additional render if needed
     if (state.generateButton) {
-      state.generateButton.addEventListener('click', function(){ startPhotorealisticRender(); });
+      state.generateButton.addEventListener('click', function(){ startPhotorealisticRender({ mode: 'user' }); });
     }
     if (state.downloadButton) {
       state.downloadButton.addEventListener('click', downloadCurrent);
@@ -712,12 +712,12 @@
     if (wasAlreadyVisible) {
       // Panel already open - start render immediately
       console.log('[Photoreal] Panel already visible, triggering immediate fresh render');
-      startPhotorealisticRender();
+      startPhotorealisticRender({ mode: 'user' });
     } else {
       // Start render after a brief delay for panel animation
       setTimeout(function(){
         if (state.panel && state.panel.classList.contains('visible') && !state.renderStarted) {
-          startPhotorealisticRender();
+          startPhotorealisticRender({ mode: 'auto' });
         }
       }, 100);
     }
@@ -751,6 +751,12 @@
     
     // Stop watching for scene changes
     stopSceneWatcher();
+
+    // Revoke blob URLs to keep memory stable across sessions
+    try {
+      if (state.lastRender && state.lastRender.url) revokeObjectUrl(state.lastRender.url);
+      state.shots.forEach(function(s){ if (s && s.dataUrl) revokeObjectUrl(s.dataUrl); });
+    } catch (_eUrls) {}
     
     state.panel.classList.remove('visible');
     document.body.classList.remove('visualize-open');
@@ -807,12 +813,24 @@
     
     // Mark as saved
     aiState.saved = true;
+
+    // Keep legacy variable in sync (some account/project flows read this)
+    try {
+      window.aiImages = window.__projectAiImages;
+    } catch (_eLegacy) {}
     
     // Trigger project auto-save to persist
     if (typeof window.saveProjectSilently === 'function') {
       window.saveProjectSilently();
       console.log('[Visualize] Saved', addedCount, 'AI images to project');
     }
+
+    // Also persist into the active Account project (DA workflow / dashboard projects)
+    try {
+      if (typeof window.syncActiveProjectAIImages === 'function') {
+        window.syncActiveProjectAIImages(window.__projectAiImages);
+      }
+    } catch (_eSync) {}
     
     // Update save status in UI
     var saveStatus = document.getElementById('visualize-ai-save-status');
@@ -2507,7 +2525,11 @@
   // MAIN RENDER PIPELINE
   // ─────────────────────────────────────────────────────────────────────────
 
-  async function startPhotorealisticRender(){
+  async function startPhotorealisticRender(options){
+    options = options || {};
+    var mode = options.mode || 'user';
+    var isAuto = mode === 'auto';
+
     console.log('[Photoreal] ===== NEW RENDER STARTED =====');
     console.log('[Photoreal] Time:', new Date().toISOString());
     
@@ -2543,10 +2565,12 @@
       // Step 1: Ensure Three.js is loaded
       await ensureThreeJS();
       
-      // Step 1b: Load post-processing modules
-      setLoading(true, 'Loading rendering effects…');
-      setStatus('Loading post-processing modules…', 'info');
-      await loadPostProcessingModules();
+      // Step 1b: Load post-processing modules (skip on first auto render to keep UI responsive)
+      if (!isAuto) {
+        setLoading(true, 'Loading rendering effects…');
+        setStatus('Loading post-processing modules…', 'info');
+        await loadPostProcessingModules();
+      }
       
       setLoading(true, 'Setting up scene…');
       setStatus('Gathering 3D objects from viewport…', 'info');
@@ -2564,8 +2588,8 @@
       // NOTE: ensureRenderer() sets an initial pixel ratio; we override it here
       // with a clamped value to avoid huge WebGL buffers and toDataURL freezes.
       var deviceRatio = window.devicePixelRatio || 1;
-      var requestedPixelRatio = Math.min(deviceRatio, 2);
-      var MAX_RENDER_PIXELS = 5_000_000; // safety budget for drawing buffer
+      var requestedPixelRatio = Math.min(deviceRatio, isAuto ? 1.25 : 2);
+      var MAX_RENDER_PIXELS = isAuto ? 2_250_000 : 5_000_000; // safety budget for drawing buffer
       var maxRatioByPixels = Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, width * height));
       var pixelRatio = Math.max(1, Math.min(requestedPixelRatio, maxRatioByPixels));
       
@@ -2625,12 +2649,14 @@
       // Step 8: Setup environment for reflections
       await ensureEnvironment();
 
-      // Step 8b: Setup post-processing pipeline
-      setLoading(true, 'Setting up post-processing…');
-      setStatus('Configuring post-processing effects…', 'info');
-      await delay(30);
-      
-      var postComposer = setupPostProcessing(renderWidth, renderHeight);
+      // Step 8b: Setup post-processing pipeline (skip on first auto render)
+      var postComposer = null;
+      if (!isAuto) {
+        setLoading(true, 'Setting up post-processing…');
+        setStatus('Configuring post-processing effects…', 'info');
+        await delay(30);
+        postComposer = setupPostProcessing(renderWidth, renderHeight);
+      }
 
       setLoading(true, 'Rendering…');
       setStatus('Rendering photorealistic scene…', 'info');
@@ -2640,13 +2666,14 @@
       if (renderer.shadowMap) renderer.shadowMap.needsUpdate = true;
       renderer.clear(true, true, true);
 
+      var shadowPasses = isAuto ? 1 : 3;
       if (postComposer) {
         console.log('[Photoreal] Rendering with post-processing');
         // First pass to build shadow maps
         renderer.render(scene, camera);
         
         // Multiple passes for shadow quality
-        for (var pass = 0; pass < 3; pass++) {
+        for (var pass = 0; pass < shadowPasses; pass++) {
           renderer.shadowMap.needsUpdate = true;
           renderer.render(scene, camera);
           await delay(16);
@@ -2659,7 +2686,7 @@
         renderer.render(scene, camera);
         
         // Perform multiple render passes for shadow quality
-        for (var pass = 0; pass < 3; pass++) {
+        for (var pass = 0; pass < shadowPasses; pass++) {
           renderer.shadowMap.needsUpdate = true;
           renderer.render(scene, camera);
           await delay(16);
@@ -2667,11 +2694,19 @@
       }
 
       // Step 10: Save result
-      var dataUrl = state.renderCanvas.toDataURL('image/png', 0.95);
+      // Avoid synchronous toDataURL() here (can freeze the UI). Use async toBlob instead.
+      setLoading(true, 'Encoding image…');
+      setStatus('Encoding render…', 'info');
+      await delay(0);
+      var renderBlob = await canvasToBlob(state.renderCanvas, 'image/png');
+      var objectUrl = (window.URL && typeof window.URL.createObjectURL === 'function') ? window.URL.createObjectURL(renderBlob) : null;
+      revokeObjectUrl(state.lastRender && state.lastRender.url);
       state.lastRender = {
-        dataUrl: dataUrl,
+        url: objectUrl,
+        blob: renderBlob,
         width: renderWidth,
-        height: renderHeight
+        height: renderHeight,
+        mimeType: 'image/png'
       };
 
       // Debug canvas dimensions
@@ -2692,7 +2727,7 @@
       }
 
       rememberShot({
-        dataUrl: dataUrl,
+        dataUrl: objectUrl,
         label: 'Photoreal · ' + preset.name,
         width: renderWidth,
         height: renderHeight
@@ -2717,6 +2752,30 @@
     return new Promise(function(resolve){ setTimeout(resolve, ms); });
   }
 
+  function canvasToBlob(canvas, mimeType, quality) {
+    return new Promise(function(resolve, reject) {
+      if (!canvas || typeof canvas.toBlob !== 'function') {
+        reject(new Error('Canvas toBlob() not supported'));
+        return;
+      }
+      canvas.toBlob(function(blob) {
+        if (!blob) {
+          reject(new Error('Failed to encode canvas'));
+          return;
+        }
+        resolve(blob);
+      }, mimeType || 'image/png', quality);
+    });
+  }
+
+  function revokeObjectUrl(url) {
+    try {
+      if (url && typeof url === 'string' && url.indexOf('blob:') === 0 && window.URL && typeof window.URL.revokeObjectURL === 'function') {
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (_eRevoke) {}
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // GALLERY AND DOWNLOAD UTILITIES
   // ─────────────────────────────────────────────────────────────────────────
@@ -2731,7 +2790,10 @@
       timestamp: Date.now()
     };
     state.shots.unshift(entry);
-    if (state.shots.length > 12) state.shots.pop();
+    if (state.shots.length > 12) {
+      var removed = state.shots.pop();
+      if (removed && removed.dataUrl) revokeObjectUrl(removed.dataUrl);
+    }
     renderGallery();
     return entry;
   }
@@ -2776,7 +2838,7 @@
     if (!state.lastRender) return;
     var link = document.createElement('a');
     link.download = 'gablok-photoreal-render.png';
-    link.href = state.lastRender.dataUrl;
+    link.href = state.lastRender.url || state.lastRender.dataUrl;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
