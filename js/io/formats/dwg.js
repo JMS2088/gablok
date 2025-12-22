@@ -1,6 +1,15 @@
 (function(){
   'use strict';
 
+  function _sleep(ms){
+    return new Promise(function(res){ setTimeout(res, ms||0); });
+  }
+
+  function _showImportProgress(msg){
+    try { if (typeof window.showFpHint === 'function') window.showFpHint(msg, 5000); } catch(_h) {}
+    try { if (typeof window.updateStatus === 'function') window.updateStatus(msg); } catch(_s) {}
+  }
+
   function _arrayBufferToBase64(buf){
     try {
       var bytes = new Uint8Array(buf);
@@ -126,6 +135,14 @@
   async function importFile(file){
     try {
       if (!file) return;
+
+      // Bring up the floorplan modal early so the user sees progress.
+      try {
+        if (typeof window.openFloorplanModal === 'function') {
+          window.openFloorplanModal({});
+        }
+      } catch(_om) {}
+
       var hdr = await _readHeaderBytes(file, 4096);
       var ascii = hdr ? _bytesToAscii(hdr) : '';
 
@@ -157,18 +174,30 @@
       // Attempt server-side conversion (if configured) so true DWGs can import.
       try {
         if (typeof fetch === 'function') {
-          try { updateStatus && updateStatus('Converting DWG'+verMsg+' to DXF…'); } catch(_cs) {}
+          var startTs = Date.now();
+          var running = true;
+          (async function(){
+            while (running) {
+              var sec = Math.max(0, Math.round((Date.now() - startTs)/1000));
+              _showImportProgress('Converting DWG'+verMsg+'… ' + sec + 's');
+              await _sleep(500);
+            }
+          })();
+
           var conv = await _convertDwgToDxfViaServer(file);
+          running = false;
           if (conv && conv.ok && conv.dxfText) {
             if (window.DXF && typeof DXF.importFile === 'function') {
               var blob = new Blob([conv.dxfText], { type: 'application/dxf' });
               try { blob.name = (file.name || 'converted') + '.dxf'; } catch(_n) {}
-              try { updateStatus && updateStatus('DWG converted. Loading DXF…'); } catch(_cs2) {}
+              _showImportProgress('DWG converted. Parsing DXF…');
               return await DXF.importFile(blob);
             }
             try { updateStatus && updateStatus('DWG converted, but DXF importer unavailable'); } catch(_cs3) {}
             return;
           }
+
+          running = false;
 
           // If the server explicitly says conversion isn't configured, show actionable guidance.
           try {

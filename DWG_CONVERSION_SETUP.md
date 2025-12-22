@@ -34,7 +34,8 @@ Set one or both of these environment variables:
 The command string supports placeholders:
 - `{in}`: full path to the input file
 - `{out}`: full path to the expected output file
-- `{in_dir}` / `{out_dir}`: the temporary working directory
+- `{in_dir}`: temp input folder (contains the uploaded file)
+- `{out_dir}`: temp output folder (must be different from `{in_dir}` for some tools)
 
 ### Example (simple converter)
 If you have a CLI that works like `dwg2dxf input.dwg output.dxf`:
@@ -47,7 +48,13 @@ Some converters take an input folder and output folder and create files inside.
 - `export GABLOK_DWG2DXF_CMD='ODAFileConverter {in_dir} {out_dir} ACAD2013 DXF 0 1'`
 - `export GABLOK_DXF2DWG_CMD='ODAFileConverter {in_dir} {out_dir} ACAD2013 DWG 0 1'`
 
-Note: Directory-based converters may not let you control output naming; the server will fall back to “first .dxf/.dwg in the temp dir”.
+#### Headless Linux note (Codespaces/dev containers)
+`ODAFileConverter` is a Qt GUI app. In a headless environment, run it via Xvfb:
+
+- `export GABLOK_DWG2DXF_CMD='xvfb-run -a ODAFileConverter {in_dir} {out_dir} ACAD2013 DXF 0 1'`
+- `export GABLOK_DXF2DWG_CMD='xvfb-run -a ODAFileConverter {in_dir} {out_dir} ACAD2013 DWG 0 1'`
+
+Note: Directory-based converters may not let you control output naming; the server will fall back to “first .dxf/.dwg in the temp output folder”.
 
 ## Run the dev server with conversion enabled
 Example:

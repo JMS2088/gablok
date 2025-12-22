@@ -868,7 +868,8 @@
   #floorplan-modal { display:flex; position:fixed; inset:0; z-index:10000; align-items:center; justify-content:center; opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 220ms; }
   #floorplan-modal.visible { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity 220ms var(--apple-ease-out), visibility 0s linear 0s; }
   #floorplan-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.45); }
-  #floorplan-content { position:relative; width: min(1200px, 95vw); height: calc(100vh - 40px); max-height:100vh; background:#fff; border-radius:12px; border: 1px solid var(--apple-separator); box-shadow: none; display:flex; flex-direction:column; overflow:hidden; opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
+  /* Near-fullscreen popover with 50px border as requested */
+  #floorplan-content { position:relative; width: calc(100vw - 100px); height: calc(100vh - 100px); max-width: 1600px; max-height: calc(100vh - 100px); background:#fff; border-radius:12px; border: 1px solid var(--apple-separator); box-shadow: none; display:flex; flex-direction:column; overflow:hidden; opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 240ms var(--apple-ease-out), transform 240ms var(--apple-ease-out); }
   #floorplan-modal.visible #floorplan-content { opacity: 1; transform: translateY(0) scale(1); }
   #floorplan-stage { display:flex; min-height:0; height:100%; }
   #floorplan-stage-main { flex:1; position:relative; background:#0b1020; display:flex; align-items:stretch; justify-content:stretch; }

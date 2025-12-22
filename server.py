@@ -204,21 +204,36 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         # DWG conversion status endpoint
         if self.path.split('?', 1)[0] == '/api/dwg/status':
             try:
-                def _first_bin(cmd_tpl: str):
+                def _cmd_bins(cmd_tpl: str):
                     try:
                         parts = shlex.split(cmd_tpl)
-                        return parts[0] if parts else ''
                     except Exception:
                         try:
-                            return (cmd_tpl.split(' ', 1)[0] or '').strip()
+                            parts = [p for p in cmd_tpl.split(' ') if p]
                         except Exception:
-                            return ''
+                            parts = []
+
+                    wrapper = parts[0] if parts else ''
+                    converter = ''
+                    if wrapper == 'xvfb-run':
+                        # Common pattern: xvfb-run -a ODAFileConverter ...
+                        if len(parts) >= 3 and parts[1] == '-a':
+                            converter = parts[2]
+                        elif len(parts) >= 2:
+                            converter = parts[1]
+                    return {
+                        'wrapper': wrapper,
+                        'converter': converter,
+                    }
 
                 dwg2dxf_tpl = os.environ.get('GABLOK_DWG2DXF_CMD') or os.environ.get('DWG2DXF_CMD') or ''
                 dxf2dwg_tpl = os.environ.get('GABLOK_DXF2DWG_CMD') or os.environ.get('DXF2DWG_CMD') or ''
 
-                dwg2dxf_bin = _first_bin(dwg2dxf_tpl) if dwg2dxf_tpl else ''
-                dxf2dwg_bin = _first_bin(dxf2dwg_tpl) if dxf2dwg_tpl else ''
+                dwg2dxf_bins = _cmd_bins(dwg2dxf_tpl) if dwg2dxf_tpl else { 'wrapper': '', 'converter': '' }
+                dxf2dwg_bins = _cmd_bins(dxf2dwg_tpl) if dxf2dwg_tpl else { 'wrapper': '', 'converter': '' }
+
+                dwg2dxf_bin = dwg2dxf_bins.get('wrapper') or ''
+                dxf2dwg_bin = dxf2dwg_bins.get('wrapper') or ''
 
                 body = {
                     'ok': True,
@@ -227,14 +242,18 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                         'env': 'GABLOK_DWG2DXF_CMD',
                         'cmd': dwg2dxf_tpl,
                         'bin': dwg2dxf_bin,
-                        'binFound': bool(dwg2dxf_bin and shutil.which(dwg2dxf_bin))
+                        'binFound': bool(dwg2dxf_bin and shutil.which(dwg2dxf_bin)),
+                        'converterBin': dwg2dxf_bins.get('converter') or '',
+                        'converterFound': bool((dwg2dxf_bins.get('converter') or '') and shutil.which(dwg2dxf_bins.get('converter') or ''))
                     },
                     'dxfToDwg': {
                         'configured': bool(dxf2dwg_tpl),
                         'env': 'GABLOK_DXF2DWG_CMD',
                         'cmd': dxf2dwg_tpl,
                         'bin': dxf2dwg_bin,
-                        'binFound': bool(dxf2dwg_bin and shutil.which(dxf2dwg_bin))
+                        'binFound': bool(dxf2dwg_bin and shutil.which(dxf2dwg_bin)),
+                        'converterBin': dxf2dwg_bins.get('converter') or '',
+                        'converterFound': bool((dxf2dwg_bins.get('converter') or '') and shutil.which(dxf2dwg_bins.get('converter') or ''))
                     }
                 }
                 out = json.dumps(body).encode('utf-8')
@@ -988,8 +1007,14 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 filename = str(data.get('filename') or '').strip() or ('input.dwg' if path == '/api/dwg/to-dxf' else 'input.dxf')
 
                 with tempfile.TemporaryDirectory(prefix='gablok-dwg-') as td:
-                    in_path = os.path.join(td, filename)
-                    out_path = os.path.join(td, 'out.dxf' if path == '/api/dwg/to-dxf' else 'out.dwg')
+                    # Some converters (notably ODAFileConverter) require output folder != input folder.
+                    in_dir = os.path.join(td, 'in')
+                    out_dir = os.path.join(td, 'out')
+                    os.makedirs(in_dir, exist_ok=True)
+                    os.makedirs(out_dir, exist_ok=True)
+
+                    in_path = os.path.join(in_dir, filename)
+                    out_path = os.path.join(out_dir, 'out.dxf' if path == '/api/dwg/to-dxf' else 'out.dwg')
 
                     if path == '/api/dwg/to-dxf':
                         # Accept either bytesBase64 (preferred) or dwgBase64 (legacy/client alias)
@@ -1028,8 +1053,6 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                     # Expand placeholders
                     # Supported placeholders:
                     #  {in} {out} {in_dir} {out_dir}
-                    in_dir = td
-                    out_dir = td
                     expanded = (cmd_tpl
                                 .replace('{in}', in_path)
                                 .replace('{out}', out_path)
@@ -1072,14 +1095,19 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                         want_ext = '.dxf' if path == '/api/dwg/to-dxf' else '.dwg'
                         found = None
                         try:
-                            for name in os.listdir(td):
+                            for name in os.listdir(out_dir):
                                 if name.lower().endswith(want_ext):
-                                    found = os.path.join(td, name)
+                                    found = os.path.join(out_dir, name)
                                     break
                         except Exception:
                             found = None
                         if not found or not os.path.exists(found):
-                            return _send_json(502, { 'error': 'no-output', 'message': 'Converter produced no output file.' })
+                            return _send_json(502, {
+                                'error': 'no-output',
+                                'message': 'Converter produced no output file.',
+                                'stdout': (proc.stdout or b'')[:2000].decode('utf-8', errors='replace'),
+                                'stderr': (proc.stderr or b'')[:4000].decode('utf-8', errors='replace')
+                            })
                         out_path = found
 
                     try:
