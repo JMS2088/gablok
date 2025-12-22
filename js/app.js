@@ -248,6 +248,15 @@ function __wireAppUi(){
               window.toggleAccountModal('show', 'projects');
             }
             break;
+
+          case 'start-new-project':
+            if (typeof window.startNewProject === 'function') {
+              window.startNewProject({ promptIfMissingName: true, closeAccount: true });
+            } else if (window.toggleAccountModal) {
+              // Fallback: open Projects view where the name+start controls live.
+              window.toggleAccountModal('show', 'projects');
+            }
+            break;
           case 'visualize':
           case 'visualize-photoreal':
             if (typeof showVisualize === 'function') {
@@ -354,7 +363,7 @@ function __wireAppUi(){
     var dxfIn = document.getElementById('upload-dxf-floorplan');
     if(dxfIn){ dxfIn.onchange = async function(e){ try{ var f=e.target.files && e.target.files[0]; if(!f) return; if (window.DXF && typeof DXF.importFile==='function') { await DXF.importFile(f); } } catch(err){ try{ updateStatus('DXF load failed'); }catch(_){} } finally { dxfIn.value=''; } }; }
     var dwgIn = document.getElementById('upload-dwg-floorplan');
-    if(dwgIn){ dwgIn.onchange = async function(e){ try{ var f=e.target.files && e.target.files[0]; if(!f) return; if (window.DWG && typeof DWG.importFile==='function') { await DWG.importFile(f); } } catch(err){ try{ updateStatus('DWG load failed'); }catch(_){} } finally { dwgIn.value=''; } }; }
+    if(dwgIn){ dwgIn.onchange = async function(e){ try{ var f=e.target.files && e.target.files[0]; if(!f) return; if (window.DWG && typeof DWG.importFile==='function') { await DWG.importFile(f); } else if (window.FileIO && typeof FileIO.import==='function') { await FileIO.import('dwg', f); } else { try{ updateStatus('DWG import support not loaded'); }catch(_){} } } catch(err){ try{ updateStatus('DWG load failed'); }catch(_){} } finally { dwgIn.value=''; } }; }
   })();
 
   // Floorplan modal: floor toggle wiring

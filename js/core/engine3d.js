@@ -2703,6 +2703,19 @@
           requestAnimationFrame(renderLoop); 
           return; 
         }
+
+        // If heavy full-screen overlays are open, throttle background rendering.
+        // This prevents the 3D viewport from continuously repainting behind blurred backdrops.
+        var __overlayOpen = false;
+        try {
+          if (document && document.body && document.body.classList && document.body.classList.contains('visualize-open')) {
+            __overlayOpen = true;
+          }
+          var __accountModal = (document && typeof document.getElementById === 'function') ? document.getElementById('account-modal') : null;
+          if (__accountModal && __accountModal.classList && __accountModal.classList.contains('visible')) {
+            __overlayOpen = true;
+          }
+        } catch(_eOverlay) { __overlayOpen = false; }
         
         // Auto-center camera on scene content during startup
         // More aggressive: run for first 30 frames or first 2 seconds
@@ -2726,6 +2739,18 @@
         var now = (performance && performance.now) ? performance.now() : Date.now();
         var last = (typeof window.__perf==='object' && window.__perf && typeof window.__perf.lastFrameTime==='number') ? window.__perf.lastFrameTime : 0;
         var minDt = (typeof window._minFrameInterval==='number' ? window._minFrameInterval : 16);
+
+        // Extra throttle when overlays are open (keep background mostly static).
+        if (__overlayOpen) {
+          var overlayMinDt = 250; // ~4 FPS
+          if (last && (now - last) < overlayMinDt) {
+            setTimeout(function(){
+              if (typeof window.requestAnimationFrame==='function') window.animationId = requestAnimationFrame(renderLoop);
+            }, Math.max(0, overlayMinDt - (now - last)));
+            return;
+          }
+        }
+
         if (last && (now - last) < minDt) { requestAnimationFrame(renderLoop); return; }
         if (window.__perf) window.__perf.lastFrameTime = now;
 

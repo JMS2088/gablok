@@ -134,7 +134,7 @@
 
   function rot(cx, cz, deg, x, z){ var r = (deg||0)*Math.PI/180; var dx=x-cx, dz=z-cz; return { x: cx + dx*Math.cos(r) - dz*Math.sin(r), z: cz + dx*Math.sin(r) + dz*Math.cos(r) }; }
 
-  function exportCurrentProjectToDXF(){
+  function serializeProjectToDXFString(){
     try {
       if (!Array.isArray(allRooms) || allRooms.length===0) { try{ updateStatus('No rooms to export'); }catch(_){} return; }
       var out = [writeHeader()];
@@ -150,7 +150,17 @@
         for (var i=0;i<4;i++){ out.push('10', String(corners[i].x), '20', String(corners[i].z)); }
       });
       out.push(writeFooter());
-      var dxf = out.join('\n');
+      return out.join('\n');
+    } catch (e) {
+      console.error('DXF export failed', e);
+      try{ updateStatus('DXF export failed'); }catch(_){}
+    }
+  }
+
+  function exportCurrentProjectToDXF(){
+    try {
+      var dxf = serializeProjectToDXFString();
+      if (!dxf) return;
       if (typeof download==='function') download('gablok-export.dxf', dxf, 'application/dxf');
       try{ updateStatus('Exported DXF'); }catch(_){}
     } catch (e) {
@@ -164,5 +174,5 @@
   try { if (window.FileIO && FileIO.registerExport) FileIO.registerExport('dxf', exportCurrentProjectToDXF); } catch(e){}
 
   // Also expose minimal API
-  window.DXF = { importFile: importFile, exportProject: exportCurrentProjectToDXF };
+  window.DXF = { importFile: importFile, exportProject: exportCurrentProjectToDXF, serializeProjectToDXFString: serializeProjectToDXFString };
 })();

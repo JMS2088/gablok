@@ -499,7 +499,7 @@
   // Watches for changes in the 3D scene and triggers debounced re-render
   // =========================================================================
   var autoUpdateDebounceTimer = null;
-  var AUTO_UPDATE_DELAY = 500; // ms delay before re-rendering after changes
+  var AUTO_UPDATE_DELAY = 1200; // ms delay before re-rendering after changes
   var lastSceneHash = '';
   
   function computeSceneHash() {
@@ -562,11 +562,6 @@
       });
     }
     
-    // Camera state
-    if (window.camera) {
-      parts.push('CAM:' + Math.round(window.camera.yaw * 100) + ',' + Math.round(window.camera.pitch * 100) + ',' + Math.round(window.camera.distance));
-    }
-    
     return parts.join('|');
   }
   
@@ -588,7 +583,7 @@
       autoUpdateDebounceTimer = setTimeout(function() {
         if (state.panel && state.panel.classList.contains('visible') && !state.busy) {
           console.log('[Photoreal] Auto-updating render due to scene changes');
-          startPhotorealisticRender();
+          startPhotorealisticRender({ mode: 'auto' });
         }
       }, AUTO_UPDATE_DELAY);
     }
@@ -600,7 +595,7 @@
   function startSceneWatcher() {
     if (sceneWatcherInterval) return;
     lastSceneHash = computeSceneHash();
-    sceneWatcherInterval = setInterval(checkForSceneChanges, 200); // Check 5 times per second
+    sceneWatcherInterval = setInterval(checkForSceneChanges, 400); // Check 2.5 times per second
     console.log('[Photoreal] Scene watcher started');
   }
   
@@ -1060,13 +1055,13 @@
     if (THREE.SSAOPass) {
       try {
         ssaoPass = new THREE.SSAOPass(scene, camera, width, height);
-        ssaoPass.kernelRadius = 32;       // Large radius for soft diffused shadows
+        ssaoPass.kernelRadius = 20;       // Reduced for performance while staying soft
         ssaoPass.minDistance = 0.001;     // Detect close surfaces
         ssaoPass.maxDistance = 0.25;      // Extended range for gentle gradients
         ssaoPass.output = THREE.SSAOPass.OUTPUT_Default;
         // Additional quality settings if available
         if (ssaoPass.kernelSize !== undefined) {
-          ssaoPass.kernelSize = 48;       // Many samples for ultra-smooth
+          ssaoPass.kernelSize = 32;       // Fewer samples to reduce GPU cost
         }
         composer.addPass(ssaoPass);
         console.log('[Photoreal] Soft SSAO pass added for junction shadows');
@@ -1226,6 +1221,15 @@
   // =========================================================================
   
   function disposeRenderer(){
+    // Dispose post-processing pipeline
+    if (composer) {
+      try { composer.dispose(); } catch(_eComposer) {}
+      composer = null;
+    }
+    ssaoPass = null;
+    bloomPass = null;
+    renderPass = null;
+
     // Clear lights
     lights.forEach(function(light){
       if (light && light.parent) light.parent.remove(light);
@@ -1258,6 +1262,25 @@
       pmremGenerator.dispose();
       pmremGenerator = null;
     }
+
+    // Dispose renderer + WebGL resources
+    if (renderer) {
+      try {
+        if (typeof renderer.setAnimationLoop === 'function') renderer.setAnimationLoop(null);
+      } catch(_eLoop) {}
+      try {
+        if (renderer.renderLists && typeof renderer.renderLists.dispose === 'function') renderer.renderLists.dispose();
+      } catch(_eLists) {}
+      try { renderer.dispose(); } catch(_eDisp) {}
+      try {
+        if (typeof renderer.forceContextLoss === 'function') renderer.forceContextLoss();
+      } catch(_eCtx) {}
+      renderer = null;
+    }
+
+    camera = null;
+    scene = null;
+    sceneRoot = null;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -2530,6 +2553,11 @@
     var mode = options.mode || 'user';
     var isAuto = mode === 'auto';
 
+    // Never render in the background
+    if (!state.panel || !state.panel.classList.contains('visible')) {
+      return;
+    }
+
     console.log('[Photoreal] ===== NEW RENDER STARTED =====');
     console.log('[Photoreal] Time:', new Date().toISOString());
     
@@ -2588,8 +2616,8 @@
       // NOTE: ensureRenderer() sets an initial pixel ratio; we override it here
       // with a clamped value to avoid huge WebGL buffers and toDataURL freezes.
       var deviceRatio = window.devicePixelRatio || 1;
-      var requestedPixelRatio = Math.min(deviceRatio, isAuto ? 1.25 : 2);
-      var MAX_RENDER_PIXELS = isAuto ? 2_250_000 : 5_000_000; // safety budget for drawing buffer
+      var requestedPixelRatio = Math.min(deviceRatio, isAuto ? 1.2 : 1.6);
+      var MAX_RENDER_PIXELS = isAuto ? 2_000_000 : 3_500_000; // safety budget for drawing buffer
       var maxRatioByPixels = Math.sqrt(MAX_RENDER_PIXELS / Math.max(1, width * height));
       var pixelRatio = Math.max(1, Math.min(requestedPixelRatio, maxRatioByPixels));
       
@@ -2666,7 +2694,7 @@
       if (renderer.shadowMap) renderer.shadowMap.needsUpdate = true;
       renderer.clear(true, true, true);
 
-      var shadowPasses = isAuto ? 1 : 3;
+      var shadowPasses = isAuto ? 1 : 2;
       if (postComposer) {
         console.log('[Photoreal] Rendering with post-processing');
         // First pass to build shadow maps

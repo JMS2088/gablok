@@ -491,6 +491,7 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 			<div class="dropdown-item" data-action="reset"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-counterclockwise"/></svg> Reset</div>
 			<div class="dropdown-item separator" aria-hidden="true"></div>
 			<div class="dropdown-title">Project</div>
+			<div class="dropdown-item" data-action="start-new-project"><svg class="sf-icon" width="16" height="16"><use href="#sf-plus"/></svg> Start New Project</div>
 			<div class="dropdown-item" data-action="open-project"><svg class="sf-icon" width="16" height="16"><use href="#sf-folder"/></svg> Projects</div>
 			<div class="dropdown-item" data-action="price"><svg class="sf-icon" width="16" height="16"><use href="#sf-dollarsign-circle"/></svg> Price</div>
 			<div class="dropdown-item" data-action="visualize-photoreal"><svg class="sf-icon" width="16" height="16"><use href="#sf-camera"/></svg> Visualize</div>
@@ -1197,7 +1198,8 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 				<div class="account-panel-body">
 					<p class="settings-hint">Manage your saved projects and AI-generated renders.</p>
 					<div class="projects-toolbar">
-						<button id="projects-new-btn" type="button" class="primary">+ New Project</button>
+						<input id="projects-new-name" type="text" placeholder="New project name..." />
+						<button id="projects-new-btn" type="button" class="primary">Start Project</button>
 						<button id="projects-refresh-btn" type="button" class="secondary">↻ Refresh</button>
 					</div>
 					<div id="projects-list" class="projects-list">
@@ -1675,6 +1677,8 @@ console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;f
 
 <!-- Apple modal system (must load before other UI scripts) -->
 <script src="js/ui/apple-modals.js?v=20251129-7"></script>
+<!-- Global smooth wheel scrolling (tweened) -->
+<script src="js/ui/smooth-scroll-tween.js?v=20251219-8"></script>
 <!-- Splash/progress overlay (non-deferred to show immediately) -->
 <script src="js/boot/splash.js?v=20251129-6"></script>
 <!-- Coordinated bootstrap: loads all modules with progress, then starts app -->

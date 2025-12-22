@@ -5,6 +5,11 @@ import argparse
 import json
 from urllib.parse import urlparse, parse_qs
 import time
+import base64
+import tempfile
+import subprocess
+import shlex
+import shutil
 
 try:
     from photoreal import renderer as photoreal_renderer
@@ -194,6 +199,56 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             self.send_header('Content-Type','text/plain; charset=utf-8')
             self.end_headers()
             self.wfile.write(b'OK')
+            return
+
+        # DWG conversion status endpoint
+        if self.path.split('?', 1)[0] == '/api/dwg/status':
+            try:
+                def _first_bin(cmd_tpl: str):
+                    try:
+                        parts = shlex.split(cmd_tpl)
+                        return parts[0] if parts else ''
+                    except Exception:
+                        try:
+                            return (cmd_tpl.split(' ', 1)[0] or '').strip()
+                        except Exception:
+                            return ''
+
+                dwg2dxf_tpl = os.environ.get('GABLOK_DWG2DXF_CMD') or os.environ.get('DWG2DXF_CMD') or ''
+                dxf2dwg_tpl = os.environ.get('GABLOK_DXF2DWG_CMD') or os.environ.get('DXF2DWG_CMD') or ''
+
+                dwg2dxf_bin = _first_bin(dwg2dxf_tpl) if dwg2dxf_tpl else ''
+                dxf2dwg_bin = _first_bin(dxf2dwg_tpl) if dxf2dwg_tpl else ''
+
+                body = {
+                    'ok': True,
+                    'dwgToDxf': {
+                        'configured': bool(dwg2dxf_tpl),
+                        'env': 'GABLOK_DWG2DXF_CMD',
+                        'cmd': dwg2dxf_tpl,
+                        'bin': dwg2dxf_bin,
+                        'binFound': bool(dwg2dxf_bin and shutil.which(dwg2dxf_bin))
+                    },
+                    'dxfToDwg': {
+                        'configured': bool(dxf2dwg_tpl),
+                        'env': 'GABLOK_DXF2DWG_CMD',
+                        'cmd': dxf2dwg_tpl,
+                        'bin': dxf2dwg_bin,
+                        'binFound': bool(dxf2dwg_bin and shutil.which(dxf2dwg_bin))
+                    }
+                }
+                out = json.dumps(body).encode('utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                self.wfile.write(out)
+            except Exception as exc:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                self.wfile.write(json.dumps({ 'ok': False, 'error': 'status-failed', 'message': str(exc) }).encode('utf-8'))
             return
         # Forwarded URL helper endpoint: returns JSON with the URL inferred from Host header
         if self.path == '/__forwarded':
@@ -863,7 +918,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
             try:
                 quality = data.get('quality') if isinstance(data, dict) else None
                 try:
-                    quality_val = float(quality)
+                    quality_val = float(quality) if quality is not None else 1.0
                 except Exception:
                     quality_val = 1.0
                 payload = data if isinstance(data, dict) else {}
@@ -894,6 +949,164 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({ 'error': 'ai-generate-failed', 'message': str(exc) }).encode('utf-8'))
             return
+
+        # DWG conversion endpoints (require external converter tool)
+        # These endpoints accept JSON with base64 payloads to keep the server lightweight.
+        if path in ('/api/dwg/to-dxf', '/api/dwg/to-dwg'):
+            def _send_json(status: int, payload: dict):
+                try:
+                    body = json.dumps(payload).encode('utf-8')
+                except Exception:
+                    body = b'{"error":"json-encode-failed"}'
+                self.send_response(status)
+                self.send_header('Content-Type', 'application/json; charset=utf-8')
+                self.send_header('Cache-Control', 'no-store')
+                self.end_headers()
+                try:
+                    self.wfile.write(body)
+                except Exception:
+                    pass
+
+            try:
+                if not isinstance(data, dict):
+                    return _send_json(400, { 'error': 'bad-request', 'message': 'Expected JSON object body.' })
+
+                # Allow configuring command templates using placeholders: {in} {out}
+                # Example:
+                #  - export GABLOK_DWG2DXF_CMD='ODAFileConverter {in_dir} {out_dir} ACAD2013 DXF 0 1'
+                #  - export GABLOK_DXF2DWG_CMD='ODAFileConverter {in_dir} {out_dir} ACAD2013 DWG 0 1'
+                # For simple converters, you can use: 'dwg2dxf {in} {out}'
+                cmd_key = 'GABLOK_DWG2DXF_CMD' if path == '/api/dwg/to-dxf' else 'GABLOK_DXF2DWG_CMD'
+                cmd_tpl = os.environ.get(cmd_key) or os.environ.get(cmd_key.replace('GABLOK_', ''))
+                if not cmd_tpl:
+                    return _send_json(501, {
+                        'error': 'dwg-converter-not-configured',
+                        'message': f"{cmd_key} is not set on the server. Install/configure a DWG converter CLI and set this env var.",
+                        'requiredEnv': cmd_key
+                    })
+
+                filename = str(data.get('filename') or '').strip() or ('input.dwg' if path == '/api/dwg/to-dxf' else 'input.dxf')
+
+                with tempfile.TemporaryDirectory(prefix='gablok-dwg-') as td:
+                    in_path = os.path.join(td, filename)
+                    out_path = os.path.join(td, 'out.dxf' if path == '/api/dwg/to-dxf' else 'out.dwg')
+
+                    if path == '/api/dwg/to-dxf':
+                        # Accept either bytesBase64 (preferred) or dwgBase64 (legacy/client alias)
+                        b64 = data.get('bytesBase64') or data.get('dwgBase64')
+                        if not isinstance(b64, str) or not b64:
+                            return _send_json(400, { 'error': 'bad-request', 'message': 'Missing bytesBase64 (or dwgBase64) for DWG input.' })
+                        try:
+                            raw_in = base64.b64decode(b64, validate=False)
+                        except Exception as exc:
+                            return _send_json(400, { 'error': 'bad-request', 'message': 'Invalid base64 payload.', 'detail': str(exc) })
+                        try:
+                            with open(in_path, 'wb') as f:
+                                f.write(raw_in)
+                        except Exception as exc:
+                            return _send_json(500, { 'error': 'write-failed', 'message': 'Failed to write input file.', 'detail': str(exc) })
+                    else:
+                        # DXF -> DWG
+                        dxf_text = data.get('dxfText')
+                        dxf_b64 = data.get('dxfBase64')
+                        raw_dxf: bytes = b''
+                        if isinstance(dxf_b64, str) and dxf_b64:
+                            try:
+                                raw_dxf = base64.b64decode(dxf_b64, validate=False)
+                            except Exception as exc:
+                                return _send_json(400, { 'error': 'bad-request', 'message': 'Invalid dxfBase64 payload.', 'detail': str(exc) })
+                        elif isinstance(dxf_text, str) and dxf_text:
+                            raw_dxf = dxf_text.encode('utf-8')
+                        else:
+                            return _send_json(400, { 'error': 'bad-request', 'message': 'Missing dxfText or dxfBase64.' })
+                        try:
+                            with open(in_path, 'wb') as f:
+                                f.write(raw_dxf)
+                        except Exception as exc:
+                            return _send_json(500, { 'error': 'write-failed', 'message': 'Failed to write input file.', 'detail': str(exc) })
+
+                    # Expand placeholders
+                    # Supported placeholders:
+                    #  {in} {out} {in_dir} {out_dir}
+                    in_dir = td
+                    out_dir = td
+                    expanded = (cmd_tpl
+                                .replace('{in}', in_path)
+                                .replace('{out}', out_path)
+                                .replace('{in_dir}', in_dir)
+                                .replace('{out_dir}', out_dir))
+                    try:
+                        args = shlex.split(expanded)
+                    except Exception:
+                        args = expanded.split(' ')
+                    if not args or not args[0]:
+                        return _send_json(500, { 'error': 'converter-misconfigured', 'message': f"{cmd_key} is empty after expansion." })
+
+                    try:
+                        proc = subprocess.run(
+                            args,
+                            cwd=td,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            timeout=300
+                        )
+                    except FileNotFoundError:
+                        return _send_json(501, { 'error': 'converter-not-found', 'message': f"Converter binary not found for {cmd_key}.", 'cmd': args[0] })
+                    except subprocess.TimeoutExpired:
+                        return _send_json(504, { 'error': 'converter-timeout', 'message': 'Conversion timed out.' })
+                    except Exception as exc:
+                        return _send_json(500, { 'error': 'converter-failed', 'message': 'Conversion failed to execute.', 'detail': str(exc) })
+
+                    if proc.returncode != 0:
+                        return _send_json(502, {
+                            'error': 'converter-error',
+                            'message': 'Converter returned non-zero exit code.',
+                            'code': int(proc.returncode),
+                            'stdout': (proc.stdout or b'')[:2000].decode('utf-8', errors='replace'),
+                            'stderr': (proc.stderr or b'')[:4000].decode('utf-8', errors='replace')
+                        })
+
+                    if not os.path.exists(out_path):
+                        # Some directory-based converters may write a different output name.
+                        # As a fallback, try to find the first matching output extension.
+                        want_ext = '.dxf' if path == '/api/dwg/to-dxf' else '.dwg'
+                        found = None
+                        try:
+                            for name in os.listdir(td):
+                                if name.lower().endswith(want_ext):
+                                    found = os.path.join(td, name)
+                                    break
+                        except Exception:
+                            found = None
+                        if not found or not os.path.exists(found):
+                            return _send_json(502, { 'error': 'no-output', 'message': 'Converter produced no output file.' })
+                        out_path = found
+
+                    try:
+                        out_bytes = open(out_path, 'rb').read()
+                    except Exception as exc:
+                        return _send_json(500, { 'error': 'read-failed', 'message': 'Failed to read output file.', 'detail': str(exc) })
+
+                    if path == '/api/dwg/to-dxf':
+                        # Return DXF as UTF-8 text (and also base64 for safety)
+                        try:
+                            dxf_text_out = out_bytes.decode('utf-8', errors='replace')
+                        except Exception:
+                            dxf_text_out = ''
+                        return _send_json(200, {
+                            'ok': True,
+                            'dxfText': dxf_text_out,
+                            'dxfBase64': base64.b64encode(out_bytes).decode('ascii'),
+                            'mime': 'application/dxf'
+                        })
+                    else:
+                        return _send_json(200, {
+                            'ok': True,
+                            'bytesBase64': base64.b64encode(out_bytes).decode('ascii'),
+                            'mime': 'application/acad'
+                        })
+            except Exception as exc:
+                return _send_json(500, { 'error': 'dwg-endpoint-failed', 'message': str(exc) })
         
         # Fallback to default handler for other POSTs
         # Unknown POST route
@@ -940,7 +1153,9 @@ def run(host='0.0.0.0', port=8000, directory=None):
                     continue
         if httpd is None:
             print(f"Failed to bind to {host}:{port} -> {bind_error}")
-            raise bind_error
+            if bind_error is not None:
+                raise bind_error
+            raise OSError('Failed to bind HTTP server')
     # Expose the bound port to handlers for URL generation
     try:
         os.environ['GABLOK_BOUND_PORT'] = str(port)

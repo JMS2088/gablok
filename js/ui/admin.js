@@ -652,6 +652,38 @@
   if(window.__projectStorageInit) return; window.__projectStorageInit = true;
   var STORAGE_PREFIX = 'gablok_projects_';
 
+  function buildBlankDesignData(){
+    // Keep this intentionally minimal but compatible with restoreProject().
+    try {
+      var cam = window.camera || {};
+      var data = {
+        camera: {
+          yaw: typeof cam.yaw === 'number' ? cam.yaw : 0.65,
+          pitch: typeof cam.pitch === 'number' ? cam.pitch : -0.45,
+          distance: typeof cam.distance === 'number' ? cam.distance : 26,
+          targetX: typeof cam.targetX === 'number' ? cam.targetX : 0,
+          targetY: typeof cam.targetY === 'number' ? cam.targetY : 1.5,
+          targetZ: typeof cam.targetZ === 'number' ? cam.targetZ : 0
+        },
+        rooms: [],
+        wallStrips: [],
+        stairs: null,
+        stairsList: [],
+        pergolas: [],
+        garages: [],
+        pools: [],
+        roofs: [],
+        balconies: [],
+        furniture: [],
+        currentFloor: 0,
+        aiImages: []
+      };
+      return JSON.stringify(data);
+    } catch(_e) {
+      return '{"rooms":[],"wallStrips":[]}';
+    }
+  }
+
   function getUserId(){
     return window.__appUserId || localStorage.getItem('gablokUserId');
   }
@@ -767,6 +799,66 @@
     deleteProject: deleteProject
   };
 
+  // Global beginner-friendly entrypoint: create a new project and start working.
+  // Used by Main Menu and the Projects home view.
+  window.startNewProject = function startNewProject(options){
+    options = options || {};
+    var storage = window.ProjectStorage;
+    if (!storage || typeof storage.createProject !== 'function' || typeof storage.updateProject !== 'function') {
+      try { showAppleAlert('Error', 'Project storage is not ready yet. Please reload and try again.'); } catch(_e) {}
+      return null;
+    }
+
+    function doCreateAndStart(name){
+      var trimmed = (name || '').trim();
+      if (!trimmed) return null;
+
+      var blank = buildBlankDesignData();
+      var created = storage.createProject(trimmed, {
+        designData: blank,
+        hasDesign: true
+      });
+      // Ensure created project always has a saved design payload.
+      if (created && created.id) {
+        try {
+          storage.updateProject(created.id, function(p){
+            p.designData = blank;
+            p.hasDesign = true;
+            return p;
+          });
+        } catch(_eUpd) {}
+      }
+
+      try { if (typeof window.setActiveProject === 'function') window.setActiveProject(created); } catch(_eMeta) {}
+
+      // Load the blank project into the editor immediately (so users see a clean start).
+      try {
+        if (typeof window.restoreProject === 'function') window.restoreProject(blank);
+        if (typeof window.renderLoop === 'function') window.renderLoop();
+      } catch(_eRestore) {}
+
+      // Optionally close Account modal so the user can start designing.
+      if (options.closeAccount !== false) {
+        try { if (window.toggleAccountModal) window.toggleAccountModal('hide'); } catch(_eHide) {}
+      }
+
+      try { if (typeof window.updateStatus === 'function') window.updateStatus('Started new project: ' + trimmed); } catch(_eStatus) {}
+      return created || null;
+    }
+
+    var providedName = (options.name || '').trim();
+    if (providedName) return doCreateAndStart(providedName);
+
+    if (options.promptIfMissingName) {
+      try {
+        showApplePrompt('Start New Project', 'Project ' + new Date().toLocaleDateString(), function(name){
+          doCreateAndStart(name);
+        });
+      } catch(_ePrompt) {}
+    }
+    return null;
+  };
+
   // Cross-screen helper: allow other surfaces (e.g., Visualize) to persist assets
   // into the currently active Account project.
   window.syncActiveProjectAIImages = function(images) {
@@ -798,12 +890,14 @@
   var listEl = null;
   var emptyEl = null;
   var newBtn = null;
+  var newNameEl = null;
   var refreshBtn = null;
 
   function ensureElements(){
     if(!listEl) listEl = document.getElementById('projects-list');
     if(!emptyEl) emptyEl = document.getElementById('projects-empty');
     if(!newBtn) newBtn = document.getElementById('projects-new-btn');
+    if(!newNameEl) newNameEl = document.getElementById('projects-new-name');
     if(!refreshBtn) refreshBtn = document.getElementById('projects-refresh-btn');
     return !!(listEl && emptyEl);
   }
@@ -1006,16 +1100,23 @@
   }
 
   function handleCreateProject(){
-    var storage = window.ProjectStorage;
-    if(!storage){
-      showAppleAlert('Error', 'Project storage is not ready yet.');
+    // Prefer the inline name field for beginners.
+    var typedName = '';
+    try { typedName = (newNameEl && newNameEl.value) ? newNameEl.value.trim() : ''; } catch(_eName) { typedName = ''; }
+    if (typedName) {
+      if (typeof window.startNewProject === 'function') {
+        window.startNewProject({ name: typedName, closeAccount: true });
+        try { if (newNameEl) newNameEl.value = ''; } catch(_eClr) {}
+      }
+      renderProjectsView();
       return;
     }
-    showApplePrompt('New Project', 'Project ' + new Date().toLocaleDateString(), function(name) {
-      if(!name) return;
-      storage.createProject(name);
+
+    // Fallback: prompt for name.
+    if (typeof window.startNewProject === 'function') {
+      window.startNewProject({ promptIfMissingName: true, closeAccount: true });
       renderProjectsView();
-    });
+    }
   }
 
   function handleRename(projectId){
@@ -1087,6 +1188,15 @@
     if(newBtn && !newBtn.__wired){
       newBtn.__wired = true;
       newBtn.addEventListener('click', handleCreateProject);
+    }
+    if(newNameEl && !newNameEl.__wired){
+      newNameEl.__wired = true;
+      newNameEl.addEventListener('keydown', function(ev){
+        if(ev.key === 'Enter'){
+          ev.preventDefault();
+          handleCreateProject();
+        }
+      });
     }
     if(refreshBtn && !refreshBtn.__wired){
       refreshBtn.__wired = true;
