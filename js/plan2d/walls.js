@@ -8,7 +8,13 @@
   };
   if (typeof window.plan2dComputeWallIntersections !== 'function') window.plan2dComputeWallIntersections = function plan2dComputeWallIntersections(elems){
     var walls = [];
-    for(var i=0;i<elems.length;i++){ var e=elems[i]; if(e && e.type==='wall' && e.wallRole!=='nonroom') walls.push({i:i, e:e}); }
+    for(var i=0;i<elems.length;i++){
+      var e=elems[i];
+      if(!e || e.type!=='wall') continue;
+      if(e.wallRole==='nonroom') continue;
+      if(e.meta && e.meta.cad) continue;
+      walls.push({i:i, e:e});
+    }
     var map = {}; // wallIndex -> array of t in (0,1)
     function addT(idx, t){ if(t<=1e-6 || t>=1-1e-6) return; (map[idx]||(map[idx]=[])).push(t); }
     function segIntersect(ax,ay,bx,by,cx,cy,dx,dy){

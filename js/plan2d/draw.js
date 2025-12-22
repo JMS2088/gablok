@@ -301,16 +301,31 @@
   var tWallsStart = (performance&&performance.now)?performance.now():Date.now();
       // Precompute connections at endpoints to extend walls and make corners flush
       var elems=__plan2d.elements;
+
+      // If CAD hairline linework is present (DWG/DXF imports), skip expensive wall-intersection modeling.
+      // CAD imports can include tens of thousands of segments; the room/wall intersection logic is O(n^2).
+      var hasCad = false;
+      try {
+        for (var __ci=0; __ci<elems.length; __ci++){
+          var __e=elems[__ci];
+          if(__e && __e.type==='wall' && __e.meta && __e.meta.cad){ hasCad = true; break; }
+        }
+      } catch(_hc) { hasCad = false; }
+
       // Precompute wall intersections (cached per edit version) to enable sub-segment selection/deletion
       var __wallIntersections;
       try{
         var cache = __plan2d.__cache || (__plan2d.__cache = {});
-        if(!cache.intersections || cache.version !== (__plan2d.__version||0)){
-          cache.intersections = plan2dComputeWallIntersections(elems);
-          cache.version = (__plan2d.__version||0);
+        if(hasCad){
+          __wallIntersections = {};
+        } else {
+          if(!cache.intersections || cache.version !== (__plan2d.__version||0)){
+            cache.intersections = plan2dComputeWallIntersections(elems);
+            cache.version = (__plan2d.__version||0);
+          }
+          __wallIntersections = cache.intersections;
         }
-        __wallIntersections = cache.intersections;
-      }catch(_cInt){ __wallIntersections = plan2dComputeWallIntersections(elems); }
+      }catch(_cInt){ __wallIntersections = hasCad ? {} : plan2dComputeWallIntersections(elems); }
       // Robust endpoint connectivity map (skip any undefined/invalid entries to avoid TypeErrors)
       var startConn=new Array(elems.length).fill(false), endConn=new Array(elems.length).fill(false);
       (function(){
@@ -319,6 +334,7 @@
         for(var i=0;i<elems.length;i++){
           var e=elems[i];
           if(!e || e.type!=='wall') continue; // Defensive: skip holes or non-walls
+          if(hasCad && e.meta && e.meta.cad) continue;
           // Validate numeric endpoints (NaN walls can arise from partial edits)
           if(!isFinite(e.x0)||!isFinite(e.y0)||!isFinite(e.x1)||!isFinite(e.y1)) continue;
           var ks=key(e.x0,e.y0), ke=key(e.x1,e.y1);
@@ -377,6 +393,30 @@
         // Profiling counts
         if(el.type==='wall') __plan2d.__frameProfile.wallsConsidered++;
         else if(el.type==='window' || el.type==='door') __plan2d.__frameProfile.openingsConsidered++;
+
+        // CAD hairline walls: render as strokes only, skipping thickness/openings/flush logic.
+        if(el.type==='wall' && el.meta && el.meta.cad){
+          try {
+            var aCad = worldToScreen2D(el.x0, el.y0);
+            var bCad = worldToScreen2D(el.x1, el.y1);
+            ctx.save();
+            ctx.beginPath();
+            ctx.strokeStyle = (el.meta.stroke || (document.body.classList.contains('cad-mode') ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.85)'));
+            // CAD linework: slightly thicker than 1px with round joins so segments visually connect.
+            var dprCad = window.devicePixelRatio || 1;
+            var cadPx = (typeof __plan2d.cadStrokePx === 'number' && isFinite(__plan2d.cadStrokePx)) ? __plan2d.cadStrokePx : 1.35;
+            ctx.lineWidth = Math.max(1, cadPx * dprCad);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.setLineDash([]);
+            ctx.moveTo(aCad.x, aCad.y);
+            ctx.lineTo(bCad.x, bCad.y);
+            ctx.stroke();
+            ctx.restore();
+          } catch(_cadDraw) {}
+          continue;
+        }
+
         if(!drawAll){ if(el.type==='wall'){ if(!wallIntersectsDirty(el)){ try{ __plan2d.__frameProfile.wallsSkipped++; }catch(_skw){}; continue; } } else {
             // For doors/windows anchored to a wall, check host wall bbox; else check element endpoints
             if(typeof el.host==='number' && elems[el.host] && elems[el.host].type==='wall'){ if(!wallIntersectsDirty(elems[el.host])){ try{ __plan2d.__frameProfile.openingsSkipped++; }catch(_sko1){}; continue; } }

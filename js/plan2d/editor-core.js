@@ -29,6 +29,7 @@
       mouseDownPosPlan:null,
       freezeSyncUntil:0,
       wallStrokePx:1.2,
+      cadStrokePx:1.35,
       debug:false,
       spacePanActive:false,
       shiftAxisLock:false,

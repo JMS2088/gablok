@@ -75,6 +75,46 @@
     }
   }
 
+  async function _convertDwgToPlan2dViaServer(file, opts){
+    opts = opts || {};
+    try {
+      var buf = await file.arrayBuffer();
+      var b64 = _arrayBufferToBase64(buf);
+      if (!b64) return { ok: false, error: 'base64-failed' };
+      var payload = {
+        filename: file.name || 'input.dwg',
+        bytesBase64: b64,
+        units: opts.units || 'mm',
+        level: (typeof opts.level === 'number' ? opts.level : (typeof window.currentFloor === 'number' ? window.currentFloor : 0)),
+        thicknessM: (typeof opts.thicknessM === 'number' ? opts.thicknessM : 0.01),
+        // Conservative defaults; server will also apply its own caps.
+        maxWalls: (typeof opts.maxWalls === 'number' ? opts.maxWalls : 12000),
+        minLenMm: (typeof opts.minLenMm === 'number' ? opts.minLenMm : 100),
+        quantMm: (typeof opts.quantMm === 'number' ? opts.quantMm : 20),
+        maxSegments: (typeof opts.maxSegments === 'number' ? opts.maxSegments : 300000),
+        expandInserts: (typeof opts.expandInserts === 'boolean' ? opts.expandInserts : true),
+        maxInsertSegs: (typeof opts.maxInsertSegs === 'number' ? opts.maxInsertSegs : 2500)
+      };
+      var res = await fetch('/api/dwg/to-plan2d', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      var json = null;
+      try { json = await res.json(); } catch(_je) { json = null; }
+      if (!res.ok) {
+        var msg = (json && (json.message || json.error)) || ('HTTP ' + res.status);
+        return { ok: false, error: 'server-error', message: msg, detail: json };
+      }
+      if (json && json.ok && Array.isArray(json.elements)) {
+        return { ok: true, plan: json };
+      }
+      return { ok: false, error: 'no-output', detail: json };
+    } catch (e) {
+      return { ok: false, error: 'exception', message: String(e && e.message || e) };
+    }
+  }
+
   async function _fetchDwgStatus(){
     try {
       var res = await fetch('/api/dwg/status', { cache: 'no-store' });
@@ -82,6 +122,22 @@
       return await res.json();
     } catch(_e) {
       return null;
+    }
+  }
+
+  async function _ensurePlan2DLoaded(){
+    try {
+      if (typeof window.plan2dImport === 'function' && typeof window.openPlan2DModal === 'function') return true;
+      if (typeof window.loadScript !== 'function') return false;
+      await loadScript('js/plan2d/geom2d.js');
+      await loadScript('js/plan2d/snap.js');
+      await loadScript('js/plan2d/walls.js');
+      await loadScript('js/plan2d/draw.js');
+      await loadScript('js/plan2d/editor-core.js');
+      await loadScript('js/plan2d/editor.js');
+      return (typeof window.plan2dImport === 'function' && typeof window.openPlan2DModal === 'function');
+    } catch (_e) {
+      return false;
     }
   }
 
@@ -184,15 +240,84 @@
             }
           })();
 
+          // Preferred: server generates simplified Plan2D JSON (avoids client DXF parsing stalls)
+          var planRes = await _convertDwgToPlan2dViaServer(file, {
+            units: 'mm',
+            level: (typeof window.currentFloor === 'number' ? window.currentFloor : 0),
+            // Hairline import: CAD lines are not wall thickness.
+            thicknessM: 0.01,
+            // Help tiny endpoint gaps “join” by snapping to a 1mm grid server-side.
+            weldMm: 1
+          });
+          if (planRes && planRes.ok && planRes.plan) {
+            running = false;
+            _showImportProgress('DWG converted. Opening 2D editor…');
+            var ok2d = await _ensurePlan2DLoaded();
+            if (!ok2d) {
+              try { updateStatus && updateStatus('2D editor not available (plan2d scripts not loaded)'); } catch(_p2) {}
+              return;
+            }
+            try { if (typeof window.resetSceneForImport === 'function') window.resetSceneForImport(); } catch(_ri) {}
+            try { if (typeof window.openPlan2DModal === 'function') window.openPlan2DModal(); } catch(_op2) {}
+            try { if (typeof window.plan2dClear === 'function') window.plan2dClear(); } catch(_clr) {}
+            // Keep Plan2D defaults consistent with the imported (hairline) geometry.
+            try { if (window.__plan2d && typeof __plan2d.wallThicknessM === 'number') __plan2d.wallThicknessM = 0.01; } catch(_wt) {}
+            try { window.__lastDwgPlan2dJson = planRes.plan; } catch(_dbg2) {}
+            try { if (typeof window.plan2dImport === 'function') window.plan2dImport(planRes.plan); } catch(_imp2) {}
+            try { if (typeof window.plan2dFitViewToContent === 'function') window.plan2dFitViewToContent(40); } catch(_fit2) {}
+            try { if (typeof window.plan2dDraw === 'function') window.plan2dDraw(); } catch(_dr2) {}
+            try { updateStatus && updateStatus('DWG loaded into 2D editor (' + (planRes.plan.elements ? planRes.plan.elements.length : 0) + ' walls)'); } catch(_ok2) {}
+            return;
+          }
+
+          // Fallback: DWG->DXF and then client-side conversion
           var conv = await _convertDwgToDxfViaServer(file);
           running = false;
           if (conv && conv.ok && conv.dxfText) {
+            // New flow: convert DXF geometry into Plan2D JSON so the user can edit.
+            if (window.DXF && typeof DXF.convertDXFTextToPlan2DJSON === 'function') {
+              _showImportProgress('DWG converted. Building editable 2D plan…');
+              var ok2d = await _ensurePlan2DLoaded();
+              if (!ok2d) {
+                try { updateStatus && updateStatus('2D editor not available (plan2d scripts not loaded)'); } catch(_p2) {}
+                return;
+              }
+
+              // Clear scene for a clean import.
+              try { if (typeof window.resetSceneForImport === 'function') window.resetSceneForImport(); } catch(_ri) {}
+              try { if (typeof window.openPlan2DModal === 'function') window.openPlan2DModal(); } catch(_op2) {}
+              try { if (typeof window.plan2dClear === 'function') window.plan2dClear(); } catch(_clr) {}
+
+              var planJson = await DXF.convertDXFTextToPlan2DJSON(conv.dxfText, {
+                level: (typeof window.currentFloor === 'number' ? window.currentFloor : 0),
+                // User-provided: client DWGs are authored in millimeters.
+                forceUnits: 'mm',
+                // Keep this conservative so Plan2D stays responsive.
+                maxWalls: 15000,
+                minLenM: 0.15,
+                quantizeM: 0.01
+              });
+              if (!planJson || !planJson.ok || !Array.isArray(planJson.elements) || planJson.elements.length === 0) {
+                try { updateStatus && updateStatus('DWG imported but no usable 2D geometry found'); } catch(_ng) {}
+                return;
+              }
+
+              try { window.__lastDwgPlan2dJson = planJson; } catch(_dbg) {}
+              try { if (typeof window.plan2dImport === 'function') window.plan2dImport(planJson); } catch(_imp) {}
+              try { if (typeof window.plan2dFitViewToContent === 'function') window.plan2dFitViewToContent(40); } catch(_fit) {}
+              try { if (typeof window.plan2dDraw === 'function') window.plan2dDraw(); } catch(_dr) {}
+              try { updateStatus && updateStatus('DWG loaded into 2D editor (' + planJson.elements.length + ' walls)'); } catch(_ok) {}
+              return;
+            }
+
+            // Fallback to legacy preview modal if Plan2D converter isn't available.
             if (window.DXF && typeof DXF.importFile === 'function') {
               var blob = new Blob([conv.dxfText], { type: 'application/dxf' });
               try { blob.name = (file.name || 'converted') + '.dxf'; } catch(_n) {}
               _showImportProgress('DWG converted. Parsing DXF…');
               return await DXF.importFile(blob);
             }
+
             try { updateStatus && updateStatus('DWG converted, but DXF importer unavailable'); } catch(_cs3) {}
             return;
           }
