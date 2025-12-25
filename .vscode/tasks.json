@@ -1,0 +1,28 @@
+{
+  // Auto-start the dev server when the workspace opens so the forwarded URL works immediately
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Dev Server",
+      "type": "shell",
+      "command": "python3",
+      "args": ["server.py"],
+      "options": {
+        "env": {
+          "GABLOK_DWG2DXF_CMD": "xvfb-run -a ODAFileConverter {in_dir} {out_dir} ACAD2013 DXF 0 1",
+          "GABLOK_DXF2DWG_CMD": "xvfb-run -a ODAFileConverter {in_dir} {out_dir} ACAD2013 DWG 0 1"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      }
+    }
+  ]
+}

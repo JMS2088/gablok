@@ -1,0 +1,357 @@
+/* ========================================
+   APPLE DESIGN SYSTEM - 2D FLOOR PLAN EDITOR
+   Complete styling for 2D plan editor modal
+   ======================================== */
+
+/* === 2D PLAN PAGE BASE === */
+#plan2d-page {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* === 2D PLAN CONTENT - Pure Black Dark Mode === */
+#plan2d-content {
+  background: var(--apple-system-background);
+  padding: 0;
+}
+
+[data-theme="dark"] #plan2d-content {
+  background: var(--apple-system-background);
+}
+
+/* === CAD MODE - Clean White === */
+body.cad-mode #plan2d-content {
+  background: #ffffff !important;
+}
+
+body.cad-mode #plan2d-canvas {
+  background: #ffffff !important;
+}
+
+/* === 2D PLAN HEADER === */
+#plan2d-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: none;
+  position: relative;
+  z-index: 2;
+}
+
+[data-theme="dark"] #plan2d-header {
+  background: transparent;
+  border-bottom: none;
+}
+
+/* === CANVAS AREA - Pure Black in Dark Mode === */
+#plan2d-canvas {
+  background: var(--apple-system-background);
+}
+
+[data-theme="dark"] #plan2d-canvas {
+  background: var(--apple-system-background) !important;
+}
+
+#plan2d-overlay {
+  background: transparent;
+}
+
+/* === RULERS - Apple Style === */
+#plan2d-ruler-top,
+#plan2d-ruler-left {
+  background: var(--apple-secondary-system-background);
+  border: 1px solid var(--apple-separator);
+  box-shadow: none;
+  transition: none;
+  transform: none;
+}
+
+[data-theme="dark"] #plan2d-ruler-top,
+[data-theme="dark"] #plan2d-ruler-left {
+  background: var(--apple-secondary-system-background);
+  border: 1px solid var(--apple-separator);
+  box-shadow: none;
+}
+
+body.cad-mode #plan2d-ruler-top,
+body.cad-mode #plan2d-ruler-left {
+  background: var(--apple-system-background) !important;
+  border: 1px solid var(--apple-separator);
+}
+
+/* === TOOLBAR CONTAINERS - Transparent Apple Style === */
+#plan2d-toolbar-left {
+  position: fixed;
+  top: 41px;
+  /* 20px gap from the left edge of the fixed Account button (right:28px, width:45px) */
+  right: calc(20px + 36px + 20px);
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+/* Plan2D buttons and dropdowns now inherit global styles */
+
+.plan2d-toolbar-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--btn-gap);
+}
+
+.plan2d-toolbar-dropdowns,
+#plan2d-menubar-right {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+}
+
+.plan2d-toolbar-dropdowns .dropdown,
+#plan2d-menubar-right .dropdown {
+  width: auto;
+}
+
+.plan2d-toolbar-dropdowns .dropdown-button,
+#plan2d-menubar-right .dropdown-button {
+  width: 200px;
+  justify-content: flex-start;
+}
+
+#plan2d-side-overlay {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: transparent;
+  position: fixed;
+  top: 35px !important;
+  left: 24px;
+  right: auto;
+  z-index: 105;
+}
+
+/* === RIGHT MENUBAR (Top) === */
+#plan2d-menubar-right {
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
+  height: auto;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  z-index: 1;
+}
+
+/* === WALL GROUP INFO === */
+#plan2d-wall-group {
+  background: var(--apple-material-regular);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 10px 16px;
+  border-radius: var(--apple-radius-medium);
+  border: 1px solid var(--apple-separator);
+  box-shadow: none;
+}
+
+[data-theme="dark"] #plan2d-wall-group {
+  background: var(--apple-material-regular);
+  border: 1px solid var(--apple-separator);
+  box-shadow: none;
+}
+
+#plan2d-wall-group #plan2d-scale {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-caption2);
+  font-weight: var(--apple-font-weight-semibold);
+  color: var(--apple-label);
+  line-height: 1;
+}
+
+[data-theme="dark"] #plan2d-wall-group #plan2d-scale {
+  color: var(--apple-label);
+}
+
+#plan2d-wall-group > div {
+  font-size: var(--apple-font-size-caption2);
+  font-weight: var(--apple-font-weight-regular);
+  color: var(--apple-secondary-label);
+  line-height: 1;
+}
+
+[data-theme="dark"] #plan2d-wall-group > div {
+  color: var(--apple-secondary-label);
+}
+
+/* === OPENING INLINE CONTROLS === */
+#plan2d-opening-inline {
+  background: var(--apple-material-regular);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 12px;
+  border-radius: var(--apple-radius-medium);
+  border: 1px solid var(--apple-separator);
+  box-shadow: none;
+}
+
+[data-theme="dark"] #plan2d-opening-inline {
+  background: var(--apple-material-regular);
+  border: 1px solid var(--apple-separator);
+  box-shadow: none;
+}
+
+#plan2d-opening-inline select,
+#plan2d-window-type,
+#plan2d-door-swing,
+#plan2d-door-hinge {
+  font-family: var(--apple-font-family);
+  font-size: var(--apple-font-size-subheadline);
+  font-weight: var(--apple-font-weight-regular);
+  line-height: var(--apple-line-height-relaxed);
+  letter-spacing: var(--apple-tracking-normal);
+  padding: 8px 12px;
+  border-radius: var(--apple-radius-medium);
+  border: 1px solid var(--apple-separator);
+  background: var(--apple-secondary-system-background);
+  color: var(--apple-label);
+  cursor: pointer;
+  transition: all var(--apple-duration-fast) var(--apple-ease-default);
+}
+
+[data-theme="dark"] #plan2d-opening-inline select,
+[data-theme="dark"] #plan2d-window-type,
+[data-theme="dark"] #plan2d-door-swing,
+[data-theme="dark"] #plan2d-door-hinge {
+  background: var(--apple-secondary-system-background);
+  border: 1px solid var(--apple-separator);
+  color: var(--apple-label);
+}
+
+#plan2d-opening-inline select:hover,
+#plan2d-window-type:hover,
+#plan2d-door-swing:hover,
+#plan2d-door-hinge:hover {
+  border-color: var(--apple-blue);
+  box-shadow: none;
+}
+
+[data-theme="dark"] #plan2d-opening-inline select:hover,
+[data-theme="dark"] #plan2d-window-type:hover,
+[data-theme="dark"] #plan2d-door-swing:hover,
+[data-theme="dark"] #plan2d-door-hinge:hover {
+  border-color: var(--apple-blue);
+  box-shadow: none;
+}
+
+/* === FLOOR CENTER CONTROLS === */
+#plan2d-floor-center {
+  position: absolute;
+  top: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 1;
+  pointer-events: auto;
+  background: var(--apple-material-regular);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 10px 16px;
+  border-radius: var(--apple-radius-medium);
+  border: 1px solid var(--apple-separator);
+  box-shadow: none;
+}
+
+[data-theme="dark"] #plan2d-floor-center {
+  background: var(--apple-material-regular);
+  border: 1px solid var(--apple-separator);
+  box-shadow: none;
+}
+
+/* === LABELS 2D === */
+#labels-2d {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: block;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* === STAGE POSITIONING === */
+#plan2d-stage {
+  position: absolute;
+  top: 28px;
+  left: 28px;
+  right: 0;
+  bottom: 0;
+}
+
+/* === RESPONSIVE - Smaller Screens === */
+@media (max-width: 1024px) {
+  #plan2d-toolbar-left,
+  #plan2d-side-overlay {
+    gap: 6px;
+    padding: 8px;
+  }
+  
+  #plan2d-toolbar-left {
+    right: 16px;
+    top: 24px;
+    right: calc(20px + 36px + 20px);
+    width: calc(100% - 32px);
+    align-items: flex-end;
+  }
+  
+  #plan2d-side-overlay {
+    left: 12px;
+    top: 35px !important;
+  }
+  
+  #plan2d-floor-center {
+    padding: 8px 12px;
+  }
+
+  #plan2d-menubar-right {
+    width: 100%;
+    padding: 0;
+  }
+}
+
+/* === PERFORMANCE OPTIMIZATIONS === */
+#plan2d-canvas,
+#plan2d-overlay,
+#labels-2d {
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* === CLEAN VIEW MODE - Hide UI === */
+body.clean-view #plan2d-toolbar-left,
+body.clean-view #plan2d-menubar-right,
+body.clean-view #plan2d-side-overlay,
+body.clean-view #plan2d-floor-center,
+body.clean-view #plan2d-ruler-top,
+body.clean-view #plan2d-ruler-left {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}

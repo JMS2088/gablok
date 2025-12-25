@@ -1,0 +1,1614 @@
+/**
+ * @file da-ui.js
+ * @description User Interface for DA Workflow System
+ * 
+ * Renders full-screen step-by-step interface for Development Application process
+ */
+
+(function() {
+  'use strict';
+  
+  if (window.__daUIInit) return;
+  window.__daUIInit = true;
+
+  var currentProjectId = null;
+  var currentState = null;
+
+  function getCurrentProject() {
+    if (!currentProjectId) return null;
+    try {
+      if (window.ProjectStorage && typeof window.ProjectStorage.getProjects === 'function') {
+        var projects = window.ProjectStorage.getProjects() || [];
+        return projects.find(function(p) { return p && p.id === currentProjectId; }) || null;
+      }
+    } catch (_e) {}
+    return null;
+  }
+
+  function hasMeaningfulDesignJSON(designJSON) {
+    try {
+      if (!designJSON || typeof designJSON !== 'string') return false;
+      var parsed = JSON.parse(designJSON);
+      return (
+        (parsed.rooms && parsed.rooms.length) ||
+        (parsed.wallStrips && parsed.wallStrips.length) ||
+        (parsed.furniture && parsed.furniture.length) ||
+        (parsed.pergolas && parsed.pergolas.length) ||
+        (parsed.garages && parsed.garages.length) ||
+        (parsed.pools && parsed.pools.length) ||
+        (parsed.roofs && parsed.roofs.length) ||
+        (parsed.balconies && parsed.balconies.length) ||
+        (parsed.stairsList && parsed.stairsList.length)
+      );
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  function captureCanvasThumbnail(callback) {
+    try {
+      var canvas = document.getElementById('canvas');
+      if (!canvas || !canvas.width || !canvas.height) {
+        callback(null);
+        return;
+      }
+      var tempCanvas = document.createElement('canvas');
+      tempCanvas.width = 400;
+      tempCanvas.height = 300;
+      var ctx = tempCanvas.getContext('2d');
+      ctx.drawImage(canvas, 0, 0, tempCanvas.width, tempCanvas.height);
+      callback(tempCanvas.toDataURL('image/jpeg', 0.8));
+    } catch (_e) {
+      callback(null);
+    }
+  }
+
+  function teardownDAOverlay(options) {
+    var opts = options || {};
+    var overlay = document.getElementById('da-workflow-overlay');
+    if (overlay) overlay.remove();
+    document.body.style.overflow = '';
+
+    // Restore the global account chrome button.
+    try {
+      var globalAccountBtn = document.getElementById('account-button');
+      if (globalAccountBtn && globalAccountBtn.__daHidden) {
+        globalAccountBtn.style.display = globalAccountBtn.__daPrevDisplay || '';
+        globalAccountBtn.__daHidden = false;
+      }
+    } catch (_eAccShow) {}
+
+    if (opts.resetState !== false) {
+      currentProjectId = null;
+      currentState = null;
+    }
+  }
+
+  function leaveDAWorkflowToEditor() {
+    // Close the DA overlay but do not force Account open.
+    teardownDAOverlay({ returnToAccount: false, resetState: false });
+  }
+
+  function openCurrentProjectIn3D() {
+    var project = getCurrentProject();
+    if (!project) {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Project not found.');
+      return;
+    }
+    if (typeof window.restoreProject !== 'function') {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Design system not loaded. Please refresh the page.');
+      return;
+    }
+
+    leaveDAWorkflowToEditor();
+
+    // Ensure the active project label (3D/2D) reflects what we're opening.
+    try {
+      if (typeof window.setActiveProject === 'function') window.setActiveProject(project);
+    } catch(_eMeta) {}
+
+    if (!project.designData) {
+      // No saved design yet — still send the user to the editor with the correct project selected.
+      try {
+        if (typeof window.updateStatus === 'function') window.updateStatus('No saved design yet for: ' + (project.name || 'Project'));
+      } catch (_eMsg) {}
+      return;
+    }
+
+    try {
+      window.restoreProject(project.designData);
+      if (typeof window.updateStatus === 'function') window.updateStatus('Loaded DA project: ' + (project.name || 'Project'));
+      if (typeof window.renderLoop === 'function') window.renderLoop();
+    } catch (e) {
+      console.error('[DA Workflow] Failed to restore project:', e);
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Failed to load the project design.');
+    }
+  }
+
+  function saveCurrentDesignToDAProject() {
+    var project = getCurrentProject();
+    if (!project) {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Project not found.');
+      return;
+    }
+    if (typeof window.serializeProject !== 'function') {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Design system not loaded. Please refresh the page.');
+      return;
+    }
+    if (!window.ProjectStorage || typeof window.ProjectStorage.updateProject !== 'function') {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Project storage is not ready yet.');
+      return;
+    }
+
+    var designData = '';
+    try { designData = window.serializeProject(); } catch (_e) { designData = ''; }
+    if (!hasMeaningfulDesignJSON(designData)) {
+      if (window.showAppleAlert) window.showAppleAlert('No Design', 'Please create or update a design before saving.');
+      return;
+    }
+
+    captureCanvasThumbnail(function(snapshot) {
+      try {
+        var images = Array.isArray(window.__projectAiImages) ? window.__projectAiImages.slice() : (Array.isArray(project.aiImages) ? project.aiImages.slice() : []);
+        var updated = window.ProjectStorage.updateProject(currentProjectId, function(p) {
+          p.designData = designData;
+          p.hasDesign = true;
+          p.aiImages = images;
+          if (snapshot) p.thumbnail = snapshot;
+          return p;
+        });
+        try {
+          if (updated && typeof window.setActiveProject === 'function') window.setActiveProject(updated);
+        } catch(_eMeta2) {}
+        if (window.showAppleAlert) window.showAppleAlert('Saved', 'Design saved to "' + ((updated && updated.name) || (project.name || 'Project')) + '".');
+      } catch (e) {
+        console.error('[DA Workflow] Save failed:', e);
+        if (window.showAppleAlert) window.showAppleAlert('Error', 'Unable to save project.');
+      }
+    });
+  }
+
+  function openVisualizeFromDA() {
+    // Ensure the visualize session is associated with the active account project.
+    try {
+      var project = getCurrentProject();
+      if (project && typeof window.setActiveProject === 'function') window.setActiveProject(project);
+    } catch (_eMeta) {}
+
+    if (typeof window.showVisualize !== 'function' && typeof showVisualize !== 'function') {
+      if (window.showAppleAlert) window.showAppleAlert('Unavailable', 'Visualization tools are not available right now.');
+      return;
+    }
+
+    leaveDAWorkflowToEditor();
+
+    setTimeout(function() {
+      try {
+        if (typeof window.showVisualize === 'function') window.showVisualize();
+        else if (typeof showVisualize === 'function') showVisualize();
+      } catch (e) {
+        console.error('[DA Workflow] Failed to open visualize:', e);
+      }
+    }, 120);
+  }
+
+  function syncVisualizationsToDAProject() {
+    var project = getCurrentProject();
+    if (!project) {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Project not found.');
+      return;
+    }
+    if (!window.ProjectStorage || typeof window.ProjectStorage.updateProject !== 'function') {
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Project storage is not ready yet.');
+      return;
+    }
+    var images = Array.isArray(window.__projectAiImages) ? window.__projectAiImages.slice() : [];
+    if (!images.length) {
+      if (window.showAppleAlert) window.showAppleAlert('No Images', 'No visualization images found in this session yet.');
+      return;
+    }
+    try {
+      var updated = window.ProjectStorage.updateProject(currentProjectId, function(p) {
+        p.aiImages = images;
+        return p;
+      });
+      if (window.showAppleAlert) window.showAppleAlert('Synced', 'Saved ' + images.length + ' image(s) to "' + ((updated && updated.name) || (project.name || 'Project')) + '".');
+      // Refresh current step so the thumbnails update.
+      try { renderCurrentStep(); } catch (_eRe) {}
+    } catch (e) {
+      console.error('[DA Workflow] Sync images failed:', e);
+      if (window.showAppleAlert) window.showAppleAlert('Error', 'Unable to save images to project.');
+    }
+  }
+
+  // ============================================================================
+  // PROJECT SELECTION
+  // ============================================================================
+  
+  /**
+   * Show project selector or start wizard before opening workflow
+   */
+  function showProjectSelector() {
+    // If selector is already open, don't create another panel.
+    var existingSelectorOverlay = document.getElementById('da-project-selector-overlay');
+
+    // Get available projects
+    var projects = [];
+    if (window.ProjectStorage && typeof window.ProjectStorage.getProjects === 'function') {
+      try {
+        projects = window.ProjectStorage.getProjects() || [];
+      } catch (e) {
+        console.error('[DA Workflow] Failed to get projects:', e);
+      }
+    }
+    
+    // Resolve the best theme to use for the selector.
+    // Priority:
+    // 1) existing DA workflow overlay (if already open)
+    // 2) saved per-section preference (da-workflow)
+    // 3) account/dashboard theme (fallback)
+    // 4) document theme
+    var savedTheme = 'light';
+    try {
+      var existingWorkflow = document.getElementById('da-workflow-overlay');
+      var existingTheme = existingWorkflow && existingWorkflow.getAttribute('data-theme');
+      if (existingTheme === 'dark' || existingTheme === 'light') {
+        savedTheme = existingTheme;
+      } else {
+        var themeSettings = JSON.parse(localStorage.getItem('gablokThemeSettings') || '{}');
+        if (themeSettings['da-workflow'] === 'dark' || themeSettings['da-workflow'] === 'light') {
+          savedTheme = themeSettings['da-workflow'];
+        } else {
+          var accountModal = document.getElementById('account-modal');
+          var accountTheme = accountModal && accountModal.getAttribute('data-theme');
+          if (accountTheme === 'dark' || accountTheme === 'light') {
+            savedTheme = accountTheme;
+          } else if (themeSettings['account'] === 'dark' || themeSettings['account'] === 'light') {
+            savedTheme = themeSettings['account'];
+          } else {
+            var docTheme = document.documentElement && document.documentElement.getAttribute('data-theme');
+            if (docTheme === 'dark' || docTheme === 'light') {
+              savedTheme = docTheme;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[DA Workflow] Could not resolve theme preference:', e);
+    }
+
+    // If the Account modal is currently visible, match its active theme so the selector
+    // doesn't feel like it "swaps" the UI behind it.
+    var effectiveTheme = savedTheme;
+    try {
+      var acc = document.getElementById('account-modal');
+      if (acc && acc.classList && acc.classList.contains('visible')) {
+        var accTheme2 = acc.getAttribute('data-theme');
+        if (accTheme2 !== 'dark' && accTheme2 !== 'light') {
+          var activePanel2 = acc.querySelector('.account-panel:not(.is-hidden)');
+          if (activePanel2) accTheme2 = activePanel2.getAttribute('data-theme');
+        }
+        if (accTheme2 === 'dark' || accTheme2 === 'light') {
+          effectiveTheme = accTheme2;
+        }
+      }
+    } catch (_eTheme2) {}
+
+    // Reuse existing selector overlay (just update theme)
+    if (existingSelectorOverlay) {
+      try {
+        existingSelectorOverlay.setAttribute('data-theme', effectiveTheme);
+        if (typeof window.applyThemeToSection === 'function') {
+          window.applyThemeToSection('da-workflow', effectiveTheme);
+        }
+      } catch (_e2) {}
+      return;
+    }
+    
+    // Create selector overlay
+    var overlay = document.createElement('div');
+    overlay.id = 'da-project-selector-overlay';
+    overlay.className = 'da-project-selector-modal';
+    overlay.setAttribute('data-theme', effectiveTheme);
+    
+    var content = '';
+    
+    if (projects.length > 0) {
+      // Show project list (Dashboard/Account projects styling)
+      content = `
+        <div class="da-selector-container">
+          <div class="da-selector-header">
+            <h2>Select a Project for DA Workflow</h2>
+            <p>DA Workflow is optional — pick any project to start or continue.</p>
+            <button class="da-selector-close" onclick="window.DAWorkflowUI.closeSelector()">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M6 6L14 14M14 6L6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="da-selector-body">
+            <div class="projects-list">`;
+      
+      projects.forEach(function(project) {
+        var date = new Date(project.updatedAt || project.createdAt).toLocaleDateString();
+        var thumbnail = project.thumbnail || '';
+        var thumbnailHTML = thumbnail
+          ? '<img src="' + thumbnail + '" class="project-card-main-thumb" alt="Project preview" loading="lazy" />'
+          : (
+              '<div class="project-card-icon-fallback" aria-hidden="true">' +
+                '<svg width="44" height="44" viewBox="0 0 24 24" fill="none">' +
+                  '<use href="/css/sf-symbols.svg#' + (project.hasDesign ? 'sf-doc-text' : 'sf-folder') + '" />' +
+                '</svg>' +
+              '</div>'
+            );
+
+        var hasDAState = false;
+        try {
+          if (window.DAWorkflow && typeof window.DAWorkflow.hasWorkflowState === 'function') {
+            hasDAState = window.DAWorkflow.hasWorkflowState(project.id);
+          } else {
+            hasDAState = !!localStorage.getItem('gablok_da_workflow_' + project.id);
+          }
+        } catch (_eState) {}
+
+        content += `
+          <div class="project-card" data-project-id="${project.id}">
+            <div class="project-card-thumb-wrapper">${thumbnailHTML}</div>
+            <div class="project-card-info">
+              <div class="project-card-name">${escapeHtml(project.name || 'Untitled Project')}</div>
+              <div class="project-card-meta">Updated: ${date}</div>
+              ${project.hasDesign ? '<div class="project-badges"><span class="project-badge design">Design saved</span></div>' : ''}
+            </div>
+            <div class="project-card-actions">
+              <button type="button" class="primary" onclick="window.DAWorkflowUI.openWithProject('${project.id}')">${hasDAState ? 'Continue Workflow' : 'Start Workflow'}</button>
+              <button type="button" class="secondary" onclick="window.DAWorkflowUI.renameProject('${project.id}')">Rename</button>
+              <button type="button" class="secondary danger" onclick="window.DAWorkflowUI.deleteProject('${project.id}')">Delete</button>
+            </div>
+          </div>`;
+      });
+      
+      content += `
+            </div>
+            <div class="da-selector-footer projects-toolbar">
+              <button type="button" class="primary" onclick="window.DAWorkflowUI.createNewProject()">Start New Project</button>
+              <button type="button" class="secondary" onclick="window.DAWorkflowUI.closeSelector()">Cancel</button>
+            </div>
+          </div>
+        </div>`;
+    } else {
+      // Show welcome screen for new users
+      content = `
+        <div class="da-selector-container da-selector-welcome">
+          <div class="da-selector-header">
+            <h2>Welcome to DA Workflow</h2>
+            <button class="da-selector-close" onclick="window.DAWorkflowUI.closeSelector()">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M6 6L14 14M14 6L6 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
+          <div class="da-selector-body da-welcome-body">
+            <div class="da-welcome-icon">
+              <svg width="80" height="80" viewBox="0 0 80 80">
+                <use href="/css/sf-symbols.svg#sf-building-2" />
+              </svg>
+            </div>
+            <h3>Get Started with Your First Project</h3>
+            <p>The DA Workflow helps you navigate the Development Application process in Australia step by step. From planning through to occupation certificate, we'll guide you through every stage.</p>
+            <ul class="da-welcome-features">
+              <li><svg width="20" height="20" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-checkmark-circle"/></svg> 8 Major workflow phases</li>
+              <li><svg width="20" height="20" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-checkmark-circle"/></svg> 50+ Detailed steps</li>
+              <li><svg width="20" height="20" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-checkmark-circle"/></svg> Progress tracking</li>
+              <li><svg width="20" height="20" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-checkmark-circle"/></svg> Document management</li>
+              <li><svg width="20" height="20" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-checkmark-circle"/></svg> Contact management</li>
+            </ul>
+            <div class="projects-toolbar da-welcome-actions">
+              <button type="button" class="primary" onclick="window.DAWorkflowUI.createNewProject()">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M10 5v10M5 10h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                Start Your First Project
+              </button>
+              <button type="button" class="secondary" onclick="window.DAWorkflowUI.closeSelector()">Cancel</button>
+            </div>
+          </div>
+        </div>`;
+    }
+    
+    overlay.innerHTML = content;
+    document.body.appendChild(overlay);
+
+    // Ensure the global theme system re-applies the theme (in case settings changed
+    // or the selector is created before watchers run).
+    try {
+      if (typeof window.applyThemeToSection === 'function') {
+        window.applyThemeToSection('da-workflow', savedTheme);
+      }
+    } catch (e) {
+      console.warn('[DA Workflow] Failed to force-apply theme:', e);
+    }
+    
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+  }
+  
+  /**
+   * Close project selector
+   */
+  function closeProjectSelector() {
+    var overlay = document.getElementById('da-project-selector-overlay');
+    if (overlay) {
+      overlay.remove();
+    }
+    document.body.style.overflow = '';
+  }
+  
+  /**
+   * Create new project and open workflow
+   */
+  function createNewProject() {
+    if (window.showApplePrompt) {
+      window.showApplePrompt('New Project', 'Enter a name for your DA project', function(name) {
+        if (!name || !name.trim()) return;
+        
+        if (window.ProjectStorage && typeof window.ProjectStorage.createProject === 'function') {
+          var project = window.ProjectStorage.createProject(name.trim());
+          if (project && project.id) {
+            closeProjectSelector();
+            openDAWorkflow(project.id);
+          }
+        }
+      });
+    } else {
+      var name = prompt('Enter a name for your DA project:');
+      if (!name || !name.trim()) return;
+      
+      if (window.ProjectStorage && typeof window.ProjectStorage.createProject === 'function') {
+        var project = window.ProjectStorage.createProject(name.trim());
+        if (project && project.id) {
+          closeProjectSelector();
+          openDAWorkflow(project.id);
+        }
+      }
+    }
+  }
+
+  function refreshProjectSelector() {
+    try { closeProjectSelector(); } catch (_e0) {}
+    try { showProjectSelector(); } catch (_e1) {}
+  }
+
+  function renameProject(projectId) {
+    if (!projectId) return;
+    var storage = window.ProjectStorage;
+    if (!storage || typeof storage.getProjects !== 'function' || typeof storage.updateProject !== 'function') return;
+
+    var projects = [];
+    try { projects = storage.getProjects() || []; } catch (_e2) {}
+    var current = projects.find(function(p){ return p && p.id === projectId; });
+    var currentName = (current && current.name) ? String(current.name) : 'Project';
+
+    var onName = function(name) {
+      if (!name || !String(name).trim()) return;
+      try { storage.updateProject(projectId, { name: String(name).trim() }); }
+      catch (e) { console.error('[DA Workflow] Rename failed:', e); }
+      refreshProjectSelector();
+    };
+
+    if (window.showApplePrompt) {
+      window.showApplePrompt('Rename Project', currentName, onName);
+    } else {
+      onName(prompt('Rename Project', currentName));
+    }
+  }
+
+  function deleteProject(projectId) {
+    if (!projectId) return;
+    var storage = window.ProjectStorage;
+    if (!storage || typeof storage.deleteProject !== 'function') return;
+
+    var doDelete = function(){
+      try { storage.deleteProject(projectId); }
+      catch (e) { console.error('[DA Workflow] Delete failed:', e); }
+      refreshProjectSelector();
+    };
+
+    if (window.showAppleConfirm) {
+      window.showAppleConfirm('Delete Project', 'This action cannot be undone. Are you sure you want to delete this project?', doDelete);
+    } else {
+      if (confirm('Delete this project? This cannot be undone.')) doDelete();
+    }
+  }
+  
+  /**
+   * Open workflow with selected project
+   */
+  function openWithProject(projectId) {
+    closeProjectSelector();
+    openDAWorkflow(projectId);
+  }
+  
+  /**
+   * Helper function to escape HTML
+   */
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  // ============================================================================
+  // OPEN WORKFLOW INTERFACE
+  // ============================================================================
+  
+  /**
+   * Open DA workflow in fullscreen mode for a project
+   */
+  function openDAWorkflow(projectId) {
+    // If we're opening a specific workflow, it should take over the screen.
+    // Hide Account if it's currently open; otherwise the workflow can render behind it.
+    try {
+      if (typeof window.hideAccount === 'function') {
+        window.hideAccount();
+      } else if (window.toggleAccountModal) {
+        window.toggleAccountModal('hide');
+      }
+      var acc = document.getElementById('account-modal');
+      if (acc) {
+        acc.classList.remove('showing', 'closing', 'visible');
+        acc.__animating = false;
+      }
+    } catch (_eHideAcc) {}
+
+    // Ensure only one workflow panel exists.
+    try {
+      var existingWorkflowOverlay = document.getElementById('da-workflow-overlay');
+      if (existingWorkflowOverlay) existingWorkflowOverlay.remove();
+      var existingSelector = document.getElementById('da-project-selector-overlay');
+      if (existingSelector) existingSelector.remove();
+    } catch (_e0) {}
+
+    currentProjectId = projectId;
+    // Treat opening the workflow as "submitting" the project to DA Workflow:
+    // ensure an initial persisted state exists so the project can be continued later.
+    try {
+      if (window.DAWorkflow && typeof window.DAWorkflow.ensureWorkflowState === 'function') {
+        window.DAWorkflow.ensureWorkflowState(projectId);
+      }
+    } catch (_eEnsure) {}
+    currentState = window.DAWorkflow.getWorkflowState(projectId);
+
+    // Resolve current project name (for sidebar header)
+    var currentProjectName = 'Project';
+    try {
+      if (window.ProjectStorage && typeof window.ProjectStorage.getProjects === 'function') {
+        var projects = window.ProjectStorage.getProjects() || [];
+        var match = projects.find(function(p){ return p && p.id === projectId; });
+        if (match && match.name) currentProjectName = String(match.name);
+      }
+    } catch (_eProjName) {}
+
+    // Resolve theme for the workflow overlay.
+    var workflowTheme = 'light';
+    try {
+      var docTheme = document.documentElement && document.documentElement.getAttribute('data-theme');
+      if (docTheme === 'dark' || docTheme === 'light') {
+        workflowTheme = docTheme;
+      } else {
+        var themeSettings = JSON.parse(localStorage.getItem('gablokThemeSettings') || '{}');
+        workflowTheme = themeSettings['da-workflow'] || 'light';
+      }
+    } catch (e) {
+      console.warn('[DA Workflow] Could not resolve workflow theme preference:', e);
+    }
+    
+    // Create fullscreen overlay
+    var overlay = document.createElement('div');
+    overlay.id = 'da-workflow-overlay';
+    overlay.className = 'da-workflow-fullscreen';
+    overlay.setAttribute('data-theme', workflowTheme); // Apple theme attribute
+    
+    overlay.innerHTML = `
+      <div class="da-workflow-container">
+        <button class="da-workflow-account-btn" onclick="window.DAWorkflowUI.close()" title="Account" aria-label="Account">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+            <path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </svg>
+        </button>
+        
+        <!-- Main Content -->
+        <div class="da-workflow-body">
+          <!-- Compact Sidebar: Stage Progress -->
+          <div class="da-sidebar">
+            <div class="da-sidebar-header">
+              <div class="da-project-name" id="da-project-name">${escapeHtml(currentProjectName)}</div>
+              <h3>Overall Progress</h3>
+              <div class="da-overall-progress">
+                <div class="da-progress-ring">
+                  <svg width="80" height="80">
+                    <defs>
+                      <linearGradient id="progress-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" style="stop-color:#007aff;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#5e5ce6;stop-opacity:1" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="40" cy="40" r="34" class="da-progress-ring-bg" stroke-width="6"></circle>
+                    <circle cx="40" cy="40" r="34" class="da-progress-ring-fill" id="da-progress-ring" stroke-width="6"></circle>
+                  </svg>
+                  <span class="da-progress-percent" id="da-overall-progress-text">0%</span>
+                </div>
+              </div>
+            </div>
+            <div class="da-stages-list" id="da-stages-list">
+              <!-- Populated dynamically -->
+            </div>
+            
+            <!-- Quick Actions -->
+            <div class="da-quick-actions">
+              <button class="da-quick-btn" onclick="window.DAWorkflowUI.showContacts()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="da-quick-icon-svg">
+                  <circle cx="12" cy="8" r="3" stroke="currentColor" stroke-width="2"/>
+                  <path d="M6 20c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span class="da-quick-label">Contacts</span>
+              </button>
+              <button class="da-quick-btn" onclick="window.DAWorkflowUI.showDocuments()">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="da-quick-icon-svg">
+                  <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span class="da-quick-label">Documents</span>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Centered Main Content Area -->
+          <div class="da-main-content">
+            <!-- Current Step Header -->
+            <div class="da-step-header-card" id="da-step-header">
+              <!-- Populated dynamically -->
+            </div>
+            
+            <!-- Next Steps Preview -->
+            <div class="da-next-steps-preview" id="da-next-steps-preview">
+              <!-- Populated dynamically -->
+            </div>
+            
+            <!-- Step Content -->
+            <div class="da-step-content" id="da-step-content">
+              <!-- Populated dynamically -->
+            </div>
+            
+            <!-- Navigation -->
+            <div class="da-nav-buttons">
+              <button class="da-nav-btn back" id="da-prev-btn" onclick="window.DAWorkflowUI.previousStep()">
+                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/css/sf-symbols.svg#sf-chevron-left" /></svg>
+                <span class="da-nav-label">Previous</span>
+              </button>
+              <div class="da-step-indicators" id="da-step-indicator">
+                <!-- Step dots -->
+              </div>
+              <button class="da-nav-btn next" id="da-next-btn" onclick="window.DAWorkflowUI.nextStep()">
+                <span class="da-nav-label">Next</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/css/sf-symbols.svg#sf-chevron-right" /></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(overlay);
+
+    // Hide the global (3D) account chrome button while DA workflow is open.
+    // DA has its own top-right account button.
+    try {
+      var globalAccountBtn = document.getElementById('account-button');
+      if (globalAccountBtn && !globalAccountBtn.__daHidden) {
+        globalAccountBtn.__daHidden = true;
+        globalAccountBtn.__daPrevDisplay = globalAccountBtn.style.display;
+        globalAccountBtn.style.display = 'none';
+      }
+    } catch (_eAccHide) {}
+    
+    // Render initial state
+    renderStagesList();
+    renderCurrentStep();
+    updateProgress();
+    
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+  }
+  
+  /**
+   * Close DA workflow interface and return to admin section
+   */
+  function closeDAWorkflow() {
+    teardownDAOverlay({ returnToAccount: true, resetState: true });
+    
+    // Return to the Account dashboard.
+    // IMPORTANT: the Account modal can be mid-close (closing animation) when DA was opened.
+    // In that state, `toggleAccountModal()` may call `showAccount()` but it will no-op due
+    // to `__animating`, and then the close animation finishes and hides the modal, dropping
+    // the user back to the 3D area.
+    try {
+      var acc = document.getElementById('account-modal');
+      if (acc) {
+        acc.classList.remove('closing');
+        acc.__animating = false;
+      }
+      if (typeof window.returnToDashboard === 'function') {
+        window.returnToDashboard();
+      }
+      if (typeof window.toggleAccountModal === 'function') {
+        window.toggleAccountModal('show');
+      } else if (typeof window.showAccount === 'function') {
+        window.showAccount();
+      }
+    } catch (_eAcc) {}
+  }
+
+  // ============================================================================
+  // RENDER FUNCTIONS
+  // ============================================================================
+  
+  /**
+   * Render stages sidebar
+   */
+  function renderStagesList() {
+    var container = document.getElementById('da-stages-list');
+    if (!container) return;
+    
+    var html = '';
+    window.DAWorkflow.workflow.stages.forEach(function(stage, idx) {
+      var stageProgress = calculateStageProgress(stage.id);
+      var isActive = stage.id === currentState.currentStage;
+      var isComplete = stageProgress === 100;
+      
+      html += `
+        <div class="da-stage-item ${isActive ? 'active' : ''} ${isComplete ? 'complete' : ''}" 
+             onclick="window.DAWorkflowUI.goToStage('${stage.id}')">
+          <div class="da-stage-badge-indicator" aria-hidden="true">
+            ${escapeHtml(String(stage.code || ''))}
+          </div>
+          <div class="da-stage-info">
+            <div class="da-stage-title">${stage.title}</div>
+            <div class="da-stage-progress">${stageProgress}% complete</div>
+          </div>
+          ${isComplete ? '<div class="da-complete-badge"><svg width="16" height="16" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-checkmark-circle" /></svg></div>' : ''}
+        </div>
+      `;
+    });
+    
+    container.innerHTML = html;
+  }
+  
+  /**
+   * Render current step content
+   */
+  function renderCurrentStep() {
+    var container = document.getElementById('da-step-content');
+    var headerCard = document.getElementById('da-step-header');
+    var nextStepsPreview = document.getElementById('da-next-steps-preview');
+    
+    if (!container) return;
+    
+    var stage = findStage(currentState.currentStage);
+    var step = findStep(currentState.currentStage, currentState.currentStep);
+    
+    if (!stage || !step) {
+      container.innerHTML = '<p>Step not found</p>';
+      return;
+    }
+    
+    var isComplete = window.DAWorkflow.isStepComplete(currentProjectId, step.id);
+    
+    // Render step header card
+    if (headerCard) {
+      var stepIndex = stage.steps.findIndex(function(s) { return s.id === step.id; }) + 1;
+      var stepCode = stage.code + stepIndex;
+      var requiredDocsCount = (step.documents && step.documents.length) ? step.documents.length : 0;
+      var requiredContactsCount = (step.contacts && step.contacts.length) ? step.contacts.length : 0;
+      var requirementsSummary = (requiredDocsCount || requiredContactsCount)
+        ? (' • Need: ' + (requiredDocsCount ? (requiredDocsCount + ' doc' + (requiredDocsCount === 1 ? '' : 's')) : '') +
+           (requiredDocsCount && requiredContactsCount ? ', ' : '') +
+           (requiredContactsCount ? (requiredContactsCount + ' contact' + (requiredContactsCount === 1 ? '' : 's')) : ''))
+        : '';
+      headerCard.innerHTML = `
+        <div class="da-step-badge-graphic">${stepCode}</div>
+        <div class="da-step-header-content">
+          <div class="da-step-stage-label">Stage ${stage.code} • Step ${stepIndex} of ${stage.steps.length}${requirementsSummary}</div>
+          <h2 class="da-step-title">${step.title}</h2>
+          <p class="da-step-description">${step.description}</p>
+          <div class="da-step-actions">
+            <button class="da-btn-complete ${isComplete ? 'completed' : ''}" 
+                    onclick="window.DAWorkflowUI.toggleStepComplete('${step.id}')">
+              <svg class="complete-icon" width="18" height="18" viewBox="0 0 18 18">
+                <use href="#${isComplete ? 'sf-checkmark-circle' : 'sf-circle'}" />
+              </svg>
+              <span>${isComplete ? 'Completed' : 'Mark Complete'}</span>
+            </button>
+            ${stage.estimatedDays ? '<span class="da-time-estimate"><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align: middle; margin-right: 4px;"><use href="#sf-clock" /></svg>' + stage.estimatedDays + '</span>' : ''}
+          </div>
+        </div>
+      `;
+    }
+    
+    // Render next steps preview
+    renderNextStepsPreview(nextStepsPreview, stage, step);
+    
+    // Project tools (3D + Visualizations)
+    var project = getCurrentProject();
+    var hasDesign = !!(project && project.designData);
+    var imageList = (project && Array.isArray(project.aiImages)) ? project.aiImages : [];
+    var imageCount = imageList.length;
+    var imageThumbs = imageList.slice(0, 6).map(function(src) {
+      var safeSrc = escapeHtml(String(src || ''));
+      if (!safeSrc) return '';
+      return '<a class="da-ai-thumb-link" href="' + safeSrc + '" target="_blank" rel="noopener noreferrer">' +
+               '<img class="da-ai-thumb" src="' + safeSrc + '" alt="Visualization image" loading="lazy" />' +
+             '</a>';
+    }).join('');
+    var imagesHtml = imageCount
+      ? '<div class="da-ai-thumb-grid">' + imageThumbs + '</div>' + (imageCount > 6 ? '<div class="da-ai-more">+' + (imageCount - 6) + ' more</div>' : '')
+      : '<div class="da-ai-empty">No images saved yet.</div>';
+
+    var thumbnail = project && project.thumbnail ? String(project.thumbnail) : '';
+    var designPreviewHtml = thumbnail
+      ? (
+          '<a class="da-project-preview-link" href="' + escapeHtml(thumbnail) + '" target="_blank" rel="noopener noreferrer">' +
+            '<img class="da-project-preview-img" src="' + escapeHtml(thumbnail) + '" alt="3D design preview" loading="lazy" />' +
+          '</a>'
+        )
+      : (
+          '<div class="da-project-preview-empty">No preview yet.</div>'
+        );
+
+    // Main content with modern card layout
+    var html = `
+      <!-- 3D View Card -->
+      <div class="da-card da-project-design-card">
+        <div class="da-card-header">
+          <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#sf-cube" /></svg> 3D View</h3>
+          <span class="da-card-badge">${hasDesign ? 'Design saved' : 'No design saved'}</span>
+        </div>
+        <div class="da-card-body">
+          <div class="da-project-actions">
+            <button class="da-btn-small primary" onclick="window.DAWorkflowUI.openProjectIn3D()">Open in 3D</button>
+            <button class="da-btn-small secondary" onclick="window.DAWorkflowUI.saveCurrentDesignToProject()">Save Current 3D Design</button>
+          </div>
+          <div class="da-project-preview">
+            ${designPreviewHtml}
+          </div>
+        </div>
+      </div>
+
+      <!-- Visualizations Card -->
+      <div class="da-card da-project-visualizations-card">
+        <div class="da-card-header">
+          <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#sf-photo" /></svg> Visualizations</h3>
+          <span class="da-card-badge">${imageCount} image${imageCount === 1 ? '' : 's'}</span>
+        </div>
+        <div class="da-card-body">
+          <div class="da-project-actions">
+            <button class="da-btn-small primary" onclick="window.DAWorkflowUI.openVisualize()">Open Visualize</button>
+            <button class="da-btn-small secondary" onclick="window.DAWorkflowUI.syncVisualizationsToProject()">Save Images to Project</button>
+          </div>
+          ${imagesHtml}
+        </div>
+      </div>
+
+      <!-- Checklist Card -->
+      <div class="da-card da-checklist-card">
+        <div class="da-card-header">
+          <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#sf-checkmark-circle" /></svg> Action Items</h3>
+          <span class="da-card-badge">${getChecklistProgress(step)} of ${step.checklist.length}</span>
+        </div>
+        <div class="da-card-body">
+          ${renderChecklist(step)}
+        </div>
+      </div>
+      
+      <!-- Required Documents Card -->
+      ${step.documents.length > 0 ? `
+        <div class="da-card da-documents-card">
+          <div class="da-card-header">
+            <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#sf-doc" /></svg> Required Documents</h3>
+            <span class="da-card-badge">${getDocumentsProgress(step)} of ${step.documents.length}</span>
+          </div>
+          <div class="da-card-body">
+            ${renderDocuments(step)}
+          </div>
+        </div>
+      ` : ''}
+      
+      <!-- Key Contacts Card -->
+      ${step.contacts.length > 0 ? `
+        <div class="da-card da-contacts-card">
+          <div class="da-card-header">
+            <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="#sf-person-2" /></svg> Key Contacts</h3>
+            <span class="da-card-badge">${getContactsProgress(step)} of ${step.contacts.length}</span>
+          </div>
+          <div class="da-card-body">
+            ${renderContacts(step)}
+          </div>
+        </div>
+      ` : ''}
+      
+      <!-- Tips & Resources -->
+      <div class="da-info-section">
+        ${step.tips ? `
+          <div class="da-tip-card">
+            <div class="da-tip-icon" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" focusable="false">
+                <use href="/css/sf-symbols.svg#sf-info-circle" />
+              </svg>
+            </div>
+            <div class="da-tip-content">
+              <div class="da-tip-title">Pro Tip</div>
+              <div class="da-tip-text">${step.tips}</div>
+            </div>
+          </div>
+        ` : ''}
+        
+        ${step.links && step.links.length > 0 ? `
+          <div class="da-links-card">
+            <div class="da-info-header">
+              <div class="da-info-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" focusable="false">
+                  <use href="/css/sf-symbols.svg#sf-link" />
+                </svg>
+              </div>
+              <div class="da-info-title">Helpful Resources</div>
+            </div>
+            ${step.links.map(function(link) {
+              var domain = getDomainName(link);
+              return (
+                '<a href="' + link + '" target="_blank" rel="noopener noreferrer" class="da-resource-link">' +
+                  '<div class="da-resource-icon" aria-hidden="true">' +
+                    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" focusable="false">' +
+                      '<use href="/css/sf-symbols.svg#sf-arrow-up-right" />' +
+                    '</svg>' +
+                  '</div>' +
+                  '<div class="da-resource-info">' +
+                    '<div class="da-resource-title">' + domain + '</div>' +
+                    '<div class="da-resource-url">' + link + '</div>' +
+                  '</div>' +
+                  '<div class="da-resource-arrow" aria-hidden="true">' +
+                    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" focusable="false">' +
+                      '<use href="/css/sf-symbols.svg#sf-chevron-right" />' +
+                    '</svg>' +
+                  '</div>' +
+                '</a>'
+              );
+            }).join('')}
+          </div>
+        ` : ''}
+      </div>
+      
+      <!-- Notes Card -->
+      <div class="da-card da-notes-card">
+        <div class="da-card-header">
+          <h3><svg class="da-icon" width="20" height="20" viewBox="0 0 24 24"><use href="/css/sf-symbols.svg#sf-pencil" /></svg> Your Notes</h3>
+        </div>
+        <div class="da-card-body">
+          <textarea class="da-notes-input" 
+                    placeholder="Add notes, reminders, or important information for this step..."
+                    onchange="window.DAWorkflowUI.saveNote('${step.id}', this.value)">${getNoteForStep(step.id)}</textarea>
+        </div>
+      </div>
+    `;
+    
+    container.innerHTML = html;
+    updateStepIndicator();
+  }
+  
+  /**
+   * Render next steps preview
+   */
+  function renderNextStepsPreview(container, currentStage, currentStep) {
+    if (!container) return;
+    
+    var allSteps = getAllStepsInStage(currentStage);
+    var currentIndex = allSteps.findIndex(function(s) { return s.id === currentStep.id; });
+    var nextSteps = allSteps.slice(currentIndex + 1, currentIndex + 4); // Show next 3 steps
+    
+    if (nextSteps.length === 0) {
+      // Check next stage
+      var stages = window.DAWorkflow.getWorkflow().stages;
+      var stageIndex = stages.findIndex(function(s) { return s.id === currentStage.id; });
+      if (stageIndex < stages.length - 1) {
+        var nextStage = stages[stageIndex + 1];
+        nextSteps = nextStage.steps.slice(0, 3);
+        
+        container.innerHTML = `
+          <div class="da-next-stage-banner">
+            <div class="da-next-stage-label">Up Next</div>
+            <div class="da-next-stage-title">Stage ${escapeHtml(String(nextStage.code || ''))} • ${escapeHtml(String(nextStage.title || ''))}</div>
+            <div class="da-next-stage-steps">
+              ${nextSteps.map(function(s) { 
+                return '<div class="da-next-step-mini">' + s.title + '</div>'; 
+              }).join('')}
+            </div>
+          </div>
+        `;
+      } else {
+        container.innerHTML = '<div class="da-completion-banner">🎉 Final stage! Almost done!</div>';
+      }
+      return;
+    }
+    
+    container.innerHTML = `
+      <div class="da-next-steps-container">
+        <div class="da-next-steps-label">Coming Up</div>
+        <div class="da-next-steps-list">
+          ${nextSteps.map(function(s, idx) {
+            return `
+              <div class="da-next-step">
+                <span class="da-next-step-number">${idx + 1}</span>
+                <span class="da-next-step-title">${s.title}</span>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+  
+  /**
+   * Get all steps in a stage
+   */
+  function getAllStepsInStage(stage) {
+    return stage.steps || [];
+  }
+  
+  /**
+   * Get checklist progress count
+   */
+  function getChecklistProgress(step) {
+    if (!step.checklist) return 0;
+    var count = 0;
+    step.checklist.forEach(function(item, idx) {
+      if (isChecklistItemChecked(step.id, idx)) count++;
+    });
+    return count;
+  }
+  
+  /**
+   * Get documents progress count
+   */
+  function getDocumentsProgress(step) {
+    if (!step.documents) return 0;
+    var count = 0;
+    step.documents.forEach(function(doc) {
+      var state = getDocumentState(doc);
+      if (state && state.status === 'complete') count++;
+    });
+    return count;
+  }
+  
+  /**
+   * Get contacts progress count
+   */
+  function getContactsProgress(step) {
+    if (!step.contacts) return 0;
+    var count = 0;
+    step.contacts.forEach(function(role) {
+      var contact = getContactByRole(role);
+      if (contact && contact.name) count++;
+    });
+    return count;
+  }
+  
+  /**
+   * Get domain name from URL
+   */
+  function getDomainName(url) {
+    try {
+      var hostname = new URL(url).hostname;
+      return hostname.replace('www.', '');
+    } catch (e) {
+      return url;
+    }
+  }
+  
+  /**
+   * Update step indicator dots
+   */
+  function updateStepIndicator() {
+    var container = document.getElementById('da-step-indicator');
+    if (!container) return;
+    
+    var stage = findStage(currentState.currentStage);
+    if (!stage) return;
+    
+    var steps = stage.steps || [];
+    var currentIndex = steps.findIndex(function(s) { return s.id === currentState.currentStep; });
+    
+    container.innerHTML = steps.map(function(s, idx) {
+      var isComplete = window.DAWorkflow.isStepComplete(currentProjectId, s.id);
+      var isCurrent = idx === currentIndex;
+      return '<span class="da-step-dot ' + 
+             (isCurrent ? 'current' : '') + ' ' + 
+             (isComplete ? 'complete' : '') + 
+             '"></span>';
+    }).join('');
+  }
+  
+  /**
+   * Render checklist items
+   */
+  function renderChecklist(step) {
+    if (!step.checklist || step.checklist.length === 0) {
+      return '<p class="da-empty">No checklist items</p>';
+    }
+    
+    return step.checklist.map(function(item, idx) {
+      var checkId = step.id + '_check_' + idx;
+      var isChecked = isChecklistItemChecked(step.id, idx);
+      
+      return `
+        <label class="da-checklist-item ${isChecked ? 'checked' : ''}">
+          <input type="checkbox" 
+                 ${isChecked ? 'checked' : ''}
+                 onchange="window.DAWorkflowUI.toggleChecklistItem('${step.id}', ${idx})">
+          <span>${item}</span>
+        </label>
+      `;
+    }).join('');
+  }
+  
+  /**
+   * Render documents list
+   */
+  function renderDocuments(step) {
+    return step.documents.map(function(doc) {
+      var docState = getDocumentState(doc);
+      var isComplete = docState && docState.status === 'complete';
+      
+      return `
+        <div class="da-doc-item da-document-item ${isComplete ? 'complete' : ''}">
+          <div class="da-doc-icon" aria-hidden="true">
+            <svg class="da-doc-icon-svg" width="20" height="20" viewBox="0 0 24 24" focusable="false">
+              <use xlink:href="/css/sf-symbols.svg#sf-doc-text" />
+            </svg>
+          </div>
+          <div class="da-doc-info">
+            <div class="da-doc-name">${doc}</div>
+            ${isComplete ? '<div class="da-doc-status">Uploaded ' + formatDate(docState.uploadedAt) + '</div>' : ''}
+          </div>
+          <div class="da-doc-actions">
+            <button class="da-btn-small ${isComplete ? 'outline' : 'primary'}" onclick="window.DAWorkflowUI.uploadDocument('${doc}')">
+              <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/css/sf-symbols.svg#sf-arrow-down-doc" /></svg>
+              ${isComplete ? 'Replace' : 'Upload'}
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+  
+  /**
+   * Render contacts list
+   */
+  function renderContacts(step) {
+    return step.contacts.map(function(role) {
+      var contact = getContactByRole(role);
+      var hasContact = contact && contact.name;
+      
+      return `
+        <div class="da-contact-item ${hasContact ? 'complete' : ''}">
+          <svg class="da-contact-icon" width="24" height="24" viewBox="0 0 24 24">
+            <use xlink:href="/css/sf-symbols.svg#${hasContact ? 'sf-checkmark-circle' : 'sf-person'}" />
+          </svg>
+          <div class="da-contact-info">
+            <div class="da-contact-role">${role}</div>
+            ${hasContact ? `
+              <div class="da-contact-details">
+                <div><strong>${contact.name}</strong> ${contact.company ? '- ' + contact.company : ''}</div>
+                ${contact.phone ? '<div><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align: middle;"><use xlink:href="/css/sf-symbols.svg#sf-phone" /></svg> ' + contact.phone + '</div>' : ''}
+                ${contact.email ? '<div><svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align: middle;"><use xlink:href="/css/sf-symbols.svg#sf-envelope" /></svg> ' + contact.email + '</div>' : ''}
+              </div>
+            ` : '<div class="da-contact-placeholder">Not added yet</div>'}
+          </div>
+          <div class="da-contact-actions">
+            <button class="da-btn-small outline" onclick="window.DAWorkflowUI.addEditContact('${role}')">
+              <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/css/sf-symbols.svg#${hasContact ? 'sf-pencil' : 'sf-plus'}" /></svg>
+              ${hasContact ? 'Edit' : 'Add'}
+            </button>
+            ${hasContact ? `
+              <button class="da-btn-small secondary" onclick="window.DAWorkflowUI.shareWithContact('${role}')">
+                <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/css/sf-symbols.svg#sf-link" /></svg>
+                Share
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+  
+  /**
+   * Update breadcrumb navigation
+   */
+  function updateBreadcrumb(stage, step) {
+    var container = document.getElementById('da-breadcrumb');
+    if (!container) return;
+    
+    container.innerHTML = `
+      <span class="da-breadcrumb-item">${stage.code}. ${stage.title}</span>
+      <span class="da-breadcrumb-separator">›</span>
+      <span class="da-breadcrumb-item active">${stage.code}${step.id.substring(1)} - ${step.title}</span>
+    `;
+  }
+  
+  /**
+   * Update overall progress
+   */
+  function updateProgress() {
+    var totalSteps = 0;
+    var completedSteps = 0;
+    
+    window.DAWorkflow.workflow.stages.forEach(function(stage) {
+      stage.steps.forEach(function(step) {
+        totalSteps++;
+        if (window.DAWorkflow.isStepComplete(currentProjectId, step.id)) {
+          completedSteps++;
+        }
+      });
+    });
+    
+    var percentage = Math.round((completedSteps / totalSteps) * 100);
+    
+    var fill = document.getElementById('da-overall-progress-fill');
+    var text = document.getElementById('da-overall-progress-text');
+    
+    if (fill) fill.style.width = percentage + '%';
+    if (text) text.textContent = percentage + '%';
+  }
+
+  // ============================================================================
+  // NAVIGATION
+  // ============================================================================
+  
+  /**
+   * Go to next step
+   */
+  function nextStep() {
+    var stage = findStage(currentState.currentStage);
+    var currentStepIdx = stage.steps.findIndex(function(s) { return s.id === currentState.currentStep; });
+    
+    // Next step in current stage
+    if (currentStepIdx < stage.steps.length - 1) {
+      currentState.currentStep = stage.steps[currentStepIdx + 1].id;
+    } else {
+      // Next stage
+      var stageIdx = window.DAWorkflow.workflow.stages.findIndex(function(s) { return s.id === stage.id; });
+      if (stageIdx < window.DAWorkflow.workflow.stages.length - 1) {
+        var nextStage = window.DAWorkflow.workflow.stages[stageIdx + 1];
+        currentState.currentStage = nextStage.id;
+        currentState.currentStep = nextStage.steps[0].id;
+      }
+    }
+    
+    window.DAWorkflow.saveWorkflowState(currentProjectId, currentState);
+    renderStagesList();
+    renderCurrentStep();
+    updateProgress();
+  }
+  
+  /**
+   * Go to previous step
+   */
+  function previousStep() {
+    var stage = findStage(currentState.currentStage);
+    var currentStepIdx = stage.steps.findIndex(function(s) { return s.id === currentState.currentStep; });
+    
+    // Previous step in current stage
+    if (currentStepIdx > 0) {
+      currentState.currentStep = stage.steps[currentStepIdx - 1].id;
+    } else {
+      // Previous stage
+      var stageIdx = window.DAWorkflow.workflow.stages.findIndex(function(s) { return s.id === stage.id; });
+      if (stageIdx > 0) {
+        var prevStage = window.DAWorkflow.workflow.stages[stageIdx - 1];
+        currentState.currentStage = prevStage.id;
+        currentState.currentStep = prevStage.steps[prevStage.steps.length - 1].id;
+      }
+    }
+    
+    window.DAWorkflow.saveWorkflowState(currentProjectId, currentState);
+    renderStagesList();
+    renderCurrentStep();
+    updateProgress();
+  }
+  
+  /**
+   * Go to specific stage
+   */
+  function goToStage(stageId) {
+    var stage = findStage(stageId);
+    if (!stage) return;
+    
+    currentState.currentStage = stageId;
+    currentState.currentStep = stage.steps[0].id;
+    
+    window.DAWorkflow.saveWorkflowState(currentProjectId, currentState);
+    renderStagesList();
+    renderCurrentStep();
+  }
+
+  // ============================================================================
+  // ACTIONS
+  // ============================================================================
+  
+  /**
+   * Toggle step completion
+   */
+  function toggleStepComplete(stepId) {
+    var isComplete = window.DAWorkflow.isStepComplete(currentProjectId, stepId);
+    
+    if (isComplete) {
+      // Remove from completed
+      var idx = currentState.completedSteps.indexOf(stepId);
+      if (idx > -1) {
+        currentState.completedSteps.splice(idx, 1);
+      }
+    } else {
+      // Add to completed
+      window.DAWorkflow.markStepComplete(currentProjectId, stepId);
+      currentState = window.DAWorkflow.getWorkflowState(currentProjectId);
+    }
+    
+    renderStagesList();
+    renderCurrentStep();
+    updateProgress();
+  }
+  
+  /**
+   * Toggle checklist item
+   */
+  function toggleChecklistItem(stepId, itemIdx) {
+    if (!currentState.checklist) currentState.checklist = {};
+    if (!currentState.checklist[stepId]) currentState.checklist[stepId] = [];
+    
+    var idx = currentState.checklist[stepId].indexOf(itemIdx);
+    if (idx > -1) {
+      currentState.checklist[stepId].splice(idx, 1);
+    } else {
+      currentState.checklist[stepId].push(itemIdx);
+    }
+    
+    window.DAWorkflow.saveWorkflowState(currentProjectId, currentState);
+  }
+  
+  /**
+   * Save note for step
+   */
+  function saveNote(stepId, note) {
+    if (!currentState.notes) currentState.notes = {};
+    currentState.notes[stepId] = note;
+    window.DAWorkflow.saveWorkflowState(currentProjectId, currentState);
+  }
+  
+  /**
+   * Upload document (placeholder - implement file upload)
+   */
+  function uploadDocument(docName) {
+    showAppleAlert('Document Upload', 'This would open a file picker to upload ' + docName + '.');
+    // TODO: Implement actual file upload
+  }
+  
+  /**
+   * Add or edit contact
+   */
+  function addEditContact(role) {
+    var contact = getContactByRole(role) || {};
+    
+    showAppleContactForm('Edit ' + role, contact, function(data) {
+      if (!data) return;
+      
+      window.DAWorkflow.addContact(currentProjectId, role, data);
+      currentState = window.DAWorkflow.getWorkflowState(currentProjectId);
+      renderCurrentStep();
+    });
+  }
+  
+  /**
+   * Share project with contact
+   */
+  function shareWithContact(role) {
+    var link = window.DAWorkflow.generateShareLink(currentProjectId, role, ['view', 'comment']);
+    
+    showApplePrompt('Share with ' + role, link, function(value) {
+      // User can copy the link from the input field
+    });
+  }
+  
+  /**
+   * Show contacts modal
+   */
+  function showContacts() {
+    showAppleAlert('Contacts Manager', 'This would show all contacts for this project in a modal.');
+    // TODO: Implement contacts modal
+  }
+  
+  /**
+   * Show documents modal
+   */
+  function showDocuments() {
+    showAppleAlert('Documents Manager', 'This would show all documents for this project in a modal.');
+    // TODO: Implement documents modal
+  }
+  
+  /**
+   * Show help modal
+   */
+  function showHelp() {
+    showAppleAlert('Complete DA Workflow', 'This step-by-step guide walks you through the entire home building process in Australia - from planning to occupation. Features include 8 major phases, 50+ detailed steps, progress tracking, document management, and contact management. Your progress is automatically saved.');
+  }
+
+  // ============================================================================
+  // HELPER FUNCTIONS
+  // ============================================================================
+  
+  function findStage(stageId) {
+    return window.DAWorkflow.workflow.stages.find(function(s) { return s.id === stageId; });
+  }
+  
+  function findStep(stageId, stepId) {
+    var stage = findStage(stageId);
+    if (!stage) return null;
+    return stage.steps.find(function(s) { return s.id === stepId; });
+  }
+  
+  function calculateStageProgress(stageId) {
+    var stage = findStage(stageId);
+    if (!stage) return 0;
+    
+    var total = stage.steps.length;
+    var completed = 0;
+    
+    stage.steps.forEach(function(step) {
+      if (window.DAWorkflow.isStepComplete(currentProjectId, step.id)) {
+        completed++;
+      }
+    });
+    
+    return Math.round((completed / total) * 100);
+  }
+  
+  function isChecklistItemChecked(stepId, itemIdx) {
+    if (!currentState.checklist || !currentState.checklist[stepId]) return false;
+    return currentState.checklist[stepId].indexOf(itemIdx) > -1;
+  }
+  
+  function getNoteForStep(stepId) {
+    if (!currentState.notes) return '';
+    return currentState.notes[stepId] || '';
+  }
+  
+  function getDocumentState(docName) {
+    if (!currentState.documents) return null;
+    return currentState.documents[docName] || null;
+  }
+  
+  function getContactByRole(role) {
+    if (!currentState.contacts) return null;
+    return currentState.contacts[role] || null;
+  }
+  
+  function formatDate(timestamp) {
+    var d = new Date(timestamp);
+    return d.toLocaleDateString();
+  }
+  
+  // ============================================================================
+  // DARK MODE
+  // ============================================================================
+  
+  function toggleDarkMode() {
+    var overlay = document.getElementById('da-workflow-overlay');
+    if (!overlay) return;
+    
+    // Toggle between light and dark themes using data-theme attribute
+    var currentTheme = overlay.getAttribute('data-theme') || 'light';
+    var newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    overlay.setAttribute('data-theme', newTheme);
+    
+    var isDark = newTheme === 'dark';
+    
+    // Update icon and label
+    var iconSymbol = overlay.querySelector('.dark-mode-symbol');
+    var label = overlay.querySelector('.dark-mode-label');
+    if (iconSymbol) {
+      iconSymbol.setAttribute('xlink:href', '/css/sf-symbols.svg#' + (isDark ? 'sf-sun-max' : 'sf-moon'));
+    }
+    if (label) {
+      label.textContent = isDark ? 'Light View' : 'Dark View';
+    }
+    
+    // Save preference (sync with global per-section theme system)
+    try {
+      var current = JSON.parse(localStorage.getItem('gablokThemeSettings') || '{}');
+      current['da-workflow'] = newTheme;
+      localStorage.setItem('gablokThemeSettings', JSON.stringify(current));
+    } catch (e) {}
+
+    try {
+      if (typeof window.applyThemeToSection === 'function') {
+        window.applyThemeToSection('da-workflow', newTheme);
+      }
+    } catch (e) {}
+
+    // Back-compat for older preference key (can be removed later)
+    try { localStorage.setItem('da_theme', newTheme); } catch (_e2) {}
+  }
+  
+  function loadDarkModePreference() {
+    try {
+      var pref = 'light';
+      try {
+        var themeSettings = JSON.parse(localStorage.getItem('gablokThemeSettings') || '{}');
+        if (themeSettings['da-workflow'] === 'dark' || themeSettings['da-workflow'] === 'light') {
+          pref = themeSettings['da-workflow'];
+        } else {
+          pref = localStorage.getItem('da_theme') || 'light';
+        }
+      } catch (_e) {
+        pref = localStorage.getItem('da_theme') || 'light';
+      }
+      var overlay = document.getElementById('da-workflow-overlay');
+      if (overlay) {
+        overlay.setAttribute('data-theme', pref);
+        var isDark = pref === 'dark';
+        var iconSymbol = overlay.querySelector('.dark-mode-symbol');
+        var label = overlay.querySelector('.dark-mode-label');
+        if (iconSymbol) iconSymbol.setAttribute('xlink:href', '/css/sf-symbols.svg#' + (isDark ? 'sf-sun-max' : 'sf-moon'));
+        if (label) label.textContent = isDark ? 'Light View' : 'Dark View';
+      }
+    } catch (e) {}
+  }
+
+  // ============================================================================
+  // EXPORTS
+  // ============================================================================
+  
+  window.DAWorkflowUI = {
+    open: function(projectId) {
+      // If no projectId provided, show selector first
+      if (!projectId) {
+        showProjectSelector();
+      } else {
+        openDAWorkflow(projectId);
+      }
+    },
+    openWithProject: openWithProject,
+    createNewProject: createNewProject,
+    renameProject: renameProject,
+    deleteProject: deleteProject,
+    closeSelector: closeProjectSelector,
+    close: closeDAWorkflow,
+    nextStep: nextStep,
+    previousStep: previousStep,
+    goToStage: goToStage,
+    toggleStepComplete: toggleStepComplete,
+    toggleChecklistItem: toggleChecklistItem,
+    saveNote: saveNote,
+    uploadDocument: uploadDocument,
+    addEditContact: addEditContact,
+    shareWithContact: shareWithContact,
+    showContacts: showContacts,
+    showDocuments: showDocuments,
+    showHelp: showHelp,
+    toggleDarkMode: toggleDarkMode,
+    openProjectIn3D: openCurrentProjectIn3D,
+    saveCurrentDesignToProject: saveCurrentDesignToDAProject,
+    openVisualize: openVisualizeFromDA,
+    syncVisualizationsToProject: syncVisualizationsToDAProject
+  };
+  
+  console.log('[DA Workflow UI] Interface ready');
+  
+})();

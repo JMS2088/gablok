@@ -1,0 +1,2068 @@
+<!doctype html>
+<html lang="en" data-v="1766131761">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<title>3D Home Configurator with Pricing</title>
+<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+<script>window.__ASSET_VERSION='20251219-8';</script>
+<!-- Apple Design System -->
+<link rel="stylesheet" href="css/apple-design-system.css?v=1766132650">
+<link rel="stylesheet" href="css/da-workflow-apple.css?v=20251219-8">
+<link rel="stylesheet" href="css/apple-micro-animations.css?v=20251219-8">
+<link rel="stylesheet" href="css/apple-main-menu.css?v=20251205-4">
+<link rel="stylesheet" href="css/apple-modals.css?v=1766130352">
+<link rel="stylesheet" href="css/apple-plan2d.css?v=20251205-4">
+<link rel="stylesheet" href="css/apple-splash.css?v=20251205-4">
+<link rel="stylesheet" href="css/apple-typography-override.css?v=20251205-4">
+<link rel="stylesheet" href="css/styles.css?v=1766135775">
+<script>
+// Version verification - shows in console immediately
+console.log('%c🔄 GABLOK v1763716707 LOADED', 'color:#0f0;font-size:16px;font-weight:bold');
+console.log('%c📌 If you see an older version number, clear your browser cache!', 'color:#ff0;font-size:12px');
+console.log('%c   Windows/Linux: Ctrl+Shift+R | Mac: Cmd+Shift+R', 'color:#aaa;font-size:10px');
+</script>
+</head>
+<body>
+<!-- SF Symbols Sprite -->
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+	<defs>
+		<!-- Person Icons -->
+		<symbol id="sf-person" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
+			<path d="M6 20C6 16.6863 8.68629 14 12 14C15.3137 14 18 16.6863 18 20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<symbol id="sf-person-2" viewBox="0 0 24 24" fill="none">
+			<circle cx="9" cy="7" r="3" stroke="currentColor" stroke-width="2"/>
+			<circle cx="15" cy="10" r="3" stroke="currentColor" stroke-width="2"/>
+			<path d="M4 18C4 15.7909 5.79086 14 8 14H10C11.1046 14 12 14.8954 12 16M13 20C13 17.7909 14.7909 16 17 16H17C19.2091 16 21 17.7909 21 20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<!-- Folder -->
+		<symbol id="sf-folder" viewBox="0 0 24 24" fill="none">
+			<path d="M22 19C22 19.5304 21.7893 20.0391 21.4142 20.4142C21.0391 20.7893 20.5304 21 20 21H4C3.46957 21 2.96086 20.7893 2.58579 20.4142C2.21071 20.0391 2 19.5304 2 19V5C2 4.46957 2.21071 3.96086 2.58579 3.58579C2.96086 3.21071 3.46957 3 4 3H9L11 6H20C20.5304 6 21.0391 6.21071 21.4142 6.58579C21.7893 6.96086 22 7.46957 22 8V19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- Gear -->
+		<symbol id="sf-gear" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+			<path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<!-- Credit Card -->
+		<symbol id="sf-creditcard" viewBox="0 0 24 24" fill="none">
+			<rect x="2" y="5" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+			<path d="M2 10H22" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+		
+		<!-- Info Circle -->
+		<symbol id="sf-info-circle" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+			<path d="M12 16V12M12 8H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<!-- Share -->
+		<symbol id="sf-square-and-arrow-up" viewBox="0 0 24 24" fill="none">
+			<path d="M17 9L12 4L7 9M12 4V16M5 20H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- Shield -->
+		<symbol id="sf-shield" viewBox="0 0 24 24" fill="none">
+			<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- Arrow Clockwise -->
+		<symbol id="sf-arrow-clockwise" viewBox="0 0 24 24" fill="none">
+			<path d="M23 4V10H17M1 20V14H7M20.49 9C19.9828 7.56678 19.1209 6.28536 17.9845 5.27542C16.8482 4.26548 15.4745 3.55976 13.9917 3.22426C12.5089 2.88875 10.9652 2.93443 9.50481 3.35677C8.04437 3.77912 6.71475 4.56479 5.64 5.64L1 10M23 14L18.36 18.36C17.2853 19.4352 15.9556 20.2209 14.4952 20.6432C13.0348 21.0656 11.4911 21.1112 10.0083 20.7757C8.52547 20.4402 7.1518 19.7345 6.01547 18.7246C4.87913 17.7146 4.01717 16.4332 3.51 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- Exclamation Triangle -->
+		<symbol id="sf-exclamationmark-triangle" viewBox="0 0 24 24" fill="none">
+			<path d="M10.29 3.86L1.82 18C1.64537 18.3024 1.55274 18.6453 1.55177 18.9945C1.55079 19.3437 1.64151 19.6871 1.81445 19.9905C1.98738 20.2939 2.23675 20.5467 2.53773 20.7239C2.83871 20.901 3.18082 20.9962 3.53 21H20.47C20.8192 20.9962 21.1613 20.901 21.4623 20.7239C21.7633 20.5467 22.0126 20.2939 22.1856 19.9905C22.3585 19.6871 22.4492 19.3437 22.4482 18.9945C22.4473 18.6453 22.3546 18.3024 22.18 18L13.71 3.86C13.5317 3.56611 13.2807 3.32312 12.9812 3.15448C12.6817 2.98585 12.3437 2.89725 12 2.89725C11.6563 2.89725 11.3183 2.98585 11.0188 3.15448C10.7193 3.32312 10.4683 3.56611 10.29 3.86V3.86Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M12 9V13M12 17H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<!-- Checkmark Circle -->
+		<symbol id="sf-checkmark-circle" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+			<path d="M8 12L11 15L16 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- Chart Bar -->
+		<symbol id="sf-chart-bar" viewBox="0 0 24 24" fill="none">
+			<path d="M18 20V10M12 20V4M6 20V14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<!-- Arrow Down Doc -->
+		<symbol id="sf-arrow-down-doc" viewBox="0 0 24 24" fill="none">
+			<path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.9 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" stroke-width="2"/>
+			<path d="M14 2V8H20M12 11V17M9 14L12 17L15 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- X Mark -->
+		<symbol id="sf-xmark" viewBox="0 0 24 24" fill="none">
+			<path d="M6 6L18 18M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+		
+		<!-- Trash -->
+		<symbol id="sf-trash" viewBox="0 0 24 24" fill="none">
+			<path d="M3 6H5H21M8 6V4C8 3.46957 8.21071 2.96086 8.58579 2.58579C8.96086 2.21071 9.46957 2 10 2H14C14.5304 2 15.0391 2.21071 15.4142 2.58579C15.7893 2.96086 16 3.46957 16 4V6M19 6V20C19 20.5304 18.7893 21.0391 18.4142 21.4142C18.0391 21.7893 17.5304 22 17 22H7C6.46957 22 5.96086 21.7893 5.58579 21.4142C5.21071 21.0391 5 20.5304 5 20V6H19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+		
+		<!-- Hammer -->
+		<symbol id="sf-hammer" viewBox="0 0 24 24" fill="none">
+			<path d="M14.7 6.3L19.1 10.7C19.9 11.5 19.9 12.8 19.1 13.6L11.6 21.1C10.8 21.9 9.5 21.9 8.7 21.1L4.3 16.7C3.5 15.9 3.5 14.6 4.3 13.8L11.8 6.3C12.6 5.5 13.9 5.5 14.7 6.3Z" stroke="currentColor" stroke-width="2"/>
+			<path d="M14 7L6 3L3 6L7 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<!-- Additional toolbar + workflow icons -->
+		<symbol id="sf-arrow-counterclockwise" viewBox="0 0 24 24" fill="none">
+			<path d="M3 10H9V4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M21 14C20.263 16.4212 18.6236 18.473 16.3899 19.7311C14.1562 20.9892 11.504 21.3556 9.00906 20.7526C6.51408 20.1497 4.35875 18.6224 2.999 16.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M3 10L5.5 12.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-arrow-down-circle" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+			<path d="M8 11L12 15L16 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M12 7V15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-arrow-left" viewBox="0 0 24 24" fill="none">
+			<path d="M15 5L7 12L15 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M7 12H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-arrow-left-arrow-right" viewBox="0 0 24 24" fill="none">
+			<path d="M7 7L3 11L7 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M17 7L21 11L17 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M3 11H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-arrow-right" viewBox="0 0 24 24" fill="none">
+			<path d="M9 5L17 12L9 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M3 12H17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-arrow-turn-up-left" viewBox="0 0 24 24" fill="none">
+			<path d="M18 20V10H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M8 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M8 10L12 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-arrow-turn-up-right" viewBox="0 0 24 24" fill="none">
+			<path d="M6 20V10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M16 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M16 10L12 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-arrow-up" viewBox="0 0 24 24" fill="none">
+			<path d="M12 5L6 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M12 5L18 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M12 5V19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-arrow-up-arrow-down" viewBox="0 0 24 24" fill="none">
+			<path d="M12 4L8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M12 4L16 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M12 4V20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M12 20L8 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M12 20L16 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-arrow-up-circle" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+			<path d="M8 13L12 9L16 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M12 9V17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-arrow-up-left-and-arrow-down-right" viewBox="0 0 24 24" fill="none">
+			<path d="M8 16L4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M8 16H4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M8 16V12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M16 8L20 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M20 12V8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M16 8H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-arrow-up-right" viewBox="0 0 24 24" fill="none">
+			<path d="M7 17L17 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M9 7H17V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-building-2" viewBox="0 0 24 24" fill="none">
+			<rect x="4" y="3" width="8" height="18" rx="1" stroke="currentColor" stroke-width="2"/>
+			<rect x="14" y="8" width="6" height="13" rx="1" stroke="currentColor" stroke-width="2"/>
+			<line x1="7" y1="7" x2="9" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<line x1="7" y1="11" x2="9" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<line x1="7" y1="15" x2="9" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<line x1="16" y1="12" x2="18" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-camera" viewBox="0 0 24 24" fill="none">
+			<rect x="3" y="6" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+			<circle cx="12" cy="12.5" r="4" stroke="currentColor" stroke-width="2"/>
+			<path d="M8 6L10 4H14L16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-car" viewBox="0 0 24 24" fill="none">
+			<path d="M4 16H20L21 12L18 7H6L3 12L4 16Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+			<circle cx="7" cy="18" r="2" stroke="currentColor" stroke-width="2"/>
+			<circle cx="17" cy="18" r="2" stroke="currentColor" stroke-width="2"/>
+			<path d="M6 12H18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-checkmark" viewBox="0 0 24 24" fill="none">
+			<path d="M6 13L10 17L18 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-clock" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+			<path d="M12 7V12L16 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-cube" viewBox="0 0 24 24" fill="none">
+			<path d="M12 3L21 8V16L12 21L3 16V8L12 3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+			<path d="M12 3V12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M3 8L12 13L21 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-cursor-rays" viewBox="0 0 24 24" fill="none">
+			<path d="M5 4L11 17L13 12L18 20L20 18L12 13L17 11L5 4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+			<path d="M5 1V3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M1 5H3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M6 6L4.5 7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-doc" viewBox="0 0 24 24" fill="none">
+			<path d="M6 3H14L19 8V21H6V3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+			<path d="M14 3V8H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-dollarsign" viewBox="0 0 24 24" fill="none">
+			<path d="M12 4V20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M16 8C16 6.343 14.209 5 12 5C9.791 5 8 6.343 8 8C8 10 10 11 12 11C14 11 16 12 16 14C16 15.657 14.209 17 12 17C9.791 17 8 15.657 8 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-dollarsign-circle" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+			<path d="M12 7V17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M15 9C15 7.895 13.657 7 12 7C10.343 7 9 7.895 9 9C9 10.657 10.5 11 12 11C13.5 11 15 11.343 15 13C15 14.105 13.657 15 12 15C10.343 15 9 14.105 9 13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-door-left-hand-open" viewBox="0 0 24 24" fill="none">
+			<path d="M6 4H14V21H6V4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+			<path d="M14 4L19 6V21L14 19" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+			<circle cx="11" cy="12" r="1" fill="currentColor"/>
+		</symbol>
+
+		<symbol id="sf-drop" viewBox="0 0 24 24" fill="none">
+			<path d="M12 3C12 3 6 10 6 14C6 17.314 8.686 20 12 20C15.314 20 18 17.314 18 14C18 10 12 3 12 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-eraser" viewBox="0 0 24 24" fill="none">
+			<path d="M9 4L3 10L11 18H21V16H12L6 10L11 5L17 11" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-eye" viewBox="0 0 24 24" fill="none">
+			<path d="M2 12C4 8 7.5 5 12 5C16.5 5 20 8 22 12C20 16 16.5 19 12 19C7.5 19 4 16 2 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+
+		<symbol id="sf-house" viewBox="0 0 24 24" fill="none">
+			<path d="M3 11L12 3L21 11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M5 10V20H19V10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M10 20V14H14V20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-list-bullet" viewBox="0 0 24 24" fill="none">
+			<path d="M7 6H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M7 12H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M7 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<circle cx="4" cy="6" r="1" fill="currentColor"/>
+			<circle cx="4" cy="12" r="1" fill="currentColor"/>
+			<circle cx="4" cy="18" r="1" fill="currentColor"/>
+		</symbol>
+
+		<symbol id="sf-location" viewBox="0 0 24 24" fill="none">
+			<path d="M12 22C12 22 5 15.418 5 10C5 6.134 8.134 3 12 3C15.866 3 19 6.134 19 10C19 15.418 12 22 12 22Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+
+		<symbol id="sf-macwindow" viewBox="0 0 24 24" fill="none">
+			<rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+			<line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="2"/>
+			<circle cx="7" cy="7" r="1" fill="currentColor"/>
+			<circle cx="11" cy="7" r="1" fill="currentColor"/>
+			<circle cx="15" cy="7" r="1" fill="currentColor"/>
+		</symbol>
+
+		<symbol id="sf-paintbrush" viewBox="0 0 24 24" fill="none">
+			<path d="M14 3L21 10L16 15L9 8L14 3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+			<path d="M8 9C8 9 7 12 4 13C4 16 6 20 10 20C11.657 20 13 18.657 13 17C13 13 8 9 8 9Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-photo" viewBox="0 0 24 24" fill="none">
+			<rect x="3" y="6" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+			<circle cx="9" cy="11" r="2" stroke="currentColor" stroke-width="2"/>
+			<path d="M7 17L11 13L14 16L17 13L21 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-plus" viewBox="0 0 24 24" fill="none">
+			<path d="M12 5V19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-plus-square" viewBox="0 0 24 24" fill="none">
+			<rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
+			<path d="M12 8V16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M8 12H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-rectangle" viewBox="0 0 24 24" fill="none">
+			<rect x="4" y="7" width="16" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+
+		<symbol id="sf-ruler" viewBox="0 0 24 24" fill="none">
+			<rect x="4" y="6" width="16" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+			<path d="M8 6V10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M12 6V10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M16 6V10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M8 14V18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M12 14V18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M16 14V18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-square" viewBox="0 0 24 24" fill="none">
+			<rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+
+		<symbol id="sf-square-grid-2x2" viewBox="0 0 24 24" fill="none">
+			<rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
+			<line x1="12" y1="4" x2="12" y2="20" stroke="currentColor" stroke-width="2"/>
+			<line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+
+		<symbol id="sf-square-grid-3x3" viewBox="0 0 24 24" fill="none">
+			<rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="2"/>
+			<line x1="9.333" y1="4" x2="9.333" y2="20" stroke="currentColor" stroke-width="2"/>
+			<line x1="14.667" y1="4" x2="14.667" y2="20" stroke="currentColor" stroke-width="2"/>
+			<line x1="4" y1="9.333" x2="20" y2="9.333" stroke="currentColor" stroke-width="2"/>
+			<line x1="4" y1="14.667" x2="20" y2="14.667" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+
+		<symbol id="sf-square-on-square-dashed" viewBox="0 0 24 24" fill="none">
+			<rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/>
+			<rect x="4" y="4" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/>
+		</symbol>
+
+		<symbol id="sf-textformat" viewBox="0 0 24 24" fill="none">
+			<path d="M5 7H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M9 7V19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M15 7V15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M12 7L6 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-triangle" viewBox="0 0 24 24" fill="none">
+			<path d="M12 4L21 19H3L12 4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-wand-and-stars" viewBox="0 0 24 24" fill="none">
+			<path d="M4 20L16 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M6 4L6.5 6L8.5 6.5L6.5 7L6 9L5.5 7L3.5 6.5L5.5 6L6 4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+			<path d="M18 4L18.5 5.5L20 6L18.5 6.5L18 8L17.5 6.5L16 6L17.5 5.5L18 4Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-wrench-and-screwdriver" viewBox="0 0 24 24" fill="none">
+			<path d="M9 3L11 5L9.5 7.5L12.5 10.5L10.5 12.5L7.5 9.5L5 11L3 9C5 7 7 5 9 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M14 6L21 13V19L19 21L13 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<path d="M16 8L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-speedometer" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+			<path d="M12 12L16 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M8 14H9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M12 16V17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<path d="M15 14H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-photo" viewBox="0 0 24 24" fill="none">
+			<rect x="3" y="6" width="18" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+			<circle cx="9" cy="11" r="2" stroke="currentColor" stroke-width="2"/>
+			<path d="M7 17L11 13L14 16L17 13L21 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		</symbol>
+
+		<symbol id="sf-person-circle" viewBox="0 0 24 24" fill="none">
+			<circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+			<circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2"/>
+			<path d="M6.5 18.5C7.5 16.5 9.5 15 12 15C14.5 15 16.5 16.5 17.5 18.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+
+		<symbol id="sf-doc-text" viewBox="0 0 24 24" fill="none">
+			<path d="M6 3H14L19 8V21H6V3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+			<path d="M14 3V8H19" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+			<line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<line x1="9" y1="15" x2="15" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+			<line x1="9" y1="18" x2="12" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+		</symbol>
+	</defs>
+</svg>
+
+<div id="controls" role="navigation" aria-label="Main toolbar">
+	<div class="controls-add-room-wrap">
+		<button onclick="addNewRoom()"><svg class="sf-icon" width="16" height="16"><use href="#sf-plus-square"/></svg> Add Room</button>
+		<div id="active-project-meta-3d" class="active-project-meta active-project-meta--toolbar is-hidden" aria-live="polite"></div>
+	</div>
+	<button id="btn-floorplan" class="secondary" title="Open 2D floor plan editor"><svg class="sf-icon" width="16" height="16"><use href="#sf-square-grid-2x2"/></svg> 2D View</button>
+	<button id="btn-save-project" class="secondary save-project" title="Save current design to a project" onclick="saveProjectFrom3D()"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-doc"/></svg> Save Project</button>
+	<button id="btn-render-walls" class="secondary" title="Toggle wall render mode"><svg class="sf-icon" width="16" height="16"><use href="#sf-paintbrush"/></svg> <span class="render-label">Render: Lines</span></button>
+	<button id="btn-clean-view" class="secondary" title="Toggle clean view (hide UI)" onclick="toggleCleanView()"><svg class="sf-icon" width="16" height="16"><use href="#sf-eye"/></svg> Clean View</button>
+	<!-- Debug Dropdown: quick toggles for corner handles and debug logs -->
+	<div id="debugDropdown" class="dropdown" aria-label="Debug Menu">
+		<button id="debugButton" class="dropdown-button" type="button">
+			<span><svg class="sf-icon" width="16" height="16"><use href="#sf-gear"/></svg> Debug</span>
+			<span class="caret">
+				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+		</button>
+		<div id="debugList" class="dropdown-list" role="menu">
+			<div class="dropdown-item">
+				<label class="checkbox-label">
+					<input type="checkbox" id="chk-corner-handles" />
+					<span>Corner Handles</span>
+				</label>
+			</div>
+			<div class="dropdown-item">
+				<label class="checkbox-label">
+					<input type="checkbox" id="chk-corner-debug" />
+					<span>Corner Debug Logs</span>
+				</label>
+			</div>
+		</div>
+	</div>
+
+	<!-- Custom Level Dropdown (replaces native select) -->
+	<div id="levelDropdown" class="dropdown" aria-label="Level Menu">
+		<button id="levelButton" class="dropdown-button" type="button">
+			<span id="levelButtonText"><svg class="sf-icon" width="16" height="16"><use href="#sf-building-2"/></svg> Ground Floor</span>
+			<span class="caret">
+				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+		</button>
+		<div id="levelList" class="dropdown-list" role="menu">
+			<div class="dropdown-item" data-value="0"><svg class="sf-icon" width="16" height="16"><use href="#sf-house"/></svg> Ground Floor</div>
+			<div class="dropdown-item" data-value="1"><svg class="sf-icon" width="16" height="16"><use href="#sf-building-2"/></svg> First Floor</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-item" data-value="stairs"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-right"/></svg> Stairs</div>
+			<div class="dropdown-item" data-value="pergola"><svg class="sf-icon" width="16" height="16"><use href="#sf-square-grid-3x3"/></svg> Pergola</div>
+			<div class="dropdown-item" data-value="garage"><svg class="sf-icon" width="16" height="16"><use href="#sf-car"/></svg> Garage</div>
+			<div class="dropdown-item" data-value="roof"><svg class="sf-icon" width="16" height="16"><use href="#sf-triangle"/></svg> Roof</div>
+			<div class="dropdown-item" data-value="pool"><svg class="sf-icon" width="16" height="16"><use href="#sf-drop"/></svg> Pool</div>
+			<div class="dropdown-item" data-value="balcony"><svg class="sf-icon" width="16" height="16"><use href="#sf-rectangle"/></svg> Balcony</div>
+		</div>
+	</div>
+
+	<!-- Hidden native select kept for fallback and API compatibility -->
+	<select id="levelSelect" onchange="switchLevel()">
+		<option value="0">Ground Floor</option>
+		<option value="1">First Floor</option>
+		<option value="stairs">+ Stairs</option>
+		<option value="pergola">+ Pergola</option>
+		<option value="garage">+ Garage</option>
+		<option value="roof">+ Roof</option>
+		<option value="pool">+ Pool</option>
+		<option value="balcony">+ Balcony</option>
+	</select>
+
+	<!-- Reset and Price moved into Main Menu -->
+	<div id="actionsDropdown" class="dropdown" aria-label="Main Menu">
+		<button id="actionsButton" class="dropdown-button" type="button">
+			<span><svg class="sf-icon" width="16" height="16"><use href="#sf-list-bullet"/></svg> Main Menu</span>
+			<span class="caret">
+				<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="#333" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+			</span>
+		</button>
+		<div id="actionsList" class="dropdown-list" role="menu">
+			<div class="dropdown-item" data-action="reset"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-counterclockwise"/></svg> Reset</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-title">Project</div>
+			<div class="dropdown-item" data-action="start-new-project"><svg class="sf-icon" width="16" height="16"><use href="#sf-plus"/></svg> Start New Project</div>
+			<div class="dropdown-item" data-action="open-project"><svg class="sf-icon" width="16" height="16"><use href="#sf-folder"/></svg> Projects</div>
+			<div class="dropdown-item" data-action="price"><svg class="sf-icon" width="16" height="16"><use href="#sf-dollarsign-circle"/></svg> Price</div>
+			<div class="dropdown-item" data-action="visualize-photoreal"><svg class="sf-icon" width="16" height="16"><use href="#sf-camera"/></svg> Visualize</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-title">Export</div>
+			<div class="dropdown-item" data-action="obj"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> 3D - OBJ</div>
+			<div class="dropdown-item" data-action="pdf"><svg class="sf-icon" width="16" height="16"><use href="#sf-doc"/></svg> PDF (Export Views)</div>
+			<div class="dropdown-item" data-action="json-download"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> JSON</div>
+			<div class="dropdown-item" data-action="dxf-export"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> Floorplan (DXF)</div>
+			<div class="dropdown-item" data-action="dwg-export"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> Floorplan (DWG)</div>
+			<div class="dropdown-item separator" aria-hidden="true"></div>
+			<div class="dropdown-title">Import</div>
+			<div class="dropdown-item" data-action="obj-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> 3D - OBJ</div>
+			<div class="dropdown-item" data-action="pdf-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (PDF)</div>
+			<div class="dropdown-item" data-action="svg-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (SVG)</div>
+			<div class="dropdown-item" data-action="dxf-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (DXF)</div>
+			<div class="dropdown-item" data-action="dwg-floorplan-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Floorplan (DWG)</div>
+			<div class="dropdown-item" data-action="json-upload"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> JSON</div>
+		</div>
+	</div>
+
+	<!-- Navigation Compass: sits next to Main Menu dropdown -->
+	<div id="nav-compass" aria-label="North" title="North">
+		<canvas id="nav-compass-canvas" width="44" height="44"></canvas>
+	</div>
+</div>
+<canvas id="canvas"></canvas>
+<div id="labels-3d"></div>
+<div id="status">Ready</div>
+
+
+<div id="measurements">
+	<div class="measurements-header">
+		<h3><svg class="sf-icon" width="16" height="16"><use href="#sf-ruler"/></svg> Object Measurements</h3>
+		<div class="measurements-header-buttons">
+			<button id="account-button" class="measurements-icon-btn" title="Account" aria-label="Account">
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+					<circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+					<path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+				</svg>
+			</button>
+			<button id="measurements-minimize" class="measurements-icon-btn" title="Minimize" aria-label="Minimize panel">
+				<svg class="sf-icon" width="18" height="18"><use href="#sf-chevron-down"/></svg>
+			</button>
+		</div>
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label"><svg class="sf-icon" width="13" height="13"><use href="#sf-textformat"/></svg> Name:</span>
+		<input class="measurement-input" id="input-name" type="text" maxlength="60" />
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label"><svg class="sf-icon" width="13" height="13"><use href="#sf-arrow-left-arrow-right"/></svg> Width (X):</span>
+		<input class="measurement-input" id="input-width" type="number" step="0.1" min="1" max="40" />
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label"><svg class="sf-icon" width="13" height="13"><use href="#sf-arrow-up-arrow-down"/></svg> Depth (Z):</span>
+		<input class="measurement-input" id="input-depth" type="number" step="0.1" min="1" max="40" />
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label"><svg class="sf-icon" width="13" height="13"><use href="#sf-arrow-up"/></svg> Height (Y):</span>
+		<input class="measurement-input" id="input-height" type="number" step="0.1" min="0.5" max="10" />
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label"><svg class="sf-icon" width="13" height="13"><use href="#sf-location"/></svg> Position X:</span>
+		<input class="measurement-input" id="input-pos-x" type="number" step="0.1" min="-100" max="100" />
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label"><svg class="sf-icon" width="13" height="13"><use href="#sf-location"/></svg> Position Z:</span>
+		<input class="measurement-input" id="input-pos-z" type="number" step="0.1" min="-100" max="100" />
+	</div>
+	<div class="measurement-item">
+		<span class="measurement-label"><svg class="sf-icon" width="13" height="13"><use href="#sf-building-2"/></svg> Floor:</span>
+		<span class="measurement-value" id="measure-floor">--</span>
+	</div>
+	<button id="save-measurements"><svg class="sf-icon" width="16" height="16"><use href="#sf-checkmark"/></svg> Save</button>
+</div>
+
+<!-- Room palette modal for adding furniture -->
+<div id="room-palette-modal">
+	<div id="room-palette-content">
+		<button class="close-button" onclick="hideRoomPalette()"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+		<div id="room-palette-left">
+			<h3 id="room-palette-title">Room</h3>
+			<canvas id="room-preview-canvas" width="360" height="260"></canvas>
+		</div>
+		<div id="room-palette-right">
+			<h3>Furniture List</h3>
+			<div class="room-palette-actions">
+				<button class="secondary" id="palette-clear" title="Clear preview items"><svg class="sf-icon" width="16" height="16"><use href="#sf-trash"/></svg> Clear</button>
+				<button id="palette-commit" title="Add preview items to room"><svg class="sf-icon" width="16" height="16"><use href="#sf-plus"/></svg> Add to Room</button>
+			</div>
+			<div id="palette-list"></div>
+		</div>
+	</div>
+	<div id="room-palette-backdrop" onclick="hideRoomPalette()"></div>
+	</div>
+
+
+<div id="info-modal">
+	<div id="info-backdrop" onclick="hideInfo()"></div>
+	<div id="info-content">
+		<div id="info-header">
+			<strong>Information & Help</strong>
+			<button class="secondary" onclick="hideInfo()" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+		</div>
+		<div id="info-body">
+			<section>
+				<h3 class="info-section-title">Camera</h3>
+				<div class="shortcut-grid">
+					<div class="left"><span class="kbd">Drag</span></div><div class="right">Rotate view</div>
+					<div class="left"><span class="kbd">Shift</span> + <span class="kbd">Drag</span></div><div class="right">Pan view</div>
+					<div class="left"><span class="kbd">Wheel</span></div><div class="right">Zoom in/out</div>
+				</div>
+			</section>
+			<section>
+				<h3 class="info-section-title">Main Toolbar (top)</h3>
+				<ul class="info-list">
+					<li><strong>+ Add Room</strong>: Create a new rectangular room. Drag its edges or use handles to resize.</li>
+		                    <li><strong>Render</strong>: Toggle free-standing walls between simple lines (draft) and solid 300mm walls.</li>
+					<li><strong>Level Menu</strong>: Switch between Ground/First floors and add components:
+						<ul class="info-sublist">
+							<li><strong>+ Stairs</strong>: Add a staircase component.</li>
+							<li><strong>+ Pergola</strong>: Add an outdoor pergola structure.</li>
+							<li><strong>+ Garage</strong>: Add a garage volume.</li>
+							<li><strong>+ Roof</strong>: Add a roof. Change style via the Roof Type dropdown; rotate with the 360° button.</li>
+							<li><strong>+ Pool</strong>: Add a pool cutout.</li>
+							<li><strong>+ Balcony</strong>: Add a balcony platform.</li>
+						</ul>
+					</li>
+					<li><strong>Main Menu 7 Reset</strong>: Clear the project (confirmation required).</li>
+					<li><strong>Main Menu 7 Price</strong>: Open pricing panel.</li>
+					<li><strong>Main Menu &rsaquo; Reset</strong>: Clear the project (confirmation required).</li>
+					<li><strong>Main Menu &rsaquo; Price</strong>: Open pricing panel.</li>
+						<ul class="info-sublist">
+							<li><strong>Information</strong>: Open this help.</li>
+							<li><strong>Project</strong>: Price.</li>
+							<li><strong>Share</strong>: Get a shareable URL.</li>
+							<li><strong>Export</strong>: OBJ (3D), PDF (views), JSON (project), DXF/DWG (floorplan).</li>
+							<li><strong>Import</strong>: OBJ, PDF/SVG/DXF/DWG floorplans, JSON.</li>
+						</ul>
+					</li>
+				</ul>
+			</section>
+			<section>
+				<h3 class="info-section-title">3D Editing</h3>
+				<ul class="info-list">
+					<li><strong>Labels</strong>: Name labels are always visible. Selected items reveal Edit and 360° buttons.</li>
+					<li><strong>Edit</strong>: Opens the Room Palette to add furniture to the selected room.</li>
+					<li><strong>360°</strong>: Rotates the selected item by 45° per click (roof, stairs, garage, furniture where applicable).</li>
+					<li><strong>Handles</strong>: Colored X/Z handles resize width/depth; Y handle adjusts height (when available).</li>
+					<li><strong>Object Measurements</strong>: Right panel for precise sizing and naming; click Save to apply.</li>
+				</ul>
+			</section>
+			<section>
+				<h3 class="info-section-title">2D Floor Plan Editor</h3>
+				<ul class="info-list">
+					<li><strong>Select</strong> (default): Click to select doors/windows/walls. <strong>Shift+Click</strong> adds/removes walls to a multi-selection. Delete removes selection. Arrow keys nudge. Hold Space to pan.</li>
+					<li><strong>Wall</strong>: Draw axis-aligned walls. Shift-click to chain segments. Double-click or press Enter to finish. Close loops to form rooms.</li>
+					<li><strong>Window</strong>: Click a wall to place; drag endpoints to size. Use the Window Type dropdown for Standard/Full height.</li>
+					<li><strong>Door</strong>: Click a wall to place; drag endpoints to size. Use the Door Swing dropdown to set In/Out.</li>
+					<li><strong>Erase</strong>: Click to remove elements under the cursor.</li>
+					<li><strong>Fit</strong>: Fit view to current content.</li>
+					<li><strong>Flip Y</strong>: Mirror vertical axis to match 3D orientation.</li>
+					<li><strong>Clear</strong>: Remove all elements in the 2D plan (confirmation required).</li>
+					<li><strong>Apply to 3D</strong>: Apply changes and automatically return to 3D view.</li>
+					<li><strong>Floor Toggle</strong>: Switch between Ground/First floors while editing.</li>
+				</ul>
+			</section>
+			<section>
+				<h3 class="info-section-title">Room Palette (Furniture)</h3>
+				<ul class="info-list">
+					<li><strong>Preview</strong>: Drag to orbit the preview; drag items within room bounds.</li>
+					<li><strong>Add to Room</strong>: Commit preview items to the selected room.</li>
+					<li><strong>Clear</strong>: Remove all preview items (keeps existing room furniture).</li>
+					<li><strong>Visuals</strong>: Beds show pillows and a sheet; kitchen shows sinks/hob. Dimensions shown in item details.</li>
+				</ul>
+			</section>
+			<section>
+				<h3 class="info-section-title">Keyboard Shortcuts</h3>
+				<div class="shortcut-grid">
+					<div class="left"><span class="kbd">Esc</span></div><div class="right">Clear selection</div>
+					<div class="left"><span class="kbd">Del</span>/<span class="kbd">⌫</span></div><div class="right">Delete selected (3D room / 2D element)</div>
+					<div class="left"><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span></div><div class="right">Nudge 3D object (when selected). <span class="kbd">Shift</span>=×10</div>
+					<div class="left"><span class="kbd">←</span><span class="kbd">→</span><span class="kbd">↑</span><span class="kbd">↓</span> (2D)</div><div class="right">Nudge selected wall(s) (grid step). <span class="kbd">Shift</span>=×10</div>
+					<div class="left"><span class="kbd">R</span></div><div class="right">Toggle wall render mode (Lines⇄Solid)</div>
+					<div class="left"><span class="kbd">L</span></div><div class="right">Hide / show labels & corner numbers</div>
+					<div class="left"><span class="kbd">V</span></div><div class="right">Toggle clean view (UI-free preview)</div>
+					<div class="left"><span class="kbd">Ctrl</span> + <span class="kbd">Z</span></div><div class="right">Undo</div>
+					<div class="left"><span class="kbd">Ctrl</span> + <span class="kbd">Y</span> / <span class="kbd">Ctrl</span> + <span class="kbd">Shift</span> + <span class="kbd">Z</span></div><div class="right">Redo</div>
+					<div class="left"><span class="kbd">Space</span> (2D)</div><div class="right">Hold to temporarily pan canvas</div>
+					<div class="left"><span class="kbd">Enter</span> (2D)</div><div class="right">Finish wall chain</div>
+					<div class="left"><span class="kbd">Shift</span> + Click (2D)</div><div class="right">Add/remove wall to multi-selection (Select tool) / Add wall segment to chain (Wall tool)</div>
+					<div class="left">Drag on selected wall (2D)</div><div class="right">Move all selected walls together (group move)</div>
+					<div class="left"><span class="kbd">F</span> (2D)</div><div class="right">Toggle selected window Full Height (floor-to-ceiling)</div>
+					<div class="left"><span class="kbd">P</span> (2D)</div><div class="right">Toggle performance HUD (<span class="kbd">Shift</span>+<span class="kbd">P</span> for extended)</div>
+					<div class="left"><span class="kbd">G</span> (2D)</div><div class="right">Toggle 2D WebGL preview</div>
+					<div class="left"><span class="kbd">Shift</span> + Drag wall end (2D)</div><div class="right">Snap the dragged wall to 45° increments</div>
+					<div class="left"><span class="kbd">Shift</span> + Drag group (2D)</div><div class="right">Constrain group move to horizontal or vertical</div>
+				</div>
+			</section>
+		</div>
+	</div>
+</div>
+
+<!-- Apple Doc Reader (renders Markdown as a styled page; avoids raw .md navigation) -->
+<div id="doc-modal" role="dialog" aria-modal="true" aria-label="Document">
+	<div id="doc-backdrop" onclick="hideDoc()"></div>
+	<div id="doc-content">
+		<div id="doc-header">
+			<div class="doc-header-left">
+				<svg class="sf-icon" width="18" height="18" aria-hidden="true"><use href="#sf-doc-text"/></svg>
+				<strong id="doc-title">Document</strong>
+			</div>
+			<div class="doc-header-right">
+				<button class="secondary" onclick="hideDoc()" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+			</div>
+		</div>
+		<div id="doc-body" tabindex="0"></div>
+	</div>
+</div>
+
+<!-- Global build footer -->
+<div id="build-footer">© Copyright Brandlab 2025 - v20251129-26</div>
+
+<!-- Share URL Modal -->
+
+<div id="share-modal">
+	<div id="share-backdrop" onclick="hideShare()"></div>
+	<div id="share-content">
+		<div id="share-header">
+			<strong>Share Link</strong>
+			<button class="secondary" onclick="hideShare()" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+		</div>
+		<div id="share-body">
+			<div id="share-note">Open your share link in a new tab. In Codespaces, this will be the forwarded URL.</div>
+			<div id="share-row">
+				<a id="share-open" class="secondary" target="_blank" rel="noopener">Open</a>
+			</div>
+			<div id="share-hint"></div>
+		</div>
+	</div>
+  
+</div>
+
+<!-- Admin Modal -->
+<div id="admin-modal">
+	<div id="admin-backdrop" onclick="hideAdmin()"></div>
+	<div id="admin-content">
+		<div id="admin-header">
+			<strong>Admin: Users & Error Logs</strong>
+			<button class="secondary" onclick="hideAdmin()" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+		</div>
+		<div id="admin-body">
+			<section class="admin-section">
+				<h3>Users</h3>
+				<ul id="admin-users" class="admin-list"></ul>
+			</section>
+			<section class="admin-section">
+				<h3>Errors</h3>
+				<ul id="admin-errors" class="admin-list"></ul>
+			</section>
+		</div>
+	</div>
+  
+</div>
+
+<!-- Visualize Modal -->
+<div id="visualize-modal" role="dialog" aria-modal="true">
+	<div id="visualize-backdrop"></div>
+	<div id="visualize-content">
+		<div class="visualize-body">
+			<div id="visualize-stage">
+				<div id="visualize-canvas-wrap">
+					<canvas id="visualize-render-canvas"></canvas>
+					<canvas id="visualize-annotations"></canvas>
+				</div>
+				<div id="visualize-loading">
+					<span>Rendering your design...</span>
+				</div>
+				<div id="visualize-photo-viewer">
+					<div class="visualize-photo-frame">
+						<button id="visualize-photo-close" class="secondary" type="button" title="Close photo"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+						<img id="visualize-photo-image" alt="Visualize design preview" />
+						<p id="visualize-photo-caption"></p>
+					</div>
+				</div>
+			</div>
+				<div id="visualize-controls">
+					<button id="visualize-close" class="secondary" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+					<p id="visualize-capture-status" class="visualize-hint" aria-live="polite"></p>
+					<div class="visualize-buttons mt-20">
+						<button id="visualize-generate" type="button"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-clockwise"/></svg> Re-Render</button>
+						<button id="visualize-download" class="secondary" type="button"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> Download PNG</button>
+					</div>
+					<p id="visualize-footnote" class="visualize-footnote"></p>
+					<div id="visualize-gallery" class="visualize-gallery-grid"></div>
+
+					<!-- AI Enhancement Panel (prompt controls + configuration) -->
+					<div id="visualize-ai-panel" class="visualize-ai-panel">
+						<div id="visualize-ai-setup" class="visualize-ai-setup">
+							<p>Configure your AI provider to enable enhancements.</p>
+							<button id="visualize-ai-configure" class="secondary" type="button">Configure AI Settings</button>
+						</div>
+
+						<div class="visualize-ai-header">
+							<span class="visualize-ai-title"><svg class="sf-icon" width="18" height="18"><use href="#sf-wand-and-stars"/></svg> AI Enhancement</span>
+							<span id="visualize-ai-provider" class="visualize-ai-badge"></span>
+						</div>
+
+						<div class="visualize-ai-section">
+							<label for="visualize-ai-style">Style Preset</label>
+							<select id="visualize-ai-style">
+								<option value="">-- Select Style --</option>
+								<option value="photorealistic">Photorealistic</option>
+								<option value="architectural">Architectural Visualization</option>
+								<option value="modern-luxury">Modern Luxury</option>
+								<option value="scandinavian">Scandinavian Minimal</option>
+								<option value="industrial">Industrial Loft</option>
+								<option value="tropical">Tropical Resort</option>
+								<option value="evening">Evening Ambiance</option>
+								<option value="magazine">Magazine Cover</option>
+							</select>
+						</div>
+
+						<div class="visualize-ai-section">
+							<label for="visualize-ai-prompt">Custom Prompt</label>
+							<textarea id="visualize-ai-prompt" rows="3" placeholder="Describe the look you want... e.g., 'warm sunset lighting, lush garden, modern furniture'"></textarea>
+						</div>
+
+						<div class="visualize-ai-section">
+							<label for="visualize-ai-quality">Quality</label>
+							<select id="visualize-ai-quality">
+								<option value="draft">Draft (Fast)</option>
+								<option value="standard" selected>Standard</option>
+								<option value="high">High</option>
+								<option value="ultra">Ultra</option>
+							</select>
+						</div>
+
+						<div class="visualize-ai-section">
+							<label>Enhancements</label>
+							<div class="visualize-ai-options">
+								<label class="visualize-ai-checkbox"><input id="visualize-ai-landscaping" type="checkbox" /> Landscaping</label>
+								<label class="visualize-ai-checkbox"><input id="visualize-ai-furniture" type="checkbox" /> Furniture</label>
+								<label class="visualize-ai-checkbox"><input id="visualize-ai-people" type="checkbox" /> People</label>
+								<label class="visualize-ai-checkbox"><input id="visualize-ai-vehicles" type="checkbox" /> Vehicles</label>
+								<label class="visualize-ai-checkbox"><input id="visualize-ai-weather" type="checkbox" /> Weather</label>
+								<label class="visualize-ai-checkbox"><input id="visualize-ai-hdr" type="checkbox" /> HDR Lighting</label>
+							</div>
+						</div>
+
+						<div class="visualize-ai-actions">
+							<button id="visualize-ai-enhance" type="button">Enhance With AI</button>
+							<button id="visualize-ai-variations" class="secondary" type="button">Generate Variations</button>
+						</div>
+
+						<div id="visualize-ai-status" class="visualize-ai-status" aria-live="polite"></div>
+
+						<div id="visualize-ai-results" class="visualize-ai-results is-hidden">
+							<label>Results</label>
+							<div id="visualize-ai-gallery" class="visualize-ai-gallery"></div>
+							<div class="visualize-ai-save-row">
+								<button id="visualize-ai-save" type="button">Save to Project</button>
+								<span id="visualize-ai-save-status" class="save-status"></span>
+							</div>
+						</div>
+					</div><!-- /visualize-ai-panel -->
+				</div><!-- /visualize-controls -->
+			</div><!-- /visualize-body -->
+		</div><!-- /visualize-content -->
+	</div><!-- /visualize-modal -->
+
+
+<!-- Project Selection Popup for saving AI images -->
+<div id="project-select-popup" class="project-select-popup is-hidden">
+	<div class="project-select-content">
+		<button id="project-select-close" class="project-select-close" type="button"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+		<div class="project-select-icon"><svg class="sf-icon" width="40" height="40"><use href="#sf-folder"/></svg></div>
+		<h3>Save to Project</h3>
+		<p>Select a project to save your AI-generated images:</p>
+		
+		<div id="project-select-list" class="project-select-list">
+			<!-- Projects will be populated dynamically -->
+		</div>
+		
+		<div class="project-select-new">
+			<input id="project-new-name" type="text" placeholder="New project name..." />
+			<button id="project-create-btn" type="button">+ Create</button>
+		</div>
+		
+		<div id="project-select-status" class="project-select-status"></div>
+	</div>
+</div>
+
+<!-- Apple Input Modal -->
+<div id="apple-input-modal" class="apple-modal" style="display: none;">
+	<div class="apple-modal-backdrop"></div>
+	<div class="apple-modal-container">
+		<div class="apple-modal-header">
+			<h3 id="apple-input-title">Enter Value</h3>
+		</div>
+		<div class="apple-modal-body">
+			<input type="text" id="apple-input-field" class="apple-input" placeholder="Enter text..." />
+		</div>
+		<div class="apple-modal-actions">
+			<button id="apple-input-cancel" class="secondary">Cancel</button>
+			<button id="apple-input-confirm" class="primary">Confirm</button>
+		</div>
+	</div>
+</div>
+
+<!-- Apple Confirm Modal -->
+<div id="apple-confirm-modal" class="apple-modal" style="display: none;">
+	<div class="apple-modal-backdrop"></div>
+	<div class="apple-modal-container">
+		<div class="apple-modal-header">
+			<h3 id="apple-confirm-title">Confirm Action</h3>
+		</div>
+		<div class="apple-modal-body">
+			<p id="apple-confirm-message">Are you sure?</p>
+		</div>
+		<div class="apple-modal-actions">
+			<button id="apple-confirm-cancel" class="secondary">Cancel</button>
+			<button id="apple-confirm-ok" class="danger">Confirm</button>
+		</div>
+	</div>
+</div>
+
+<!-- Apple Contact Form Modal -->
+<div id="apple-contact-modal" class="apple-modal" style="display: none;">
+	<div class="apple-modal-backdrop"></div>
+	<div class="apple-modal-container" style="width: 480px;">
+		<div class="apple-modal-header">
+			<h3 id="apple-contact-title">Edit Contact</h3>
+		</div>
+		<div class="apple-modal-body">
+			<div class="apple-form-group">
+				<label>Name</label>
+				<input type="text" id="apple-contact-name" class="apple-input" placeholder="Full name" />
+			</div>
+			<div class="apple-form-group">
+				<label>Company/Organization</label>
+				<input type="text" id="apple-contact-company" class="apple-input" placeholder="Company name" />
+			</div>
+			<div class="apple-form-group">
+				<label>Phone Number</label>
+				<input type="tel" id="apple-contact-phone" class="apple-input" placeholder="Phone number" />
+			</div>
+			<div class="apple-form-group">
+				<label>Email Address</label>
+				<input type="email" id="apple-contact-email" class="apple-input" placeholder="email@example.com" />
+			</div>
+			<div class="apple-form-group">
+				<label>License Number (if applicable)</label>
+				<input type="text" id="apple-contact-license" class="apple-input" placeholder="License number" />
+			</div>
+		</div>
+		<div class="apple-modal-actions">
+			<button id="apple-contact-cancel" class="secondary">Cancel</button>
+			<button id="apple-contact-save" class="primary">Save</button>
+		</div>
+	</div>
+</div>
+
+<!-- Account Modal (full-screen splash with left nav) -->
+<div id="account-modal" aria-hidden="true">
+	<div id="account-splash"></div>
+	<div id="account-sheet">
+		<main id="account-main">
+			<button id="account-close" class="secondary" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+			
+			<!-- Account Dashboard -->
+			<section id="account-dashboard" class="account-panel account-dashboard">
+				<div class="account-panel-header">
+					<div class="panel-icon panel-icon-navy">
+						<svg class="sf-icon" width="28" height="28"><use href="#sf-speedometer"/></svg>
+					</div>
+					<div class="panel-heading">
+						<p class="panel-eyebrow">Account</p>
+						<h1 class="dashboard-title">Dashboard</h1>
+						<p class="panel-subtitle">Stay aligned with your DA workflow and saved work.</p>
+					</div>
+					<div class="panel-counts">
+						<span class="panel-chip" data-account-count="projects" data-count-label="projects">0 projects</span>
+						<span class="panel-chip subtle" data-account-count="aiImages" data-count-label="AI renders">0 AI renders</span>
+					</div>
+				</div>
+				<div class="account-panel-body">
+					<!-- Quick Stats Row -->
+					<div class="dashboard-stats">
+						<div class="stat-card">
+							<div class="stat-icon">
+								<svg class="sf-icon" width="24" height="24"><use href="#sf-folder"/></svg>
+							</div>
+							<div class="stat-content">
+								<p class="stat-value" data-dashboard-stat="projects">0</p>
+								<p class="stat-label">Projects</p>
+							</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-icon">
+								<svg class="sf-icon" width="24" height="24"><use href="#sf-photo"/></svg>
+							</div>
+							<div class="stat-content">
+								<p class="stat-value" data-dashboard-stat="renders">0</p>
+								<p class="stat-label">AI Renders</p>
+							</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-icon">
+								<svg class="sf-icon" width="24" height="24"><use href="#sf-clock"/></svg>
+							</div>
+							<div class="stat-content">
+								<p class="stat-value" id="dashboard-time">--:--</p>
+								<p class="stat-label">Local Time</p>
+							</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-icon">
+								<svg class="sf-icon" width="24" height="24"><use href="#sf-dollarsign"/></svg>
+							</div>
+							<div class="stat-content">
+								<p class="stat-value" data-dashboard-stat="estimate">$0</p>
+								<p class="stat-label">Estimated Cost</p>
+							</div>
+						</div>
+					</div>
+				
+					<!-- Main Dashboard Grid -->
+					<div class="dashboard-grid">
+						<!-- Navigation Cards -->
+						<div class="dashboard-section">
+							<h2 class="section-title">Account</h2>
+							<div class="account-cards-grid">
+								<!-- Profile Card -->
+								<button class="account-card" data-view="profile">
+									<div class="account-card-icon-wrapper">
+										<div class="account-card-icon">
+											<svg class="sf-icon" width="100" height="100"><use href="#sf-person"/></svg>
+										</div>
+									</div>
+									<h3 class="account-card-title">Profile</h3>
+									<p class="account-card-intro">Identity, contact, and company details.</p>
+									<p class="account-card-detail">Keep your personal info, company name, office and mobile numbers ready for DA submissions.</p>
+									<div class="account-card-meta">
+										<span class="account-chip" data-account-count="profileFields" data-count-label="fields complete">0 fields complete</span>
+									</div>
+								</button>
+
+								<!-- Projects Card -->
+								<button class="account-card" data-view="projects">
+									<div class="account-card-icon-wrapper">
+										<div class="account-card-icon">
+											<svg class="sf-icon" width="100" height="100"><use href="#sf-folder"/></svg>
+										</div>
+									</div>
+									<h3 class="account-card-title">Projects</h3>
+									<p class="account-card-intro">Saved layouts, DA-ready plans, and images.</p>
+									<p class="account-card-detail">Review every saved design, download exports, and keep AI imagery tied to each project.</p>
+									<div class="account-card-meta">
+										<span class="account-chip" data-account-count="projects" data-count-label="projects">0 projects</span>
+										<span class="account-chip subtle" data-account-count="designs" data-count-label="designs">0 designs</span>
+										<span class="account-chip subtle" data-account-count="aiImages" data-count-label="images">0 images</span>
+									</div>
+								</button>
+
+								<!-- Settings Card -->
+								<button class="account-card" data-view="settings">
+									<div class="account-card-icon-wrapper">
+										<div class="account-card-icon">
+											<svg class="sf-icon" width="100" height="100"><use href="#sf-gear"/></svg>
+										</div>
+									</div>
+									<h3 class="account-card-title">Settings</h3>
+									<p class="account-card-intro">AI providers, measurement units, and defaults.</p>
+									<p class="account-card-detail">Connect AI keys, choose units, and tune workflow preferences for every DA submission.</p>
+									<div class="account-card-meta">
+										<span class="account-chip" data-account-count="aiProviders" data-count-label="AI providers">0 AI providers</span>
+									</div>
+								</button>
+
+								<!-- Payments Card -->
+								<button class="account-card" data-view="payments">
+									<div class="account-card-icon-wrapper">
+										<div class="account-card-icon">
+											<svg class="sf-icon" width="100" height="100"><use href="#sf-creditcard"/></svg>
+										</div>
+									</div>
+									<h3 class="account-card-title">Payments</h3>
+									<p class="account-card-intro">Billing methods and invoicing.</p>
+									<p class="account-card-detail">Store company cards or bank info so DA requests and visualization orders get cleared immediately.</p>
+									<div class="account-card-meta">
+										<span class="account-chip" data-account-count="payments" data-count-label="methods">0 methods</span>
+									</div>
+								</button>
+							</div>
+						</div>
+					
+						<!-- App Section -->
+						<div class="dashboard-section">
+							<h2 class="section-title">Application</h2>
+							<div class="account-cards-grid">
+								<button class="account-card" data-view="info">
+									<div class="account-card-top">
+										<div class="account-card-icon">
+											<svg class="sf-icon" width="32" height="32"><use href="#sf-info-circle"/></svg>
+										</div>
+										<div class="account-card-heading">
+											<h3>Information</h3>
+											<p class="account-card-description">Help, docs, and onboarding tips.</p>
+										</div>
+										<span class="account-card-link">See guides</span>
+									</div>
+									<p class="account-card-detail">Browse DA workflow checklists, visualization instructions, and project-ready documentation.</p>
+									<div class="account-card-meta">
+										<span class="account-chip" data-account-count="helpDocs" data-count-label="guides">0 guides</span>
+									</div>
+								</button>
+
+								<button class="account-card" data-view="share">
+									<div class="account-card-top">
+										<div class="account-card-icon">
+											<svg class="sf-icon" width="32" height="32"><use href="#sf-square-and-arrow-up"/></svg>
+										</div>
+										<div class="account-card-heading">
+											<h3>Share</h3>
+											<p class="account-card-description">Share links, exports, and badges.</p>
+										</div>
+										<span class="account-card-link">Share designs</span>
+									</div>
+									<p class="account-card-detail">Send projects to stakeholders, publish badges, or copy DA-ready share links.</p>
+									<div class="account-card-meta">
+										<span class="account-chip" data-account-count="shareLinks" data-count-label="links ready">0 links ready</span>
+									</div>
+								</button>
+
+								<button class="account-card" data-view="admin">
+									<div class="account-card-top">
+										<div class="account-card-icon">
+											<svg class="sf-icon" width="32" height="32"><use href="#sf-shield"/></svg>
+										</div>
+										<div class="account-card-heading">
+											<h3>Admin</h3>
+											<p class="account-card-description">Approvals, compliance, and reviews.</p>
+										</div>
+										<span class="account-card-link">Review queue</span>
+									</div>
+									<p class="account-card-detail">Track DA approval requests, monitor pending actions, and resolve issues quickly.</p>
+									<div class="account-card-meta">
+										<span class="account-chip" data-account-count="adminPending" data-count-label="requests">0 requests</span>
+									</div>
+								</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</section>
+			
+			<section id="account-view-profile" class="account-panel is-hidden">
+				<div class="account-panel-header">
+					<div class="panel-icon panel-icon-blue">
+						<svg class="sf-icon" width="24" height="24"><use href="#sf-person"/></svg>
+					</div>
+					<div class="panel-heading">
+						<p class="panel-eyebrow">Profile</p>
+						<h2>Personal Information</h2>
+						<p class="panel-subtitle">Keep your contact info up to date for smooth DA approvals.</p>
+					</div>
+					<div class="panel-counts">
+						<span class="panel-chip" data-account-count="profileFields" data-count-label="fields complete">0 fields complete</span>
+					</div>
+				</div>
+				<div class="account-panel-body">
+					<form id="account-form" class="account-form">
+					<div class="account-field"><label for="acc-first">First name</label><input id="acc-first" name="firstName" /></div>
+					<div class="account-field"><label for="acc-last">Last name</label><input id="acc-last" name="lastName" /></div>
+					<div class="account-field full"><label for="acc-email">Email</label><input id="acc-email" name="email" type="email" /></div>
+					<div class="account-field"><label for="acc-office">Office number</label><input id="acc-office" name="office" /></div>
+					<div class="account-field"><label for="acc-mobile">Mobile</label><input id="acc-mobile" name="mobile" /></div>
+					<div class="account-field full"><label for="acc-company">Company name</label><input id="acc-company" name="company" /></div>
+					<div class="account-actions full">
+						<button type="button" id="account-save">Save</button>
+						<button type="button" id="account-cancel" class="secondary">Cancel</button>
+					</div>
+				</form>
+				</div>
+			</section>
+			<section id="account-view-projects" class="account-panel is-hidden">
+				<div class="account-panel-header">
+					<div class="panel-icon panel-icon-indigo">
+						<svg class="sf-icon" width="24" height="24"><use href="#sf-folder"/></svg>
+					</div>
+					<div class="panel-heading">
+						<p class="panel-eyebrow">Projects</p>
+						<h2>Saved Designs</h2>
+						<p class="panel-subtitle">Manage DA-ready designs, AI renders, and workflow progress.</p>
+					</div>
+					<div class="panel-counts">
+						<span class="panel-chip" data-account-count="projects" data-count-label="projects">0 projects</span>
+						<span class="panel-chip subtle" data-account-count="designs" data-count-label="designs">0 designs</span>
+						<span class="panel-chip subtle" data-account-count="aiImages" data-count-label="images">0 images</span>
+					</div>
+				</div>
+				<div class="account-panel-body">
+					<p class="settings-hint">Manage your saved projects and AI-generated renders.</p>
+					<div class="projects-toolbar">
+						<input id="projects-new-name" type="text" placeholder="New project name..." />
+						<button id="projects-new-btn" type="button" class="primary">Start Project</button>
+						<button id="projects-refresh-btn" type="button" class="secondary">↻ Refresh</button>
+					</div>
+					<div id="projects-list" class="projects-list">
+						<!-- Projects will be populated dynamically -->
+					</div>
+					<div id="projects-empty" class="projects-empty">
+						<p><svg class="sf-icon" width="24" height="24"><use href="#sf-folder"/></svg> No projects yet</p>
+						<p>Create a project to save your designs and AI renders.</p>
+					</div>
+				</div>
+			</section>
+			<section id="account-view-settings" class="account-panel is-hidden">
+				<div class="account-panel-header">
+					<div class="panel-icon panel-icon-teal">
+						<svg class="sf-icon" width="24" height="24"><use href="#sf-gear"/></svg>
+					</div>
+					<div class="panel-heading">
+						<p class="panel-eyebrow">Settings</p>
+						<h2>AI & Preferences</h2>
+						<p class="panel-subtitle">Connect image providers, tune measurements, and save workflow defaults.</p>
+					</div>
+					<div class="panel-counts">
+						<span class="panel-chip" data-account-count="aiProviders" data-count-label="AI providers">0 AI providers</span>
+					</div>
+				</div>
+				<div class="account-panel-body">
+					<!-- LLM / AI API Settings for Image Generation -->
+					<div class="settings-group">
+						<h3>AI Image Generation</h3>
+						<p class="settings-hint">Connect your own AI/LLM API for enhanced image generation features.</p>
+					
+						<div class="settings-row">
+							<label for="llm-provider">AI Provider</label>
+							<select id="llm-provider">
+							<option value="">-- Select Provider --</option>
+							<option value="openai">OpenAI (ChatGPT / DALL-E)</option>
+							<option value="anthropic">Anthropic (Claude)</option>
+							<option value="google">Google (Gemini / Imagen)</option>
+							<option value="xai">xAI (Grok)</option>
+							<option value="stability">Stability AI</option>
+							<option value="midjourney">Midjourney</option>
+							<option value="freepik">Freepik (Mystic / Flux)</option>
+							<option value="replicate">Replicate</option>
+							<option value="leonardo">Leonardo.AI</option>
+							<option value="ideogram">Ideogram</option>
+							<option value="runway">Runway ML</option>
+							<option value="fal">fal.ai (Fast)</option>
+							<option value="together">Together AI</option>
+							<option value="fireworks">Fireworks AI</option>
+						</select>
+					</div>
+					
+					<div class="settings-row">
+						<label for="llm-api-key">API Key</label>
+						<div class="input-with-toggle">
+							<input id="llm-api-key" type="password" placeholder="Enter your API key" autocomplete="off" />
+							<button id="llm-key-toggle" type="button" class="icon-btn" title="Show/Hide">👁</button>
+						</div>
+					</div>
+					
+					<div class="settings-row" id="llm-model-row">
+						<label for="llm-model">Model</label>
+						<select id="llm-model">
+							<option value="">-- Select Model --</option>
+						</select>
+					</div>
+					
+					<div class="settings-row is-hidden" id="llm-endpoint-row">
+						<label for="llm-endpoint">Custom Endpoint (Optional)</label>
+						<input id="llm-endpoint" type="url" placeholder="https://api.example.com/v1" />
+					</div>
+					
+					<div class="settings-row">
+						<label for="llm-org-id">Organization ID (Optional)</label>
+						<input id="llm-org-id" type="text" placeholder="org-xxxxx" />
+					</div>
+					
+					<div class="settings-actions">
+						<button id="llm-test-connection" type="button" class="secondary">Test Connection</button>
+						<button id="llm-save-settings" type="button">Save API Settings</button>
+					</div>
+					<div id="llm-status" class="settings-status"></div>
+				</div>
+				
+				<!-- General App Settings -->
+				<div class="settings-group">
+					<h3>General</h3>
+					<div class="settings-row">
+						<label for="settings-units">Measurement Units</label>
+						<select id="settings-units">
+							<option value="metric">Metric (meters)</option>
+							<option value="imperial">Imperial (feet)</option>
+						</select>
+					</div>
+					<div class="settings-row">
+						<label for="settings-autosave">Auto-save Projects</label>
+						<input id="settings-autosave" type="checkbox" checked />
+					</div>
+				</div>
+				
+				<!-- Theme Settings Per Section -->
+				<div class="settings-group">
+					<h3>Appearance</h3>
+					<p class="settings-hint">Toggle dark or light mode for each section of the application. Click section names to navigate.</p>
+					
+					<div class="settings-row theme-toggle-row">
+						<div class="theme-toggle-label">
+							<svg class="sf-icon" width="18" height="18"><use href="#sf-house"/></svg>
+							<div class="theme-label-content">
+								<span class="theme-label-title" data-navigate="main">Main Editor</span>
+								<span class="theme-label-description">Top toolbar and main application interface</span>
+							</div>
+						</div>
+						<label class="theme-switch">
+							<input type="checkbox" id="theme-main-editor" data-section="main" />
+							<span class="theme-slider"></span>
+							<span class="theme-labels">
+								<span class="theme-light-label">Light</span>
+								<span class="theme-dark-label">Dark</span>
+							</span>
+						</label>
+					</div>
+					
+					<div class="settings-row theme-toggle-row">
+						<div class="theme-toggle-label">
+							<svg class="sf-icon" width="18" height="18"><use href="#sf-square-grid-2x2"/></svg>
+							<div class="theme-label-content">
+								<span class="theme-label-title" data-navigate="plan2d">2D Floor Plan</span>
+								<span class="theme-label-description">Floor plan editor and drawing canvas</span>
+							</div>
+						</div>
+						<label class="theme-switch">
+							<input type="checkbox" id="theme-plan2d" data-section="plan2d" />
+							<span class="theme-slider"></span>
+							<span class="theme-labels">
+								<span class="theme-light-label">Light</span>
+								<span class="theme-dark-label">Dark</span>
+							</span>
+						</label>
+					</div>
+					
+					<div class="settings-row theme-toggle-row">
+						<div class="theme-toggle-label">
+							<svg class="sf-icon" width="18" height="18"><use href="#sf-cube"/></svg>
+							<div class="theme-label-content">
+								<span class="theme-label-title" data-navigate="visualize">3D Visualize</span>
+								<span class="theme-label-description">3D rendering and visualization view</span>
+							</div>
+						</div>
+						<label class="theme-switch">
+							<input type="checkbox" id="theme-visualize" data-section="visualize" />
+							<span class="theme-slider"></span>
+							<span class="theme-labels">
+								<span class="theme-light-label">Light</span>
+								<span class="theme-dark-label">Dark</span>
+							</span>
+						</label>
+					</div>
+					
+					<div class="settings-row theme-toggle-row">
+						<div class="theme-toggle-label">
+							<svg class="sf-icon" width="18" height="18"><use href="#sf-doc-text"/></svg>
+							<div class="theme-label-content">
+								<span class="theme-label-title" data-navigate="da-workflow">DA Workflow</span>
+								<span class="theme-label-description">Development approval workflow guide</span>
+							</div>
+						</div>
+						<label class="theme-switch">
+							<input type="checkbox" id="theme-da-workflow" data-section="da-workflow" />
+							<span class="theme-slider"></span>
+							<span class="theme-labels">
+								<span class="theme-light-label">Light</span>
+								<span class="theme-dark-label">Dark</span>
+							</span>
+						</label>
+					</div>
+					
+					<div class="settings-row theme-toggle-row">
+						<div class="theme-toggle-label">
+							<svg class="sf-icon" width="18" height="18"><use href="#sf-speedometer"/></svg>
+							<div class="theme-label-content">
+								<span class="theme-label-title" data-navigate="dashboard">Dashboard</span>
+								<span class="theme-label-description">Account dashboard and all panels</span>
+							</div>
+						</div>
+						<label class="theme-switch">
+							<input type="checkbox" id="theme-account" data-section="account" />
+							<span class="theme-slider"></span>
+							<span class="theme-labels">
+								<span class="theme-light-label">Light</span>
+								<span class="theme-dark-label">Dark</span>
+							</span>
+						</label>
+					</div>
+				</div>
+			</div>
+		</section>
+		
+		<!-- Theme navigation handled by event delegation in admin.js -->
+		
+		<section id="account-view-payments" class="account-panel is-hidden">
+			<div class="account-panel-header">
+				<div class="panel-icon panel-icon-amber">
+					<svg class="sf-icon" width="24" height="24"><use href="#sf-creditcard"/></svg>
+				</div>
+				<div class="panel-heading">
+					<p class="panel-eyebrow">Payments</p>
+					<h2>Billing Methods</h2>
+					<p class="panel-subtitle">Add company cards or bank details for faster DA approvals.</p>
+				</div>
+				<div class="panel-counts">
+					<span class="panel-chip" data-account-count="payments" data-count-label="methods">0 methods</span>
+				</div>
+			</div>
+			<div class="account-panel-body">
+				<p>Payment methods and billing will appear here.</p>
+			</div>
+		</section>
+		<section id="account-view-info" class="account-panel is-hidden">
+			<div class="account-panel-header">
+				<div class="panel-icon panel-icon-purple">
+					<svg class="sf-icon" width="24" height="24"><use href="#sf-info-circle"/></svg>
+				</div>
+				<div class="panel-heading">
+					<p class="panel-eyebrow">Information</p>
+					<h2>Help & Docs</h2>
+					<p class="panel-subtitle">Browse design guides, structural docs, and workflow notes.</p>
+				</div>
+				<div class="panel-counts">
+					<span class="panel-chip" data-account-count="helpDocs" data-count-label="guides">0 guides</span>
+				</div>
+			</div>
+			<div class="account-panel-body">
+				<div id="account-info-body" class="account-scroll"></div>
+			</div>
+		</section>
+		<section id="account-view-share" class="account-panel is-hidden">
+			<div class="account-panel-header">
+				<div class="panel-icon panel-icon-green">
+					<svg class="sf-icon" width="24" height="24"><use href="#sf-square-and-arrow-up"/></svg>
+				</div>
+				<div class="panel-heading">
+					<p class="panel-eyebrow">Share</p>
+					<h2>Share Designs</h2>
+					<p class="panel-subtitle">Generate links for clients or DA reviewers.</p>
+				</div>
+				<div class="panel-counts">
+					<span class="panel-chip" data-account-count="shareLinks" data-count-label="links ready">0 links ready</span>
+				</div>
+			</div>
+			<div class="account-panel-body">
+				<div class="share-inline">
+					<label class="share-label" for="account-share-url">Project URL</label>
+					<input id="account-share-url" type="text" readonly />
+					<div class="share-buttons">
+						<button id="account-share-open" class="secondary" type="button">Open</button>
+						<button id="account-share-copy" type="button">Copy</button>
+					</div>
+					<div id="account-share-hint" class="share-hint"></div>
+				</div>
+			</div>
+		</section>
+		<section id="account-view-admin" class="account-panel is-hidden">
+			<div class="account-panel-header">
+				<div class="panel-icon panel-icon-red">
+					<svg class="sf-icon" width="24" height="24"><use href="#sf-shield"/></svg>
+				</div>
+				<div class="panel-heading">
+					<p class="panel-eyebrow">Admin</p>
+					<h2>DA Approvals</h2>
+					<p class="panel-subtitle">Monitor pending reviews, errors, and live users.</p>
+				</div>
+				<div class="panel-counts">
+					<span class="panel-chip" data-account-count="adminPending" data-count-label="requests">0 requests</span>
+				</div>
+			</div>
+			<div class="account-panel-body">
+				<div class="admin-header">
+					<h2>Admin Dashboard</h2>
+					<button id="account-admin-refresh" class="secondary" type="button">
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-clockwise"/></svg>
+						Refresh
+					</button>
+				</div>
+				<div class="admin-grid">
+							<!-- Users Card -->
+							<div class="admin-card">
+								<div class="admin-card-header">
+									<div class="admin-card-icon admin-icon-blue">
+										<svg class="sf-icon" width="24" height="24"><use href="#sf-person-2"/></svg>
+									</div>
+									<h3>Active Users</h3>
+								</div>
+								<div class="admin-card-body">
+									<ul id="account-admin-users" class="admin-list"></ul>
+								</div>
+							</div>
+
+							<!-- Errors Card -->
+							<div class="admin-card">
+								<div class="admin-card-header">
+									<div class="admin-card-icon admin-icon-red">
+										<svg class="sf-icon" width="24" height="24"><use href="#sf-exclamationmark-triangle"/></svg>
+									</div>
+									<h3>Recent Errors</h3>
+								</div>
+								<div class="admin-card-body">
+									<ul id="account-admin-errors" class="admin-list"></ul>
+								</div>
+							</div>
+
+							<!-- System Status Card -->
+							<div class="admin-card">
+								<div class="admin-card-header">
+									<div class="admin-card-icon admin-icon-green">
+										<svg class="sf-icon" width="24" height="24"><use href="#sf-checkmark-circle"/></svg>
+									</div>
+									<h3>System Status</h3>
+								</div>
+								<div class="admin-card-body">
+									<div class="admin-status-row">
+										<span class="admin-status-label">API</span>
+										<span class="admin-status-badge admin-status-online">Online</span>
+									</div>
+									<div class="admin-status-row">
+										<span class="admin-status-label">Database</span>
+										<span class="admin-status-badge admin-status-online">Connected</span>
+									</div>
+									<div class="admin-status-row">
+										<span class="admin-status-label">Storage</span>
+										<span class="admin-status-badge admin-status-online">Available</span>
+									</div>
+								</div>
+							</div>
+
+							<!-- Analytics Card -->
+							<div class="admin-card">
+								<div class="admin-card-header">
+									<div class="admin-card-icon admin-icon-purple">
+										<svg class="sf-icon" width="24" height="24"><use href="#sf-chart-bar"/></svg>
+									</div>
+									<h3>Analytics</h3>
+								</div>
+								<div class="admin-card-body">
+									<div class="admin-stat-row">
+										<span class="admin-stat-label">Projects Created</span>
+										<span class="admin-stat-value">0</span>
+									</div>
+									<div class="admin-stat-row">
+										<span class="admin-stat-label">DA Submissions</span>
+										<span class="admin-stat-value">0</span>
+									</div>
+									<div class="admin-stat-row">
+										<span class="admin-stat-label">Total Users</span>
+										<span class="admin-stat-value">0</span>
+									</div>
+								</div>
+							</div>
+						</div>
+					</section>
+		</main>
+	</div>
+</div>
+
+<input type="file" id="upload-file" accept="application/json" />
+<input type="file" id="upload-obj-file" accept=".obj" />
+<input type="file" id="upload-pdf-floorplan" accept="application/pdf" />
+<input type="file" id="upload-svg-floorplan" accept="image/svg+xml,.svg" />
+<input type="file" id="upload-dxf-floorplan" accept=".dxf,application/dxf,application/x-dxf,text/plain" />
+<input type="file" id="upload-dwg-floorplan" accept=".dwg,application/acad,application/x-acad,application/autocad-dwg" />
+
+<!-- Floorplan Import Modal -->
+
+<div id="floorplan-modal">
+	<div id="floorplan-backdrop"></div>
+	<div id="floorplan-content">
+		<div class="floorplan-header">
+			<strong>Import Floorplan (PDF)</strong>
+			<button id="floorplan-close" class="secondary" title="Close"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+		</div>
+		<div id="floorplan-stage">
+			<div id="floorplan-stage-main">
+				<canvas id="floorplan-canvas"></canvas>
+				<canvas id="floorplan-overlay"></canvas>
+			</div>
+			<div id="floorplan-sidebar">
+				<div class="floorplan-page-row">
+					<span class="floorplan-page-label">Page</span>
+					<button id="fp-page-prev" class="secondary" title="Previous page">◀</button>
+					<input id="fp-page-input" type="number" min="1" value="1" />
+					<span class="floorplan-page-label">/ <span id="fp-page-total">1</span></span>
+					<button id="fp-page-next" class="secondary" title="Next page">▶</button>
+				</div>
+				<div>
+					<div class="floorplan-steps-title">Steps</div>
+
+					<ol class="floorplan-steps-list">
+						<li>Calibrate scale: click two points, enter real distance</li>
+						<li>Draw rooms: drag to place rectangles</li>
+						<li>Commit rooms to scene</li>
+					</ol>
+				</div>
+				<div class="floorplan-tools-row">
+					<button id="fp-mode-calibrate">Calibrate</button>
+					<button id="fp-mode-place">Place Room</button>
+					<button id="fp-undo" class="secondary">Undo</button>
+					<button id="fp-refine-detect" class="secondary" title="Re-run automatic detection">Refine Detect</button>
+				</div>
+				<div class="floorplan-distances-column">
+					<label class="floorplan-small-label">Real distance (m) for last two clicks</label>
+					<input id="fp-real-distance" type="number" min="0.1" max="1000" step="0.1" value="1.0" />
+					<button id="fp-apply-scale" class="secondary">Apply Scale</button>
+				</div>
+				<div class="floorplan-auto-box">
+					<div class="floorplan-auto-title">Auto Detection</div>
+					<label class="floorplan-auto-label">Min Room (m)
+							<input id="fp-auto-min" type="number" step="0.5" min="1" value="2" />
+					</label>
+					<label class="floorplan-auto-label">Max Aspect Ratio
+							<input id="fp-auto-ar" type="number" step="0.5" min="2" value="8" />
+					</label>
+					<label class="floorplan-auto-label">Border Ink ≥
+							<input id="fp-auto-border" type="number" step="0.05" min="0" max="1" value="0.15" />
+					</label>
+				</div>
+				<div class="floorplan-small-text">
+					<div>Scale: <span id="fp-scale-display">—</span> px/m</div>
+					<div>Rooms queued: <span id="fp-rooms-count">0</span></div>
+				</div>
+				<div class="floorplan-commit-row">
+					<button id="fp-commit">Commit to Scene</button>
+					<button id="fp-cancel" class="secondary">Cancel</button>
+				</div>
+			</div>
+		</div>
+	</div>
+  
+</div>
+
+<div id="pricing-modal">
+    <div id="pricing-content">
+		<button class="close-button" onclick="hidePricing()"><svg class="sf-icon" width="20" height="20"><use href="#sf-xmark"/></svg></button>
+		<h2>Project Pricing</h2>
+			<div class="pricing-settings-row">
+				<label class="pricing-field-label">
+					Concrete thickness (mm)
+					<input id="pricing-slab-mm" type="number" min="50" max="300" step="5" value="100" />
+				</label>
+				<label class="pricing-field-label">
+					Soil rate ($/m³)
+					<input id="pricing-soil-per-m3" type="number" min="0" step="10" value="600" />
+				</label>
+				<button id="pricing-apply" class="secondary" title="Apply pricing settings">Apply</button>
+			</div>
+		<div id="pricing-breakdown">
+			<div class="pricing-section">
+				<h3>Rooms</h3>
+				<div id="room-pricing"></div>
+			</div>
+			<div class="pricing-section">
+				<h3>Additional Components</h3>
+				<div id="component-pricing"></div>
+			</div>
+			<div class="pricing-section">
+				<h3>Concrete & Site Works</h3>
+				<div id="concrete-pricing"></div>
+			</div>
+			<div class="pricing-section total-section">
+				<h3>Total Estimate</h3>
+				<div id="total-pricing"></div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<!-- Apple modal system (must load before other UI scripts) -->
+<script src="js/ui/apple-modals.js?v=20251129-7"></script>
+<!-- Global smooth wheel scrolling (tweened) -->
+<script src="js/ui/smooth-scroll-tween.js?v=20251219-8"></script>
+<!-- Splash/progress overlay (non-deferred to show immediately) -->
+<script src="js/boot/splash.js?v=20251129-6"></script>
+<!-- Coordinated bootstrap: loads all modules with progress, then starts app -->
+<script src="js/boot/bootstrap.js?v=20251129-6"></script>
+<!-- Optional smoke tests (enable 2D editor smoke with ?smoke2d=1 in URL) -->
+<script src="js/smoke/smoke2d.js?v=20251129-6"></script>
+<!-- Optional 3D smoke (e.g., ?test3d=kitchen) -->
+<script src="js/smoke/smoke3d.js?v=20251129-6"></script>
+
+<script>
+// Debug dropdown: manage open state and wire toggles to global flags
+document.addEventListener('DOMContentLoaded', () => {
+	try {
+		const btn = document.getElementById('debugButton');
+		const list = document.getElementById('debugList');
+		const chkHandles = document.getElementById('chk-corner-handles');
+		const chkDebug = document.getElementById('chk-corner-debug');
+		const dropdown = document.getElementById('debugDropdown');
+
+		function setOpen(open){
+			if (!dropdown) return;
+			if (open) {
+				// Close other dropdowns
+				document.querySelectorAll('.dropdown').forEach(function(dd) {
+					if (dd !== dropdown) dd.classList.remove('open');
+				});
+				dropdown.classList.add('open');
+			} else {
+				dropdown.classList.remove('open');
+			}
+		}
+		if (btn) {
+			btn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				const isOpen = dropdown.classList.contains('open');
+				setOpen(!isOpen);
+			});
+		}
+		document.addEventListener('click', (e) => {
+			if (!dropdown) return;
+			if (!dropdown.contains(e.target)) setOpen(false);
+		});
+
+		// Load saved states
+		try {
+			const v1 = localStorage.getItem('gablok_dbg_cornerHandles');
+			const v2 = localStorage.getItem('gablok_dbg_cornerDebug');
+			if (v1 !== null) window.__enableCornerHandles = (v1 === '1');
+			if (v2 !== null) window.__debugCornerCache = (v2 === '1');
+		} catch(_eLS) {}
+		if (chkHandles) chkHandles.checked = (window.__enableCornerHandles === true);
+		if (chkDebug) chkDebug.checked = (window.__debugCornerCache === true);
+
+		function rerender(){ try { if (typeof window.renderLoop === 'function') window.renderLoop(); } catch(_eR) {} }
+		if (chkHandles) {
+			chkHandles.addEventListener('change', () => {
+				window.__enableCornerHandles = !!chkHandles.checked;
+				try { localStorage.setItem('gablok_dbg_cornerHandles', window.__enableCornerHandles ? '1' : '0'); } catch(_e) {}
+				rerender();
+			});
+		}
+		if (chkDebug) {
+			chkDebug.addEventListener('change', () => {
+				window.__debugCornerCache = !!chkDebug.checked;
+				try { localStorage.setItem('gablok_dbg_cornerDebug', window.__debugCornerCache ? '1' : '0'); } catch(_e) {}
+			});
+		}
+	} catch(_eDbg) {}
+});
+</script>
+
+
+<!-- 2D Floor Plan Editor Modal -->
+<!-- Elevate 2D plan modal above all other UI (previous duplicate used z-index 12000) -->
+
+<div id="plan2d-page">
+	<div id="plan2d-content">
+		<div id="plan2d-header">
+			<!-- Left Vertical Toolbar - Drawing Tools -->
+			<div id="plan2d-toolbar-left" class="plan2d-toolbar-rail">
+				<div class="plan2d-toolbar-primary">
+					<button id="plan2d-tool-select" class="plan2d-tool-btn" title="Select elements to edit/delete">
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-cursor-rays"/></svg>
+						<span>Select</span>
+					</button>
+					<button id="plan2d-tool-wall" class="plan2d-tool-btn" title="Draw Walls (300mm thick)">
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-square-on-square-dashed"/></svg>
+						<span>Wall</span>
+					</button>
+					<button id="plan2d-tool-window" class="plan2d-tool-btn" title="Draw Windows">
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-macwindow"/></svg>
+						<span>Window</span>
+					</button>
+					<button id="plan2d-tool-door" class="plan2d-tool-btn" title="Draw Doors">
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-door-left-hand-open"/></svg>
+						<span>Door</span>
+					</button>
+					<button id="plan2d-tool-erase" class="plan2d-tool-btn" title="Erase elements">
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-eraser"/></svg>
+						<span>Erase</span>
+					</button>
+					<button id="plan2d-tool-apply" class="plan2d-tool-btn" title="Apply plan to 3D" type="button" onclick="if(window.applyPlan2DTo3D) applyPlan2DTo3D();">
+						<svg class="sf-icon" width="16" height="16"><use href="#sf-cube"/></svg>
+						<span>Apply</span>
+					</button>
+					<button id="plan2d-account" title="Account" aria-label="Account" type="button">
+						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+							<circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+							<path d="M4 20c0-4.418 3.582-8 8-8s8 3.582 8 8" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+						</svg>
+					</button>
+				</div>
+				<div id="plan2d-menubar-right" class="plan2d-toolbar-dropdowns" aria-label="Plan menus">
+					<!-- Tools Dropdown -->
+					<div id="plan2d-tools-dropdown" class="dropdown" aria-label="Tools">
+						<button id="plan2d-tools-button" class="dropdown-button" type="button">
+							<svg class="sf-icon" width="16" height="16"><use href="#sf-wrench-and-screwdriver"/></svg>
+							<span>Tools</span>
+							<span class="caret">
+								<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+							</span>
+						</button>
+						<div id="plan2d-tools-list" class="dropdown-list" role="menu">
+							<div class="dropdown-item" data-action="fit"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-left-and-arrow-down-right"/></svg> Fit View</div>
+							<div class="dropdown-item" data-action="flip-y"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-arrow-down"/></svg> Flip Y</div>
+							<div class="dropdown-item separator" aria-hidden="true"></div>
+							<div class="dropdown-title">Window Type</div>
+							<div class="dropdown-item" data-action="window-standard"><svg class="sf-icon" width="16" height="16"><use href="#sf-square"/></svg> Standard</div>
+							<div class="dropdown-item" data-action="window-full"><svg class="sf-icon" width="16" height="16"><use href="#sf-rectangle"/></svg> Full Height</div>
+							<div class="dropdown-item separator" aria-hidden="true"></div>
+							<div class="dropdown-title">Door Settings</div>
+							<div class="dropdown-item" data-action="door-swing-in"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-right"/></svg> Swing In</div>
+							<div class="dropdown-item" data-action="door-swing-out"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-left"/></svg> Swing Out</div>
+							<div class="dropdown-item" data-action="door-hinge-left"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-turn-up-left"/></svg> Hinge Left</div>
+							<div class="dropdown-item" data-action="door-hinge-right"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-turn-up-right"/></svg> Hinge Right</div>
+						</div>
+					</div>
+
+					<!-- File Dropdown -->
+					<div id="plan2d-file-dropdown" class="dropdown" aria-label="File">
+						<button id="plan2d-file-button" class="dropdown-button" type="button">
+							<svg class="sf-icon" width="16" height="16"><use href="#sf-folder"/></svg>
+							<span>File</span>
+							<span class="caret">
+								<svg width="12" height="8" viewBox="0 0 12 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M1 1L6 6L11 1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+							</span>
+						</button>
+						<div id="plan2d-file-list" class="dropdown-list" role="menu">
+							<div class="dropdown-item" data-action="apply-3d"><svg class="sf-icon" width="16" height="16"><use href="#sf-cube"/></svg> Apply to 3D</div>
+							<div class="dropdown-item separator" aria-hidden="true"></div>
+							<div class="dropdown-item" data-action="export"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-down-circle"/></svg> Export JSON</div>
+							<div class="dropdown-item" data-action="import"><svg class="sf-icon" width="16" height="16"><use href="#sf-arrow-up-circle"/></svg> Import JSON</div>
+							<div class="dropdown-item separator" aria-hidden="true"></div>
+							<div class="dropdown-item" data-action="clear"><svg class="sf-icon" width="16" height="16"><use href="#sf-trash"/></svg> Clear Drawing</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div id="plan2d-floor-center">
+			<div class="plan2d-floor-toggle" role="group" aria-label="Floor level">
+				<button id="plan2d-floor-ground" type="button" class="active" aria-pressed="true">
+					<svg class="sf-icon" width="16" height="16"><use href="#sf-house"/></svg>
+					<span>Ground</span>
+				</button>
+				<button id="plan2d-floor-first" type="button" aria-pressed="false">
+					<svg class="sf-icon" width="16" height="16"><use href="#sf-building-2"/></svg>
+					<span>First</span>
+				</button>
+			</div>
+		</div>
+
+		<!-- Navigation Compass -->
+		<div id="plan2d-compass-nav" aria-label="North" title="North">
+			<canvas id="plan2d-compass-canvas" width="44" height="44"></canvas>
+			<div id="active-project-meta-2d" class="active-project-meta is-hidden" aria-live="polite"></div>
+		</div>
+
+		<!-- Absolute-positioned rulers and stage to match resize logic -->
+		<canvas id="plan2d-ruler-top"></canvas>
+		<canvas id="plan2d-ruler-left"></canvas>
+		<div id="plan2d-stage">
+			<canvas id="plan2d-canvas"></canvas>
+			<canvas id="plan2d-overlay"></canvas>
+			<canvas id="labels-2d"></canvas>
+			
+			<!-- Hidden file input for Import JSON -->
+			<input type="file" id="plan2d-import-file" accept="application/json" style="display: none;">
+			
+			<!-- Hidden select elements for compatibility -->
+			<select id="plan2d-window-type" style="display: none;">
+				<option value="standard">Window: Standard</option>
+				<option value="full">Window: Full Height</option>
+			</select>
+			<select id="plan2d-door-swing" style="display: none;">
+				<option value="in">Door: Swing In</option>
+				<option value="out">Door: Swing Out</option>
+			</select>
+			<select id="plan2d-door-hinge" style="display: none;">
+				<option value="t0" selected>Door: Hinge Left</option>
+				<option value="t1">Door: Hinge Right</option>
+			</select>
+		</div>
+	</div>
+</div>
+
+<!-- Reset Confirmation Modal -->
+
+<div id="reset-confirmation-modal">
+	<div id="reset-dialog">
+		<div id="reset-titlebar">
+			<div id="reset-icon">
+				<svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+			</div>
+			<h2 id="reset-title">Reset Everything?</h2>
+			<p id="reset-desc">This will permanently delete all your work including rooms, furniture, and settings. This action cannot be undone.</p>
+		</div>
+		<div id="reset-actions">
+			<button id="reset-cancel-btn" class="secondary">Cancel</button>
+			<button id="reset-confirm-btn">Yes, Reset Everything</button>
+		</div>
+	</div>
+</div>
+
+<script>
+// Render mode toggle for free-standing walls: Lines (default) vs Solid (300mm)
+document.addEventListener('DOMContentLoaded', () => {
+	try {
+		// Ensure initial mode defaults to 'line' (outline) unless explicitly restored
+		if (typeof window.__wallRenderMode === 'undefined') window.__wallRenderMode = 'line';
+		var btn = document.getElementById('btn-render-walls');
+		function refreshBtn() {
+			if (!btn) return;
+			var labelEl = btn.querySelector('.render-label');
+			var isSolid = (window.__wallRenderMode === 'solid');
+			if (labelEl) labelEl.textContent = isSolid ? 'Render: Solid' : 'Render: Lines';
+			btn.dataset.renderMode = isSolid ? 'solid' : 'line';
+			// Provide a visual pressed/active style when solid mode is enabled
+			if (isSolid) btn.classList.add('active'); else btn.classList.remove('active');
+		}
+		function setMode(mode){
+			try {
+				if (typeof window.setWallRenderMode === 'function') {
+					window.setWallRenderMode(mode);
+				} else {
+					window.__wallRenderMode = mode;
+					if (typeof window.updateStatus === 'function') window.updateStatus('Walls: ' + (mode==='solid'?'Solid 300mm':'Lines'));
+					// Force rebuild when switching to solid to ensure openings have correct defaults
+					if (mode === 'solid' && typeof window.rebuildRoomPerimeterStrips === 'function') {
+						window.rebuildRoomPerimeterStrips(window.__roomWallThickness || 0.3);
+					}
+					// Ensure windows render with blue glass when entering solid render mode
+					if (mode === 'solid') {
+						// Use the design-system translucent blue and default thickness
+						window.__windowGlassColor = 'rgba(37,99,235,0.35)';
+						if (typeof window.__windowGlassThickness !== 'number' || window.__windowGlassThickness <= 0) {
+							window.__windowGlassThickness = 0.03;
+						}
+					} else {
+						// Clear override so non-solid mode can skip special coloring (solid branch draws glass)
+						window.__windowGlassColor = null;
+					}
+					if (typeof window.renderLoop === 'function') window.renderLoop();
+				}
+				refreshBtn();
+			} catch(_e) {}
+		}
+		if (btn){
+			btn.addEventListener('click', function(){
+				var next = (window.__wallRenderMode === 'solid') ? 'line' : 'solid';
+				setMode(next);
+			});
+			// If the engine already set a default (line), reflect it; otherwise enforce line
+			if (window.__wallRenderMode !== 'solid' && window.__wallRenderMode !== 'line') window.__wallRenderMode = 'line';
+			refreshBtn();
+		}
+	} catch(_eR) {}
+});
+// Reset confirmation dialog
+function showResetConfirmation() {
+	const modal = document.getElementById('reset-confirmation-modal');
+	if (modal) {
+		modal.style.display = 'flex';
+		modal.classList.remove('hidden');
+	}
+}
+
+function hideResetConfirmation() {
+	const modal = document.getElementById('reset-confirmation-modal');
+	if (modal) {
+		modal.style.display = 'none';
+		modal.classList.add('hidden');
+	}
+}
+
+function confirmReset() {
+	console.log('[RESET] Starting complete reset...');
+	
+	// Call the existing resetAll function
+	if (typeof resetAll === 'function') {
+		try {
+			resetAll();
+			console.log('[RESET] resetAll() executed');
+		} catch(e) {
+			console.error('[RESET] resetAll() failed:', e);
+		}
+	}
+	
+	// Clear all storage (localStorage, sessionStorage, cookies)
+	try {
+		localStorage.clear();
+		console.log('[RESET] localStorage cleared');
+	} catch(e) {
+		console.warn('[RESET] localStorage clear failed:', e);
+	}
+	
+	try {
+		sessionStorage.clear();
+		console.log('[RESET] sessionStorage cleared');
+	} catch(e) {
+		console.warn('[RESET] sessionStorage clear failed:', e);
+	}
+	
+	// Clear all cookies
+	try {
+		document.cookie.split(";").forEach(function(c) {
+			document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+		});
+		console.log('[RESET] Cookies cleared');
+	} catch(e) {
+		console.warn('[RESET] Cookie clear failed:', e);
+	}
+	
+	// Clear Cache Storage API if available
+	if ('caches' in window) {
+		caches.keys().then(function(names) {
+			return Promise.all(names.map(function(name) {
+				return caches.delete(name);
+			}));
+		}).then(function() {
+			console.log('[RESET] Cache Storage cleared');
+		}).catch(function(e) {
+			console.warn('[RESET] Cache Storage clear failed:', e);
+		});
+	}
+	
+	// Force hard reload with cache bypass
+	console.log('[RESET] Reloading in 200ms...');
+	setTimeout(() => {
+		const cleanUrl = window.location.href.split('?')[0].split('#')[0];
+		const timestamp = Date.now();
+		window.location.href = cleanUrl + '?_nocache=' + timestamp;
+	}, 200);
+}
+
+// Wire up modal buttons
+document.addEventListener('DOMContentLoaded', () => {
+	const cancelBtn = document.getElementById('reset-cancel-btn');
+	const confirmBtn = document.getElementById('reset-confirm-btn');
+	const modal = document.getElementById('reset-confirmation-modal');
+	
+	if (cancelBtn) {
+		cancelBtn.addEventListener('click', hideResetConfirmation);
+	}
+	
+	if (confirmBtn) {
+		confirmBtn.addEventListener('click', confirmReset);
+	}
+	
+	// Close modal when clicking backdrop
+	if (modal) {
+		modal.addEventListener('click', (e) => {
+			if (e.target === modal) {
+				hideResetConfirmation();
+			}
+		});
+	}
+});
+</script>
+
+</body>
+</html>
+
+

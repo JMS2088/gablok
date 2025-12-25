@@ -1,0 +1,28 @@
+{
+  "remote.portsAttributes": {
+    "8000": {
+      "label": "Gablok App (8000)",
+      "onAutoForward": "openBrowser",
+      "protocol": "http"
+    },
+    "8001": {
+      "label": "Gablok App (8001)",
+      "onAutoForward": "openBrowser",
+      "protocol": "http"
+    }
+  },
+  "remote.autoForwardPorts": true,
+  "remote.autoForwardPortsSource": "process",
+  "remote.restoreForwardedPorts": true
+}
+{
+  // Auto-forward port 8000 and open in a browser to speed up first-load feedback
+  "remote.portsAttributes": {
+    "8000": {
+      "label": "Gablok dev server",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "python-envs.defaultEnvManager": "ms-python.python:system",
+  "python-envs.pythonProjects": []
+}

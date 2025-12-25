@@ -1,0 +1,81 @@
+{
+  "snapshot": {
+    "rooms": [
+      {
+        "width": 10,
+        "depth": 8,
+        "height": 3,
+        "x": 0,
+        "z": 0,
+        "baseHeight": 0
+      }
+    ],
+    "garages": [],
+    "pergolas": [],
+    "balconies": [],
+    "furniture": [],
+    "pools": [
+      {
+        "width": 6,
+        "depth": 3,
+        "height": 1.2,
+        "x": -4,
+        "z": 6,
+        "baseHeight": -0.5
+      }
+    ],
+    "roofs": [],
+    "stairs": [],
+    "wallStrips": [
+      {
+        "start": {
+          "x": -5,
+          "z": -4
+        },
+        "end": {
+          "x": 5,
+          "z": -4
+        },
+        "baseHeight": 0,
+        "height": 3,
+        "thickness": 0.25
+      }
+    ]
+  },
+  "camera": {
+    "position": [
+      18,
+      10,
+      18
+    ],
+    "target": [
+      0,
+      0,
+      0
+    ],
+    "up": [
+      0,
+      1,
+      0
+    ],
+    "fov": 55,
+    "near": 0.1,
+    "far": 1000
+  },
+  "view": null,
+  "stage": {
+    "width": 1920,
+    "height": 1080
+  },
+  "sky": null,
+  "project": {
+    "name": "sample"
+  },
+  "quality": 1,
+  "meta": {
+    "requestedAt": 0,
+    "jobId": "3e9bb1aa-09d2-4e7b-88b2-f256c6781899",
+    "queuedAt": 1764074617673,
+    "quality": 1.0
+  }
+}

@@ -1,0 +1,312 @@
+/*!
+ * Apple Design System - Main 3D Menu Override
+ * Applies Apple HIG to the main application controls
+ */
+
+/* ============================================================================
+   GLOBAL APPLE BUTTON SYSTEM FOR MAIN MENU
+   ============================================================================ */
+
+#controls {
+  position: fixed;
+  top: 35px;
+  left: 20px;
+  z-index: 100;
+  background: transparent;
+  backdrop-filter: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body.app-ready #controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+
+.dropdown.open .dropdown-button {
+  background: var(--apple-secondary-system-background) !important;
+  border-color: var(--apple-blue) !important;
+  box-shadow: none;
+  color: var(--apple-blue) !important;
+}
+
+.dropdown.open .dropdown-button .caret svg path {
+  stroke: var(--apple-blue) !important;
+}
+
+.dropdown-button .caret {
+  margin-left: auto;
+  width: 14px;
+  height: 10px;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.dropdown.open .dropdown-button .caret {
+  transform: rotate(180deg);
+}
+
+.dropdown-button .caret svg path {
+  stroke: var(--apple-label);
+  transition: stroke 0.2s ease;
+}
+
+/* Dropdown List - Apple Style */
+.dropdown-list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 200px;
+  max-height: 400px;
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(30px) saturate(160%);
+  -webkit-backdrop-filter: blur(30px) saturate(160%);
+  border: 0.5px solid rgba(120, 120, 128, 0.18);
+  border-radius: var(--apple-radius-medium);
+  box-shadow: none;
+  padding: 6px;
+  z-index: 200;
+  display: none;
+  animation: dropdown-slide-in 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+@keyframes dropdown-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.dropdown.open .dropdown-list {
+  display: block;
+}
+
+/* Dark mode dropdown surfaces (3D navigation toolbar) */
+[data-theme="dark"] #controls .dropdown-list {
+  background: var(--apple-material-thick);
+  border-color: var(--apple-separator);
+}
+
+[data-theme="dark"] #controls .dropdown-item:hover {
+  background: var(--apple-secondary-fill);
+  color: var(--apple-label);
+}
+
+[data-theme="dark"] #controls .dropdown-item.disabled:hover {
+  background: transparent;
+  color: var(--apple-tertiary-label);
+}
+
+/* Dropdown Items */
+.dropdown-item {
+  padding: 8px 12px;
+  font-size: 13px !important;
+  font-weight: var(--apple-font-weight-regular);
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--apple-radius-small);
+  color: var(--apple-label);
+  transition: all 0.15s ease;
+  margin-bottom: 2px;
+}
+
+.dropdown-item .checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+}
+
+.dropdown-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--apple-blue);
+  flex-shrink: 0;
+}
+
+.dropdown-item:last-child {
+  margin-bottom: 0;
+}
+
+.dropdown-item:hover {
+  background: #e5e5ea;
+  color: var(--apple-label);
+}
+
+.dropdown-item:active {
+  background: var(--apple-blue);
+  color: #ffffff;
+}
+
+.dropdown-item.disabled {
+  color: var(--apple-tertiary-label);
+  cursor: default;
+}
+
+.dropdown-item.disabled:hover {
+  background: transparent;
+  color: var(--apple-tertiary-label);
+}
+
+.dropdown-item.separator {
+  padding: 0;
+  margin: 4px 0;
+  border-top: 0.5px solid var(--apple-separator);
+  cursor: default;
+  height: 1px;
+  min-height: 1px;
+}
+
+.dropdown-item.separator:hover {
+  background: transparent;
+}
+
+.dropdown-title {
+  font-size: var(--apple-font-size-caption2);
+  font-weight: var(--apple-font-weight-bold);
+  color: var(--apple-secondary-label);
+  padding: 8px 12px 4px 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: default;
+}
+
+.dropdown-title:hover {
+  background: transparent;
+  color: var(--apple-secondary-label);
+}
+
+/* ============================================================================
+   ACCOUNT BUTTON
+   ============================================================================ */
+
+#account-button {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 100;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--apple-material-regular);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 0.5px solid var(--apple-separator);
+  border-radius: 50%;
+  box-shadow: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+#account-button:hover {
+  background: var(--apple-secondary-system-background);
+  box-shadow: none;
+  transform: scale(1.05);
+}
+
+#account-button:active {
+  transform: scale(0.95);
+}
+
+#account-button svg circle {
+  stroke: var(--apple-blue);
+  fill: var(--apple-system-background);
+}
+
+#account-button svg path {
+  stroke: var(--apple-blue);
+}
+
+#account-button:hover svg circle,
+#account-button:hover svg path {
+  stroke: var(--apple-blue-hover);
+}
+
+/* ============================================================================
+   VERSION BADGE - Minimal Apple Style
+   ============================================================================ */
+
+#version-badge {
+  position: fixed;
+  top: 8px;
+  right: 64px;
+  background: var(--apple-secondary-label);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--apple-system-background);
+  padding: 4px 8px;
+  font: var(--apple-font-size-caption2) var(--apple-font-family-mono);
+  z-index: 10000;
+  border-radius: var(--apple-radius-small);
+  border: 0.5px solid var(--apple-quaternary-label);
+  box-shadow: none;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================================
+   RESPONSIVE & ACCESSIBILITY
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  #controls {
+    top: 12px;
+    left: 12px;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  #controls button,
+  #controls .dropdown-button {
+    height: 36px;
+    font-size: 14px;
+  }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  #controls button,
+  #controls .dropdown-button,
+  .dropdown-list,
+  .dropdown-item {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* Focus states for accessibility */
+#controls button:focus-visible,
+#controls .dropdown-button:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.dropdown-item:focus-visible {
+  outline: none;
+  background: var(--apple-blue);
+  color: var(--apple-system-background);
+}
