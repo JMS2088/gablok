@@ -85,6 +85,60 @@
         var b = (typeof window.plan2dComputeBounds === 'function') ? window.plan2dComputeBounds() : null;
         if (!b) return false;
 
+        function computeRobustBounds(){
+          try {
+            if (!window.__plan2d || !Array.isArray(__plan2d.elements) || __plan2d.elements.length === 0) return null;
+            var xs = [], ys = [];
+            function addPt(x, y){
+              if (!isFinite(x) || !isFinite(y)) return;
+              xs.push(x);
+              ys.push(y);
+            }
+            for (var i=0; i<__plan2d.elements.length; i++){
+              var e = __plan2d.elements[i];
+              if (!e) continue;
+              if (e.type === 'wall'){
+                addPt(e.x0, e.y0);
+                addPt(e.x1, e.y1);
+                continue;
+              }
+              if ((e.type === 'window' || e.type === 'door') && typeof e.host === 'number'){
+                var host = __plan2d.elements[e.host];
+                if (host && host.type === 'wall'){
+                  var t0 = Math.max(0, Math.min(1, e.t0 || 0));
+                  var t1 = Math.max(0, Math.min(1, e.t1 || 0));
+                  if (t1 < t0){ var tmp = t0; t0 = t1; t1 = tmp; }
+                  var ax = host.x0 + (host.x1 - host.x0) * t0;
+                  var ay = host.y0 + (host.y1 - host.y0) * t0;
+                  var bx = host.x0 + (host.x1 - host.x0) * t1;
+                  var by = host.y0 + (host.y1 - host.y0) * t1;
+                  addPt(ax, ay);
+                  addPt(bx, by);
+                  continue;
+                }
+              }
+              if (typeof e.x0 === 'number' && typeof e.y0 === 'number') addPt(e.x0, e.y0);
+              if (typeof e.x1 === 'number' && typeof e.y1 === 'number') addPt(e.x1, e.y1);
+            }
+            if (xs.length < 8) return null;
+            xs.sort(function(a,b){ return a-b; });
+            ys.sort(function(a,b){ return a-b; });
+            var n = xs.length;
+            // Trim 2% on each side to ignore far-out CAD artifacts.
+            var lo = Math.max(0, Math.floor(n * 0.02));
+            var hi = Math.min(n - 1, Math.ceil(n * 0.98) - 1);
+            var minX = xs[lo], maxX = xs[hi];
+            var minY = ys[lo], maxY = ys[hi];
+            if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return null;
+            if (maxX - minX < 1e-9 || maxY - minY < 1e-9) return null;
+            // If trimming collapses too much (degenerate), fall back to full bounds.
+            if ((maxX - minX) < (b.maxX - b.minX) * 0.001 || (maxY - minY) < (b.maxY - b.minY) * 0.001) return null;
+            return { minX:minX, minY:minY, maxX:maxX, maxY:maxY };
+          } catch(_e){
+            return null;
+          }
+        }
+
         var pad = (typeof paddingPx === 'number' && isFinite(paddingPx)) ? paddingPx : 40;
         var w = Math.max(1, c.width || 1);
         var h = Math.max(1, c.height || 1);
@@ -99,6 +153,21 @@
         // Clamp scale to keep UI stable
         var minS = 10, maxS = 800;
         if (!isFinite(s) || s <= 0) return false;
+
+        // Auto-robust-fit when the computed fit would clamp to minimum zoom.
+        // This typically happens when a DWG/DXF contains a far-out title block/XREF/stray point.
+        var wantRobust = !!(opts && opts.robust);
+        if (!wantRobust && s < minS) wantRobust = true;
+        if (wantRobust) {
+          var rb = computeRobustBounds();
+          if (rb) {
+            b = rb;
+            contentW = Math.max(1e-6, (b.maxX - b.minX));
+            contentH = Math.max(1e-6, (b.maxY - b.minY));
+            s = Math.min(availW / contentW, availH / contentH);
+          }
+        }
+
         s = Math.max(minS, Math.min(maxS, s));
 
         var cx = (b.minX + b.maxX) / 2;

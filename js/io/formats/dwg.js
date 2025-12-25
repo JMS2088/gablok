@@ -5,6 +5,25 @@
     return new Promise(function(res){ setTimeout(res, ms||0); });
   }
 
+  async function _fitPlan2DWhenReady(paddingPx){
+    // Plan2D fit can fail if called before the canvas has its final size
+    // (e.g. just after opening the modal or before a resize pass).
+    // Retry a few frames so imports don’t appear “blank” even though elements exist.
+    var pad = (typeof paddingPx === 'number' ? paddingPx : 40);
+    for (var i=0; i<8; i++){
+      try { if (typeof window.__plan2dResize === 'function') window.__plan2dResize(); } catch(_rz) {}
+      try { if (window.__plan2d) window.__plan2d.autoFitEnabled = true; } catch(_af) {}
+      try {
+        if (typeof window.plan2dFitViewToContent === 'function') {
+          var ok = window.plan2dFitViewToContent(pad, { robust: true });
+          if (ok) return true;
+        }
+      } catch(_fit) {}
+      await _sleep(60);
+    }
+    return false;
+  }
+
   function _showImportProgress(msg){
     try { if (typeof window.showFpHint === 'function') window.showFpHint(msg, 5000); } catch(_h) {}
     try { if (typeof window.updateStatus === 'function') window.updateStatus(msg); } catch(_s) {}
@@ -88,9 +107,10 @@
         level: (typeof opts.level === 'number' ? opts.level : (typeof window.currentFloor === 'number' ? window.currentFloor : 0)),
         thicknessM: (typeof opts.thicknessM === 'number' ? opts.thicknessM : 0.01),
         // Conservative defaults; server will also apply its own caps.
-        maxWalls: (typeof opts.maxWalls === 'number' ? opts.maxWalls : 12000),
-        minLenMm: (typeof opts.minLenMm === 'number' ? opts.minLenMm : 100),
-        quantMm: (typeof opts.quantMm === 'number' ? opts.quantMm : 20),
+        // Keep enough detail for a full floorplan, but drop tiny annotation/tick segments.
+        maxWalls: (typeof opts.maxWalls === 'number' ? opts.maxWalls : 60000),
+        minLenMm: (typeof opts.minLenMm === 'number' ? opts.minLenMm : 20),
+        quantMm: (typeof opts.quantMm === 'number' ? opts.quantMm : 5),
         maxSegments: (typeof opts.maxSegments === 'number' ? opts.maxSegments : 300000),
         expandInserts: (typeof opts.expandInserts === 'boolean' ? opts.expandInserts : true),
         maxInsertSegs: (typeof opts.maxInsertSegs === 'number' ? opts.maxInsertSegs : 2500)
@@ -122,6 +142,21 @@
       return await res.json();
     } catch(_e) {
       return null;
+    }
+  }
+
+  function _statusSummaryLine(status){
+    try {
+      if (!status || !status.dwgToDxf) return '';
+      var s = status.dwgToDxf;
+      var parts = [];
+      parts.push('DWG→DXF: ' + (s.configured ? 'configured' : 'not configured'));
+      if (s.bin) parts.push('bin: ' + s.bin + (s.binFound ? ' (found)' : ' (NOT found)'));
+      if (s.converterFound === false) parts.push('converter: NOT found');
+      if (s.cmd) parts.push('cmd: ' + s.cmd);
+      return parts.join('\n');
+    } catch(_e) {
+      return '';
     }
   }
 
@@ -232,6 +267,8 @@
         if (typeof fetch === 'function') {
           var startTs = Date.now();
           var running = true;
+          var planErr = null;
+          var convErr = null;
           (async function(){
             while (running) {
               var sec = Math.max(0, Math.round((Date.now() - startTs)/1000));
@@ -264,11 +301,12 @@
             try { if (window.__plan2d && typeof __plan2d.wallThicknessM === 'number') __plan2d.wallThicknessM = 0.01; } catch(_wt) {}
             try { window.__lastDwgPlan2dJson = planRes.plan; } catch(_dbg2) {}
             try { if (typeof window.plan2dImport === 'function') window.plan2dImport(planRes.plan); } catch(_imp2) {}
-            try { if (typeof window.plan2dFitViewToContent === 'function') window.plan2dFitViewToContent(40); } catch(_fit2) {}
+            try { await _fitPlan2DWhenReady(40); } catch(_fit2) {}
             try { if (typeof window.plan2dDraw === 'function') window.plan2dDraw(); } catch(_dr2) {}
             try { updateStatus && updateStatus('DWG loaded into 2D editor (' + (planRes.plan.elements ? planRes.plan.elements.length : 0) + ' walls)'); } catch(_ok2) {}
             return;
           }
+          if (planRes && !planRes.ok) planErr = planRes;
 
           // Fallback: DWG->DXF and then client-side conversion
           var conv = await _convertDwgToDxfViaServer(file);
@@ -304,7 +342,7 @@
 
               try { window.__lastDwgPlan2dJson = planJson; } catch(_dbg) {}
               try { if (typeof window.plan2dImport === 'function') window.plan2dImport(planJson); } catch(_imp) {}
-              try { if (typeof window.plan2dFitViewToContent === 'function') window.plan2dFitViewToContent(40); } catch(_fit) {}
+              try { await _fitPlan2DWhenReady(40); } catch(_fit) {}
               try { if (typeof window.plan2dDraw === 'function') window.plan2dDraw(); } catch(_dr) {}
               try { updateStatus && updateStatus('DWG loaded into 2D editor (' + planJson.elements.length + ' walls)'); } catch(_ok) {}
               return;
@@ -322,31 +360,25 @@
             return;
           }
 
+          if (conv && !conv.ok) convErr = conv;
+
           running = false;
 
-          // If the server explicitly says conversion isn't configured, show actionable guidance.
+          // Both server paths failed. Show the actual server error + status so users don't get a misleading
+          // “cannot parse DWG in browser” message when the backend converter is misconfigured.
           try {
-            var detail = conv && conv.detail;
-            if (detail && detail.error && (detail.error === 'dwg-converter-not-configured' || detail.error === 'converter-not-found')) {
-              if (typeof window.showAppleAlert === 'function') {
-                var required = detail.requiredEnv ? String(detail.requiredEnv) : '';
-                var status = await _fetchDwgStatus();
-                var statusLine = '';
-                try {
-                  if (status && status.dwgToDxf) {
-                    var s = status.dwgToDxf;
-                    statusLine = '\n\nServer status: ' +
-                      (s.configured ? 'configured' : 'not configured') +
-                      (s.bin ? (' (bin: ' + s.bin + (s.binFound ? ', found' : ', NOT found') + ')') : '');
-                  }
-                } catch(_st) {}
-
-                var msg = (detail.message ? String(detail.message) : 'DWG converter is not configured on the server.') +
-                  (required ? ('\n\nRequired env: ' + required) : '') +
-                  statusLine +
-                  '\n\nOn Linux you must install a DWG converter tool and set the env vars in the server/service. See DWG_CONVERSION_SETUP.md.';
-                window.showAppleAlert('DWG Import', msg);
-              }
+            if (typeof window.showAppleAlert === 'function') {
+              var detail = (planErr && planErr.detail) || (convErr && convErr.detail) || null;
+              var msg0 = (planErr && (planErr.message || planErr.error)) || (convErr && (convErr.message || convErr.error)) || 'DWG conversion failed.';
+              var required = (detail && detail.requiredEnv) ? String(detail.requiredEnv) : '';
+              var status = await _fetchDwgStatus();
+              var statusLine = _statusSummaryLine(status);
+              var extra = '';
+              if (detail && detail.error) extra += '\n\nServer error: ' + String(detail.error);
+              if (required) extra += '\n\nRequired env: ' + required;
+              if (statusLine) extra += '\n\nServer status:\n' + statusLine;
+              extra += '\n\nIf the server converter is unavailable, export/save the DWG as DXF and re-upload the .dxf. See DWG_CONVERSION_SETUP.md.';
+              window.showAppleAlert('DWG Import', String(msg0) + extra);
             }
           } catch(_convMsg) {}
         }

@@ -22,6 +22,25 @@
     opts = opts || {};
     var maxSegments = (typeof opts.maxSegments === 'number' && opts.maxSegments > 0) ? opts.maxSegments : 500000;
 
+    // Curve tessellation controls. Defaults are tuned to avoid exploding large-radius arcs into hundreds of segments.
+    // Units are DXF input units (typically mm for our DWG->DXF flow).
+    var curveRadiusFrac = (typeof opts.curveRadiusFrac === 'number' && isFinite(opts.curveRadiusFrac)) ? opts.curveRadiusFrac : 0.25;
+    if (!(curveRadiusFrac > 0)) curveRadiusFrac = 0.25;
+    if (curveRadiusFrac < 0.01) curveRadiusFrac = 0.01;
+    if (curveRadiusFrac > 1.0) curveRadiusFrac = 1.0;
+    var curveMaxChord = (typeof opts.curveMaxChord === 'number' && isFinite(opts.curveMaxChord)) ? opts.curveMaxChord : 500;
+    if (!(curveMaxChord > 0)) curveMaxChord = 500;
+    var curveMinSegs = (typeof opts.curveMinSegs === 'number' && isFinite(opts.curveMinSegs)) ? Math.floor(opts.curveMinSegs) : 3;
+    if (!(curveMinSegs >= 2)) curveMinSegs = 2;
+    var curveMaxSegs = (typeof opts.curveMaxSegs === 'number' && isFinite(opts.curveMaxSegs)) ? Math.floor(opts.curveMaxSegs) : 96;
+    if (curveMaxSegs < curveMinSegs) curveMaxSegs = curveMinSegs;
+    var splineSamplesPerCtrl = (typeof opts.splineSamplesPerCtrl === 'number' && isFinite(opts.splineSamplesPerCtrl)) ? Math.floor(opts.splineSamplesPerCtrl) : 4;
+    if (!(splineSamplesPerCtrl >= 1)) splineSamplesPerCtrl = 1;
+    var splineSamplesMin = (typeof opts.splineSamplesMin === 'number' && isFinite(opts.splineSamplesMin)) ? Math.floor(opts.splineSamplesMin) : 16;
+    if (!(splineSamplesMin >= 4)) splineSamplesMin = 4;
+    var splineSamplesMax = (typeof opts.splineSamplesMax === 'number' && isFinite(opts.splineSamplesMax)) ? Math.floor(opts.splineSamplesMax) : 256;
+    if (splineSamplesMax < splineSamplesMin) splineSamplesMax = splineSamplesMin;
+
     var len = text.length;
     var pos = 0;
     var lastYield = 0;
@@ -56,23 +75,293 @@
 
     var curType = null;
     var lineEnt = { x0: null, y0: null, x1: null, y1: null };
-    var lw = { xs: [], ys: [], flags: 0 };
+    var lw = { verts: [], flags: 0 };
+
+    var arcEnt = { cx: null, cy: null, r: null, a0Deg: null, a1Deg: null };
+    var circEnt = { cx: null, cy: null, r: null };
+    var ellipseEnt = { cx: null, cy: null, mx: null, my: null, ratio: null, t0: null, t1: null };
+    var splineEnt = { degree: null, flags: 0, knots: [], weights: [], ctrl: [], fit: [] };
 
     var insertEnt = { name: null, x: null, y: null, sx: 1, sy: 1, rotDeg: 0 };
     var insertActive = false;
 
+    // Model space vs paper space/layout filtering.
+    // DXF: 67=1 indicates paper space; 410 is layout name ("Model" for model space).
+    var curPaperSpace = false;
+
     var polyActive = false;
-    var poly = { xs: [], ys: [], flags: 0 };
+    var poly = { verts: [], flags: 0 };
     var vertexActive = false;
-    var vertex = { x: null, y: null };
+    var vertex = { x: null, y: null, bulge: 0 };
+
+    function _tau(){ return Math.PI * 2; }
+
+    function arcAppend(out, cx, cy, r, a0, a1, ccw){
+      try {
+        if (!(isFinite(cx) && isFinite(cy) && isFinite(r) && isFinite(a0) && isFinite(a1))) return;
+        if (r <= 0) return;
+        var tau = _tau();
+        if (ccw) {
+          while (a1 <= a0) a1 += tau;
+        } else {
+          while (a1 >= a0) a1 -= tau;
+        }
+        var da = a1 - a0;
+        if (da === 0) return;
+        var arcLen = Math.abs(da) * Math.abs(r);
+        var maxChord = Math.max(1, Math.min(curveMaxChord, Math.abs(r) * curveRadiusFrac));
+        var n = Math.ceil(arcLen / maxChord);
+        n = Math.max(curveMinSegs, Math.min(curveMaxSegs, n));
+        var step = da / n;
+        var px = cx + r * Math.cos(a0);
+        var py = cy + r * Math.sin(a0);
+        for (var i=1; i<=n; i++) {
+          if (out.length >= maxSegments) break;
+          var ang = a0 + step * i;
+          var x = cx + r * Math.cos(ang);
+          var y = cy + r * Math.sin(ang);
+          pushSeg(out, px, py, x, y);
+          px = x; py = y;
+        }
+      } catch(_e) {}
+    }
+
+    function bulgeToArc(out, x0, y0, x1, y1, bulge){
+      try {
+        var b = parseFloat(bulge);
+        if (!isFinite(b) || b === 0) { pushSeg(out, x0, y0, x1, y1); return; }
+        var dx = x1 - x0;
+        var dy = y1 - y0;
+        var d = Math.hypot(dx, dy);
+        if (!(d > 1e-12)) return;
+        var theta = 4 * Math.atan(b);
+        if (theta === 0) { pushSeg(out, x0, y0, x1, y1); return; }
+        var r = d / (2 * Math.sin(Math.abs(theta) / 2));
+        var a = Math.sqrt(Math.max(0, r*r - (d*0.5)*(d*0.5)));
+        var mx = (x0 + x1) * 0.5;
+        var my = (y0 + y1) * 0.5;
+        var nx = -dy / d;
+        var ny = dx / d;
+        var sgn = (b > 0) ? 1 : -1;
+        var cx = mx + nx * a * sgn;
+        var cy = my + ny * a * sgn;
+        var a0 = Math.atan2(y0 - cy, x0 - cx);
+        var a1 = a0 + theta;
+        arcAppend(out, cx, cy, r, a0, a1, (theta > 0));
+      } catch(_e) {
+        pushSeg(out, x0, y0, x1, y1);
+      }
+    }
+
+    function flushCurveEntities(){
+      if (curType === 'ARC') flushArc();
+      else if (curType === 'CIRCLE') flushCircle();
+      else if (curType === 'ELLIPSE') flushEllipse();
+      else if (curType === 'SPLINE') flushSpline();
+    }
 
     function pushSeg(out, x0, y0, x1, y1){
+      if (curPaperSpace) return;
       if (out.length >= maxSegments) return;
       if (isFinite(x0) && isFinite(y0) && isFinite(x1) && isFinite(y1)) out.push({x0:x0,y0:y0,x1:x1,y1:y1});
     }
 
+    function flushArc(){
+      if (curType !== 'ARC') return;
+      var out = (inBlocks && currentBlockSegs) ? currentBlockSegs : segs;
+      var cx = arcEnt.cx, cy = arcEnt.cy, r = arcEnt.r, a0Deg = arcEnt.a0Deg, a1Deg = arcEnt.a1Deg;
+      arcEnt.cx = arcEnt.cy = arcEnt.r = arcEnt.a0Deg = arcEnt.a1Deg = null;
+      if (!(isFinite(cx) && isFinite(cy) && isFinite(r) && isFinite(a0Deg) && isFinite(a1Deg))) return;
+      var a0 = a0Deg * Math.PI / 180;
+      var a1 = a1Deg * Math.PI / 180;
+      arcAppend(out, cx, cy, r, a0, a1, true);
+    }
+
+    function flushCircle(){
+      if (curType !== 'CIRCLE') return;
+      var out = (inBlocks && currentBlockSegs) ? currentBlockSegs : segs;
+      var cx = circEnt.cx, cy = circEnt.cy, r = circEnt.r;
+      circEnt.cx = circEnt.cy = circEnt.r = null;
+      if (!(isFinite(cx) && isFinite(cy) && isFinite(r))) return;
+      arcAppend(out, cx, cy, r, 0, _tau(), true);
+    }
+
+    function flushEllipse(){
+      if (curType !== 'ELLIPSE') return;
+      var out = (inBlocks && currentBlockSegs) ? currentBlockSegs : segs;
+      var cx = ellipseEnt.cx, cy = ellipseEnt.cy, mx = ellipseEnt.mx, my = ellipseEnt.my;
+      var ratio = ellipseEnt.ratio, t0 = ellipseEnt.t0, t1 = ellipseEnt.t1;
+      ellipseEnt.cx = ellipseEnt.cy = ellipseEnt.mx = ellipseEnt.my = ellipseEnt.ratio = ellipseEnt.t0 = ellipseEnt.t1 = null;
+      if (!(isFinite(cx) && isFinite(cy) && isFinite(mx) && isFinite(my) && isFinite(ratio) && isFinite(t0) && isFinite(t1))) return;
+      if (!(ratio > 0)) return;
+      var tau = _tau();
+      while (t1 <= t0) t1 += tau;
+      var dt = t1 - t0;
+      var majLen = Math.hypot(mx, my);
+      var approxLen = Math.abs(dt) * Math.max(1, majLen);
+      var axisLen = Math.max(majLen, majLen * ratio);
+      var maxChord = Math.max(1, Math.min(curveMaxChord, axisLen * curveRadiusFrac));
+      var n = Math.ceil(approxLen / maxChord);
+      var minN = Math.max(8, curveMinSegs * 2);
+      var maxN = Math.max(minN, Math.min(192, curveMaxSegs * 2));
+      n = Math.max(minN, Math.min(maxN, n));
+      var nx = -my * ratio;
+      var ny = mx * ratio;
+      var step = dt / n;
+      var px = cx + mx * Math.cos(t0) + nx * Math.sin(t0);
+      var py = cy + my * Math.cos(t0) + ny * Math.sin(t0);
+      for (var i=1; i<=n; i++) {
+        if (out.length >= maxSegments) break;
+        var t = t0 + step * i;
+        var x = cx + mx * Math.cos(t) + nx * Math.sin(t);
+        var y = cy + my * Math.cos(t) + ny * Math.sin(t);
+        pushSeg(out, px, py, x, y);
+        px = x; py = y;
+      }
+    }
+
+    function flushSpline(){
+      if (curType !== 'SPLINE') return;
+      var out = (inBlocks && currentBlockSegs) ? currentBlockSegs : segs;
+      var flags = parseInt(splineEnt.flags || 0, 10) || 0;
+      var isClosed = (flags & 1) === 1;
+      var degree = splineEnt.degree;
+      var ctrl = splineEnt.ctrl || [];
+      var knots = splineEnt.knots || [];
+      var weights = splineEnt.weights || [];
+      var fit = splineEnt.fit || [];
+      splineEnt.degree = null;
+      splineEnt.flags = 0;
+      splineEnt.knots = [];
+      splineEnt.weights = [];
+      splineEnt.ctrl = [];
+      splineEnt.fit = [];
+
+      // Fit-point only fallback
+      if ((!ctrl || ctrl.length === 0) && Array.isArray(fit) && fit.length >= 2) {
+        for (var fi=0; fi<fit.length-1; fi++) {
+          if (out.length >= maxSegments) break;
+          var p0 = fit[fi];
+          var p1 = fit[fi+1];
+          if (!p0 || !p1) continue;
+          pushSeg(out, p0[0], p0[1], p1[0], p1[1]);
+        }
+        if (isClosed && fit.length >= 3 && out.length < maxSegments) {
+          pushSeg(out, fit[fit.length-1][0], fit[fit.length-1][1], fit[0][0], fit[0][1]);
+        }
+        return;
+      }
+
+      if (!isFinite(degree)) return;
+      var p = parseInt(degree, 10);
+      if (!(p >= 1)) return;
+      if (!Array.isArray(ctrl) || !Array.isArray(knots)) return;
+      if (ctrl.length < p + 1) return;
+      if (knots.length < (ctrl.length + p + 1)) return;
+
+      var ctrlPts = [];
+      for (var ci=0; ci<ctrl.length; ci++) {
+        var cpt = ctrl[ci];
+        if (!cpt || cpt.length < 2) continue;
+        var cx = parseFloat(cpt[0]);
+        var cy = parseFloat(cpt[1]);
+        if (isFinite(cx) && isFinite(cy)) ctrlPts.push([cx, cy]);
+      }
+      if (ctrlPts.length < p + 1) return;
+
+      var U = knots.map(function(u){ return parseFloat(u); }).filter(function(u){ return isFinite(u); });
+      if (U.length < (ctrlPts.length + p + 1)) return;
+
+      var W = null;
+      if (Array.isArray(weights) && weights.length >= ctrlPts.length) {
+        W = new Array(ctrlPts.length);
+        for (var wi=0; wi<ctrlPts.length; wi++) {
+          var wv = parseFloat(weights[wi]);
+          W[wi] = isFinite(wv) ? wv : 1;
+        }
+      }
+
+      var n = ctrlPts.length - 1;
+      var m = U.length - 1;
+      var u0 = U[p];
+      var u1 = U[m - p];
+      if (!(isFinite(u0) && isFinite(u1) && u1 > u0)) return;
+
+      function findSpan(u){
+        if (u >= U[n + 1]) return n;
+        if (u <= U[p]) return p;
+        var low = p;
+        var high = n + 1;
+        var mid = Math.floor((low + high) / 2);
+        while (u < U[mid] || u >= U[mid + 1]) {
+          if (u < U[mid]) high = mid;
+          else low = mid;
+          mid = Math.floor((low + high) / 2);
+        }
+        return mid;
+      }
+
+      function basisFuns(span, u){
+        var N = new Array(p + 1);
+        var left = new Array(p + 1);
+        var right = new Array(p + 1);
+        for (var ii=0; ii<=p; ii++) { N[ii] = 0; left[ii] = 0; right[ii] = 0; }
+        N[0] = 1;
+        for (var j=1; j<=p; j++) {
+          left[j] = u - U[span + 1 - j];
+          right[j] = U[span + j] - u;
+          var saved = 0;
+          for (var r=0; r<j; r++) {
+            var denom = right[r + 1] + left[j - r];
+            var temp = (denom === 0) ? 0 : (N[r] / denom);
+            N[r] = saved + right[r + 1] * temp;
+            saved = left[j - r] * temp;
+          }
+          N[j] = saved;
+        }
+        return N;
+      }
+
+      function curvePoint(u){
+        var span = findSpan(u);
+        var N = basisFuns(span, u);
+        var cx = 0, cy = 0, cw = 0;
+        for (var j=0; j<=p; j++) {
+          var i = span - p + j;
+          var bx = ctrlPts[i][0];
+          var by = ctrlPts[i][1];
+          var wj = (W ? W[i] : 1);
+          var Nj = N[j] * wj;
+          cx += Nj * bx;
+          cy += Nj * by;
+          cw += Nj;
+        }
+        if (cw === 0) return null;
+        return [cx / cw, cy / cw];
+      }
+
+      var samples = Math.max(24, Math.min(512, ctrlPts.length * 10));
+      var prev = null;
+      for (var si=0; si<=samples; si++) {
+        if (out.length >= maxSegments) break;
+        var u = u0 + (u1 - u0) * (si / samples);
+        var pt = curvePoint(u);
+        if (!pt) continue;
+        if (prev) pushSeg(out, prev[0], prev[1], pt[0], pt[1]);
+        prev = pt;
+      }
+      if (isClosed && prev && out.length < maxSegments) {
+        var first = curvePoint(u0);
+        if (first) pushSeg(out, prev[0], prev[1], first[0], first[1]);
+      }
+    }
+
     function flushLine(){
       if (curType === 'LINE') {
+        if (curPaperSpace) {
+          lineEnt.x0 = lineEnt.y0 = lineEnt.x1 = lineEnt.y1 = null;
+          return;
+        }
         var x0 = lineEnt.x0, y0 = lineEnt.y0, x1 = lineEnt.x1, y1 = lineEnt.y1;
         var out = (inBlocks && currentBlockSegs) ? currentBlockSegs : segs;
         pushSeg(out, x0, y0, x1, y1);
@@ -82,50 +371,76 @@
 
     function flushLwpoly(){
       if (curType !== 'LWPOLYLINE') return;
+      if (curPaperSpace) { lw.verts = []; lw.flags = 0; return; }
       var out = (inBlocks && currentBlockSegs) ? currentBlockSegs : segs;
-      var n = Math.min(lw.xs.length, lw.ys.length);
+      var verts = lw.verts || [];
+      var n = verts.length;
       if (n >= 2) {
         for (var i=0;i<n-1;i++) {
-          var x0 = parseFloat(lw.xs[i]); var y0 = parseFloat(lw.ys[i]);
-          var x1 = parseFloat(lw.xs[i+1]); var y1 = parseFloat(lw.ys[i+1]);
           if (out.length >= maxSegments) break;
-          pushSeg(out, x0, y0, x1, y1);
+          var v0 = verts[i];
+          var v1 = verts[i+1];
+          if (!v0 || !v1) continue;
+          var x0 = v0.x, y0 = v0.y, x1 = v1.x, y1 = v1.y;
+          var bulge = (isFinite(v0.bulge) ? v0.bulge : 0);
+          if (bulge) bulgeToArc(out, x0, y0, x1, y1, bulge);
+          else pushSeg(out, x0, y0, x1, y1);
         }
         if ((lw.flags & 1) === 1) {
-          var cx0 = parseFloat(lw.xs[0]); var cy0 = parseFloat(lw.ys[0]);
-          var cx1 = parseFloat(lw.xs[n-1]); var cy1 = parseFloat(lw.ys[n-1]);
-          if (out.length < maxSegments) pushSeg(out, cx1, cy1, cx0, cy0);
+          var lv0 = verts[n-1];
+          var fv0 = verts[0];
+          if (lv0 && fv0 && out.length < maxSegments) {
+            var bulgeLast = (isFinite(lv0.bulge) ? lv0.bulge : 0);
+            if (bulgeLast) bulgeToArc(out, lv0.x, lv0.y, fv0.x, fv0.y, bulgeLast);
+            else pushSeg(out, lv0.x, lv0.y, fv0.x, fv0.y);
+          }
         }
       }
-      lw.xs = []; lw.ys = []; lw.flags = 0;
+      lw.verts = []; lw.flags = 0;
     }
 
     function flushPolyline(){
       if (!polyActive) return;
+      if (curPaperSpace) {
+        polyActive = false;
+        poly.verts = []; poly.flags = 0;
+        vertexActive = false;
+        vertex.x = vertex.y = null; vertex.bulge = 0;
+        return;
+      }
       var out = (inBlocks && currentBlockSegs) ? currentBlockSegs : segs;
-      var n = Math.min(poly.xs.length, poly.ys.length);
+      var verts = poly.verts || [];
+      var n = verts.length;
       if (n >= 2) {
         for (var i=0;i<n-1;i++) {
-          var x0 = parseFloat(poly.xs[i]); var y0 = parseFloat(poly.ys[i]);
-          var x1 = parseFloat(poly.xs[i+1]); var y1 = parseFloat(poly.ys[i+1]);
           if (out.length >= maxSegments) break;
-          pushSeg(out, x0, y0, x1, y1);
+          var v0 = verts[i];
+          var v1 = verts[i+1];
+          if (!v0 || !v1) continue;
+          var bulge = (isFinite(v0.bulge) ? v0.bulge : 0);
+          if (bulge) bulgeToArc(out, v0.x, v0.y, v1.x, v1.y, bulge);
+          else pushSeg(out, v0.x, v0.y, v1.x, v1.y);
         }
         if ((poly.flags & 1) === 1) {
-          var cx0 = parseFloat(poly.xs[0]); var cy0 = parseFloat(poly.ys[0]);
-          var cx1 = parseFloat(poly.xs[n-1]); var cy1 = parseFloat(poly.ys[n-1]);
-          if (out.length < maxSegments) pushSeg(out, cx1, cy1, cx0, cy0);
+          var lv0 = verts[n-1];
+          var fv0 = verts[0];
+          if (lv0 && fv0 && out.length < maxSegments) {
+            var bulgeLast = (isFinite(lv0.bulge) ? lv0.bulge : 0);
+            if (bulgeLast) bulgeToArc(out, lv0.x, lv0.y, fv0.x, fv0.y, bulgeLast);
+            else pushSeg(out, lv0.x, lv0.y, fv0.x, fv0.y);
+          }
         }
       }
       polyActive = false;
-      poly.xs = []; poly.ys = []; poly.flags = 0;
+      poly.verts = []; poly.flags = 0;
       vertexActive = false;
-      vertex.x = vertex.y = null;
+      vertex.x = vertex.y = null; vertex.bulge = 0;
     }
 
     function flushInsert(){
       if (!insertActive) return;
       insertActive = false;
+      if (curPaperSpace) return;
       var name = insertEnt.name;
       if (!name) return;
       var block = blocks[name];
@@ -181,10 +496,18 @@
 
       if (code === 0) {
         // Entity boundary / section markers
+        // Commit any pending POLYLINE vertex before changing state.
+        if (polyActive && vertexActive && isFinite(vertex.x) && isFinite(vertex.y)) {
+          poly.verts.push({ x: vertex.x, y: vertex.y, bulge: (isFinite(vertex.bulge) ? vertex.bulge : 0) });
+          vertex.x = vertex.y = null;
+          vertex.bulge = 0;
+        }
         if (curType === 'LINE') flushLine();
         if (curType === 'LWPOLYLINE') flushLwpoly();
+        if (curType === 'ARC' || curType === 'CIRCLE' || curType === 'ELLIPSE' || curType === 'SPLINE') flushCurveEntities();
         if (insertActive) flushInsert();
         curType = null;
+        curPaperSpace = false;
 
         if (vtrim === 'SECTION') {
           expectingSectionName = true;
@@ -212,16 +535,16 @@
           }
 
           // Inside BLOCK definitions, we parse the same geometry entities into currentBlockSegs.
-          if (vtrim === 'LINE' || vtrim === 'LWPOLYLINE') {
+          if (vtrim === 'LINE' || vtrim === 'LWPOLYLINE' || vtrim === 'ARC' || vtrim === 'CIRCLE' || vtrim === 'ELLIPSE' || vtrim === 'SPLINE') {
             curType = vtrim;
           } else if (vtrim === 'POLYLINE') {
             polyActive = true;
-            poly.xs = []; poly.ys = []; poly.flags = 0;
+            poly.verts = []; poly.flags = 0;
             vertexActive = false;
           } else if (vtrim === 'VERTEX') {
             if (polyActive) {
               vertexActive = true;
-              vertex.x = null; vertex.y = null;
+              vertex.x = null; vertex.y = null; vertex.bulge = 0;
             }
           } else if (vtrim === 'SEQEND') {
             flushPolyline();
@@ -244,7 +567,7 @@
           }
 
           // Single-record entities
-          if (vtrim === 'LINE' || vtrim === 'LWPOLYLINE') {
+          if (vtrim === 'LINE' || vtrim === 'LWPOLYLINE' || vtrim === 'ARC' || vtrim === 'CIRCLE' || vtrim === 'ELLIPSE' || vtrim === 'SPLINE') {
             curType = vtrim;
           } else if (vtrim === 'INSERT') {
             insertActive = true;
@@ -283,6 +606,17 @@
 
       if (!inEntities && !inBlocks) continue;
 
+      // Space/layout filtering
+      if (code === 67) {
+        curPaperSpace = ((parseInt(vtrim || '0', 10) || 0) === 1);
+        continue;
+      }
+      if (code === 410) {
+        var lname = String(vtrim || '').trim().toLowerCase();
+        if (lname && lname !== 'model') curPaperSpace = true;
+        continue;
+      }
+
       // LINE
       if (curType === 'LINE') {
         if (code === 10) lineEnt.x0 = parseFloat(vtrim);
@@ -294,9 +628,59 @@
 
       // LWPOLYLINE
       if (curType === 'LWPOLYLINE') {
-        if (code === 10) lw.xs.push(vtrim);
-        else if (code === 20) lw.ys.push(vtrim);
+        if (code === 10) {
+          lw.verts.push({ x: parseFloat(vtrim), y: null, bulge: 0 });
+        }
+        else if (code === 20) {
+          if (lw.verts.length) lw.verts[lw.verts.length - 1].y = parseFloat(vtrim);
+        }
+        else if (code === 42) {
+          if (lw.verts.length) lw.verts[lw.verts.length - 1].bulge = parseFloat(vtrim);
+        }
         else if (code === 70) lw.flags = parseInt(vtrim || '0', 10) || 0;
+        continue;
+      }
+
+      // ARC
+      if (curType === 'ARC') {
+        if (code === 10) arcEnt.cx = parseFloat(vtrim);
+        else if (code === 20) arcEnt.cy = parseFloat(vtrim);
+        else if (code === 40) arcEnt.r = parseFloat(vtrim);
+        else if (code === 50) arcEnt.a0Deg = parseFloat(vtrim);
+        else if (code === 51) arcEnt.a1Deg = parseFloat(vtrim);
+        continue;
+      }
+
+      // CIRCLE
+      if (curType === 'CIRCLE') {
+        if (code === 10) circEnt.cx = parseFloat(vtrim);
+        else if (code === 20) circEnt.cy = parseFloat(vtrim);
+        else if (code === 40) circEnt.r = parseFloat(vtrim);
+        continue;
+      }
+
+      // ELLIPSE
+      if (curType === 'ELLIPSE') {
+        if (code === 10) ellipseEnt.cx = parseFloat(vtrim);
+        else if (code === 20) ellipseEnt.cy = parseFloat(vtrim);
+        else if (code === 11) ellipseEnt.mx = parseFloat(vtrim);
+        else if (code === 21) ellipseEnt.my = parseFloat(vtrim);
+        else if (code === 40) ellipseEnt.ratio = parseFloat(vtrim);
+        else if (code === 41) ellipseEnt.t0 = parseFloat(vtrim);
+        else if (code === 42) ellipseEnt.t1 = parseFloat(vtrim);
+        continue;
+      }
+
+      // SPLINE
+      if (curType === 'SPLINE') {
+        if (code === 70) splineEnt.flags = parseInt(vtrim || '0', 10) || 0;
+        else if (code === 71) splineEnt.degree = parseInt(vtrim || '0', 10) || 0;
+        else if (code === 40) splineEnt.knots.push(parseFloat(vtrim));
+        else if (code === 41) splineEnt.weights.push(parseFloat(vtrim));
+        else if (code === 10) splineEnt.ctrl.push([parseFloat(vtrim), null]);
+        else if (code === 20) { if (splineEnt.ctrl.length) splineEnt.ctrl[splineEnt.ctrl.length - 1][1] = parseFloat(vtrim); }
+        else if (code === 11) splineEnt.fit.push([parseFloat(vtrim), null]);
+        else if (code === 21) { if (splineEnt.fit.length) splineEnt.fit[splineEnt.fit.length - 1][1] = parseFloat(vtrim); }
         continue;
       }
 
@@ -318,13 +702,7 @@
         } else {
           if (code === 10) vertex.x = parseFloat(vtrim);
           else if (code === 20) vertex.y = parseFloat(vtrim);
-          // When both coords present, push and keep collecting (some VERTEX records repeat codes)
-          if (isFinite(vertex.x) && isFinite(vertex.y)) {
-            // Store as strings (existing path) to keep behavior consistent
-            poly.xs.push(String(vertex.x));
-            poly.ys.push(String(vertex.y));
-            vertex.x = vertex.y = null;
-          }
+          else if (code === 42) vertex.bulge = parseFloat(vtrim);
         }
       }
     }
@@ -332,6 +710,7 @@
     // Flush any trailing entity
     if (curType === 'LINE') flushLine();
     if (curType === 'LWPOLYLINE') flushLwpoly();
+    if (curType === 'ARC' || curType === 'CIRCLE' || curType === 'ELLIPSE' || curType === 'SPLINE') flushCurveEntities();
     if (insertActive) flushInsert();
     if (polyActive) flushPolyline();
 
@@ -514,8 +893,8 @@
         return s;
       });
     }
-
-    var elements = new Array(selected.length);
+      // Sampling resolution: bounded, scales with control points.
+      var samples = Math.max(splineSamplesMin, Math.min(splineSamplesMax, ctrlPts.length * splineSamplesPerCtrl));
     for (var k=0;k<selected.length;k++) {
       var ss = selected[k];
       elements[k] = { type: 'wall', x0: ss.x0, y0: ss.y0, x1: ss.x1, y1: ss.y1, thickness: thicknessM, level: level, manual: true };

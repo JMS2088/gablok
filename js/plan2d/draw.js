@@ -401,7 +401,23 @@
             var bCad = worldToScreen2D(el.x1, el.y1);
             ctx.save();
             ctx.beginPath();
-            ctx.strokeStyle = (el.meta.stroke || (document.body.classList.contains('cad-mode') ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.85)'));
+            var cadModeNow = false; try { cadModeNow = document.body && document.body.classList.contains('cad-mode'); } catch(_cm) { cadModeNow = false; }
+            var cadStroke = (el.meta.stroke || (cadModeNow ? 'rgba(0,0,0,0.85)' : 'rgba(255,255,255,0.85)'));
+            // Auto-contrast: many CAD files use "black/white" (ACI 7) or very dark colors.
+            // On a dark canvas those become invisible; on a white canvas pure white is invisible.
+            try {
+              if (cadStroke && typeof cadStroke === 'string' && cadStroke.charAt(0) === '#' && cadStroke.length === 7) {
+                var rr = parseInt(cadStroke.slice(1,3), 16);
+                var gg = parseInt(cadStroke.slice(3,5), 16);
+                var bb = parseInt(cadStroke.slice(5,7), 16);
+                if (isFinite(rr) && isFinite(gg) && isFinite(bb)) {
+                  var lum = (0.2126*rr + 0.7152*gg + 0.0722*bb) / 255;
+                  if (!cadModeNow && lum < 0.15) cadStroke = 'rgba(255,255,255,0.85)';
+                  if (cadModeNow && lum > 0.92) cadStroke = 'rgba(0,0,0,0.85)';
+                }
+              }
+            } catch(_cadCol) {}
+            ctx.strokeStyle = cadStroke;
             // CAD linework: slightly thicker than 1px with round joins so segments visually connect.
             var dprCad = window.devicePixelRatio || 1;
             var cadPx = (typeof __plan2d.cadStrokePx === 'number' && isFinite(__plan2d.cadStrokePx)) ? __plan2d.cadStrokePx : 1.35;

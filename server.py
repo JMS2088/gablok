@@ -1039,11 +1039,35 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 except Exception:
                     return '#111111'
 
-            def _dxf_to_segments(dxf_path: str, max_segments: int, expand_inserts: bool, max_insert_segs: int):
+            def _dxf_to_segments(
+                dxf_path: str,
+                max_segments: int,
+                expand_inserts: bool,
+                max_insert_segs: int,
+                *,
+                curve_radius_frac: float = 0.25,
+                curve_max_chord: float = 500.0,
+                curve_min_segs: int = 3,
+                curve_max_segs: int = 96,
+                spline_samples_per_ctrl: int = 4,
+                spline_samples_min: int = 16,
+                spline_samples_max: int = 256,
+            ):
                 # Returns (segments, meta)
                 from typing import Dict, List, Optional, Tuple
                 segs = []
-                meta = { 'truncated': False, 'segments': 0, 'blocks': 0, 'insertsExpanded': 0, 'colors': 0 }
+                meta = {
+                    'truncated': False,
+                    'segments': 0,
+                    'blocks': 0,
+                    'insertsExpanded': 0,
+                    'colors': 0,
+                    'arcs': 0,
+                    'circles': 0,
+                    'ellipses': 0,
+                    'splines': 0,
+                    'bulgeArcs': 0,
+                }
 
                 # Layer table colors (name -> rgb int). Used to resolve BYLAYER (ACI 256).
                 layer_rgb: Dict[str, int] = {}
@@ -1176,20 +1200,37 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
 
                 cur_type = None
                 line_ent: Dict[str, Optional[float]] = { 'x0': None, 'y0': None, 'x1': None, 'y1': None }
-                lw = { 'xs': [], 'ys': [], 'flags': 0 }
+                lw = { 'xs': [], 'ys': [], 'bulges': [], 'flags': 0 }
+
+                arc_ent: Dict[str, Optional[float]] = { 'cx': None, 'cy': None, 'r': None, 'a0': None, 'a1': None }
+                circ_ent: Dict[str, Optional[float]] = { 'cx': None, 'cy': None, 'r': None }
+                ellipse_ent: Dict[str, Optional[float]] = { 'cx': None, 'cy': None, 'mx': None, 'my': None, 'ratio': None, 't0': None, 't1': None }
+                spline_ent = {
+                    'degree': None,
+                    'flags': 0,
+                    'knots': [],
+                    'weights': [],
+                    'ctrl': [],
+                    'fit': []
+                }
 
                 # Per-entity visual attributes
                 cur_layer: Optional[str] = None
                 cur_aci: Optional[int] = None
                 cur_rgb: Optional[int] = None
                 cur_invisible: bool = False
+                # Per-entity space/layout: skip Paper Space (layout) entities to avoid scrambled imports.
+                # DXF: 67=1 indicates paper space; 410 indicates layout name ("Model" for model space).
+                cur_paperspace: bool = False
 
                 poly_active = False
                 vertex_active = False
                 poly_xs: List[float] = []
                 poly_ys: List[float] = []
+                poly_bulges: List[float] = []
                 poly_flags: int = 0
                 vertex: Dict[str, Optional[float]] = { 'x': None, 'y': None }
+                vertex_bulge: Optional[float] = None
 
                 insert_active = False
                 insert_ent = { 'name': None, 'x': None, 'y': None, 'sx': 1.0, 'sy': 1.0, 'rot': 0.0, 'layer': None, 'aci': None, 'rgb': None }
@@ -1255,6 +1296,405 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                         (int(aci) if aci is not None else None)
                     ))
 
+                def _arc_append(
+                    out,
+                    *,
+                    cx: float,
+                    cy: float,
+                    r: float,
+                    a0: float,
+                    a1: float,
+                    ccw: bool,
+                    layer: Optional[str],
+                    aci: Optional[int],
+                    rgb: Optional[int]
+                ):
+                    try:
+                        import math
+                        # Defensive clamp of curve tessellation controls.
+                        try:
+                            radius_frac = float(curve_radius_frac)
+                        except Exception:
+                            radius_frac = 0.25
+                        if not (radius_frac == radius_frac):
+                            radius_frac = 0.25
+                        radius_frac = max(0.01, min(1.0, radius_frac))
+                        try:
+                            chord_cap = float(curve_max_chord)
+                        except Exception:
+                            chord_cap = 500.0
+                        if not (chord_cap == chord_cap) or chord_cap <= 0:
+                            chord_cap = 500.0
+                        try:
+                            min_segs = int(curve_min_segs)
+                        except Exception:
+                            min_segs = 3
+                        try:
+                            max_segs = int(curve_max_segs)
+                        except Exception:
+                            max_segs = 96
+                        if min_segs < 2:
+                            min_segs = 2
+                        if max_segs < min_segs:
+                            max_segs = min_segs
+
+                        if r <= 0 or not (r == r and cx == cx and cy == cy and a0 == a0 and a1 == a1):
+                            return
+                        # Normalize angle span to direction
+                        if ccw:
+                            while a1 <= a0:
+                                a1 += math.tau
+                        else:
+                            while a1 >= a0:
+                                a1 -= math.tau
+                        da = a1 - a0
+                        if da == 0:
+                            return
+
+                        arc_len = abs(da) * abs(r)
+                        # Target chord length in input units (usually mm).
+                        # Use a larger cap than before so large-radius curves don't explode into hundreds of segments.
+                        max_chord = max(1.0, min(chord_cap, abs(r) * radius_frac))
+                        n = int(math.ceil(arc_len / max_chord))
+                        n = max(min_segs, min(max_segs, n))
+                        step = da / float(n)
+
+                        px = cx + r * math.cos(a0)
+                        py = cy + r * math.sin(a0)
+                        for i in range(1, n + 1):
+                            if len(out) >= max_segments:
+                                meta['truncated'] = True
+                                break
+                            ang = a0 + step * i
+                            x = cx + r * math.cos(ang)
+                            y = cy + r * math.sin(ang)
+                            _push_seg(out, px, py, x, y, layer=layer, aci=aci, rgb=rgb)
+                            px, py = x, y
+                    except Exception:
+                        return
+
+                def _bulge_to_arc(out, x0: float, y0: float, x1: float, y1: float, bulge: float, *, layer: Optional[str], aci: Optional[int], rgb: Optional[int]):
+                    try:
+                        import math
+                        b = float(bulge)
+                        if not (b == b) or b == 0.0:
+                            _push_seg(out, x0, y0, x1, y1, layer=layer, aci=aci, rgb=rgb)
+                            return
+                        dx = x1 - x0
+                        dy = y1 - y0
+                        d = math.hypot(dx, dy)
+                        if d <= 1e-12:
+                            return
+                        theta = 4.0 * math.atan(b)
+                        if theta == 0.0:
+                            _push_seg(out, x0, y0, x1, y1, layer=layer, aci=aci, rgb=rgb)
+                            return
+
+                        r = d / (2.0 * math.sin(abs(theta) / 2.0))
+                        # Distance from chord midpoint to center
+                        a = math.sqrt(max(0.0, r * r - (d * 0.5) * (d * 0.5)))
+                        mx = (x0 + x1) * 0.5
+                        my = (y0 + y1) * 0.5
+                        # Left normal of chord
+                        nx = -dy / d
+                        ny = dx / d
+                        sgn = 1.0 if b > 0 else -1.0
+                        cx = mx + nx * a * sgn
+                        cy = my + ny * a * sgn
+                        a0 = math.atan2(y0 - cy, x0 - cx)
+                        a1 = a0 + theta
+                        _arc_append(out, cx=cx, cy=cy, r=r, a0=a0, a1=a1, ccw=(theta > 0), layer=layer, aci=aci, rgb=rgb)
+                        meta['bulgeArcs'] = int(meta.get('bulgeArcs') or 0) + 1
+                    except Exception:
+                        _push_seg(out, x0, y0, x1, y1, layer=layer, aci=aci, rgb=rgb)
+
+                def _flush_arc():
+                    if cur_type != 'ARC':
+                        return
+                    out = current_block_segs if (in_blocks and current_block_segs is not None) else segs
+                    if cur_invisible:
+                        return
+                    try:
+                        import math
+                        cx = arc_ent.get('cx')
+                        cy = arc_ent.get('cy')
+                        r = arc_ent.get('r')
+                        a0 = arc_ent.get('a0')
+                        a1 = arc_ent.get('a1')
+                        if cx is None or cy is None or r is None or a0 is None or a1 is None:
+                            return
+                        _arc_append(out, cx=float(cx), cy=float(cy), r=float(r), a0=float(a0), a1=float(a1), ccw=True, layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                        meta['arcs'] = int(meta.get('arcs') or 0) + 1
+                    except Exception:
+                        return
+                    finally:
+                        arc_ent['cx'] = arc_ent['cy'] = arc_ent['r'] = arc_ent['a0'] = arc_ent['a1'] = None
+
+                def _flush_circle():
+                    if cur_type != 'CIRCLE':
+                        return
+                    out = current_block_segs if (in_blocks and current_block_segs is not None) else segs
+                    if cur_invisible:
+                        return
+                    try:
+                        import math
+                        cx = circ_ent.get('cx')
+                        cy = circ_ent.get('cy')
+                        r = circ_ent.get('r')
+                        if cx is None or cy is None or r is None:
+                            return
+                        _arc_append(out, cx=float(cx), cy=float(cy), r=float(r), a0=0.0, a1=math.tau, ccw=True, layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                        meta['circles'] = int(meta.get('circles') or 0) + 1
+                    except Exception:
+                        return
+                    finally:
+                        circ_ent['cx'] = circ_ent['cy'] = circ_ent['r'] = None
+
+                def _flush_ellipse():
+                    if cur_type != 'ELLIPSE':
+                        return
+                    out = current_block_segs if (in_blocks and current_block_segs is not None) else segs
+                    if cur_invisible:
+                        return
+                    try:
+                        import math
+                        # Defensive clamp of curve tessellation controls.
+                        try:
+                            radius_frac = float(curve_radius_frac)
+                        except Exception:
+                            radius_frac = 0.25
+                        if not (radius_frac == radius_frac):
+                            radius_frac = 0.25
+                        radius_frac = max(0.01, min(1.0, radius_frac))
+                        try:
+                            chord_cap = float(curve_max_chord)
+                        except Exception:
+                            chord_cap = 500.0
+                        if not (chord_cap == chord_cap) or chord_cap <= 0:
+                            chord_cap = 500.0
+                        try:
+                            min_segs = int(curve_min_segs)
+                        except Exception:
+                            min_segs = 3
+                        try:
+                            max_segs = int(curve_max_segs)
+                        except Exception:
+                            max_segs = 96
+                        if min_segs < 2:
+                            min_segs = 2
+                        if max_segs < min_segs:
+                            max_segs = min_segs
+                        cx = ellipse_ent.get('cx')
+                        cy = ellipse_ent.get('cy')
+                        mx = ellipse_ent.get('mx')
+                        my = ellipse_ent.get('my')
+                        ratio = ellipse_ent.get('ratio')
+                        t0 = ellipse_ent.get('t0')
+                        t1 = ellipse_ent.get('t1')
+                        if cx is None or cy is None or mx is None or my is None or ratio is None or t0 is None or t1 is None:
+                            return
+                        cx = float(cx)
+                        cy = float(cy)
+                        mx = float(mx)
+                        my = float(my)
+                        ratio = float(ratio)
+                        if ratio <= 0:
+                            return
+                        # minor axis vector is perpendicular to major and scaled by ratio
+                        nx = -my * ratio
+                        ny = mx * ratio
+                        # parameter increases CCW from t0 to t1
+                        t0 = float(t0)
+                        t1 = float(t1)
+                        while t1 <= t0:
+                            t1 += math.tau
+                        dt = t1 - t0
+                        # segment count based on major axis length and angle sweep
+                        maj_len = math.hypot(mx, my)
+                        approx_len = abs(dt) * max(1.0, maj_len)
+                        axis_len = max(maj_len, maj_len * ratio)
+                        max_chord = max(1.0, min(chord_cap, axis_len * radius_frac))
+                        n = int(math.ceil(approx_len / max_chord))
+                        n = max(max(8, min_segs * 2), min(max(192, max_segs * 2), n))
+                        step = dt / float(n)
+                        px = cx + mx * math.cos(t0) + nx * math.sin(t0)
+                        py = cy + my * math.cos(t0) + ny * math.sin(t0)
+                        for i in range(1, n + 1):
+                            if len(out) >= max_segments:
+                                meta['truncated'] = True
+                                break
+                            t = t0 + step * i
+                            x = cx + mx * math.cos(t) + nx * math.sin(t)
+                            y = cy + my * math.cos(t) + ny * math.sin(t)
+                            _push_seg(out, px, py, x, y, layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                            px, py = x, y
+                        meta['ellipses'] = int(meta.get('ellipses') or 0) + 1
+                    except Exception:
+                        return
+                    finally:
+                        ellipse_ent['cx'] = ellipse_ent['cy'] = ellipse_ent['mx'] = ellipse_ent['my'] = ellipse_ent['ratio'] = ellipse_ent['t0'] = ellipse_ent['t1'] = None
+
+                def _flush_spline():
+                    if cur_type != 'SPLINE':
+                        return
+                    out = current_block_segs if (in_blocks and current_block_segs is not None) else segs
+                    if cur_invisible:
+                        return
+                    try:
+                        import math
+
+                        flags = int(spline_ent.get('flags') or 0)
+                        is_closed = (flags & 1) == 1
+
+                        fit = spline_ent.get('fit') or []
+                        if isinstance(fit, list) and len(fit) >= 2 and (not spline_ent.get('ctrl')):
+                            # Fit-point only fallback
+                            pts = [(float(p[0]), float(p[1])) for p in fit if p and len(p) >= 2]
+                            for i in range(len(pts) - 1):
+                                if len(out) >= max_segments:
+                                    meta['truncated'] = True
+                                    break
+                                _push_seg(out, pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                            if is_closed and len(pts) >= 3 and len(out) < max_segments:
+                                _push_seg(out, pts[-1][0], pts[-1][1], pts[0][0], pts[0][1], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                            meta['splines'] = int(meta.get('splines') or 0) + 1
+                            return
+
+                        ctrl = spline_ent.get('ctrl') or []
+                        knots = spline_ent.get('knots') or []
+                        weights = spline_ent.get('weights') or []
+                        p = spline_ent.get('degree')
+                        if p is None:
+                            return
+                        p = int(p)
+                        if p < 1:
+                            return
+                        if not (isinstance(ctrl, list) and isinstance(knots, list) and len(ctrl) >= p + 1 and len(knots) >= (len(ctrl) + p + 1)):
+                            return
+
+                        ctrl_pts = [(float(pt[0]), float(pt[1])) for pt in ctrl if pt and len(pt) >= 2]
+                        if len(ctrl_pts) < p + 1:
+                            return
+                        n = len(ctrl_pts) - 1
+                        U = [float(u) for u in knots]
+
+                        W = None
+                        if isinstance(weights, list) and len(weights) >= len(ctrl_pts):
+                            try:
+                                W = [float(w) for w in weights[: len(ctrl_pts)]]
+                            except Exception:
+                                W = None
+
+                        m = len(U) - 1
+                        u0 = U[p]
+                        u1 = U[m - p]
+                        if not (u0 == u0 and u1 == u1) or u1 <= u0:
+                            return
+
+                        def find_span(u: float) -> int:
+                            # Algorithm A2.1 (The NURBS Book)
+                            if u >= U[n + 1]:
+                                return n
+                            if u <= U[p]:
+                                return p
+                            low = p
+                            high = n + 1
+                            mid = (low + high) // 2
+                            while u < U[mid] or u >= U[mid + 1]:
+                                if u < U[mid]:
+                                    high = mid
+                                else:
+                                    low = mid
+                                mid = (low + high) // 2
+                            return mid
+
+                        def basis_funs(span: int, u: float) -> List[float]:
+                            # Algorithm A2.2
+                            N = [0.0] * (p + 1)
+                            left = [0.0] * (p + 1)
+                            right = [0.0] * (p + 1)
+                            N[0] = 1.0
+                            for j in range(1, p + 1):
+                                left[j] = u - U[span + 1 - j]
+                                right[j] = U[span + j] - u
+                                saved = 0.0
+                                for r in range(0, j):
+                                    denom = right[r + 1] + left[j - r]
+                                    if denom == 0.0:
+                                        temp = 0.0
+                                    else:
+                                        temp = N[r] / denom
+                                    N[r] = saved + right[r + 1] * temp
+                                    saved = left[j - r] * temp
+                                N[j] = saved
+                            return N
+
+                        def curve_point(u: float):
+                            span = find_span(u)
+                            N = basis_funs(span, u)
+                            cx = 0.0
+                            cy = 0.0
+                            cw = 0.0
+                            for j in range(0, p + 1):
+                                i = span - p + j
+                                bx, by = ctrl_pts[i]
+                                wj = W[i] if W is not None else 1.0
+                                Nj = N[j] * wj
+                                cx += Nj * bx
+                                cy += Nj * by
+                                cw += Nj
+                            if cw == 0.0:
+                                return None
+                            return (cx / cw, cy / cw)
+
+                        # Sampling resolution: bounded, scales with control points.
+                        try:
+                            per_ctrl = int(spline_samples_per_ctrl)
+                        except Exception:
+                            per_ctrl = 4
+                        if per_ctrl < 1:
+                            per_ctrl = 1
+                        try:
+                            smin = int(spline_samples_min)
+                        except Exception:
+                            smin = 16
+                        try:
+                            smax = int(spline_samples_max)
+                        except Exception:
+                            smax = 256
+                        if smin < 4:
+                            smin = 4
+                        if smax < smin:
+                            smax = smin
+                        samples = int(max(smin, min(smax, len(ctrl_pts) * per_ctrl)))
+                        prev = None
+                        for si in range(samples + 1):
+                            if len(out) >= max_segments:
+                                meta['truncated'] = True
+                                break
+                            u = u0 + (u1 - u0) * (float(si) / float(samples))
+                            pt = curve_point(u)
+                            if pt is None:
+                                continue
+                            if prev is not None:
+                                _push_seg(out, prev[0], prev[1], pt[0], pt[1], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                            prev = pt
+                        # Closed: connect endpoints if needed
+                        if is_closed and prev is not None:
+                            first = curve_point(u0)
+                            if first is not None and len(out) < max_segments:
+                                _push_seg(out, prev[0], prev[1], first[0], first[1], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                        meta['splines'] = int(meta.get('splines') or 0) + 1
+                    except Exception:
+                        return
+                    finally:
+                        spline_ent['degree'] = None
+                        spline_ent['flags'] = 0
+                        spline_ent['knots'] = []
+                        spline_ent['weights'] = []
+                        spline_ent['ctrl'] = []
+                        spline_ent['fit'] = []
+
                 def _flush_line():
                     if cur_type != 'LINE':
                         return
@@ -1273,11 +1713,30 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                             if len(out) >= max_segments:
                                 meta['truncated'] = True
                                 break
-                            _push_seg(out, lw['xs'][i], lw['ys'][i], lw['xs'][i + 1], lw['ys'][i + 1], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                            try:
+                                bulge = 0.0
+                                if i < len(lw['bulges']):
+                                    bulge = float(lw['bulges'][i] or 0.0)
+                                if bulge:
+                                    _bulge_to_arc(out, float(lw['xs'][i]), float(lw['ys'][i]), float(lw['xs'][i + 1]), float(lw['ys'][i + 1]), bulge, layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                                else:
+                                    _push_seg(out, lw['xs'][i], lw['ys'][i], lw['xs'][i + 1], lw['ys'][i + 1], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                            except Exception:
+                                _push_seg(out, lw['xs'][i], lw['ys'][i], lw['xs'][i + 1], lw['ys'][i + 1], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
                         if (lw['flags'] & 1) == 1 and len(out) < max_segments:
-                            _push_seg(out, lw['xs'][n - 1], lw['ys'][n - 1], lw['xs'][0], lw['ys'][0], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                            try:
+                                bulge_last = 0.0
+                                if (n - 1) < len(lw['bulges']):
+                                    bulge_last = float(lw['bulges'][n - 1] or 0.0)
+                                if bulge_last:
+                                    _bulge_to_arc(out, float(lw['xs'][n - 1]), float(lw['ys'][n - 1]), float(lw['xs'][0]), float(lw['ys'][0]), bulge_last, layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                                else:
+                                    _push_seg(out, lw['xs'][n - 1], lw['ys'][n - 1], lw['xs'][0], lw['ys'][0], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                            except Exception:
+                                _push_seg(out, lw['xs'][n - 1], lw['ys'][n - 1], lw['xs'][0], lw['ys'][0], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
                     lw['xs'].clear()
                     lw['ys'].clear()
+                    lw['bulges'].clear()
                     lw['flags'] = 0
 
                 def _flush_polyline():
@@ -1291,15 +1750,44 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                             if len(out) >= max_segments:
                                 meta['truncated'] = True
                                 break
-                            _push_seg(out, poly_xs[i], poly_ys[i], poly_xs[i + 1], poly_ys[i + 1], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                            try:
+                                bulge = 0.0
+                                if i < len(poly_bulges):
+                                    bulge = float(poly_bulges[i] or 0.0)
+                                if bulge:
+                                    _bulge_to_arc(out, float(poly_xs[i]), float(poly_ys[i]), float(poly_xs[i + 1]), float(poly_ys[i + 1]), bulge, layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                                else:
+                                    _push_seg(out, poly_xs[i], poly_ys[i], poly_xs[i + 1], poly_ys[i + 1], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                            except Exception:
+                                _push_seg(out, poly_xs[i], poly_ys[i], poly_xs[i + 1], poly_ys[i + 1], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
                         if (poly_flags & 1) == 1 and len(out) < max_segments:
-                            _push_seg(out, poly_xs[n - 1], poly_ys[n - 1], poly_xs[0], poly_ys[0], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                            try:
+                                bulge_last = 0.0
+                                if (n - 1) < len(poly_bulges):
+                                    bulge_last = float(poly_bulges[n - 1] or 0.0)
+                                if bulge_last:
+                                    _bulge_to_arc(out, float(poly_xs[n - 1]), float(poly_ys[n - 1]), float(poly_xs[0]), float(poly_ys[0]), bulge_last, layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                                else:
+                                    _push_seg(out, poly_xs[n - 1], poly_ys[n - 1], poly_xs[0], poly_ys[0], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
+                            except Exception:
+                                _push_seg(out, poly_xs[n - 1], poly_ys[n - 1], poly_xs[0], poly_ys[0], layer=cur_layer, aci=cur_aci, rgb=cur_rgb)
                     poly_active = False
                     vertex_active = False
                     poly_xs.clear()
                     poly_ys.clear()
+                    poly_bulges.clear()
                     poly_flags = 0
                     vertex['x'] = vertex['y'] = None
+                    
+                def _flush_curve_entities():
+                    if cur_type == 'ARC':
+                        _flush_arc()
+                    elif cur_type == 'CIRCLE':
+                        _flush_circle()
+                    elif cur_type == 'ELLIPSE':
+                        _flush_ellipse()
+                    elif cur_type == 'SPLINE':
+                        _flush_spline()
 
                 def _flush_insert():
                     nonlocal insert_active
@@ -1348,6 +1836,8 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                                 _flush_line()
                             if cur_type == 'LWPOLYLINE':
                                 _flush_lwpoly()
+                            if cur_type in ('ARC', 'CIRCLE', 'ELLIPSE', 'SPLINE'):
+                                _flush_curve_entities()
                             if insert_active:
                                 _flush_insert()
                             cur_type = None
@@ -1357,6 +1847,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                             cur_aci = None
                             cur_rgb = None
                             cur_invisible = False
+                            cur_paperspace = False
 
                             if vtrim == 'SECTION':
                                 expecting_section_name = True
@@ -1411,12 +1902,13 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                                     block_header_active = False
 
                                 # Inside block definitions, parse geometry similarly
-                                if vtrim in ('LINE', 'LWPOLYLINE'):
+                                if vtrim in ('LINE', 'LWPOLYLINE', 'ARC', 'CIRCLE', 'ELLIPSE', 'SPLINE'):
                                     cur_type = vtrim
                                     block_header_active = False
                                 elif vtrim == 'POLYLINE':
                                     poly_active = True
                                     poly_xs.clear(); poly_ys.clear(); poly_flags = 0
+                                    poly_bulges.clear()
                                     vertex_active = False
                                     block_header_active = False
                                 elif vtrim == 'INSERT':
@@ -1428,6 +1920,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                                         vertex_active = True
                                         vertex['x'] = None
                                         vertex['y'] = None
+                                        vertex_bulge = None
                                     block_header_active = False
                                 elif vtrim == 'SEQEND':
                                     _flush_polyline()
@@ -1445,7 +1938,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                                 elif vtrim == 'SEQEND':
                                     _flush_polyline()
 
-                                if vtrim in ('LINE', 'LWPOLYLINE'):
+                                if vtrim in ('LINE', 'LWPOLYLINE', 'ARC', 'CIRCLE', 'ELLIPSE', 'SPLINE'):
                                     cur_type = vtrim
                                 elif vtrim == 'INSERT':
                                     insert_active = True
@@ -1507,6 +2000,25 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                             continue
 
                         # Common DXF entity attributes
+                        if code == 67:
+                            try:
+                                # 0=model space, 1=paper space
+                                cur_paperspace = (int(str(vtrim).strip() or '0') == 1)
+                                if cur_paperspace:
+                                    cur_invisible = True
+                            except Exception:
+                                pass
+                            continue
+                        if code == 410:
+                            try:
+                                # Layout name; treat non-Model layouts as paper space
+                                name = str(vtrim or '').strip()
+                                if name and name.lower() != 'model':
+                                    cur_paperspace = True
+                                    cur_invisible = True
+                            except Exception:
+                                pass
+                            continue
                         if code == 8:
                             cur_layer = vtrim
                             if insert_active:
@@ -1544,6 +2056,7 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                                 x = _parse_float(vtrim)
                                 if x is not None:
                                     lw['xs'].append(x)
+                                    lw['bulges'].append(0.0)
                             elif code == 20:
                                 y = _parse_float(vtrim)
                                 if y is not None:
@@ -1551,6 +2064,96 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                             elif code == 70:
                                 n = _parse_int(vtrim)
                                 lw['flags'] = n or 0
+                            elif code == 42:
+                                # Bulge applies to the most recent vertex
+                                try:
+                                    b = _parse_float(vtrim)
+                                    if b is None:
+                                        continue
+                                    if lw['bulges'] and len(lw['bulges']) == len(lw['xs']):
+                                        lw['bulges'][-1] = float(b)
+                                except Exception:
+                                    pass
+                            continue
+
+                        if cur_type == 'ARC':
+                            if code == 10:
+                                arc_ent['cx'] = _parse_float(vtrim)
+                            elif code == 20:
+                                arc_ent['cy'] = _parse_float(vtrim)
+                            elif code == 40:
+                                arc_ent['r'] = _parse_float(vtrim)
+                            elif code == 50:
+                                try:
+                                    import math
+                                    d = _parse_float(vtrim)
+                                    arc_ent['a0'] = (float(d) * math.pi / 180.0) if d is not None else None
+                                except Exception:
+                                    arc_ent['a0'] = None
+                            elif code == 51:
+                                try:
+                                    import math
+                                    d = _parse_float(vtrim)
+                                    arc_ent['a1'] = (float(d) * math.pi / 180.0) if d is not None else None
+                                except Exception:
+                                    arc_ent['a1'] = None
+                            continue
+
+                        if cur_type == 'CIRCLE':
+                            if code == 10:
+                                circ_ent['cx'] = _parse_float(vtrim)
+                            elif code == 20:
+                                circ_ent['cy'] = _parse_float(vtrim)
+                            elif code == 40:
+                                circ_ent['r'] = _parse_float(vtrim)
+                            continue
+
+                        if cur_type == 'ELLIPSE':
+                            if code == 10:
+                                ellipse_ent['cx'] = _parse_float(vtrim)
+                            elif code == 20:
+                                ellipse_ent['cy'] = _parse_float(vtrim)
+                            elif code == 11:
+                                ellipse_ent['mx'] = _parse_float(vtrim)
+                            elif code == 21:
+                                ellipse_ent['my'] = _parse_float(vtrim)
+                            elif code == 40:
+                                ellipse_ent['ratio'] = _parse_float(vtrim)
+                            elif code == 41:
+                                ellipse_ent['t0'] = _parse_float(vtrim)
+                            elif code == 42:
+                                ellipse_ent['t1'] = _parse_float(vtrim)
+                            continue
+
+                        if cur_type == 'SPLINE':
+                            if code == 70:
+                                spline_ent['flags'] = _parse_int(vtrim) or 0
+                            elif code == 71:
+                                spline_ent['degree'] = _parse_int(vtrim)
+                            elif code == 40:
+                                k = _parse_float(vtrim)
+                                if k is not None:
+                                    spline_ent['knots'].append(float(k))
+                            elif code == 41:
+                                w = _parse_float(vtrim)
+                                if w is not None:
+                                    spline_ent['weights'].append(float(w))
+                            elif code == 10:
+                                x = _parse_float(vtrim)
+                                if x is not None:
+                                    spline_ent['ctrl'].append([float(x), 0.0])
+                            elif code == 20:
+                                y = _parse_float(vtrim)
+                                if y is not None and spline_ent['ctrl']:
+                                    spline_ent['ctrl'][-1][1] = float(y)
+                            elif code == 11:
+                                x = _parse_float(vtrim)
+                                if x is not None:
+                                    spline_ent['fit'].append([float(x), 0.0])
+                            elif code == 21:
+                                y = _parse_float(vtrim)
+                                if y is not None and spline_ent['fit']:
+                                    spline_ent['fit'][-1][1] = float(y)
                             continue
 
                         if insert_active:
@@ -1577,20 +2180,26 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                                     vertex['x'] = _parse_float(vtrim)
                                 elif code == 20:
                                     vertex['y'] = _parse_float(vtrim)
+                                elif code == 42:
+                                    vertex_bulge = _parse_float(vtrim)
                                 vx = vertex.get('x')
                                 vy = vertex.get('y')
                                 if vx is not None and vy is not None:
                                     # poly_xs/poly_ys are lists of floats
                                     poly_xs.append(float(vx))
                                     poly_ys.append(float(vy))
+                                    poly_bulges.append(float(vertex_bulge or 0.0))
                                     vertex['x'] = None
                                     vertex['y'] = None
+                                    vertex_bulge = None
 
                 # trailing flush
                 if cur_type == 'LINE':
                     _flush_line()
                 if cur_type == 'LWPOLYLINE':
                     _flush_lwpoly()
+                if cur_type in ('ARC', 'CIRCLE', 'ELLIPSE', 'SPLINE'):
+                    _flush_curve_entities()
                 if insert_active:
                     _flush_insert()
                 if poly_active:
@@ -1673,8 +2282,21 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                     })
                 return elements, { 'scaleToM': scale_to_m, 'quantMm': q, 'minLenMm': float(min_len_mm), 'dedup': len(seen) }
 
-            def _segments_to_plan2d_cad_elements(segs, *, units: str, thickness_m: float, level: int, weld_mm: float):
-                # 1:1 “CAD linework” import. Keeps all segments and their colors.
+            def _segments_to_plan2d_cad_elements(
+                segs,
+                *,
+                units: str,
+                thickness_m: float,
+                level: int,
+                weld_mm: float,
+                max_walls: int,
+                min_len_mm: float,
+                auto_clean: bool
+            ):
+                # 1:1 “CAD linework” import (hairline rendering, keeps colors/layers).
+                # Applies light simplification to avoid “scattered dots” and annotation clutter:
+                # - drop segments shorter than min_len_mm
+                # - keep at most max_walls longest segments
                 scale_to_m = 0.001 if units == 'mm' else 1.0
                 weld = float(weld_mm) if weld_mm and weld_mm > 0 else 0.0
                 elements = []
@@ -1682,6 +2304,39 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 layer_counts = {}
                 # Dedup after optional weld (snap). Keeps colors distinct.
                 seen = set()
+
+                try:
+                    max_walls_i = int(max_walls) if max_walls is not None else 0
+                except Exception:
+                    max_walls_i = 0
+                if max_walls_i < 0:
+                    max_walls_i = 0
+                try:
+                    min_len = float(min_len_mm) if min_len_mm is not None else 0.0
+                except Exception:
+                    min_len = 0.0
+                if min_len < 0.0:
+                    min_len = 0.0
+                min_len2 = min_len * min_len
+
+                # Automatic cleanup of common non-floorplan layers (PDF underlay geometry, hatch, dimensions).
+                # Many DWGs are produced by PDF-to-DWG conversion and contain huge "PDF*_Geometry" layers
+                # that overwhelm the actual architectural layers.
+                drop_patterns = []
+                if auto_clean:
+                    try:
+                        import re
+                        drop_patterns = [
+                            re.compile(r'(?i)\bhatch\b'),
+                            re.compile(r'(?i)pdf\d*_geometry'),
+                            re.compile(r'(?i)\$0\$pdf'),
+                            re.compile(r'(?i)\bdefpoints\b'),
+                            re.compile(r'(?i)\bdim(ension)?\b'),
+                            re.compile(r'(?i)\btext\b'),
+                            re.compile(r'(?i)\banno(tation)?\b'),
+                        ]
+                    except Exception:
+                        drop_patterns = []
 
                 # Endpoint welding via neighborhood snapping (better than rounding).
                 # Uses a grid hash of size `weld` and snaps endpoints within radius.
@@ -1716,6 +2371,8 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                     except Exception:
                         return x, y
 
+                # First pass: apply weld (if any), dedup, and drop tiny segments.
+                kept = []
                 for s in segs:
                     try:
                         x0, y0, x1, y1 = float(s[0]), float(s[1]), float(s[2]), float(s[3])
@@ -1726,13 +2383,30 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                         x0, y0 = _snap_pt(x0, y0)
                         x1, y1 = _snap_pt(x1, y1)
 
+                    # Drop zero/very short segments (the "scattered dots" effect).
+                    try:
+                        dx = x1 - x0
+                        dy = y1 - y0
+                        l2 = dx * dx + dy * dy
+                        if min_len2 > 0.0 and (not (l2 == l2) or l2 < min_len2):
+                            continue
+                    except Exception:
+                        pass
+
                     try:
                         rgb = int(s[4]) if len(s) >= 5 and s[4] is not None else 0x111111
                     except Exception:
                         rgb = 0x111111
                     rgb = rgb & 0xFFFFFF
 
+                    layer = None
+                    try:
+                        layer = str(s[5]) if len(s) >= 6 and s[5] else None
+                    except Exception:
+                        layer = None
+
                     # Dedup (order-invariant) after weld.
+                    is_dup = False
                     try:
                         ax0, ay0, ax1, ay1 = x0, y0, x1, y1
                         if ax0 > ax1 or (ax0 == ax1 and ay0 > ay1):
@@ -1740,19 +2414,74 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                             ay0, ay1 = ay1, ay0
                         key = (round(ax0, 6), round(ay0, 6), round(ax1, 6), round(ay1, 6), int(rgb))
                         if key in seen:
-                            continue
-                        seen.add(key)
+                            is_dup = True
+                        else:
+                            seen.add(key)
                     except Exception:
-                        pass
+                        is_dup = False
+
+                    if is_dup:
+                        continue
+
+                    kept.append((x0, y0, x1, y1, rgb, layer))
+
+                # Apply automatic layer cleanup if it seems safe.
+                cleaned_applied = False
+                dropped_by_layer = 0
+                if drop_patterns and kept:
+                    try:
+                        cleaned = []
+                        for rec in kept:
+                            _x0, _y0, _x1, _y1, _rgb, lyr = rec
+                            if not lyr:
+                                cleaned.append(rec)
+                                continue
+                            drop = False
+                            for pat in drop_patterns:
+                                try:
+                                    if pat.search(lyr):
+                                        drop = True
+                                        break
+                                except Exception:
+                                    continue
+                            if drop:
+                                dropped_by_layer += 1
+                                continue
+                            cleaned.append(rec)
+
+                        # Only apply if we still have a meaningful amount of geometry.
+                        if cleaned and (len(cleaned) >= 500 or len(cleaned) >= int(0.05 * len(kept))):
+                            kept = cleaned
+                            cleaned_applied = True
+                        else:
+                            dropped_by_layer = 0
+                    except Exception:
+                        cleaned_applied = False
+                        dropped_by_layer = 0
+
+                # If still too many, keep the longest max_walls_i segments.
+                if max_walls_i and len(kept) > max_walls_i:
+                    try:
+                        import heapq
+                        heap = []
+                        for rec in kept:
+                            x0, y0, x1, y1, rgb, layer = rec
+                            dx = x1 - x0
+                            dy = y1 - y0
+                            l2 = dx * dx + dy * dy
+                            if len(heap) < max_walls_i:
+                                heapq.heappush(heap, (l2, rec))
+                            else:
+                                if l2 > heap[0][0]:
+                                    heapq.heapreplace(heap, (l2, rec))
+                        kept = [h[1] for h in heap]
+                    except Exception:
+                        kept = kept[:max_walls_i]
+
+                for (x0, y0, x1, y1, rgb, layer) in kept:
 
                     stroke = _rgb_int_to_hex(rgb)
                     color_counts[stroke] = int(color_counts.get(stroke) or 0) + 1
-
-                    layer = None
-                    try:
-                        layer = str(s[5]) if len(s) >= 6 and s[5] else None
-                    except Exception:
-                        layer = None
                     if layer:
                         layer_counts[layer] = int(layer_counts.get(layer) or 0) + 1
 
@@ -1790,6 +2519,11 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                     'scaleToM': scale_to_m,
                     'elements': len(elements),
                     'weldMm': weld,
+                    'minLenMm': float(min_len),
+                    'maxWalls': int(max_walls_i) if max_walls_i else None,
+                    'autoClean': bool(auto_clean),
+                    'autoCleanApplied': bool(cleaned_applied),
+                    'autoCleanDropped': int(dropped_by_layer),
                     'colorsTop': colors_top,
                     'layersTop': layers_top
                 }
@@ -1842,6 +2576,13 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                 weld_mm = float(data.get('weldMm') or (1.0 if mode == 'cad' else 0.0))
                 if weld_mm < 0:
                     weld_mm = 0.0
+
+                auto_clean = True
+                try:
+                    if isinstance(data, dict) and ('autoClean' in data):
+                        auto_clean = bool(data.get('autoClean'))
+                except Exception:
+                    auto_clean = True
 
                 # Segment parsing caps
                 max_segments = int(data.get('maxSegments') or (qs.get('maxSegments', ['750000' if mode == 'cad' else '300000'])[0] if qs else ('750000' if mode == 'cad' else '300000')))
@@ -1917,14 +2658,38 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
                             })
                         out_path = found
 
-                    segs, parse_meta = _dxf_to_segments(out_path, max_segments=max_segments, expand_inserts=expand_inserts, max_insert_segs=max_insert_segs)
+                    # Curve tessellation controls (reduces "30 tiny lines" on big-radius arcs).
+                    curve_radius_frac = float(data.get('curveRadiusFrac') or (qs.get('curveRadiusFrac', ['0.25'])[0] if qs else '0.25'))
+                    curve_max_chord = float(data.get('curveMaxChordMm') or (qs.get('curveMaxChordMm', ['500'])[0] if qs else '500'))
+                    curve_min_segs = int(data.get('curveMinSegs') or (qs.get('curveMinSegs', ['3'])[0] if qs else '3'))
+                    curve_max_segs = int(data.get('curveMaxSegs') or (qs.get('curveMaxSegs', ['96'])[0] if qs else '96'))
+                    spline_samples_per_ctrl = int(data.get('splineSamplesPerCtrl') or (qs.get('splineSamplesPerCtrl', ['4'])[0] if qs else '4'))
+                    spline_samples_min = int(data.get('splineSamplesMin') or (qs.get('splineSamplesMin', ['16'])[0] if qs else '16'))
+                    spline_samples_max = int(data.get('splineSamplesMax') or (qs.get('splineSamplesMax', ['256'])[0] if qs else '256'))
+
+                    segs, parse_meta = _dxf_to_segments(
+                        out_path,
+                        max_segments=max_segments,
+                        expand_inserts=expand_inserts,
+                        max_insert_segs=max_insert_segs,
+                        curve_radius_frac=curve_radius_frac,
+                        curve_max_chord=curve_max_chord,
+                        curve_min_segs=curve_min_segs,
+                        curve_max_segs=curve_max_segs,
+                        spline_samples_per_ctrl=spline_samples_per_ctrl,
+                        spline_samples_min=spline_samples_min,
+                        spline_samples_max=spline_samples_max,
+                    )
                     if mode == 'cad':
                         elements, simp_meta = _segments_to_plan2d_cad_elements(
                             segs,
                             units=units,
                             thickness_m=thickness_m,
                             level=level,
-                            weld_mm=weld_mm
+                            weld_mm=weld_mm,
+                            max_walls=max_walls,
+                            min_len_mm=min_len_mm,
+                            auto_clean=auto_clean
                         )
                     else:
                         elements, simp_meta = _simplify_to_plan2d_elements(
